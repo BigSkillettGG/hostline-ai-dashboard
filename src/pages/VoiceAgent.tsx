@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PageHeader, PageBody } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,14 +25,25 @@ import {
   AlertTriangle,
   Bot,
   CalendarDays,
+  CheckCircle2,
   CreditCard,
   PhoneCall,
   Play,
   Printer,
+  RefreshCw,
+  Server,
   ShoppingBag,
   Sparkles,
+  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  fetchVoicePreviewAudio,
+  fetchVoiceServiceHealth,
+  isVoiceServiceConfigured,
+  voiceServiceBaseUrl,
+  type VoiceServiceHealth,
+} from "@/lib/voice-service";
 
 const variables = ["{restaurant_name}", "{caller_name}", "{hours_today}"];
 
@@ -46,6 +57,58 @@ const capabilityRows = [
 
 export default function VoiceAgent() {
   const [config, setConfig] = useState(defaultRestaurantAgentConfig);
+  const [serviceHealth, setServiceHealth] = useState<VoiceServiceHealth | null>(null);
+  const [serviceError, setServiceError] = useState<string | null>(null);
+  const [checkingService, setCheckingService] = useState(false);
+  const [playingPreview, setPlayingPreview] = useState(false);
+
+  const checkVoiceService = async () => {
+    if (!isVoiceServiceConfigured()) {
+      setServiceHealth(null);
+      setServiceError("Set VITE_VOICE_SERVICE_URL to connect the dashboard to the voice backend.");
+      return;
+    }
+
+    setCheckingService(true);
+    setServiceError(null);
+
+    try {
+      const health = await fetchVoiceServiceHealth();
+      setServiceHealth(health);
+    } catch (error) {
+      setServiceHealth(null);
+      setServiceError(error instanceof Error ? error.message : "Voice service health check failed.");
+    } finally {
+      setCheckingService(false);
+    }
+  };
+
+  useEffect(() => {
+    void checkVoiceService();
+  }, []);
+
+  const playVoicePreview = async () => {
+    if (!isVoiceServiceConfigured()) {
+      toast.error("Voice service is not configured yet. Set VITE_VOICE_SERVICE_URL first.");
+      return;
+    }
+
+    setPlayingPreview(true);
+
+    try {
+      const audioBlob = await fetchVoicePreviewAudio(config.greetingTemplate);
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+      audio.onended = () => URL.revokeObjectURL(audioUrl);
+      audio.onerror = () => URL.revokeObjectURL(audioUrl);
+      await audio.play();
+      toast.success("Playing ElevenLabs preview");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Voice preview failed.");
+    } finally {
+      setPlayingPreview(false);
+    }
+  };
 
   const setDestination = (destination: OrderDestination, checked: boolean) => {
     setConfig((current) => {
@@ -70,9 +133,9 @@ export default function VoiceAgent() {
         description="Configure how the AI host answers, routes, and escalates calls"
         actions={
           <>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={playVoicePreview} disabled={playingPreview}>
               <Play className="mr-1.5 h-3.5 w-3.5" />
-              Preview
+              {playingPreview ? "Loading..." : "Preview"}
             </Button>
             <Button size="sm" onClick={() => toast.success("Configuration saved")}>
               Save changes
@@ -427,6 +490,63 @@ export default function VoiceAgent() {
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-base">
+                  <Server className="h-4 w-4 text-primary" />
+                  Voice service
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="rounded-md border border-border bg-muted/20 p-3">
+                  <div className="text-xs font-medium text-muted-foreground">Service URL</div>
+                  <div className="mt-1 truncate text-sm font-medium">
+                    {voiceServiceBaseUrl || "Not configured"}
+                  </div>
+                </div>
+
+                <ServiceStatusRow
+                  label="Backend"
+                  value={
+                    serviceHealth?.ok
+                      ? "Online"
+                      : serviceError
+                        ? "Not connected"
+                        : checkingService
+                          ? "Checking"
+                          : "Not checked"
+                  }
+                  state={serviceHealth?.ok ? "ready" : serviceError ? "error" : "pending"}
+                />
+                <ServiceStatusRow
+                  label="ElevenLabs preview"
+                  value={serviceHealth?.elevenLabsConfigured ? "API key configured" : "Needs API key"}
+                  state={serviceHealth?.elevenLabsConfigured ? "ready" : "pending"}
+                />
+                <ServiceStatusRow
+                  label="OpenAI replies"
+                  value={serviceHealth?.openaiConfigured ? "API key configured" : "Fallback mode"}
+                  state={serviceHealth?.openaiConfigured ? "ready" : "pending"}
+                />
+                <ServiceStatusRow
+                  label="Twilio signatures"
+                  value={serviceHealth?.twilioSignatureRequired ? "Required" : "Relaxed for local dev"}
+                  state={serviceHealth?.twilioSignatureRequired ? "ready" : "pending"}
+                />
+
+                {serviceError && (
+                  <div className="rounded-md border border-warning/30 bg-warning/10 p-3 text-xs text-muted-foreground">
+                    {serviceError}
+                  </div>
+                )}
+
+                <Button variant="outline" size="sm" className="w-full" onClick={checkVoiceService} disabled={checkingService}>
+                  <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${checkingService ? "animate-spin" : ""}`} />
+                  Check service
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
                   <Sparkles className="h-4 w-4 text-primary" />
                   Voice preview
                 </CardTitle>
@@ -452,9 +572,9 @@ export default function VoiceAgent() {
                   </div>
                   <div className="text-xs text-muted-foreground">Sample phrase</div>
                   <p className="mt-1 text-sm italic">{config.greetingTemplate}</p>
-                  <Button size="sm" variant="outline" className="mt-3" onClick={() => toast("Playing preview...")}>
+                  <Button size="sm" variant="outline" className="mt-3" onClick={playVoicePreview} disabled={playingPreview}>
                     <Play className="mr-1.5 h-3.5 w-3.5" />
-                    Play sample
+                    {playingPreview ? "Loading..." : "Play sample"}
                   </Button>
                 </div>
                 <Button className="w-full" onClick={() => toast.success("Test call queued")}>
@@ -481,6 +601,34 @@ export default function VoiceAgent() {
         </div>
       </PageBody>
     </>
+  );
+}
+
+function ServiceStatusRow({
+  label,
+  state,
+  value,
+}: {
+  label: string;
+  state: "ready" | "pending" | "error";
+  value: string;
+}) {
+  const Icon = state === "ready" ? CheckCircle2 : state === "error" ? XCircle : AlertTriangle;
+  const color =
+    state === "ready"
+      ? "text-success"
+      : state === "error"
+        ? "text-destructive"
+        : "text-warning";
+
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md border border-border p-3">
+      <div>
+        <div className="text-xs text-muted-foreground">{label}</div>
+        <div className="text-sm font-medium">{value}</div>
+      </div>
+      <Icon className={`h-4 w-4 shrink-0 ${color}`} />
+    </div>
   );
 }
 

@@ -25,6 +25,7 @@ For local Twilio testing, expose the service with a tunnel such as ngrok and set
 ```sh
 PUBLIC_HTTP_BASE_URL=https://your-tunnel.ngrok.app
 PUBLIC_WS_BASE_URL=wss://your-tunnel.ngrok.app
+VITE_VOICE_SERVICE_URL=https://your-tunnel.ngrok.app
 ```
 
 Set your Twilio phone number Voice webhook to:

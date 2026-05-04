@@ -7,6 +7,7 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(8787),
   PUBLIC_HTTP_BASE_URL: z.string().url().optional(),
   PUBLIC_WS_BASE_URL: z.string().url().optional(),
+  VOICE_SERVICE_ALLOWED_ORIGIN: z.string().default("*"),
   TWILIO_AUTH_TOKEN: z.string().optional(),
   REQUIRE_TWILIO_SIGNATURE: z
     .enum(["true", "false"])

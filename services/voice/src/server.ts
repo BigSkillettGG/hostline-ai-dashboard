@@ -42,6 +42,13 @@ server.listen(env.PORT, () => {
 
 async function handleRequest(req: IncomingMessage, res: ServerResponse, currentEnv: VoiceServiceEnv) {
   const url = new URL(req.url ?? "/", "http://localhost");
+  applyCors(req, res, currentEnv);
+
+  if (req.method === "OPTIONS") {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
 
   if (req.method === "GET" && url.pathname === "/health") {
     sendJson(res, 200, {
@@ -169,4 +176,19 @@ function sendXml(res: ServerResponse, status: number, body: string) {
 function sendText(res: ServerResponse, status: number, body: string) {
   res.writeHead(status, { "Content-Type": "text/plain" });
   res.end(body);
+}
+
+function applyCors(req: IncomingMessage, res: ServerResponse, currentEnv: VoiceServiceEnv) {
+  const origin = req.headers.origin;
+  const allowedOrigin = currentEnv.VOICE_SERVICE_ALLOWED_ORIGIN;
+
+  if (allowedOrigin === "*") {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+  } else if (origin && allowedOrigin.split(",").map((item) => item.trim()).includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+  }
+
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 }
