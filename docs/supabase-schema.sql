@@ -186,3 +186,7 @@ create table staff_tasks (
   status text not null default 'open',
   created_at timestamptz not null default now()
 );
+
+-- Dashboard read access should be protected with Supabase Auth + RLS before production launch.
+-- The browser should use VITE_SUPABASE_PUBLISHABLE_KEY or the legacy anon key.
+-- The voice service must use SUPABASE_SECRET_KEY or a legacy service_role key only on the backend.

@@ -1,8 +1,9 @@
 // Mock data for HostLine AI — restaurant: "Olive & Ember"
 
 export type CallIntent = "order" | "reservation" | "faq" | "hours" | "other";
-export type CallOutcome = "resolved" | "order_placed" | "reservation_booked" | "escalated" | "voicemail" | "missed";
+export type CallOutcome = "resolved" | "order_placed" | "reservation_booked" | "escalated" | "voicemail" | "missed" | "unknown";
 export type CallStatus = "new" | "reviewed" | "needs_review" | "resolved";
+export type TranscriptSpeaker = "agent" | "caller" | "staff";
 
 export interface Call {
   id: string;
@@ -15,7 +16,7 @@ export interface Call {
   confidence: number; // 0-100
   status: CallStatus;
   summary: string;
-  transcript: { speaker: "agent" | "caller"; text: string; t: string }[];
+  transcript: { speaker: TranscriptSpeaker; text: string; t: string }[];
   orderId?: string;
   reservationId?: string;
 }

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { PageHeader, PageBody } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -9,12 +10,13 @@ import {
 } from "@/components/ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { calls, type Call } from "@/data/mock";
+import { calls as sampleCalls, type Call } from "@/data/mock";
 import { formatTime, formatDuration } from "@/lib/format";
-import { Search, Download, Play, FileText, MessageSquare, UserCheck, Send, Phone, Filter } from "lucide-react";
+import { Search, Download, Play, FileText, MessageSquare, UserCheck, Send, Phone, Filter, RefreshCw } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { fetchCallsFromSupabase, isSupabaseConfigured } from "@/lib/supabase-rest";
 
 const intentColor: Record<string, string> = {
   order: "bg-primary/10 text-primary border-primary/20",
@@ -35,6 +37,15 @@ export default function Calls() {
   const [intent, setIntent] = useState<string>("all");
   const [status, setStatus] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const supabaseConfigured = isSupabaseConfigured();
+  const callQuery = useQuery({
+    enabled: supabaseConfigured,
+    queryFn: fetchCallsFromSupabase,
+    queryKey: ["calls", "supabase"],
+    refetchInterval: 30_000,
+  });
+  const usingSupabase = Boolean(supabaseConfigured && callQuery.isSuccess);
+  const calls = usingSupabase ? callQuery.data : sampleCalls;
 
   const filtered = calls.filter(c => {
     if (intent !== "all" && c.intent !== intent) return false;
@@ -48,9 +59,32 @@ export default function Calls() {
       <PageHeader
         title="Calls"
         description={`${filtered.length} calls in the last 24 hours`}
-        actions={<Button variant="outline" size="sm"><Download className="mr-1.5 h-3.5 w-3.5" />Export</Button>}
+        actions={
+          <>
+            <Badge variant="outline" className={usingSupabase ? "border-success/20 bg-success/10 text-success" : "bg-muted text-muted-foreground"}>
+              {usingSupabase ? "Live Supabase" : "Sample data"}
+            </Badge>
+            {supabaseConfigured && (
+              <Button variant="outline" size="sm" onClick={() => callQuery.refetch()} disabled={callQuery.isFetching}>
+                <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${callQuery.isFetching ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+            )}
+            <Button variant="outline" size="sm"><Download className="mr-1.5 h-3.5 w-3.5" />Export</Button>
+          </>
+        }
       />
       <PageBody className="space-y-4">
+        {callQuery.isError && (
+          <Card className="border-warning/30 bg-warning/10 p-3 text-sm text-muted-foreground">
+            Supabase calls could not be loaded, so this page is showing sample data. {callQuery.error instanceof Error ? callQuery.error.message : ""}
+          </Card>
+        )}
+        {!supabaseConfigured && (
+          <Card className="border-dashed bg-muted/20 p-3 text-sm text-muted-foreground">
+            Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to show real calls from Supabase.
+          </Card>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[200px] max-w-xs">
             <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -174,7 +208,7 @@ export default function Calls() {
                     <div key={i} className={`flex gap-3 ${t.speaker === "agent" ? "" : "flex-row-reverse"}`}>
                       <div className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${t.speaker === "agent" ? "bg-muted" : "bg-primary text-primary-foreground"}`}>
                         <div className={`text-[10px] mb-0.5 ${t.speaker === "agent" ? "text-muted-foreground" : "text-primary-foreground/70"}`}>
-                          {t.speaker === "agent" ? "Vera (AI)" : selected.caller} · {t.t}
+                          {t.speaker === "agent" ? "Vera (AI)" : t.speaker === "staff" ? "Staff" : selected.caller} · {t.t}
                         </div>
                         {t.text}
                       </div>

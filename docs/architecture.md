@@ -21,6 +21,8 @@ This app is the admin and operations dashboard. The real-time phone agent should
 
 Owns restaurant setup, operations views, order review, reservation review, knowledge base, menu, integrations, users, and analytics.
 
+The Calls page can read from Supabase REST using `VITE_SUPABASE_URL` and either `VITE_SUPABASE_PUBLISHABLE_KEY` or the legacy `VITE_SUPABASE_ANON_KEY`. If Supabase is missing or unavailable, the page falls back to sample data and marks the source in the UI.
+
 ### Voice Service
 
 Owns inbound phone sessions, streaming audio, barge-in, turn detection, tool calls, escalation, call summaries, and transcript persistence.
@@ -86,7 +88,7 @@ Caller -> Twilio -> Voice Service -> LLM + tools
 
 1. Supabase schema and seed data.
 2. Voice service writes call setup, prompts, replies, and summaries to Supabase.
-3. Dashboard reads calls and orders from Supabase instead of local mocks.
+3. Dashboard reads orders and reservations from Supabase instead of local mocks.
 4. FAQ call flow works from the knowledge base.
 5. Pickup order flow creates an order in staff-review mode.
 6. Dashboard shows the new call and order.
