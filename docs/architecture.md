@@ -25,6 +25,15 @@ Owns restaurant setup, operations views, order review, reservation review, knowl
 
 Owns inbound phone sessions, streaming audio, barge-in, turn detection, tool calls, escalation, call summaries, and transcript persistence.
 
+The first implementation is in `services/voice`:
+
+- `POST /twilio/voice` returns TwiML that connects the call to ConversationRelay.
+- `wss://.../twilio/conversation-relay` receives ConversationRelay setup, prompt, DTMF, interrupt, and error messages.
+- ConversationRelay is configured for ElevenLabs TTS by default.
+- `POST /voice/preview` calls the ElevenLabs Text to Speech API directly for dashboard previews.
+- OpenAI Responses API powers the restaurant-host reply path when an API key is configured.
+- A deterministic fallback responds safely without OpenAI during local development.
+
 ### Integration Workers
 
 Own POS, reservation, SMS, printing, and kitchen tablet delivery. Integration failures should create staff-review tasks instead of dropping orders.
@@ -76,9 +85,9 @@ Caller -> Twilio -> Voice Service -> LLM + tools
 ## First Working Milestone
 
 1. Supabase schema and seed data.
-2. Dashboard reads from Supabase instead of local mocks.
-3. Twilio webhook answers a call with a static greeting.
-4. Voice service creates a call record.
-5. FAQ call flow works from the knowledge base.
-6. Pickup order flow creates an order in staff-review mode.
-7. Dashboard shows the new call and order.
+2. Voice service writes call setup, prompts, replies, and summaries to Supabase.
+3. Dashboard reads calls and orders from Supabase instead of local mocks.
+4. FAQ call flow works from the knowledge base.
+5. Pickup order flow creates an order in staff-review mode.
+6. Dashboard shows the new call and order.
+7. Toast integration pushes accepted orders into the POS.

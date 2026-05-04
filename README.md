@@ -31,12 +31,30 @@ npm run dev
 
 The Lovable project uses Vite, React, TypeScript, Tailwind, shadcn/ui, Recharts, and React Router.
 
+## Voice Service
+
+The first production backend slice lives in `services/voice`.
+
+```sh
+cp .env.example .env.local
+npm run dev:voice
+```
+
+It exposes:
+
+- `POST /twilio/voice` for the Twilio Voice webhook.
+- `wss://.../twilio/conversation-relay` for Twilio ConversationRelay.
+- `POST /voice/preview` for ElevenLabs voice previews.
+- `POST /debug/reply` in non-production for testing restaurant replies.
+
+See `services/voice/README.md` for provider setup.
+
 ## Next Engineering Milestones
 
-1. Add Supabase and replace mock data with real tables.
+1. Connect the voice service to Supabase for calls, transcripts, and staff-review orders.
 2. Add auth, organizations, locations, and roles.
-3. Build the separate Node/TypeScript voice service.
-4. Create a Twilio webhook that opens a call session and writes call records.
-5. Implement FAQ calls from the knowledge base.
-6. Implement staff-review pickup orders before POS integrations.
-7. Add Toast as the first POS integration.
+3. Connect the dashboard voice preview button to `/voice/preview`.
+4. Implement FAQ calls from the restaurant knowledge base.
+5. Implement staff-review pickup orders before POS integrations.
+6. Add Toast as the first POS integration.
+7. Add OpenTable as the first reservation integration.

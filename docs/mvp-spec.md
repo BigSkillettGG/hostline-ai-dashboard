@@ -48,6 +48,21 @@ If an integration is connected, the AI checks availability and books through the
 
 The AI escalates allergies, complaints, refunds, payment questions, private events, catering, alcohol edge cases, unclear orders, low confidence, and explicit human requests.
 
+## Production Voice Path
+
+The MVP phone path uses Twilio ConversationRelay first because it gives us low-latency phone audio, real-time speech recognition, text-to-speech playback, and interruption handling while our application owns the restaurant logic.
+
+Voice defaults:
+
+- Telephony: Twilio Voice.
+- Phone AI transport: Twilio ConversationRelay.
+- TTS provider: ElevenLabs.
+- TTS voice model: ElevenLabs Flash 2.5 via ConversationRelay voice configuration.
+- LLM: OpenAI Responses API using `gpt-5-mini` by default for cost and latency.
+- Payments: pay at pickup only.
+
+The direct ElevenLabs Text to Speech endpoint is used for dashboard voice previews. Live phone calls should use ConversationRelay's ElevenLabs TTS path until we need lower-level audio control.
+
 ## Integration Priority
 
 ### Ordering/POS
