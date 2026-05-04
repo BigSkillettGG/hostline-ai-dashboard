@@ -64,4 +64,50 @@ describe("Supabase call store", () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("creates a staff-review pickup order with order items", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ id: "order_uuid" }]), { status: 201 }))
+      .mockResolvedValueOnce(new Response("", { status: 201 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const store = createCallStore(env);
+
+    const result = await store.createStaffReviewOrder({
+      callId: "call_uuid",
+      customerName: "Sarah",
+      customerPhone: "+15551234567",
+      items: [
+        { modifiers: ["Light cheese"], name: "Margherita Pizza", priceCents: 1800, quantity: 2 },
+        { name: "Caesar Salad", priceCents: 1400, quantity: 1 },
+      ],
+      notes: "AI-created staff-review order.",
+    });
+
+    expect(result.orderId).toBe("order_uuid");
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://example.supabase.co/rest/v1/orders?select=id",
+      expect.objectContaining({
+        body: expect.stringContaining('"total_cents":5000'),
+        method: "POST",
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://example.supabase.co/rest/v1/order_items",
+      expect.objectContaining({
+        body: expect.stringContaining('"order_id":"order_uuid"'),
+        method: "POST",
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "https://example.supabase.co/rest/v1/calls?id=eq.call_uuid",
+      expect.objectContaining({
+        body: expect.stringContaining('"intent":"order"'),
+        method: "PATCH",
+      }),
+    );
+  });
 });

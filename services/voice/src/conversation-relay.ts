@@ -2,6 +2,7 @@ import type { IncomingMessage } from "node:http";
 import type { WebSocket } from "ws";
 import type { CallStore } from "./call-store";
 import type { VoiceServiceEnv } from "./env";
+import { capturePickupOrder, mergeCapturedOrderItems, type CapturedOrderItem } from "./order-intake";
 import { demoRestaurantContext } from "./restaurant-context";
 import { generateRestaurantReply } from "./restaurant-agent";
 import type {
@@ -16,6 +17,8 @@ interface RelaySession {
   callRecordId?: string;
   callSid?: string;
   callerPhone?: string;
+  orderCreatedId?: string;
+  orderDraftItems: CapturedOrderItem[];
   startedAt: number;
   transcript: TranscriptTurn[];
 }
@@ -24,7 +27,7 @@ export function createConversationRelayHandler(env: VoiceServiceEnv, callStore: 
   const sessions = new WeakMap<WebSocket, RelaySession>();
 
   return function handleConversationRelayConnection(ws: WebSocket, req: IncomingMessage) {
-    const session: RelaySession = { startedAt: Date.now(), transcript: [] };
+    const session: RelaySession = { orderDraftItems: [], startedAt: Date.now(), transcript: [] };
     sessions.set(ws, session);
 
     console.info("[conversation-relay] connected", req.url);
@@ -68,12 +71,21 @@ export function createConversationRelayHandler(env: VoiceServiceEnv, callStore: 
           text: message.voicePrompt,
         }).catch((error) => console.error("[conversation-relay] caller transcript persistence failed", error));
 
-        const reply = await generateRestaurantReply({
+        let reply = await generateRestaurantReply({
           callerUtterance: message.voicePrompt,
           context: demoRestaurantContext,
           env,
           transcript: session.transcript,
         });
+        const createdOrderId = await maybeCreateStaffReviewOrder({
+          callStore,
+          session,
+          utterance: message.voicePrompt,
+        });
+
+        if (createdOrderId) {
+          reply = `${reply} I have sent that pickup order to the staff review queue. It will be pay at pickup.`;
+        }
 
         session.transcript.push({
           role: "agent",
@@ -169,4 +181,39 @@ function summarizeTranscript(transcript: TranscriptTurn[]) {
   const lastCallerTurn = callerTurns.at(-1);
   if (!lastCallerTurn) return "Call ended before a caller prompt was captured.";
   return `Caller asked: ${lastCallerTurn.text.slice(0, 220)}`;
+}
+
+async function maybeCreateStaffReviewOrder({
+  callStore,
+  session,
+  utterance,
+}: {
+  callStore: CallStore;
+  session: RelaySession;
+  utterance: string;
+}) {
+  if (session.orderCreatedId || !session.callRecordId) return null;
+
+  const capturedOrder = capturePickupOrder(utterance, demoRestaurantContext);
+  if (!capturedOrder) return null;
+
+  session.orderDraftItems = mergeCapturedOrderItems(session.orderDraftItems, capturedOrder.items);
+  if (!session.orderDraftItems.length) return null;
+
+  try {
+    const result = await callStore.createStaffReviewOrder({
+      callId: session.callRecordId,
+      customerName: capturedOrder.customerName,
+      customerPhone: session.callerPhone,
+      etaMinutes: 25,
+      items: session.orderDraftItems,
+      notes: `${capturedOrder.notes} Confidence: ${capturedOrder.confidence}%.`,
+    });
+
+    session.orderCreatedId = result.orderId;
+    return result.orderId ?? null;
+  } catch (error) {
+    console.error("[conversation-relay] staff-review order persistence failed", error);
+    return null;
+  }
 }

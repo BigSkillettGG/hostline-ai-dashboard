@@ -35,6 +35,7 @@ The first implementation is in `services/voice`:
 - `POST /voice/preview` calls the ElevenLabs Text to Speech API directly for dashboard previews.
 - OpenAI Responses API powers the restaurant-host reply path when an API key is configured.
 - A deterministic fallback responds safely without OpenAI during local development.
+- Clear pickup-order language with recognized menu items creates a staff-review, pay-at-pickup order in Supabase.
 
 ### Integration Workers
 
@@ -71,6 +72,7 @@ Own POS, reservation, SMS, printing, and kitchen tablet delivery. Integration fa
 - Escalate low confidence.
 - Persist every tool call with inputs, outputs, latency, and error details.
 - Degrade safely: if POS submission fails, create a staff-review order and alert the restaurant.
+- Staff-review orders are the default before any POS integration. They must be accepted by staff before kitchen production.
 
 ## Deployment Shape
 
@@ -90,6 +92,5 @@ Caller -> Twilio -> Voice Service -> LLM + tools
 2. Voice service writes call setup, prompts, replies, and summaries to Supabase.
 3. Dashboard reads reservations from Supabase instead of local mocks.
 4. FAQ call flow works from the knowledge base.
-5. Pickup order flow creates an order in staff-review mode.
-6. Dashboard shows the new call and order.
-7. Toast integration pushes accepted orders into the POS.
+5. Dashboard shows the new call and staff-review order.
+6. Toast integration pushes accepted orders into the POS.

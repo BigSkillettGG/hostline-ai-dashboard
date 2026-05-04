@@ -11,6 +11,7 @@ This service is the production path for inbound restaurant phone calls.
 - Generates restaurant-host replies with OpenAI Responses API when `OPENAI_API_KEY` is set.
 - Falls back to deterministic restaurant-safe replies when OpenAI is not configured.
 - Persists calls and transcript turns to Supabase when the server has a secret key and location ID.
+- Creates staff-review pickup orders when the caller clearly asks for pickup/takeout and mentions recognized menu items.
 - Provides a direct ElevenLabs preview endpoint at `POST /voice/preview`.
 - Validates Twilio signatures when `REQUIRE_TWILIO_SIGNATURE=true`.
 
@@ -49,6 +50,7 @@ POST https://your-tunnel.ngrok.app/twilio/voice
 
 - Payment is pay at pickup.
 - The AI does not collect card numbers.
+- Staff-review orders are not automatically sent to the kitchen or POS.
 - Manual reservation requests are not confirmed until staff confirms them.
 - Severe allergies are escalated or flagged for staff confirmation.
 - Human handoff remains a first-class fallback path.

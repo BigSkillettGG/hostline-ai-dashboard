@@ -1,4 +1,5 @@
 import type { VoiceServiceEnv } from "./env";
+import type { CapturedOrderItem } from "./order-intake";
 import type { ConversationRelaySetupMessage, TranscriptRole } from "./types";
 
 export interface StartCallInput {
@@ -20,10 +21,20 @@ export interface CompleteCallInput {
   status?: "new" | "reviewed" | "needs_review" | "resolved";
 }
 
+export interface CreateStaffReviewOrderInput {
+  callId?: string;
+  customerName?: string;
+  customerPhone?: string;
+  etaMinutes?: number;
+  items: CapturedOrderItem[];
+  notes?: string;
+}
+
 export interface CallStore {
   startCall(input: StartCallInput): Promise<{ callId?: string }>;
   addTranscriptTurn(input: AddTranscriptTurnInput): Promise<void>;
   completeCall(input: CompleteCallInput): Promise<void>;
+  createStaffReviewOrder(input: CreateStaffReviewOrderInput): Promise<{ orderId?: string }>;
 }
 
 export function createCallStore(env: VoiceServiceEnv): CallStore {
@@ -57,6 +68,14 @@ class NoopCallStore implements CallStore {
     console.info("[call-store] Supabase not configured; call close not persisted", {
       durationSeconds: input.durationSeconds,
     });
+  }
+
+  async createStaffReviewOrder(input: CreateStaffReviewOrderInput) {
+    console.info("[call-store] Supabase not configured; staff-review order not persisted", {
+      callId: input.callId,
+      itemCount: input.items.length,
+    });
+    return {};
   }
 }
 
@@ -120,6 +139,57 @@ class SupabaseCallStore implements CallStore {
       method: "PATCH",
       query: `id=eq.${encodeURIComponent(input.callId)}`,
     });
+  }
+
+  async createStaffReviewOrder(input: CreateStaffReviewOrderInput) {
+    if (!input.callId || !input.items.length) return {};
+
+    const totalCents = input.items.reduce((sum, item) => sum + item.priceCents * item.quantity, 0);
+    const rows = await this.request<Array<{ id: string }>>("orders", {
+      body: {
+        customer_name: input.customerName ?? "Unknown",
+        customer_phone: input.customerPhone ?? null,
+        destination: "staff_review",
+        eta_minutes: input.etaMinutes ?? 25,
+        location_id: this.locationId,
+        notes: input.notes ?? null,
+        payment_mode: "pay_at_pickup",
+        source_call_id: input.callId,
+        status: "new",
+        total_cents: totalCents,
+      },
+      headers: {
+        Prefer: "return=representation",
+      },
+      method: "POST",
+      query: "select=id",
+    });
+
+    const orderId = rows?.[0]?.id;
+    if (!orderId) return {};
+
+    await this.request("order_items", {
+      body: input.items.map((item) => ({
+        modifiers: item.modifiers ?? [],
+        name: item.name,
+        order_id: orderId,
+        price_cents: item.priceCents,
+        quantity: item.quantity,
+      })),
+      method: "POST",
+    });
+
+    await this.request("calls", {
+      body: {
+        intent: "order",
+        outcome: "order_placed",
+        summary: `Staff-review pickup order created with ${input.items.length} item type${input.items.length === 1 ? "" : "s"}.`,
+      },
+      method: "PATCH",
+      query: `id=eq.${encodeURIComponent(input.callId)}`,
+    });
+
+    return { orderId };
   }
 
   private async request<T = unknown>(

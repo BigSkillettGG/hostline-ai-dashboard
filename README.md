@@ -47,6 +47,8 @@ It exposes:
 - `POST /voice/preview` for ElevenLabs voice previews.
 - `POST /debug/reply` in non-production for testing restaurant replies.
 
+It also creates staff-review pickup orders from clear order language when menu items are recognized. These orders are pay-at-pickup and are not auto-sent to the kitchen or POS.
+
 See `services/voice/README.md` for provider setup.
 
 ## Next Engineering Milestones
@@ -54,6 +56,5 @@ See `services/voice/README.md` for provider setup.
 1. Add auth, organizations, locations, and roles.
 2. Connect dashboard reservations to Supabase queries.
 3. Implement FAQ calls from the restaurant knowledge base.
-4. Implement staff-review pickup orders before POS integrations.
-5. Add Toast as the first POS integration.
-6. Add OpenTable as the first reservation integration.
+4. Add Toast as the first POS integration.
+5. Add OpenTable as the first reservation integration.

@@ -4,7 +4,15 @@ export interface RestaurantVoiceContext {
   timezone: string;
   greeting: string;
   menuHighlights: string[];
+  menuItems: RestaurantMenuItem[];
   policies: Record<string, string>;
+}
+
+export interface RestaurantMenuItem {
+  name: string;
+  priceCents: number;
+  aliases?: string[];
+  modifiers?: string[];
 }
 
 export const demoRestaurantContext: RestaurantVoiceContext = {
@@ -18,6 +26,16 @@ export const demoRestaurantContext: RestaurantVoiceContext = {
     "Caesar salad",
     "Cacio e Pepe",
     "Tiramisu",
+  ],
+  menuItems: [
+    { name: "Margherita Pizza", priceCents: 1800, aliases: ["margherita", "margherita pizza"], modifiers: ["Light cheese", "Gluten-free crust"] },
+    { name: "Diavola Pizza", priceCents: 2100, aliases: ["diavola", "diavola pizza"] },
+    { name: "Caesar Salad", priceCents: 1400, aliases: ["caesar", "caesar salad"], modifiers: ["No anchovy", "Add chicken"] },
+    { name: "Cacio e Pepe", priceCents: 2200, aliases: ["cacio e pepe"] },
+    { name: "Spaghetti Bolognese", priceCents: 2200, aliases: ["bolognese", "spaghetti bolognese"] },
+    { name: "Lasagna", priceCents: 2400, aliases: ["lasagna"] },
+    { name: "Tiramisu", priceCents: 1100, aliases: ["tiramisu"] },
+    { name: "Sparkling Water", priceCents: 500, aliases: ["sparkling water"] },
   ],
   policies: {
     hours: "Open Tuesday through Thursday 5 PM to 10 PM, Friday 5 PM to 11 PM, Saturday noon to 11 PM, Sunday noon to 9 PM, closed Monday.",
