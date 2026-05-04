@@ -10,6 +10,7 @@ This service is the production path for inbound restaurant phone calls.
 - Receives ConversationRelay setup, prompt, DTMF, interrupt, and error messages.
 - Generates restaurant-host replies with OpenAI Responses API when `OPENAI_API_KEY` is set.
 - Falls back to deterministic restaurant-safe replies when OpenAI is not configured.
+- Persists calls and transcript turns to Supabase when the server has a secret key and location ID.
 - Provides a direct ElevenLabs preview endpoint at `POST /voice/preview`.
 - Validates Twilio signatures when `REQUIRE_TWILIO_SIGNATURE=true`.
 
@@ -40,6 +41,9 @@ POST https://your-tunnel.ngrok.app/twilio/voice
 - Twilio phone number pointed at `/twilio/voice`.
 - OpenAI API key for real LLM replies.
 - ElevenLabs voice ID for branded voice.
+- Supabase project with `docs/supabase-schema.sql` applied.
+- `SUPABASE_SECRET_KEY` or legacy service role key stored only on the voice-service backend.
+- `SUPABASE_DEMO_LOCATION_ID` set to a real `locations.id` value.
 
 ## Important Safety Defaults
 

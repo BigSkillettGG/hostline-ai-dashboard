@@ -95,6 +95,8 @@ create table menu_items (
 create table calls (
   id uuid primary key default gen_random_uuid(),
   location_id uuid not null references locations(id) on delete cascade,
+  external_call_sid text unique,
+  external_session_id text,
   caller_name text,
   caller_phone text,
   started_at timestamptz not null default now(),
@@ -105,6 +107,7 @@ create table calls (
   status call_status not null default 'new',
   summary text,
   recording_url text,
+  twilio_payload jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
 

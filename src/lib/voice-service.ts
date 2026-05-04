@@ -3,6 +3,7 @@ export interface VoiceServiceHealth {
   service: string;
   openaiConfigured: boolean;
   elevenLabsConfigured: boolean;
+  supabaseConfigured: boolean;
   twilioSignatureRequired: boolean;
 }
 

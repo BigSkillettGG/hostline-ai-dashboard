@@ -51,10 +51,9 @@ See `services/voice/README.md` for provider setup.
 
 ## Next Engineering Milestones
 
-1. Connect the voice service to Supabase for calls, transcripts, and staff-review orders.
-2. Add auth, organizations, locations, and roles.
-3. Connect the dashboard voice preview button to `/voice/preview`.
-4. Implement FAQ calls from the restaurant knowledge base.
-5. Implement staff-review pickup orders before POS integrations.
-6. Add Toast as the first POS integration.
-7. Add OpenTable as the first reservation integration.
+1. Add auth, organizations, locations, and roles.
+2. Connect dashboard calls/orders/reservations to Supabase queries.
+3. Implement FAQ calls from the restaurant knowledge base.
+4. Implement staff-review pickup orders before POS integrations.
+5. Add Toast as the first POS integration.
+6. Add OpenTable as the first reservation integration.

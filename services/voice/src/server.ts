@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { URL } from "node:url";
 import { WebSocketServer } from "ws";
+import { createCallStore } from "./call-store";
 import { createConversationRelayHandler } from "./conversation-relay";
 import { createElevenLabsPreview } from "./elevenlabs";
 import { loadEnv, type VoiceServiceEnv } from "./env";
@@ -10,12 +11,13 @@ import { validateTwilioSignature } from "./twilio-signature";
 import { buildConversationRelayTwiML, buildUnavailableTwiML } from "./twiml";
 
 const env = loadEnv();
+const callStore = createCallStore(env);
 const server = createServer((req, res) => {
   void handleRequest(req, res, env);
 });
 
 const wss = new WebSocketServer({ noServer: true });
-const handleConversationRelayConnection = createConversationRelayHandler(env);
+const handleConversationRelayConnection = createConversationRelayHandler(env, callStore);
 
 server.on("upgrade", (req, socket, head) => {
   const path = new URL(req.url ?? "/", "http://localhost").pathname;
@@ -56,6 +58,11 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       service: "hostline-voice",
       openaiConfigured: Boolean(currentEnv.OPENAI_API_KEY),
       elevenLabsConfigured: Boolean(currentEnv.ELEVENLABS_API_KEY),
+      supabaseConfigured: Boolean(
+        currentEnv.SUPABASE_URL &&
+          currentEnv.SUPABASE_SECRET_KEY &&
+          currentEnv.SUPABASE_DEMO_LOCATION_ID,
+      ),
       twilioSignatureRequired: currentEnv.REQUIRE_TWILIO_SIGNATURE,
     });
     return;

@@ -526,6 +526,11 @@ export default function VoiceAgent() {
                   state={serviceHealth?.openaiConfigured ? "ready" : "pending"}
                 />
                 <ServiceStatusRow
+                  label="Supabase logging"
+                  value={serviceHealth?.supabaseConfigured ? "Calls will be saved" : "Not connected"}
+                  state={serviceHealth?.supabaseConfigured ? "ready" : "pending"}
+                />
+                <ServiceStatusRow
                   label="Twilio signatures"
                   value={serviceHealth?.twilioSignatureRequired ? "Required" : "Relaxed for local dev"}
                   state={serviceHealth?.twilioSignatureRequired ? "ready" : "pending"}

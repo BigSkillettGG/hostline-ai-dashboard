@@ -1,5 +1,6 @@
 import type { IncomingMessage } from "node:http";
 import type { WebSocket } from "ws";
+import type { CallStore } from "./call-store";
 import type { VoiceServiceEnv } from "./env";
 import { demoRestaurantContext } from "./restaurant-context";
 import { generateRestaurantReply } from "./restaurant-agent";
@@ -12,16 +13,18 @@ import type {
 
 interface RelaySession {
   id?: string;
+  callRecordId?: string;
   callSid?: string;
   callerPhone?: string;
+  startedAt: number;
   transcript: TranscriptTurn[];
 }
 
-export function createConversationRelayHandler(env: VoiceServiceEnv) {
+export function createConversationRelayHandler(env: VoiceServiceEnv, callStore: CallStore) {
   const sessions = new WeakMap<WebSocket, RelaySession>();
 
   return function handleConversationRelayConnection(ws: WebSocket, req: IncomingMessage) {
-    const session: RelaySession = { transcript: [] };
+    const session: RelaySession = { startedAt: Date.now(), transcript: [] };
     sessions.set(ws, session);
 
     console.info("[conversation-relay] connected", req.url);
@@ -32,6 +35,16 @@ export function createConversationRelayHandler(env: VoiceServiceEnv) {
 
       if (message.type === "setup") {
         applySetupMessage(session, message);
+        try {
+          const result = await callStore.startCall({
+            locationId: message.customParameters?.locationId,
+            setup: message,
+          });
+          session.callRecordId = result.callId;
+        } catch (error) {
+          console.error("[conversation-relay] call start persistence failed", error);
+        }
+
         console.info("[conversation-relay] setup", {
           callSid: session.callSid,
           from: session.callerPhone,
@@ -48,6 +61,12 @@ export function createConversationRelayHandler(env: VoiceServiceEnv) {
           text: message.voicePrompt,
           at: new Date().toISOString(),
         });
+        void callStore.addTranscriptTurn({
+          callId: session.callRecordId,
+          offsetSeconds: getSessionOffsetSeconds(session),
+          speaker: "caller",
+          text: message.voicePrompt,
+        }).catch((error) => console.error("[conversation-relay] caller transcript persistence failed", error));
 
         const reply = await generateRestaurantReply({
           callerUtterance: message.voicePrompt,
@@ -61,6 +80,12 @@ export function createConversationRelayHandler(env: VoiceServiceEnv) {
           text: reply,
           at: new Date().toISOString(),
         });
+        void callStore.addTranscriptTurn({
+          callId: session.callRecordId,
+          offsetSeconds: getSessionOffsetSeconds(session),
+          speaker: "agent",
+          text: reply,
+        }).catch((error) => console.error("[conversation-relay] agent transcript persistence failed", error));
 
         sendText(ws, reply, message.lang);
         return;
@@ -85,8 +110,17 @@ export function createConversationRelayHandler(env: VoiceServiceEnv) {
     });
 
     ws.on("close", () => {
+      const durationSeconds = getSessionOffsetSeconds(session);
+      void callStore.completeCall({
+        callId: session.callRecordId,
+        durationSeconds,
+        status: session.transcript.length ? "resolved" : "needs_review",
+        summary: summarizeTranscript(session.transcript),
+      }).catch((error) => console.error("[conversation-relay] call close persistence failed", error));
+
       console.info("[conversation-relay] closed", {
         callSid: session.callSid,
+        durationSeconds,
         turns: session.transcript.length,
       });
     });
@@ -124,4 +158,15 @@ function applySetupMessage(session: RelaySession, message: ConversationRelaySetu
   session.id = message.sessionId;
   session.callSid = message.callSid;
   session.callerPhone = message.from;
+}
+
+function getSessionOffsetSeconds(session: RelaySession) {
+  return (Date.now() - session.startedAt) / 1000;
+}
+
+function summarizeTranscript(transcript: TranscriptTurn[]) {
+  const callerTurns = transcript.filter((turn) => turn.role === "caller");
+  const lastCallerTurn = callerTurns.at(-1);
+  if (!lastCallerTurn) return "Call ended before a caller prompt was captured.";
+  return `Caller asked: ${lastCallerTurn.text.slice(0, 220)}`;
 }
