@@ -359,7 +359,11 @@ export const users = [
 // Hourly call volume for today (24 hours)
 export const callVolumeByHour = [
   0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 6, 5, 4, 6, 8, 12, 18, 22, 19, 14, 8, 3,
-].map((v, h) => ({ hour: `${h}:00`, calls: v }));
+].map((v, h) => {
+  const period = h < 12 ? "AM" : "PM";
+  const display = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return { hour: `${display}${period}`, calls: v };
+});
 
 export const dashboardStats = {
   callsAnswered: { value: 87, delta: 12 },
