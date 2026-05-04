@@ -1,4 +1,12 @@
-import type { Call, CallIntent, CallOutcome, CallStatus, TranscriptSpeaker } from "@/data/mock";
+import type {
+  Call,
+  CallIntent,
+  CallOutcome,
+  CallStatus,
+  Order,
+  OrderStatus,
+  TranscriptSpeaker,
+} from "@/data/mock";
 
 const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL ?? "").replace(/\/$/, "");
 const supabasePublishableKey =
@@ -8,6 +16,7 @@ const callIntents: CallIntent[] = ["order", "reservation", "faq", "hours", "othe
 const callOutcomes: CallOutcome[] = ["resolved", "order_placed", "reservation_booked", "escalated", "voicemail", "missed", "unknown"];
 const callStatuses: CallStatus[] = ["new", "reviewed", "needs_review", "resolved"];
 const transcriptSpeakers: TranscriptSpeaker[] = ["agent", "caller", "staff"];
+const orderStatuses: OrderStatus[] = ["new", "accepted", "in_progress", "completed", "canceled"];
 
 interface SupabaseCallRow {
   id: string;
@@ -27,6 +36,28 @@ interface SupabaseTranscriptTurnRow {
   speaker: string;
   text: string;
   offset_seconds: number | null;
+}
+
+interface SupabaseOrderRow {
+  id: string;
+  source_call_id: string | null;
+  customer_name: string | null;
+  customer_phone: string | null;
+  status: string | null;
+  total_cents: number | null;
+  eta_minutes: number | null;
+  payment_mode: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+interface SupabaseOrderItemRow {
+  order_id: string;
+  name: string;
+  quantity: number | null;
+  price_cents: number | null;
+  modifiers: unknown;
+  notes: string | null;
 }
 
 export function isSupabaseConfigured() {
@@ -62,6 +93,47 @@ export async function fetchCallsFromSupabase(): Promise<Call[]> {
   return mapSupabaseCalls(calls, transcriptTurns);
 }
 
+export async function fetchOrdersFromSupabase(): Promise<Order[]> {
+  if (!isSupabaseConfigured()) {
+    throw new Error("Supabase is not configured.");
+  }
+
+  const orders = await supabaseRequest<SupabaseOrderRow[]>(
+    "orders",
+    new URLSearchParams({
+      limit: "100",
+      order: "created_at.desc",
+      select: "id,source_call_id,customer_name,customer_phone,status,total_cents,eta_minutes,payment_mode,notes,created_at",
+    }),
+  );
+
+  const orderIds = orders.map((order) => order.id);
+  const orderItems = orderIds.length
+    ? await supabaseRequest<SupabaseOrderItemRow[]>(
+        "order_items",
+        new URLSearchParams({
+          order_id: `in.(${orderIds.join(",")})`,
+          select: "order_id,name,quantity,price_cents,modifiers,notes",
+        }),
+      )
+    : [];
+
+  return mapSupabaseOrders(orders, orderItems);
+}
+
+export async function updateOrderStatusInSupabase(orderId: string, status: OrderStatus) {
+  if (!isSupabaseConfigured()) {
+    throw new Error("Supabase is not configured.");
+  }
+
+  await supabaseRequest("orders", new URLSearchParams({ id: `eq.${orderId}` }), {
+    body: {
+      status,
+    },
+    method: "PATCH",
+  });
+}
+
 export function mapSupabaseCalls(
   calls: SupabaseCallRow[],
   transcriptTurns: SupabaseTranscriptTurnRow[],
@@ -93,6 +165,43 @@ export function mapSupabaseCalls(
   }));
 }
 
+export function mapSupabaseOrders(
+  orders: SupabaseOrderRow[],
+  orderItems: SupabaseOrderItemRow[],
+): Order[] {
+  const itemsByOrderId = new Map<string, SupabaseOrderItemRow[]>();
+
+  for (const item of orderItems) {
+    const currentItems = itemsByOrderId.get(item.order_id) ?? [];
+    currentItems.push(item);
+    itemsByOrderId.set(item.order_id, currentItems);
+  }
+
+  return orders.map((order) => {
+    const items = (itemsByOrderId.get(order.id) ?? []).map((item) => ({
+      modifiers: normalizeStringArray(item.modifiers),
+      name: item.name,
+      notes: item.notes ?? undefined,
+      price: centsToDollars(item.price_cents ?? 0),
+      qty: item.quantity ?? 1,
+    }));
+
+    return {
+      id: order.id,
+      createdAt: order.created_at,
+      customer: order.customer_name?.trim() || "Unknown",
+      etaMinutes: order.eta_minutes ?? 0,
+      items,
+      notes: order.notes ?? undefined,
+      payAtPickup: order.payment_mode === "pay_at_pickup",
+      phone: order.customer_phone?.trim() || "Unknown",
+      sourceCallId: order.source_call_id ?? undefined,
+      status: normalizeEnum(order.status, orderStatuses, "new"),
+      total: centsToDollars(order.total_cents ?? calculateItemsTotalCents(items)),
+    };
+  });
+}
+
 function normalizeEnum<T extends string>(value: string | null | undefined, allowedValues: T[], fallback: T): T {
   return allowedValues.includes(value as T) ? (value as T) : fallback;
 }
@@ -104,12 +213,37 @@ function formatOffset(offsetSeconds: number) {
   return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
 }
 
-async function supabaseRequest<T>(table: string, params: URLSearchParams) {
+function centsToDollars(cents: number) {
+  return cents / 100;
+}
+
+function calculateItemsTotalCents(items: Array<{ price: number; qty: number }>) {
+  return Math.round(items.reduce((sum, item) => sum + item.price * item.qty, 0) * 100);
+}
+
+function normalizeStringArray(value: unknown) {
+  if (!Array.isArray(value)) return undefined;
+  const strings = value.filter((item): item is string => typeof item === "string");
+  return strings.length ? strings : undefined;
+}
+
+async function supabaseRequest<T>(
+  table: string,
+  params: URLSearchParams,
+  options?: {
+    body?: unknown;
+    method?: "GET" | "PATCH";
+  },
+) {
   const response = await fetch(`${supabaseUrl}/rest/v1/${table}?${params.toString()}`, {
+    body: options?.body ? JSON.stringify(options.body) : undefined,
     headers: {
       apikey: supabasePublishableKey,
       Authorization: `Bearer ${supabasePublishableKey}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
     },
+    method: options?.method ?? "GET",
   });
 
   if (!response.ok) {
@@ -117,5 +251,7 @@ async function supabaseRequest<T>(table: string, params: URLSearchParams) {
     throw new Error(`Supabase ${table} request failed: ${response.status} ${body}`);
   }
 
-  return (await response.json()) as T;
+  if (response.status === 204) return undefined as T;
+  const text = await response.text();
+  return text ? (JSON.parse(text) as T) : (undefined as T);
 }

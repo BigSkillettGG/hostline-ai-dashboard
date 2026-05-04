@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapSupabaseCalls } from "./supabase-rest";
+import { mapSupabaseCalls, mapSupabaseOrders } from "./supabase-rest";
 
 describe("Supabase call mapping", () => {
   it("maps persisted calls and transcript turns into dashboard call records", () => {
@@ -71,5 +71,82 @@ describe("Supabase call mapping", () => {
     expect(calls[0].intent).toBe("other");
     expect(calls[0].outcome).toBe("unknown");
     expect(calls[0].status).toBe("new");
+  });
+});
+
+describe("Supabase order mapping", () => {
+  it("maps persisted orders and items into dashboard order records", () => {
+    const orders = mapSupabaseOrders(
+      [
+        {
+          created_at: "2026-05-04T20:15:00.000Z",
+          customer_name: "Sarah Chen",
+          customer_phone: "+15551234567",
+          eta_minutes: 25,
+          id: "order_1",
+          notes: "Pickup at counter",
+          payment_mode: "pay_at_pickup",
+          source_call_id: "call_1",
+          status: "accepted",
+          total_cents: 5300,
+        },
+      ],
+      [
+        {
+          modifiers: ["Light cheese"],
+          name: "Margherita Pizza",
+          notes: null,
+          order_id: "order_1",
+          price_cents: 1800,
+          quantity: 1,
+        },
+        {
+          modifiers: [],
+          name: "Caesar Salad",
+          notes: "Dressing on side",
+          order_id: "order_1",
+          price_cents: 1400,
+          quantity: 1,
+        },
+      ],
+    );
+
+    expect(orders[0]).toMatchObject({
+      customer: "Sarah Chen",
+      etaMinutes: 25,
+      payAtPickup: true,
+      phone: "+15551234567",
+      sourceCallId: "call_1",
+      status: "accepted",
+      total: 53,
+    });
+    expect(orders[0].items).toEqual([
+      { modifiers: ["Light cheese"], name: "Margherita Pizza", notes: undefined, price: 18, qty: 1 },
+      { modifiers: undefined, name: "Caesar Salad", notes: "Dressing on side", price: 14, qty: 1 },
+    ]);
+  });
+
+  it("normalizes unexpected order status values", () => {
+    const orders = mapSupabaseOrders(
+      [
+        {
+          created_at: "2026-05-04T20:15:00.000Z",
+          customer_name: null,
+          customer_phone: null,
+          eta_minutes: null,
+          id: "order_2",
+          notes: null,
+          payment_mode: null,
+          source_call_id: null,
+          status: "mystery",
+          total_cents: null,
+        },
+      ],
+      [],
+    );
+
+    expect(orders[0].customer).toBe("Unknown");
+    expect(orders[0].status).toBe("new");
+    expect(orders[0].total).toBe(0);
   });
 });

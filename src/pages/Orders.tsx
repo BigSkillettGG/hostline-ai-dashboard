@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PageHeader, PageBody } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,10 +8,11 @@ import { orders as seed, type Order, type OrderStatus } from "@/data/mock";
 import { formatMoney, formatTime } from "@/lib/format";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Printer, Send, Clock, Phone, ShoppingBag } from "lucide-react";
+import { Printer, Send, Clock, Phone, ShoppingBag, RefreshCw } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
+import { fetchOrdersFromSupabase, isSupabaseConfigured, updateOrderStatusInSupabase } from "@/lib/supabase-rest";
 
 const columns: { key: OrderStatus; label: string; tint: string }[] = [
   { key: "new", label: "New", tint: "border-l-info" },
@@ -19,20 +21,53 @@ const columns: { key: OrderStatus; label: string; tint: string }[] = [
   { key: "completed", label: "Completed", tint: "border-l-success" },
   { key: "canceled", label: "Canceled", tint: "border-l-muted-foreground/40" },
 ];
+const orderFlow: OrderStatus[] = ["new", "accepted", "in_progress", "completed"];
 
 export default function Orders() {
-  const [orders, setOrders] = useState<Order[]>(seed);
+  const queryClient = useQueryClient();
+  const [sampleOrders, setSampleOrders] = useState<Order[]>(seed);
   const [view, setView] = useState<"kanban" | "table">("kanban");
   const [selected, setSelected] = useState<Order | null>(null);
+  const supabaseConfigured = isSupabaseConfigured();
+  const orderQuery = useQuery({
+    enabled: supabaseConfigured,
+    queryFn: fetchOrdersFromSupabase,
+    queryKey: ["orders", "supabase"],
+    refetchInterval: 30_000,
+  });
+  const usingSupabase = Boolean(supabaseConfigured && orderQuery.isSuccess);
+  const orders = usingSupabase ? (orderQuery.data ?? []) : sampleOrders;
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: OrderStatus }) => updateOrderStatusInSupabase(id, status),
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Order status update failed");
+    },
+    onSuccess: async (_, variables) => {
+      setSelected((current) => current?.id === variables.id ? { ...current, status: variables.status } : current);
+      await queryClient.invalidateQueries({ queryKey: ["orders", "supabase"] });
+      toast.success("Order status updated");
+    },
+  });
 
   const advance = (id: string, dir: 1 | -1) => {
-    const order = ["new", "accepted", "in_progress", "completed"];
-    setOrders(os => os.map(o => {
+    const order = orders.find((item) => item.id === id);
+    if (!order) return;
+
+    const i = orderFlow.indexOf(order.status);
+    const next = orderFlow[Math.max(0, Math.min(orderFlow.length - 1, i + dir))];
+    if (!next || next === order.status) return;
+
+    if (usingSupabase) {
+      statusMutation.mutate({ id, status: next });
+      return;
+    }
+
+    setSampleOrders(os => os.map(o => {
       if (o.id !== id) return o;
-      const i = order.indexOf(o.status);
-      const next = order[Math.max(0, Math.min(order.length - 1, i + dir))];
-      return { ...o, status: next as OrderStatus };
+      return { ...o, status: next };
     }));
+    setSelected((current) => current?.id === id ? { ...current, status: next } : current);
+    toast.success("Advanced");
   };
 
   return (
@@ -41,15 +76,36 @@ export default function Orders() {
         title="Orders"
         description={`${orders.filter(o => o.status !== "completed" && o.status !== "canceled").length} active · ${orders.length} today`}
         actions={
-          <Tabs value={view} onValueChange={(v) => setView(v as any)}>
-            <TabsList className="h-9">
-              <TabsTrigger value="kanban" className="text-xs">Kanban</TabsTrigger>
-              <TabsTrigger value="table" className="text-xs">Table</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <>
+            <Badge variant="outline" className={usingSupabase ? "border-success/20 bg-success/10 text-success" : "bg-muted text-muted-foreground"}>
+              {usingSupabase ? "Live Supabase" : "Sample data"}
+            </Badge>
+            {supabaseConfigured && (
+              <Button variant="outline" size="sm" onClick={() => orderQuery.refetch()} disabled={orderQuery.isFetching}>
+                <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${orderQuery.isFetching ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+            )}
+            <Tabs value={view} onValueChange={(v) => setView(v as any)}>
+              <TabsList className="h-9">
+                <TabsTrigger value="kanban" className="text-xs">Kanban</TabsTrigger>
+                <TabsTrigger value="table" className="text-xs">Table</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </>
         }
       />
-      <PageBody>
+      <PageBody className="space-y-4">
+        {orderQuery.isError && (
+          <Card className="border-warning/30 bg-warning/10 p-3 text-sm text-muted-foreground">
+            Supabase orders could not be loaded, so this page is showing sample data. {orderQuery.error instanceof Error ? orderQuery.error.message : ""}
+          </Card>
+        )}
+        {!supabaseConfigured && (
+          <Card className="border-dashed bg-muted/20 p-3 text-sm text-muted-foreground">
+            Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY to show real orders from Supabase.
+          </Card>
+        )}
         {view === "kanban" ? (
           <div className="grid gap-3 lg:grid-cols-5">
             {columns.map(col => {
@@ -189,7 +245,7 @@ export default function Orders() {
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  <Button size="sm" onClick={() => { advance(selected.id, 1); toast.success("Advanced"); }}>Advance status</Button>
+                  <Button size="sm" onClick={() => advance(selected.id, 1)} disabled={statusMutation.isPending}>Advance status</Button>
                   <Button size="sm" variant="outline" onClick={() => toast.success("Sent to printer")}><Printer className="mr-1.5 h-3.5 w-3.5" />Print</Button>
                   <Button size="sm" variant="outline" onClick={() => toast.success("SMS sent")}><Send className="mr-1.5 h-3.5 w-3.5" />Send SMS</Button>
                 </div>
