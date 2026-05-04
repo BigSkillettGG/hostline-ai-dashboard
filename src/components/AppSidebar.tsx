@@ -1,7 +1,7 @@
 import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, Phone, ShoppingBag, CalendarDays, BookOpen,
-  Bot, Plug, Settings as SettingsIcon, UtensilsCrossed, Flame,
+  Bot, Plug, Settings as SettingsIcon, UtensilsCrossed, Flame, ClipboardCheck,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 
 const items = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
+  { title: "Onboarding", url: "/onboarding", icon: ClipboardCheck },
   { title: "Calls", url: "/calls", icon: Phone },
   { title: "Orders", url: "/orders", icon: ShoppingBag },
   { title: "Reservations", url: "/reservations", icon: CalendarDays },

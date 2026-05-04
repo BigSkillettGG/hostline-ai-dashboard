@@ -19,6 +19,7 @@ import {
   type AfterHoursBehavior,
   type CallHandlingMode,
   type OrderDestination,
+  type RestaurantAgentConfig,
   type ReservationMode,
 } from "@/domain/restaurant-config";
 import {
@@ -44,6 +45,7 @@ import {
   voiceServiceBaseUrl,
   type VoiceServiceHealth,
 } from "@/lib/voice-service";
+import { loadOnboardingDraft } from "@/lib/onboarding-draft";
 
 const variables = ["{restaurant_name}", "{caller_name}", "{hours_today}"];
 
@@ -56,7 +58,7 @@ const capabilityRows = [
 ] as const;
 
 export default function VoiceAgent() {
-  const [config, setConfig] = useState(defaultRestaurantAgentConfig);
+  const [config, setConfig] = useState<RestaurantAgentConfig>(() => createConfigFromOnboardingDraft());
   const [serviceHealth, setServiceHealth] = useState<VoiceServiceHealth | null>(null);
   const [serviceError, setServiceError] = useState<string | null>(null);
   const [checkingService, setCheckingService] = useState(false);
@@ -607,6 +609,67 @@ export default function VoiceAgent() {
       </PageBody>
     </>
   );
+}
+
+function createConfigFromOnboardingDraft(): RestaurantAgentConfig {
+  const draft = loadOnboardingDraft();
+  const callHandlingMode = mapCallHandlingMode(String(draft.callHandling ?? ""));
+  const takeOrders = draft.takeOrders !== false;
+  const takeReservations = draft.takeReservations !== false;
+  const provider = mapReservationProvider(String(draft.reservationProvider ?? ""));
+
+  return {
+    ...defaultRestaurantAgentConfig,
+    callHandlingMode,
+    escalationPhoneNumber: String(draft.escalationPhone || defaultRestaurantAgentConfig.escalationPhoneNumber),
+    greetingTemplate: String(draft.greeting || defaultRestaurantAgentConfig.greetingTemplate),
+    hostName: String(draft.hostName || defaultRestaurantAgentConfig.hostName),
+    orders: {
+      ...defaultRestaurantAgentConfig.orders,
+      defaultPickupEtaMinutes: parsePickupEta(String(draft.defaultPickupEta ?? "")),
+      enabled: takeOrders,
+    },
+    reservations: {
+      ...defaultRestaurantAgentConfig.reservations,
+      mode: takeReservations ? defaultRestaurantAgentConfig.reservations.mode : "disabled",
+      provider,
+    },
+    tone: mapVoiceTone(String(draft.tone ?? "")),
+    capabilities: {
+      ...defaultRestaurantAgentConfig.capabilities,
+      handleReservations: takeReservations,
+      takeOrders,
+    },
+  };
+}
+
+function mapCallHandlingMode(value: string): CallHandlingMode {
+  if (value === "Immediately") return "answer_immediately";
+  if (value === "After-hours only") return "after_hours_only";
+  if (value === "Manual on/off") return "manually_enabled";
+  return "answer_after_rings";
+}
+
+function mapReservationProvider(value: string): RestaurantAgentConfig["reservations"]["provider"] {
+  const normalized = value.toLowerCase();
+  if (normalized.includes("yelp")) return "yelp_guest_manager";
+  if (normalized.includes("sevenrooms")) return "sevenrooms";
+  if (normalized.includes("resy")) return "resy";
+  if (normalized.includes("tock")) return "tock";
+  if (normalized.includes("manual") || normalized.includes("no reservations")) return "none";
+  return "opentable";
+}
+
+function mapVoiceTone(value: string): RestaurantAgentConfig["tone"] {
+  const normalized = value.toLowerCase();
+  if (normalized.includes("professional") || normalized.includes("calm")) return "professional";
+  if (normalized.includes("playful") || normalized.includes("bright")) return "playful";
+  return "warm";
+}
+
+function parsePickupEta(value: string) {
+  const minutes = Number.parseInt(value, 10);
+  return Number.isFinite(minutes) && minutes > 0 ? minutes : defaultRestaurantAgentConfig.orders.defaultPickupEtaMinutes;
 }
 
 function ServiceStatusRow({

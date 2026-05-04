@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import AppLayout from "./components/AppLayout";
 import Dashboard from "./pages/Dashboard";
+import Onboarding from "./pages/Onboarding";
 import Calls from "./pages/Calls";
 import Orders from "./pages/Orders";
 import Reservations from "./pages/Reservations";
@@ -26,6 +27,7 @@ const App = () => (
         <Routes>
           <Route element={<AppLayout />}>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/onboarding" element={<Onboarding />} />
             <Route path="/calls" element={<Calls />} />
             <Route path="/orders" element={<Orders />} />
             <Route path="/reservations" element={<Reservations />} />

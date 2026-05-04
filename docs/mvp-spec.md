@@ -30,6 +30,8 @@ Each location needs these setup controls:
 - Knowledge base: hours, address, parking, pickup policy, delivery policy, allergy policy, large parties, private events, dress code, accessibility, gift cards, and custom FAQs.
 - Menu: items, categories, modifiers, prices, prep times, 86'd availability, and upsell suggestions.
 
+The self-service onboarding flow should collect these details through a conversational interview before the restaurant reaches the live dashboard. See `docs/onboarding-knowledge-scope.md` for the full knowledge map.
+
 ## Call Flows
 
 ### FAQ
@@ -89,6 +91,10 @@ The direct ElevenLabs Text to Speech endpoint is used for dashboard voice previe
 - No enterprise SSO/procurement workflow.
 - No hidden AI impersonation. The default greeting should lightly disclose the AI host.
 - No hand-built full POS replacement.
+
+## Production Workstreams
+
+The production build is tracked as 12 workstreams. See `docs/production-roadmap.md` for the current sequence and scope.
 
 ## Pilot Success Metrics
 

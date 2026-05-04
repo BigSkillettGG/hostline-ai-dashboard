@@ -51,10 +51,21 @@ It also creates staff-review pickup orders from clear order language when menu i
 
 See `services/voice/README.md` for provider setup.
 
+## Onboarding
+
+The app now includes a guided onboarding surface at `/onboarding`. It captures the restaurant profile, menu sources, service periods, order rules, reservation rules, policies, voice behavior, and phone launch details needed before the first test call.
+
+See:
+
+- `docs/onboarding-knowledge-scope.md`
+- `docs/production-roadmap.md`
+
 ## Next Engineering Milestones
 
-1. Add auth, organizations, locations, and roles.
-2. Connect dashboard reservations to Supabase queries.
-3. Implement FAQ calls from the restaurant knowledge base.
-4. Add Toast as the first POS integration.
-5. Add OpenTable as the first reservation integration.
+1. Persist onboarding profiles to Supabase.
+2. Provision Twilio phone numbers from onboarding.
+3. Use onboarded location profiles in the live voice service.
+4. Connect dashboard reservations to Supabase queries.
+5. Implement FAQ calls from the restaurant knowledge base.
+6. Add Toast as the first POS integration.
+7. Add OpenTable as the first reservation integration.
