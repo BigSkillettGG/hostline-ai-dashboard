@@ -15,9 +15,9 @@ import { LogoCloud } from "@/components/marketing/LogoCloud";
 
 import { testimonials, homeFaqs } from "@/data/marketing";
 
-import heroRestaurant from "/marketing/hero-restaurant.jpg?url";
-import hostOnPhone from "/marketing/host-on-phone.jpg?url";
-import happyGuests from "/marketing/happy-guests.jpg?url";
+const heroRestaurant = "/marketing/hero-restaurant.jpg";
+const hostOnPhone = "/marketing/host-on-phone.jpg";
+const happyGuests = "/marketing/happy-guests.jpg";
 
 export default function MarketingHome() {
   return (
