@@ -5,7 +5,9 @@ import { createCallStore } from "./call-store";
 import { createConversationRelayHandler } from "./conversation-relay";
 import { createElevenLabsPreview } from "./elevenlabs";
 import { loadEnv, type VoiceServiceEnv } from "./env";
+import { createPhoneNumberStore } from "./phone-number-store";
 import { createRestaurantContextStore } from "./restaurant-context-store";
+import { createTelephonyService } from "./telephony";
 import { demoRestaurantContext } from "./restaurant-context";
 import { generateRestaurantReply } from "./restaurant-agent";
 import { validateTwilioSignature } from "./twilio-signature";
@@ -13,7 +15,9 @@ import { buildConversationRelayTwiML, buildUnavailableTwiML } from "./twiml";
 
 const env = loadEnv();
 const callStore = createCallStore(env);
+const phoneNumberStore = createPhoneNumberStore(env);
 const restaurantContextStore = createRestaurantContextStore(env);
+const telephonyService = createTelephonyService(env);
 const server = createServer((req, res) => {
   void handleRequest(req, res, env);
 });
@@ -70,8 +74,62 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
           currentEnv.SUPABASE_SECRET_KEY &&
           currentEnv.SUPABASE_DEMO_LOCATION_ID,
       ),
+      twilioProvisioningConfigured: telephonyService.configured,
       twilioSignatureRequired: currentEnv.REQUIRE_TWILIO_SIGNATURE,
     });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/telephony/available-numbers") {
+    if (!isAuthorizedInternalRequest(req, currentEnv)) {
+      sendJson(res, 401, { error: "Unauthorized" });
+      return;
+    }
+
+    try {
+      const numbers = await telephonyService.searchAvailableNumbers({
+        areaCode: url.searchParams.get("areaCode") ?? undefined,
+        contains: url.searchParams.get("contains") ?? undefined,
+        country: url.searchParams.get("country") ?? undefined,
+        limit: Number(url.searchParams.get("limit") ?? "5"),
+      });
+      sendJson(res, 200, { numbers });
+    } catch (error) {
+      sendJson(res, 500, { error: error instanceof Error ? error.message : "Twilio number search failed" });
+    }
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/telephony/provision-number") {
+    if (!isAuthorizedInternalRequest(req, currentEnv)) {
+      sendJson(res, 401, { error: "Unauthorized" });
+      return;
+    }
+
+    try {
+      const body = JSON.parse(await readRequestBody(req)) as {
+        forwardingMode?: string;
+        locationId?: string;
+        phoneNumber?: string;
+        restaurantMainLine?: string;
+      };
+      if (!body.phoneNumber?.trim()) {
+        sendJson(res, 400, { error: "phoneNumber is required" });
+        return;
+      }
+
+      const input = {
+        forwardingMode: body.forwardingMode,
+        locationId: body.locationId ?? currentEnv.SUPABASE_DEMO_LOCATION_ID,
+        phoneNumber: body.phoneNumber.trim(),
+        restaurantMainLine: body.restaurantMainLine,
+      };
+      const provisioned = await telephonyService.provisionPhoneNumber(input);
+      await phoneNumberStore.saveProvisionedNumber(input, provisioned);
+      sendJson(res, 200, { phoneNumber: provisioned });
+    } catch (error) {
+      sendJson(res, 500, { error: error instanceof Error ? error.message : "Twilio number provisioning failed" });
+    }
     return;
   }
 
@@ -174,6 +232,14 @@ function isValidTwilioUpgrade(req: IncomingMessage, currentEnv: VoiceServiceEnv)
     expectedSignature: req.headers["x-twilio-signature"],
     url: `${currentEnv.PUBLIC_WS_BASE_URL}${req.url ?? ""}`,
   });
+}
+
+function isAuthorizedInternalRequest(req: IncomingMessage, currentEnv: VoiceServiceEnv) {
+  if (!currentEnv.HOSTLINE_INTERNAL_API_KEY) {
+    return currentEnv.NODE_ENV !== "production";
+  }
+
+  return req.headers["x-hostline-api-key"] === currentEnv.HOSTLINE_INTERNAL_API_KEY;
 }
 
 async function readRequestBody(req: IncomingMessage) {

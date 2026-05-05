@@ -84,6 +84,24 @@ create table onboarding_profiles (
   unique(location_id)
 );
 
+create table phone_numbers (
+  id uuid primary key default gen_random_uuid(),
+  location_id uuid not null references locations(id) on delete cascade,
+  provider text not null default 'twilio',
+  provider_sid text,
+  phone_number text not null,
+  restaurant_main_line text,
+  forwarding_mode text not null default 'forward_unanswered',
+  forwarding_status text not null default 'not_verified',
+  status text not null default 'provisioned',
+  voice_webhook_url text,
+  capabilities jsonb not null default '{}'::jsonb,
+  last_verified_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(provider, phone_number)
+);
+
 create table menu_categories (
   id uuid primary key default gen_random_uuid(),
   location_id uuid not null references locations(id) on delete cascade,

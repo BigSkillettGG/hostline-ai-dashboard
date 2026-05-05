@@ -8,10 +8,14 @@ const envSchema = z.object({
   PUBLIC_HTTP_BASE_URL: z.string().url().optional(),
   PUBLIC_WS_BASE_URL: z.string().url().optional(),
   VOICE_SERVICE_ALLOWED_ORIGIN: z.string().default("*"),
+  HOSTLINE_INTERNAL_API_KEY: z.string().optional(),
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_SECRET_KEY: z.string().optional(),
   SUPABASE_DEMO_LOCATION_ID: z.string().uuid().optional(),
+  TWILIO_ACCOUNT_SID: z.string().optional(),
+  TWILIO_API_BASE_URL: z.string().url().default("https://api.twilio.com"),
   TWILIO_AUTH_TOKEN: z.string().optional(),
+  TWILIO_DEFAULT_COUNTRY: z.string().default("US"),
   REQUIRE_TWILIO_SIGNATURE: z
     .enum(["true", "false"])
     .default("false")

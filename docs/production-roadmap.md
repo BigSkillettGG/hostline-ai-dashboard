@@ -24,7 +24,7 @@ There are 12 production workstreams:
 1. Onboarding UI and knowledge scope.
 2. Persist onboarding profile to Supabase tables.
 3. Use the onboarded location profile in the live voice service.
-4. Add Twilio number provisioning and forwarding status.
+4. Twilio number provisioning and forwarding status.
 5. Expand menu ingestion so uploaded/linked menus create `menu_items` rows for the voice service.
 6. Add reservation request persistence and OpenTable integration path.
 7. Add staff notification channels for orders and handoffs.
@@ -41,6 +41,7 @@ There are 12 production workstreams:
 - Clear pickup orders can create staff-review orders.
 - Onboarding scope, guided setup UI, and Supabase onboarding profile persistence are now part of the app.
 - The live voice service can load onboarded restaurant context from Supabase for call greetings and replies.
+- The voice backend has internal Twilio number search/provisioning endpoints, and the dashboard can read persisted phone-number forwarding status.
 
 ## Key Product Standard
 

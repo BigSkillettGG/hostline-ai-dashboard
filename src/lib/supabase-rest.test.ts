@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { sampleOnboardingDraft } from "@/domain/onboarding";
-import { buildOnboardingProfilePayload, mapSupabaseCalls, mapSupabaseOrders } from "./supabase-rest";
+import {
+  buildOnboardingProfilePayload,
+  mapSupabaseCalls,
+  mapSupabaseOrders,
+  mapSupabasePhoneNumber,
+} from "./supabase-rest";
 
 describe("Supabase call mapping", () => {
   it("maps persisted calls and transcript turns into dashboard call records", () => {
@@ -164,5 +169,37 @@ describe("Supabase onboarding profile payload", () => {
     expect(payload.completed_required).toBe(payload.total_required);
     expect(payload.progress_percent).toBe(100);
     expect(new Date(payload.updated_at).toString()).not.toBe("Invalid Date");
+  });
+});
+
+describe("Supabase phone number mapping", () => {
+  it("maps persisted Twilio phone-number rows into dashboard records", () => {
+    const phoneNumber = mapSupabasePhoneNumber({
+      forwarding_mode: "forward_unanswered",
+      forwarding_status: "pending_verification",
+      id: "pn_1",
+      last_verified_at: null,
+      phone_number: "+14155550199",
+      provider: "twilio",
+      provider_sid: "PN123",
+      restaurant_main_line: "+14155550148",
+      status: "in-use",
+      updated_at: "2026-05-05T14:00:00.000Z",
+      voice_webhook_url: "https://voice.hostline.test/twilio/voice",
+    });
+
+    expect(phoneNumber).toEqual({
+      forwardingMode: "forward_unanswered",
+      forwardingStatus: "pending_verification",
+      id: "pn_1",
+      lastVerifiedAt: undefined,
+      phoneNumber: "+14155550199",
+      provider: "twilio",
+      providerSid: "PN123",
+      restaurantMainLine: "+14155550148",
+      status: "in-use",
+      updatedAt: "2026-05-05T14:00:00.000Z",
+      voiceWebhookUrl: "https://voice.hostline.test/twilio/voice",
+    });
   });
 });

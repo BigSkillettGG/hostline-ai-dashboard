@@ -13,6 +13,8 @@ const env: VoiceServiceEnv = {
   SUPABASE_DEMO_LOCATION_ID: "00000000-0000-4000-8000-000000000001",
   SUPABASE_SECRET_KEY: "sb_secret_test",
   SUPABASE_URL: "https://example.supabase.co",
+  TWILIO_API_BASE_URL: "https://api.twilio.com",
+  TWILIO_DEFAULT_COUNTRY: "US",
   TWILIO_LANGUAGE: "en-US",
   TWILIO_TRANSCRIPTION_PROVIDER: "Deepgram",
   TWILIO_TTS_PROVIDER: "ElevenLabs",

@@ -543,6 +543,11 @@ export default function VoiceAgent() {
                   value={serviceHealth?.twilioSignatureRequired ? "Required" : "Relaxed for local dev"}
                   state={serviceHealth?.twilioSignatureRequired ? "ready" : "pending"}
                 />
+                <ServiceStatusRow
+                  label="Twilio provisioning"
+                  value={serviceHealth?.twilioProvisioningConfigured ? "API credentials configured" : "Manual setup"}
+                  state={serviceHealth?.twilioProvisioningConfigured ? "ready" : "pending"}
+                />
 
                 {serviceError && (
                   <div className="rounded-md border border-warning/30 bg-warning/10 p-3 text-xs text-muted-foreground">

@@ -72,6 +72,34 @@ interface SupabaseOnboardingProfileRow {
   updated_at: string | null;
 }
 
+interface SupabasePhoneNumberRow {
+  id: string;
+  phone_number: string;
+  provider: string | null;
+  provider_sid: string | null;
+  restaurant_main_line: string | null;
+  forwarding_mode: string | null;
+  forwarding_status: string | null;
+  status: string | null;
+  voice_webhook_url: string | null;
+  last_verified_at: string | null;
+  updated_at: string | null;
+}
+
+export interface PhoneNumberRecord {
+  forwardingMode: string;
+  forwardingStatus: string;
+  id: string;
+  lastVerifiedAt?: string;
+  phoneNumber: string;
+  provider: string;
+  providerSid?: string;
+  restaurantMainLine?: string;
+  status: string;
+  updatedAt?: string;
+  voiceWebhookUrl?: string;
+}
+
 export function isSupabaseConfigured() {
   return Boolean(supabaseUrl && supabasePublishableKey);
 }
@@ -197,6 +225,26 @@ export async function saveOnboardingProfileToSupabase(
   return rows?.[0] ?? payload;
 }
 
+export async function fetchPhoneNumbersFromSupabase(
+  locationId = supabaseDemoLocationId,
+): Promise<PhoneNumberRecord[]> {
+  if (!isSupabaseConfigured() || !locationId) {
+    throw new Error("Supabase phone-number persistence is not configured.");
+  }
+
+  const rows = await supabaseRequest<SupabasePhoneNumberRow[]>(
+    "phone_numbers",
+    new URLSearchParams({
+      location_id: `eq.${locationId}`,
+      order: "created_at.desc",
+      select:
+        "id,phone_number,provider,provider_sid,restaurant_main_line,forwarding_mode,forwarding_status,status,voice_webhook_url,last_verified_at,updated_at",
+    }),
+  );
+
+  return rows.map(mapSupabasePhoneNumber);
+}
+
 export function buildOnboardingProfilePayload(draft: OnboardingDraft, locationId: string) {
   const progress = calculateOnboardingProgress(draft);
 
@@ -208,6 +256,22 @@ export function buildOnboardingProfilePayload(draft: OnboardingDraft, locationId
     status: progress.percent === 100 ? "ready_for_test_call" : "in_progress",
     total_required: progress.totalRequired,
     updated_at: new Date().toISOString(),
+  };
+}
+
+export function mapSupabasePhoneNumber(row: SupabasePhoneNumberRow): PhoneNumberRecord {
+  return {
+    forwardingMode: row.forwarding_mode ?? "forward_unanswered",
+    forwardingStatus: row.forwarding_status ?? "not_verified",
+    id: row.id,
+    lastVerifiedAt: row.last_verified_at ?? undefined,
+    phoneNumber: row.phone_number,
+    provider: row.provider ?? "twilio",
+    providerSid: row.provider_sid ?? undefined,
+    restaurantMainLine: row.restaurant_main_line ?? undefined,
+    status: row.status ?? "provisioned",
+    updatedAt: row.updated_at ?? undefined,
+    voiceWebhookUrl: row.voice_webhook_url ?? undefined,
   };
 }
 

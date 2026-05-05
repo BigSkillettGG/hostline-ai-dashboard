@@ -64,10 +64,9 @@ See:
 
 ## Next Engineering Milestones
 
-1. Persist onboarding profiles to Supabase.
-2. Provision Twilio phone numbers from onboarding.
-3. Use onboarded location profiles in the live voice service.
-4. Connect dashboard reservations to Supabase queries.
-5. Implement FAQ calls from the restaurant knowledge base.
-6. Add Toast as the first POS integration.
-7. Add OpenTable as the first reservation integration.
+1. Expand menu ingestion so uploaded/linked menus create structured menu rows.
+2. Connect dashboard reservations to Supabase queries.
+3. Implement FAQ calls from the restaurant knowledge base.
+4. Add staff notification channels for orders, complaints, and handoffs.
+5. Add Toast as the first POS integration.
+6. Add OpenTable as the first reservation integration.
