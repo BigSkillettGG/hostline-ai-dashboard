@@ -60,7 +60,7 @@ export interface Order {
   notes?: string;
 }
 
-export type ReservationStatus = "pending" | "confirmed" | "declined" | "seated";
+export type ReservationStatus = "pending" | "confirmed" | "declined" | "seated" | "canceled";
 export interface Reservation {
   id: string;
   guest: string;
@@ -73,6 +73,9 @@ export interface Reservation {
   source: "ai_host" | "web" | "walk_in";
   sourceCallId?: string;
   manual?: boolean;
+  provider?: string;
+  providerReservationId?: string;
+  createdAt?: string;
 }
 
 export const restaurant = {

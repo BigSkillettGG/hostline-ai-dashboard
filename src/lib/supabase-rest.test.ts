@@ -4,10 +4,12 @@ import {
   buildMenuCategoryInsertRows,
   buildMenuItemInsertRows,
   buildOnboardingProfilePayload,
+  buildReservationInsertPayload,
   mapSupabaseCalls,
   mapSupabaseMenu,
   mapSupabaseOrders,
   mapSupabasePhoneNumber,
+  mapSupabaseReservations,
 } from "./supabase-rest";
 
 describe("Supabase call mapping", () => {
@@ -297,5 +299,108 @@ describe("Supabase menu mapping", () => {
         upsell_suggestions: [],
       },
     ]);
+  });
+});
+
+describe("Supabase reservation mapping", () => {
+  it("maps persisted reservations into dashboard records", () => {
+    const reservations = mapSupabaseReservations([
+      {
+        created_at: "2026-05-05T19:00:00.000Z",
+        guest_name: "Nina Rossi",
+        guest_phone: "+15550102",
+        id: "res_1",
+        manual_request: true,
+        notes: "Anniversary",
+        party_size: 6,
+        provider: "opentable",
+        provider_reservation_id: null,
+        reservation_date: "2026-05-10",
+        reservation_time: "19:30:00",
+        source: "ai_host",
+        source_call_id: "call_1",
+        status: "pending",
+      },
+    ]);
+
+    expect(reservations[0]).toEqual({
+      createdAt: "2026-05-05T19:00:00.000Z",
+      date: "2026-05-10",
+      guest: "Nina Rossi",
+      id: "res_1",
+      manual: true,
+      notes: "Anniversary",
+      partySize: 6,
+      phone: "+15550102",
+      provider: "opentable",
+      providerReservationId: undefined,
+      source: "ai_host",
+      sourceCallId: "call_1",
+      status: "pending",
+      time: "19:30",
+    });
+  });
+
+  it("normalizes unexpected reservation fields", () => {
+    const reservations = mapSupabaseReservations([
+      {
+        created_at: null,
+        guest_name: null,
+        guest_phone: null,
+        id: "res_2",
+        manual_request: null,
+        notes: null,
+        party_size: null,
+        provider: null,
+        provider_reservation_id: null,
+        reservation_date: null,
+        reservation_time: null,
+        source: "bad_source",
+        source_call_id: null,
+        status: "bad_status",
+      },
+    ]);
+
+    expect(reservations[0]).toMatchObject({
+      date: "",
+      guest: "Unknown",
+      manual: false,
+      partySize: 0,
+      phone: "Unknown",
+      source: "ai_host",
+      status: "pending",
+      time: "",
+    });
+  });
+
+  it("builds insert payloads for staff-confirmed manual requests", () => {
+    expect(
+      buildReservationInsertPayload(
+        {
+          date: "2026-05-10",
+          guest: " Nina Rossi ",
+          notes: " Birthday table ",
+          partySize: 6,
+          phone: " +15550102 ",
+          provider: "opentable",
+          source: "ai_host",
+          status: "pending",
+          time: "19:30",
+        },
+        "location_1",
+      ),
+    ).toEqual({
+      guest_name: "Nina Rossi",
+      guest_phone: "+15550102",
+      location_id: "location_1",
+      manual_request: true,
+      notes: "Birthday table",
+      party_size: 6,
+      provider: "opentable",
+      reservation_date: "2026-05-10",
+      reservation_time: "19:30:00",
+      source: "ai_host",
+      status: "pending",
+    });
   });
 });

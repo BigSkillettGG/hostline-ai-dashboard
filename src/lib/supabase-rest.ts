@@ -6,6 +6,8 @@ import type {
   MenuItem,
   Order,
   OrderStatus,
+  Reservation,
+  ReservationStatus,
   TranscriptSpeaker,
 } from "@/data/mock";
 import type { ParsedMenuCategory } from "@/domain/menu-ingestion";
@@ -21,6 +23,8 @@ const callOutcomes: CallOutcome[] = ["resolved", "order_placed", "reservation_bo
 const callStatuses: CallStatus[] = ["new", "reviewed", "needs_review", "resolved"];
 const transcriptSpeakers: TranscriptSpeaker[] = ["agent", "caller", "staff"];
 const orderStatuses: OrderStatus[] = ["new", "accepted", "in_progress", "completed", "canceled"];
+const reservationStatuses: ReservationStatus[] = ["pending", "confirmed", "declined", "seated", "canceled"];
+const reservationSources: Reservation["source"][] = ["ai_host", "web", "walk_in"];
 
 interface SupabaseCallRow {
   id: string;
@@ -106,6 +110,23 @@ interface SupabaseMenuItemRow {
   upsell_suggestions: unknown;
 }
 
+interface SupabaseReservationRow {
+  created_at: string | null;
+  guest_name: string | null;
+  guest_phone: string | null;
+  id: string;
+  manual_request: boolean | null;
+  notes: string | null;
+  party_size: number | null;
+  provider: string | null;
+  provider_reservation_id: string | null;
+  reservation_date: string | null;
+  reservation_time: string | null;
+  source: string | null;
+  source_call_id: string | null;
+  status: string | null;
+}
+
 export interface PhoneNumberRecord {
   forwardingMode: string;
   forwardingStatus: string;
@@ -126,6 +147,19 @@ export interface MenuCategoryRecord {
   name: string;
 }
 
+export interface CreateReservationInput {
+  date: string;
+  guest: string;
+  manual?: boolean;
+  notes?: string;
+  partySize: number;
+  phone?: string;
+  provider?: string;
+  source?: Reservation["source"];
+  status?: ReservationStatus;
+  time: string;
+}
+
 export function isSupabaseConfigured() {
   return Boolean(supabaseUrl && supabasePublishableKey);
 }
@@ -135,6 +169,10 @@ export function isOnboardingPersistenceConfigured() {
 }
 
 export function isMenuPersistenceConfigured() {
+  return Boolean(isSupabaseConfigured() && supabaseDemoLocationId);
+}
+
+export function isReservationPersistenceConfigured() {
   return Boolean(isSupabaseConfigured() && supabaseDemoLocationId);
 }
 
@@ -355,6 +393,80 @@ export async function importParsedMenuToSupabase(
   return mapSupabaseMenu(insertedCategories, insertedItems);
 }
 
+export async function fetchReservationsFromSupabase(
+  locationId = supabaseDemoLocationId,
+): Promise<Reservation[]> {
+  if (!isSupabaseConfigured() || !locationId) {
+    throw new Error("Supabase reservation persistence is not configured.");
+  }
+
+  const rows = await supabaseRequest<SupabaseReservationRow[]>(
+    "reservations",
+    new URLSearchParams({
+      limit: "200",
+      location_id: `eq.${locationId}`,
+      order: "reservation_date.asc,reservation_time.asc",
+      select: reservationSelectColumns,
+    }),
+  );
+
+  return mapSupabaseReservations(rows);
+}
+
+export async function updateReservationStatusInSupabase(
+  reservationId: string,
+  status: ReservationStatus,
+): Promise<Reservation | undefined> {
+  if (!isSupabaseConfigured()) {
+    throw new Error("Supabase is not configured.");
+  }
+
+  const rows = await supabaseRequest<SupabaseReservationRow[]>(
+    "reservations",
+    new URLSearchParams({
+      id: `eq.${reservationId}`,
+      select: reservationSelectColumns,
+    }),
+    {
+      body: {
+        manual_request: status === "pending",
+        status,
+      },
+      headers: {
+        Prefer: "return=representation",
+      },
+      method: "PATCH",
+    },
+  );
+
+  return mapSupabaseReservations(rows ?? [])[0];
+}
+
+export async function createReservationInSupabase(
+  input: CreateReservationInput,
+  locationId = supabaseDemoLocationId,
+): Promise<Reservation | undefined> {
+  if (!isSupabaseConfigured() || !locationId) {
+    throw new Error("Supabase reservation persistence is not configured.");
+  }
+
+  const rows = await supabaseRequest<SupabaseReservationRow[]>(
+    "reservations",
+    new URLSearchParams({
+      select: reservationSelectColumns,
+    }),
+    {
+      body: buildReservationInsertPayload(input, locationId),
+      headers: {
+        Prefer: "return=representation",
+      },
+      method: "POST",
+    },
+  );
+
+  return mapSupabaseReservations(rows ?? [])[0];
+}
+
 export function buildOnboardingProfilePayload(draft: OnboardingDraft, locationId: string) {
   const progress = calculateOnboardingProgress(draft);
 
@@ -444,6 +556,43 @@ export function mapSupabaseMenu(
     }));
 }
 
+export function buildReservationInsertPayload(input: CreateReservationInput, locationId: string) {
+  const status = input.status ?? "pending";
+
+  return {
+    guest_name: input.guest.trim(),
+    guest_phone: input.phone?.trim() || null,
+    location_id: locationId,
+    manual_request: input.manual ?? status === "pending",
+    notes: input.notes?.trim() || null,
+    party_size: input.partySize,
+    provider: input.provider?.trim() || null,
+    reservation_date: input.date,
+    reservation_time: normalizeReservationTime(input.time),
+    source: input.source ?? "ai_host",
+    status,
+  };
+}
+
+export function mapSupabaseReservations(rows: SupabaseReservationRow[]): Reservation[] {
+  return rows.map((row) => ({
+    createdAt: row.created_at ?? undefined,
+    date: row.reservation_date ?? "",
+    guest: row.guest_name?.trim() || "Unknown",
+    id: row.id,
+    manual: row.manual_request ?? false,
+    notes: row.notes ?? undefined,
+    partySize: row.party_size ?? 0,
+    phone: row.guest_phone?.trim() || "Unknown",
+    provider: row.provider ?? undefined,
+    providerReservationId: row.provider_reservation_id ?? undefined,
+    source: normalizeEnum(row.source, reservationSources, "ai_host"),
+    sourceCallId: row.source_call_id ?? undefined,
+    status: normalizeEnum(row.status, reservationStatuses, "pending"),
+    time: normalizeDisplayTime(row.reservation_time),
+  }));
+}
+
 export function mapSupabaseCalls(
   calls: SupabaseCallRow[],
   transcriptTurns: SupabaseTranscriptTurnRow[],
@@ -516,6 +665,17 @@ function normalizeEnum<T extends string>(value: string | null | undefined, allow
   return allowedValues.includes(value as T) ? (value as T) : fallback;
 }
 
+function normalizeReservationTime(time: string) {
+  if (/^\d{2}:\d{2}:\d{2}$/.test(time)) return time;
+  if (/^\d{2}:\d{2}$/.test(time)) return `${time}:00`;
+  return time;
+}
+
+function normalizeDisplayTime(time: string | null) {
+  if (!time) return "";
+  return time.slice(0, 5);
+}
+
 function formatOffset(offsetSeconds: number) {
   const totalSeconds = Math.max(0, Math.round(offsetSeconds));
   const minutes = Math.floor(totalSeconds / 60);
@@ -571,3 +731,6 @@ async function supabaseRequest<T>(
   const text = await response.text();
   return text ? (JSON.parse(text) as T) : (undefined as T);
 }
+
+const reservationSelectColumns =
+  "id,guest_name,guest_phone,party_size,reservation_date,reservation_time,status,source,source_call_id,manual_request,provider,provider_reservation_id,notes,created_at";
