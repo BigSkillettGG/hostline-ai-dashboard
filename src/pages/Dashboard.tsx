@@ -2,7 +2,7 @@ import { PageBody } from "@/components/PageHeader";
 import { StatCard } from "@/components/StatCard";
 import {
   Phone, PhoneIncoming, ShoppingBag, CalendarDays, DollarSign,
-  AlertCircle, Activity, ArrowRight, Sparkles, Calendar,
+  AlertTriangle, Megaphone, Activity, ArrowRight, Sparkles, Calendar,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -93,8 +93,12 @@ export default function Dashboard() {
           <StatCard label="Missed recovered" value={dashboardStats.missedRecovered.value} delta={dashboardStats.missedRecovered.delta} icon={PhoneIncoming} />
           <StatCard label="Orders captured" value={dashboardStats.ordersCaptured.value} delta={dashboardStats.ordersCaptured.delta} icon={ShoppingBag} />
           <StatCard label="Reservation requests" value={dashboardStats.reservationRequests.value} delta={dashboardStats.reservationRequests.delta} icon={CalendarDays} />
-          <StatCard label="Revenue captured" value={dashboardStats.revenueCaptured.value} delta={dashboardStats.revenueCaptured.delta} icon={DollarSign} format="money" />
-          <StatCard label="Needs review" value={dashboardStats.needsReview.value} delta={dashboardStats.needsReview.delta} icon={AlertCircle} />
+          <Link to="/app/escalations?type=complaint" className="contents">
+            <StatCard label="Complaints escalated" value={dashboardStats.complaints.value} delta={dashboardStats.complaints.delta} icon={AlertTriangle} />
+          </Link>
+          <Link to="/app/escalations?type=sales" className="contents">
+            <StatCard label="Sales / vendor calls" value={dashboardStats.salesCalls.value} delta={dashboardStats.salesCalls.delta} icon={Megaphone} />
+          </Link>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-3">
