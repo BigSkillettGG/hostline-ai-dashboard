@@ -13,7 +13,11 @@ import { ComparisonTable } from "@/components/marketing/ComparisonTable";
 import { TestimonialCard } from "@/components/marketing/TestimonialCard";
 import { LogoCloud } from "@/components/marketing/LogoCloud";
 
-import { testimonials, liveMetrics, homeFaqs } from "@/data/marketing";
+import { testimonials, homeFaqs } from "@/data/marketing";
+
+import heroRestaurant from "/marketing/hero-restaurant.jpg?url";
+import hostOnPhone from "/marketing/host-on-phone.jpg?url";
+import happyGuests from "/marketing/happy-guests.jpg?url";
 
 export default function MarketingHome() {
   return (
