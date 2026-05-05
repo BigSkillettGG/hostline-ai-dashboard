@@ -31,6 +31,16 @@ npm run dev
 
 The Lovable project uses Vite, React, TypeScript, Tailwind, shadcn/ui, Recharts, and React Router.
 
+## Marketing Audio Demo
+
+The homepage includes a call-demo player that looks for generated clips in `public/audio`.
+
+```sh
+ELEVENLABS_API_KEY=sk-... npm run marketing:audio
+```
+
+The generator creates Vera and caller audio for each homepage scenario. If the clips are not present, the homepage still shows the scripted transcript and tells the user how to generate the audio.
+
 ## Voice Service
 
 The first production backend slice lives in `services/voice`.

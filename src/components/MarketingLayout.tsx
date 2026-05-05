@@ -28,6 +28,7 @@ export default function MarketingLayout() {
           <nav className="hidden items-center gap-5 text-sm md:flex">
             <NavLink to="/" end className={({ isActive }) => isActive ? "text-foreground font-medium" : "text-muted-foreground hover:text-foreground"}>Product</NavLink>
             <NavLink to="/pricing" className={({ isActive }) => isActive ? "text-foreground font-medium" : "text-muted-foreground hover:text-foreground"}>Pricing</NavLink>
+            <a href="/#live-demo" className="text-muted-foreground hover:text-foreground">Live demo</a>
             <a href="/#how" className="text-muted-foreground hover:text-foreground">How it works</a>
             <a href="mailto:sales@hostline.ai" className="text-muted-foreground hover:text-foreground">Talk to sales</a>
           </nav>

@@ -12,6 +12,7 @@ import { ProductTour } from "@/components/marketing/ProductTour";
 import { ComparisonTable } from "@/components/marketing/ComparisonTable";
 import { TestimonialCard } from "@/components/marketing/TestimonialCard";
 import { LogoCloud } from "@/components/marketing/LogoCloud";
+import { VoiceDemoPlayer } from "@/components/marketing/VoiceDemoPlayer";
 
 import { testimonials, homeFaqs } from "@/data/marketing";
 
@@ -52,7 +53,7 @@ export default function MarketingHome() {
                 <Link to="/signup">Start free 14-day trial <ArrowRight className="ml-1 h-4 w-4" /></Link>
               </Button>
               <Button asChild variant="outline" size="lg" className="h-12 px-6 text-base">
-                <a href="#how"><Phone className="mr-1.5 h-4 w-4" /> Hear a sample call</a>
+                <a href="#live-demo"><Phone className="mr-1.5 h-4 w-4" /> Hear a sample call</a>
               </Button>
             </div>
             <div className="mt-5 flex items-center gap-4 text-xs text-muted-foreground">
@@ -86,6 +87,20 @@ export default function MarketingHome() {
               <div className="absolute inset-0 bg-gradient-to-br from-background/60 via-background/30 to-background/80" />
             </div>
             <CallTranscriptCard />
+          </div>
+        </div>
+      </section>
+
+      {/* LIVE DEMO */}
+      <section id="live-demo" className="border-b border-border bg-card/40">
+        <div className="mx-auto max-w-6xl px-5 py-20 md:py-28">
+          <SectionHeader
+            eyebrow="Live demo"
+            title="Seven real caller scenarios, one restaurant-trained host."
+            subtitle="Press play to hear how Vera handles orders, reservations, allergy questions, complaints, after-hours calls, and more."
+          />
+          <div className="mt-10">
+            <VoiceDemoPlayer />
           </div>
         </div>
       </section>
