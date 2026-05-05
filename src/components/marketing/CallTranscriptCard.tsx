@@ -88,7 +88,7 @@ export function CallTranscriptCard({ className }: { className?: string }) {
           </div>
           <p
             key={active}
-            className="mt-2 animate-fade-in text-[15px] leading-snug text-background"
+            className="mt-2 min-h-[44px] animate-fade-in text-[15px] leading-snug text-background"
           >
             "{current.text}"
           </p>
@@ -97,7 +97,7 @@ export function CallTranscriptCard({ className }: { className?: string }) {
         {/* extracted by AI */}
         <div className="grid grid-cols-3 gap-px border-t border-background/10 bg-background/10 text-[11px]">
           <Stat label="Intent" value="Pickup order" />
-          <Stat label="Items" value="3" />
+          <Stat label="Items" value="4" />
           <Stat label="ETA" value="7:00 PM" />
         </div>
       </div>
