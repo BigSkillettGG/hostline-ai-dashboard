@@ -39,18 +39,13 @@ export default function MarketingHome() {
             <Badge variant="outline" className="mb-5 gap-1.5 border-primary/30 bg-primary/10 text-primary">
               <Sparkles className="h-3 w-3" /> AI phone host for restaurants
             </Badge>
-            <h1 className="text-[40px] font-semibold leading-[1.05] tracking-tight md:text-6xl lg:text-[68px]">
-              Your phone is your{" "}
-              <span className="relative inline-block">
-                <span className="relative z-10">busiest employee.</span>
-                <span className="absolute inset-x-0 bottom-1 -z-0 h-3 bg-primary/25 md:bottom-2 md:h-4" />
-              </span>{" "}
-              Hire one that never misses a shift.
+            <h1 className="text-[44px] font-semibold leading-[1.02] tracking-tight md:text-6xl lg:text-[76px]">
+              Answer every call.<br />
+              <span className="text-primary">Capture every order.</span>
             </h1>
             <p className="mt-6 max-w-xl text-base text-muted-foreground md:text-lg">
-              HostLine AI answers every call in your restaurant's voice — taking pickup orders, booking
-              tables, answering questions, and routing complaints to a manager. 24/7, in 28 languages,
-              for less than a tip per call.
+              HostLine AI is the always-on phone host for your restaurant — taking pickup orders,
+              booking tables, and routing complaints to a manager, 24/7.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Button asChild size="lg" className="h-12 px-6 text-base">
@@ -66,20 +61,30 @@ export default function MarketingHome() {
               <span className="flex items-center gap-1.5"><Lock className="h-3.5 w-3.5 text-info" /> SOC 2 ready</span>
             </div>
 
-            {/* trust strip */}
+            {/* trust strip — honest version */}
             <div className="mt-12 border-t border-border pt-6">
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                Trusted by 400+ independent restaurants
+                Built for restaurants — works with the tools you already use
               </div>
-              <div className="mt-3 grid grid-cols-3 gap-x-6 gap-y-2 text-sm font-semibold text-muted-foreground/70 md:grid-cols-5">
-                {["Trattoria Rinaldi", "Curry House", "Taquería Norte", "Nori & Rice", "Boulevard Bistro"].map((n) => (
-                  <span key={n} className="truncate">{n}</span>
+              <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm font-semibold text-muted-foreground/70">
+                {["Toast", "Square", "OpenTable", "Resy", "Twilio", "Stripe"].map((n) => (
+                  <span key={n}>{n}</span>
                 ))}
               </div>
             </div>
           </div>
 
-          <div className="lg:col-span-5">
+          <div className="relative lg:col-span-5">
+            {/* faded restaurant backdrop */}
+            <div className="pointer-events-none absolute -inset-6 -z-10 overflow-hidden rounded-3xl">
+              <img
+                src={heroRestaurant}
+                alt=""
+                aria-hidden
+                className="h-full w-full object-cover opacity-30"
+              />
+              <div className="absolute inset-0 bg-gradient-to-br from-background/60 via-background/30 to-background/80" />
+            </div>
             <CallTranscriptCard />
           </div>
         </div>
