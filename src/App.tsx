@@ -15,6 +15,7 @@ import { RequireRole } from "./components/RequireRole";
 import Dashboard from "./pages/Dashboard";
 import Onboarding from "./pages/Onboarding";
 import Calls from "./pages/Calls";
+import Escalations from "./pages/Escalations";
 import Orders from "./pages/Orders";
 import Reservations from "./pages/Reservations";
 import MenuPage from "./pages/Menu";
@@ -22,6 +23,7 @@ import Knowledge from "./pages/Knowledge";
 import VoiceAgent from "./pages/VoiceAgent";
 import Integrations from "./pages/Integrations";
 import PhoneHours from "./pages/settings/PhoneHours";
+import Alerts from "./pages/settings/Alerts";
 import Team from "./pages/settings/Team";
 import RestaurantProfile from "./pages/settings/RestaurantProfile";
 import Billing from "./pages/settings/Billing";
@@ -58,6 +60,7 @@ const App = () => (
             <Route index element={<Dashboard />} />
             <Route path="onboarding" element={<Onboarding />} />
             <Route path="calls" element={<Calls />} />
+            <Route path="escalations" element={<Escalations />} />
             <Route path="orders" element={<Orders />} />
             <Route path="reservations" element={<Reservations />} />
             <Route path="menu" element={<MenuPage />} />
@@ -65,6 +68,7 @@ const App = () => (
             <Route path="voice-agent" element={<VoiceAgent />} />
             <Route path="integrations" element={<Integrations />} />
             <Route path="settings" element={<PhoneHours />} />
+            <Route path="settings/alerts" element={<Alerts />} />
             <Route path="team" element={<Team />} />
             <Route path="profile" element={<RestaurantProfile />} />
             <Route path="billing" element={<Billing />} />
