@@ -26,26 +26,21 @@ import {
   AlertTriangle,
   Bot,
   CalendarDays,
-  CheckCircle2,
+  ChevronDown,
   CreditCard,
   PhoneCall,
   Play,
   Printer,
-  RefreshCw,
-  Server,
   ShoppingBag,
   Sparkles,
-  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
   fetchVoicePreviewAudio,
-  fetchVoiceServiceHealth,
   isVoiceServiceConfigured,
-  voiceServiceBaseUrl,
-  type VoiceServiceHealth,
 } from "@/lib/voice-service";
 import { loadOnboardingDraft } from "@/lib/onboarding-draft";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 const variables = ["{restaurant_name}", "{caller_name}", "{hours_today}"];
 
