@@ -33,6 +33,12 @@ PUBLIC_WS_BASE_URL=wss://your-tunnel.ngrok.app
 VITE_VOICE_SERVICE_URL=https://your-tunnel.ngrok.app
 ```
 
+If you enable `HOSTLINE_INTERNAL_API_KEY` while testing the dashboard provisioning UI, set the matching dashboard env var only in trusted local or admin builds:
+
+```sh
+VITE_HOSTLINE_INTERNAL_API_KEY=dev-only-key
+```
+
 Set your Twilio phone number Voice webhook to:
 
 ```text

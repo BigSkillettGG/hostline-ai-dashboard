@@ -7,9 +7,12 @@ import {
   CheckCircle2,
   Clock3,
   ClipboardCheck,
+  Copy,
   FileText,
+  Loader2,
   PhoneForwarded,
   Rocket,
+  Search,
   ShieldCheck,
   ShoppingBag,
   Store,
@@ -43,6 +46,12 @@ import {
   isOnboardingPersistenceConfigured,
   saveOnboardingProfileToSupabase,
 } from "@/lib/supabase-rest";
+import {
+  searchAvailableVoicePhoneNumbers,
+  provisionVoicePhoneNumber,
+  isVoiceServiceConfigured,
+  type AvailableVoicePhoneNumber,
+} from "@/lib/voice-service";
 import { cn } from "@/lib/utils";
 
 const sectionIcons: Record<OnboardingStepId, LucideIcon> = {
@@ -76,10 +85,16 @@ export default function Onboarding() {
   const [syncMessage, setSyncMessage] = useState(
     isOnboardingPersistenceConfigured() ? "Checking Supabase profile" : "Saved to this browser",
   );
+  const [availableNumbers, setAvailableNumbers] = useState<AvailableVoicePhoneNumber[]>([]);
+  const [phoneSearchAreaCode, setPhoneSearchAreaCode] = useState(() => inferAreaCode(String(loadOnboardingDraft().mainPhone ?? "")));
+  const [phoneSearchError, setPhoneSearchError] = useState<string | null>(null);
+  const [provisioningNumber, setProvisioningNumber] = useState<string | null>(null);
+  const [searchingNumbers, setSearchingNumbers] = useState(false);
   const progress = useMemo(() => calculateOnboardingProgress(draft), [draft]);
   const activeSection = onboardingSections.find((section) => section.id === activeSectionId) ?? onboardingSections[0];
   const ActiveIcon = sectionIcons[activeSection.id];
   const assignedNumber = String(draft.assignedHostLineNumber || assignedDemoPhoneNumber);
+  const assignedNumberIsDemo = assignedNumber === assignedDemoPhoneNumber;
 
   useEffect(() => {
     if (!isOnboardingPersistenceConfigured()) return;
@@ -117,29 +132,87 @@ export default function Onboarding() {
     setDraft((current) => ({ ...current, [fieldId]: value }));
   };
 
-  const saveDraft = async () => {
-    saveOnboardingDraft(draft);
+  const persistDraft = async (nextDraft: OnboardingDraft, successMessage = "Onboarding draft saved locally") => {
+    saveOnboardingDraft(nextDraft);
 
     if (!isOnboardingPersistenceConfigured()) {
       setSyncState("local");
       setSyncMessage("Saved to this browser");
-      toast.success("Onboarding draft saved locally");
+      toast.success(successMessage);
       return;
     }
 
     setSavingDraft(true);
 
     try {
-      const result = await saveOnboardingProfileToSupabase(draft);
+      const result = await saveOnboardingProfileToSupabase(nextDraft);
       setSyncState("live");
-      setSyncMessage(`Synced to Supabase at ${result.progress_percent ?? progress.percent}% readiness`);
-      toast.success("Onboarding profile synced to Supabase");
+      setSyncMessage(`Synced to Supabase at ${result.progress_percent ?? calculateOnboardingProgress(nextDraft).percent}% readiness`);
+      toast.success(successMessage === "Onboarding draft saved locally" ? "Onboarding profile synced to Supabase" : successMessage);
     } catch (error) {
       setSyncState("error");
       setSyncMessage(error instanceof Error ? error.message : "Supabase profile sync failed");
       toast.error("Saved locally, but Supabase sync failed");
     } finally {
       setSavingDraft(false);
+    }
+  };
+
+  const saveDraft = async () => {
+    await persistDraft(draft);
+  };
+
+  const searchPhoneNumbers = async () => {
+    if (!isVoiceServiceConfigured()) {
+      setPhoneSearchError("Set VITE_VOICE_SERVICE_URL to connect Twilio number search.");
+      toast.error("Voice service URL is not configured.");
+      return;
+    }
+
+    setSearchingNumbers(true);
+    setPhoneSearchError(null);
+
+    try {
+      const result = await searchAvailableVoicePhoneNumbers({
+        areaCode: phoneSearchAreaCode,
+        country: "US",
+        limit: 6,
+      });
+      setAvailableNumbers(result.numbers);
+      if (!result.numbers.length) {
+        toast.info("No matching numbers found. Try a nearby area code.");
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Phone number search failed.";
+      setPhoneSearchError(message);
+      toast.error(message);
+    } finally {
+      setSearchingNumbers(false);
+    }
+  };
+
+  const provisionNumber = async (phoneNumber: string) => {
+    setProvisioningNumber(phoneNumber);
+    setPhoneSearchError(null);
+
+    try {
+      const result = await provisionVoicePhoneNumber({
+        forwardingMode: mapForwardingMode(String(draft.forwardingMode ?? "")),
+        phoneNumber,
+        restaurantMainLine: String(draft.mainPhone ?? "").trim() || undefined,
+      });
+      const nextDraft = {
+        ...draft,
+        assignedHostLineNumber: result.phoneNumber.phoneNumber,
+      };
+      setDraft(nextDraft);
+      await persistDraft(nextDraft, "HostLine number assigned");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Phone number provisioning failed.";
+      setPhoneSearchError(message);
+      toast.error(message);
+    } finally {
+      setProvisioningNumber(null);
     }
   };
 
@@ -320,8 +393,16 @@ export default function Onboarding() {
                 <div className="rounded-md border border-border bg-muted/20 p-4">
                   <div className="text-xs font-medium text-muted-foreground">Assigned HostLine number</div>
                   <div className="mt-1 text-2xl font-semibold tabular-nums">{assignedNumber}</div>
-                  <Badge variant="outline" className="mt-3 bg-warning/10 text-warning border-warning/30">
-                    Ready for Twilio provisioning
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "mt-3",
+                      assignedNumberIsDemo
+                        ? "border-warning/30 bg-warning/10 text-warning"
+                        : "border-success/30 bg-success/10 text-success",
+                    )}
+                  >
+                    {assignedNumberIsDemo ? "Ready for Twilio provisioning" : "Provisioned"}
                   </Badge>
                 </div>
 
@@ -329,7 +410,10 @@ export default function Onboarding() {
                   <Label>Main line</Label>
                   <Input
                     value={String(draft.mainPhone ?? "")}
-                    onChange={(event) => updateField("mainPhone", event.target.value)}
+                    onChange={(event) => {
+                      updateField("mainPhone", event.target.value);
+                      if (!phoneSearchAreaCode) setPhoneSearchAreaCode(inferAreaCode(event.target.value));
+                    }}
                     placeholder="+1 (415) 555-0148"
                   />
                 </div>
@@ -353,6 +437,79 @@ export default function Onboarding() {
                 </div>
 
                 <Separator />
+
+                <div className="space-y-3">
+                  <div className="flex items-end gap-2">
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <Label>Search HostLine numbers</Label>
+                      <Input
+                        inputMode="numeric"
+                        maxLength={3}
+                        onChange={(event) => setPhoneSearchAreaCode(event.target.value.replace(/\D/g, "").slice(0, 3))}
+                        placeholder="415"
+                        value={phoneSearchAreaCode}
+                      />
+                    </div>
+                    <Button variant="outline" onClick={searchPhoneNumbers} disabled={searchingNumbers}>
+                      {searchingNumbers ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Search className="mr-1.5 h-3.5 w-3.5" />}
+                      Search
+                    </Button>
+                  </div>
+
+                  {phoneSearchError && (
+                    <div className="rounded-md border border-warning/30 bg-warning/10 p-3 text-xs text-muted-foreground">
+                      {phoneSearchError}
+                    </div>
+                  )}
+
+                  {availableNumbers.length > 0 && (
+                    <div className="divide-y divide-border rounded-md border border-border">
+                      {availableNumbers.map((number) => (
+                        <div key={number.phoneNumber} className="flex items-center justify-between gap-3 p-3">
+                          <div className="min-w-0">
+                            <div className="font-mono text-sm font-semibold">{number.phoneNumber}</div>
+                            <div className="mt-0.5 text-xs text-muted-foreground">
+                              {[number.locality, number.region].filter(Boolean).join(", ") || number.friendlyName || "US local number"}
+                            </div>
+                          </div>
+                          <Button
+                            size="sm"
+                            onClick={() => provisionNumber(number.phoneNumber)}
+                            disabled={Boolean(provisioningNumber)}
+                          >
+                            {provisioningNumber === number.phoneNumber ? (
+                              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <PhoneForwarded className="mr-1.5 h-3.5 w-3.5" />
+                            )}
+                            Assign
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <Separator />
+
+                <div className="rounded-md border border-primary/20 bg-primary/5 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-medium">Forwarding instruction</div>
+                      <div className="mt-1 text-xs text-muted-foreground">{buildForwardingInstruction(String(draft.forwardingMode ?? ""), assignedNumber)}</div>
+                    </div>
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      onClick={() => {
+                        void navigator.clipboard?.writeText(buildForwardingInstruction(String(draft.forwardingMode ?? ""), assignedNumber));
+                        toast.success("Forwarding instruction copied");
+                      }}
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
 
                 <div className="space-y-2">
                   {launchChecklist.map((item, index) => (
@@ -489,4 +646,34 @@ function FieldLabel({ field }: { field: OnboardingField }) {
 function hasDraftValue(value: string | boolean | undefined) {
   if (typeof value === "boolean") return true;
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function inferAreaCode(phoneNumber: string) {
+  const digits = phoneNumber.replace(/\D/g, "");
+  if (digits.length >= 11 && digits.startsWith("1")) return digits.slice(1, 4);
+  if (digits.length >= 10) return digits.slice(0, 3);
+  return "";
+}
+
+function mapForwardingMode(value: string) {
+  if (value === "Forward all calls") return "forward_all";
+  if (value === "After-hours forwarding") return "after_hours";
+  if (value === "Port number later") return "port_later";
+  return "forward_unanswered";
+}
+
+function buildForwardingInstruction(forwardingMode: string, assignedNumber: string) {
+  if (forwardingMode === "Forward all calls") {
+    return `Forward all inbound calls from the restaurant main line to ${assignedNumber}.`;
+  }
+
+  if (forwardingMode === "After-hours forwarding") {
+    return `Set after-hours call forwarding to ${assignedNumber} when the restaurant is closed.`;
+  }
+
+  if (forwardingMode === "Port number later") {
+    return `Keep the current main line active for now. Use ${assignedNumber} for test calls before starting a port request.`;
+  }
+
+  return `Forward unanswered calls to ${assignedNumber} after the restaurant line rings 3 to 4 times.`;
 }

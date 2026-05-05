@@ -58,6 +58,7 @@ It exposes:
 - `POST /twilio/voice` for the Twilio Voice webhook.
 - `wss://.../twilio/conversation-relay` for Twilio ConversationRelay.
 - `POST /voice/preview` for ElevenLabs voice previews.
+- `GET /telephony/available-numbers` and `POST /telephony/provision-number` for Twilio number launch.
 - `POST /debug/reply` in non-production for testing restaurant replies.
 
 It also creates staff-review pickup orders from clear order language when menu items are recognized, and staff-confirmed reservation requests when date, time, party size, and guest details are captured. Orders are pay-at-pickup and are not auto-sent to the kitchen or POS.
@@ -71,6 +72,8 @@ The app now includes a guided onboarding surface at `/app/onboarding`. It captur
 When `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, and `VITE_SUPABASE_DEMO_LOCATION_ID` are set, onboarding drafts sync to the `onboarding_profiles` table. Without those values, the dashboard saves the draft to local browser storage.
 
 The Voice Agent settings page also persists locally and syncs to `agent_configs` when Supabase is configured. The voice service reads that table while building live restaurant call context.
+
+The onboarding Phone launch card can search and assign Twilio numbers through the voice service. In local development the endpoints work without an internal key; for deployed environments, protect provisioning behind `HOSTLINE_INTERNAL_API_KEY` on the voice service and only expose a dashboard-side key from trusted admin/staging builds.
 
 See:
 

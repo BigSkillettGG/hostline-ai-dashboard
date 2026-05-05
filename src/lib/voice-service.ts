@@ -9,7 +9,24 @@ export interface VoiceServiceHealth {
   twilioSignatureRequired: boolean;
 }
 
+export interface AvailableVoicePhoneNumber {
+  capabilities: Record<string, boolean>;
+  friendlyName?: string;
+  locality?: string;
+  phoneNumber: string;
+  region?: string;
+}
+
+export interface ProvisionedVoicePhoneNumber {
+  capabilities: Record<string, boolean>;
+  phoneNumber: string;
+  providerSid: string;
+  status: string;
+  voiceWebhookUrl?: string;
+}
+
 export const voiceServiceBaseUrl = (import.meta.env.VITE_VOICE_SERVICE_URL ?? "").replace(/\/$/, "");
+const internalApiKey = import.meta.env.VITE_HOSTLINE_INTERNAL_API_KEY ?? "";
 
 export function isVoiceServiceConfigured() {
   return Boolean(voiceServiceBaseUrl);
@@ -47,4 +64,63 @@ export async function fetchVoicePreviewAudio(text: string) {
   }
 
   return response.blob();
+}
+
+export async function searchAvailableVoicePhoneNumbers(input: {
+  areaCode?: string;
+  contains?: string;
+  country?: string;
+  limit?: number;
+}) {
+  if (!voiceServiceBaseUrl) {
+    throw new Error("VITE_VOICE_SERVICE_URL is not configured.");
+  }
+
+  const params = new URLSearchParams();
+  if (input.areaCode?.trim()) params.set("areaCode", input.areaCode.trim());
+  if (input.contains?.trim()) params.set("contains", input.contains.trim());
+  if (input.country?.trim()) params.set("country", input.country.trim());
+  if (input.limit) params.set("limit", String(input.limit));
+
+  const response = await fetch(`${voiceServiceBaseUrl}/telephony/available-numbers?${params.toString()}`, {
+    headers: buildInternalHeaders(),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(body || `Phone number search failed with ${response.status}.`);
+  }
+
+  return (await response.json()) as { numbers: AvailableVoicePhoneNumber[] };
+}
+
+export async function provisionVoicePhoneNumber(input: {
+  forwardingMode?: string;
+  locationId?: string;
+  phoneNumber: string;
+  restaurantMainLine?: string;
+}) {
+  if (!voiceServiceBaseUrl) {
+    throw new Error("VITE_VOICE_SERVICE_URL is not configured.");
+  }
+
+  const response = await fetch(`${voiceServiceBaseUrl}/telephony/provision-number`, {
+    body: JSON.stringify(input),
+    headers: {
+      "Content-Type": "application/json",
+      ...buildInternalHeaders(),
+    },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(body || `Phone number provisioning failed with ${response.status}.`);
+  }
+
+  return (await response.json()) as { phoneNumber: ProvisionedVoicePhoneNumber };
+}
+
+function buildInternalHeaders() {
+  return internalApiKey ? { "x-hostline-api-key": internalApiKey } : {};
 }

@@ -277,5 +277,5 @@ function applyCors(req: IncomingMessage, res: ServerResponse, currentEnv: VoiceS
   }
 
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-hostline-api-key");
 }
