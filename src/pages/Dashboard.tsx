@@ -61,6 +61,23 @@ export default function Dashboard() {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-3 rounded-xl border border-border/80 bg-card/80 px-3 py-2 shadow-sm backdrop-blur">
+                <div className="relative">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-glow text-sm font-semibold text-primary-foreground">
+                    V
+                  </div>
+                  <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-success ring-2 ring-card" />
+                </div>
+                <div className="leading-tight">
+                  <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    <Phone className="h-3 w-3" />
+                    Vera is answering
+                  </div>
+                  <a href="tel:+14155550142" className="block text-sm font-semibold tabular-nums tracking-tight hover:text-primary">
+                    (415) 555-0142
+                  </a>
+                </div>
+              </div>
               <Button variant="outline" size="sm">Export report</Button>
               <Button size="sm" asChild>
                 <Link to="/app/calls">View calls<ArrowRight className="ml-1.5 h-3.5 w-3.5" /></Link>
