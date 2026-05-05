@@ -13,7 +13,11 @@ import { ComparisonTable } from "@/components/marketing/ComparisonTable";
 import { TestimonialCard } from "@/components/marketing/TestimonialCard";
 import { LogoCloud } from "@/components/marketing/LogoCloud";
 
-import { testimonials, liveMetrics, homeFaqs } from "@/data/marketing";
+import { testimonials, homeFaqs } from "@/data/marketing";
+
+const heroRestaurant = "/marketing/hero-restaurant.jpg";
+const hostOnPhone = "/marketing/host-on-phone.jpg";
+const happyGuests = "/marketing/happy-guests.jpg";
 
 export default function MarketingHome() {
   return (
@@ -35,18 +39,13 @@ export default function MarketingHome() {
             <Badge variant="outline" className="mb-5 gap-1.5 border-primary/30 bg-primary/10 text-primary">
               <Sparkles className="h-3 w-3" /> AI phone host for restaurants
             </Badge>
-            <h1 className="text-[40px] font-semibold leading-[1.05] tracking-tight md:text-6xl lg:text-[68px]">
-              Your phone is your{" "}
-              <span className="relative inline-block">
-                <span className="relative z-10">busiest employee.</span>
-                <span className="absolute inset-x-0 bottom-1 -z-0 h-3 bg-primary/25 md:bottom-2 md:h-4" />
-              </span>{" "}
-              Hire one that never misses a shift.
+            <h1 className="text-[44px] font-semibold leading-[1.02] tracking-tight md:text-6xl lg:text-[76px]">
+              Answer every call.<br />
+              <span className="text-primary">Capture every order.</span>
             </h1>
             <p className="mt-6 max-w-xl text-base text-muted-foreground md:text-lg">
-              HostLine AI answers every call in your restaurant's voice — taking pickup orders, booking
-              tables, answering questions, and routing complaints to a manager. 24/7, in 28 languages,
-              for less than a tip per call.
+              HostLine AI is the always-on phone host for your restaurant — taking pickup orders,
+              booking tables, and routing complaints to a manager, 24/7.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Button asChild size="lg" className="h-12 px-6 text-base">
@@ -62,20 +61,30 @@ export default function MarketingHome() {
               <span className="flex items-center gap-1.5"><Lock className="h-3.5 w-3.5 text-info" /> SOC 2 ready</span>
             </div>
 
-            {/* trust strip */}
+            {/* trust strip — honest version */}
             <div className="mt-12 border-t border-border pt-6">
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                Trusted by 400+ independent restaurants
+                Built for restaurants — works with the tools you already use
               </div>
-              <div className="mt-3 grid grid-cols-3 gap-x-6 gap-y-2 text-sm font-semibold text-muted-foreground/70 md:grid-cols-5">
-                {["Trattoria Rinaldi", "Curry House", "Taquería Norte", "Nori & Rice", "Boulevard Bistro"].map((n) => (
-                  <span key={n} className="truncate">{n}</span>
+              <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm font-semibold text-muted-foreground/70">
+                {["Toast", "Square", "OpenTable", "Resy", "Twilio", "Stripe"].map((n) => (
+                  <span key={n}>{n}</span>
                 ))}
               </div>
             </div>
           </div>
 
-          <div className="lg:col-span-5">
+          <div className="relative lg:col-span-5">
+            {/* faded restaurant backdrop */}
+            <div className="pointer-events-none absolute -inset-6 -z-10 overflow-hidden rounded-3xl">
+              <img
+                src={heroRestaurant}
+                alt=""
+                aria-hidden
+                className="h-full w-full object-cover opacity-30"
+              />
+              <div className="absolute inset-0 bg-gradient-to-br from-background/60 via-background/30 to-background/80" />
+            </div>
             <CallTranscriptCard />
           </div>
         </div>
@@ -126,25 +135,43 @@ export default function MarketingHome() {
       {/* HOW IT WORKS */}
       <section id="how" className="border-b border-border">
         <div className="mx-auto max-w-6xl px-5 py-20 md:py-28">
-          <SectionHeader
-            eyebrow="How it works"
-            title="Live tonight. Seriously."
-            subtitle="No new hardware. No phone trees. Most restaurants are answering calls with Vera within an hour of signing up."
-          />
-
-          <div className="mt-12 grid gap-px overflow-hidden rounded-xl border border-border bg-border md:grid-cols-4">
-            {[
-              { n: "01", t: "Forward your line", d: "Keep your number. We give you a quick instruction for your carrier." },
-              { n: "02", t: "Upload your menu", d: "PDF, photo, or POS sync. Vera learns prices, modifiers, and specials." },
-              { n: "03", t: "Train Vera in 10 min", d: "Answer a few questions about hours, parking, allergens, and tone." },
-              { n: "04", t: "Go live", d: "Vera picks up the very next call. You get a live transcript and SMS alerts." },
-            ].map((s) => (
-              <div key={s.n} className="relative bg-card p-6">
-                <div className="text-[11px] font-semibold tracking-wider text-primary">STEP {s.n}</div>
-                <div className="mt-2 text-base font-semibold">{s.t}</div>
-                <div className="mt-1 text-sm text-muted-foreground">{s.d}</div>
+          <div className="grid gap-10 lg:grid-cols-12 lg:items-center">
+            <div className="lg:col-span-7">
+              <SectionHeader
+                eyebrow="How it works"
+                title="Live tonight. Seriously."
+                subtitle="No new hardware. No phone trees. Most restaurants are answering calls with Vera within an hour of signing up."
+              />
+              <div className="mt-10 grid gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-2">
+                {[
+                  { n: "01", t: "Forward your line", d: "Keep your number. We give you a quick instruction for your carrier." },
+                  { n: "02", t: "Upload your menu", d: "PDF, photo, or POS sync. Vera learns prices, modifiers, and specials." },
+                  { n: "03", t: "Train Vera in 10 min", d: "Answer a few questions about hours, parking, allergens, and tone." },
+                  { n: "04", t: "Go live", d: "Vera picks up the very next call. You get a live transcript and SMS alerts." },
+                ].map((s) => (
+                  <div key={s.n} className="relative bg-card p-5">
+                    <div className="text-[11px] font-semibold tracking-wider text-primary">STEP {s.n}</div>
+                    <div className="mt-2 text-base font-semibold">{s.t}</div>
+                    <div className="mt-1 text-sm text-muted-foreground">{s.d}</div>
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
+
+            <div className="lg:col-span-5">
+              <div className="relative overflow-hidden rounded-2xl border border-border shadow-[0_1px_0_hsl(var(--border)),0_30px_60px_-30px_hsl(var(--foreground)/0.25)]">
+                <img
+                  src={hostOnPhone}
+                  alt="A friendly restaurant host smiling while answering the phone at a host stand"
+                  loading="lazy"
+                  className="h-[520px] w-full object-cover"
+                />
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-foreground/85 via-foreground/40 to-transparent p-5 text-background">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary-glow">Before HostLine</div>
+                  <div className="mt-1 text-lg font-semibold">Your host is on the phone — not on the floor.</div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -165,41 +192,45 @@ export default function MarketingHome() {
 
       {/* TESTIMONIALS */}
       <section className="border-b border-border">
-        <div className="mx-auto max-w-6xl px-5 py-20 md:py-28">
-          <SectionHeader
-            eyebrow="What operators say"
-            title="Restaurants that picked up the phone — and a lot more revenue."
+        {/* photo banner */}
+        <div className="relative h-56 w-full overflow-hidden md:h-72">
+          <img
+            src={happyGuests}
+            alt="Friends laughing together over dinner at a warm, candlelit restaurant"
+            loading="lazy"
+            className="h-full w-full object-cover"
           />
+          <div className="absolute inset-0 bg-gradient-to-b from-background/10 via-background/40 to-background" />
+        </div>
+
+        <div className="mx-auto max-w-6xl px-5 pb-20 md:pb-28">
+          <div className="-mt-16 md:-mt-24">
+            <SectionHeader
+              eyebrow="What operators say"
+              title="Operators who picked up the phone — and a lot more orders."
+            />
+          </div>
           <div className="mt-10 grid gap-5 md:grid-cols-3">
             {testimonials.map((t) => <TestimonialCard key={t.name} {...t} />)}
           </div>
 
-          {/* live metrics */}
+          {/* qualitative "why operators switch" — replaces fabricated metrics */}
           <div className="mt-14 rounded-2xl border border-border bg-gradient-to-br from-primary/5 via-card to-card p-6 md:p-10">
             <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
-              Across HostLine restaurants · last 30 days
+              Why operators switch to HostLine
             </div>
-            <div className="mt-4 grid grid-cols-2 gap-6 md:grid-cols-4">
-              {liveMetrics.map((m) => (
-                <div key={m.label}>
-                  <div className="text-3xl font-semibold tabular-nums tracking-tight md:text-4xl">{m.value}</div>
-                  <div className="mt-1 text-xs uppercase tracking-wider text-muted-foreground">{m.label}</div>
+            <div className="mt-5 grid gap-6 md:grid-cols-3">
+              {[
+                { t: "Never miss a dinner-rush call",  d: "When the line is busy or no one can pick up, Vera answers — instantly, every time." },
+                { t: "Free up your host for the floor", d: "Your team stops juggling the phone and gets back to greeting and seating real guests." },
+                { t: "Capture pickup orders 24/7",      d: "Late-night cravings, lunch crowds, holidays — Vera works every shift you'd rather not." },
+              ].map((m) => (
+                <div key={m.t}>
+                  <div className="text-base font-semibold">{m.t}</div>
+                  <div className="mt-1 text-sm text-muted-foreground">{m.d}</div>
                 </div>
               ))}
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* INTEGRATIONS */}
-      <section className="border-b border-border bg-card/40">
-        <div className="mx-auto max-w-6xl px-5 py-20 md:py-24">
-          <SectionHeader
-            eyebrow="Plays nice with your stack"
-            title="Connects to the tools you already run on."
-          />
-          <div className="mt-10">
-            <LogoCloud />
           </div>
         </div>
       </section>
