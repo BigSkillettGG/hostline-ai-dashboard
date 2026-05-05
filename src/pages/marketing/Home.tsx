@@ -96,8 +96,8 @@ export default function MarketingHome() {
         <div className="mx-auto max-w-6xl px-5 py-20 md:py-28">
           <SectionHeader
             eyebrow="Live demo"
-            title="Seven real caller scenarios, one restaurant-trained host."
-            subtitle="Press play to hear how Vera handles orders, reservations, allergy questions, complaints, after-hours calls, and more."
+            title="Real calls, answered by a restaurant-trained host."
+            subtitle="Hear finished audio demos for parking questions and pickup orders, then preview the remaining call flows while we add the next recordings."
           />
           <div className="mt-10">
             <VoiceDemoPlayer />

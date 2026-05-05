@@ -1,19 +1,36 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Pause, Play, PhoneCall, Sparkles, UserRound, Volume2 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { LucideIcon } from "lucide-react";
+import {
+  AlertTriangle,
+  CalendarDays,
+  CheckCircle2,
+  Clock,
+  Headphones,
+  Moon,
+  Pause,
+  PhoneCall,
+  Play,
+  ShoppingBag,
+  Sparkles,
+  UserRound,
+  Utensils,
+  Volume2,
+  Wine,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
+type PlaybackState = "done" | "idle" | "playing";
 type Speaker = "vera" | "caller";
 
 interface DemoLine {
-  audioIndex: number;
   speaker: Speaker;
   text: string;
 }
 
 interface DemoScenario {
+  audioUrl?: string;
   caller: {
     color: string;
     initials: string;
@@ -21,6 +38,7 @@ interface DemoScenario {
     phone: string;
   };
   captured: string;
+  icon: LucideIcon;
   id: string;
   intent: string;
   label: string;
@@ -30,354 +48,416 @@ interface DemoScenario {
 
 const scenarios: DemoScenario[] = [
   {
+    audioUrl: "/audio/call-faq.mp3",
     caller: { color: "#4A90D9", initials: "MP", name: "Marco P.", phone: "+1 (917) 555-0142" },
     captured: "Parking answer",
+    icon: Clock,
     id: "faq",
     intent: "FAQ",
     label: "Hours and parking",
     outcome: "Resolved",
     lines: [
-      { speaker: "vera", text: "Thanks for calling Olive and Ember, this is Vera. How can I help tonight?", audioIndex: 0 },
-      { speaker: "caller", text: "Hey, what time do you guys close on Sundays?", audioIndex: 0 },
-      { speaker: "vera", text: "We're open until 9 PM on Sundays. Kitchen takes last orders at 8:30.", audioIndex: 1 },
-      { speaker: "caller", text: "And is there parking nearby?", audioIndex: 1 },
-      { speaker: "vera", text: "There's metered street parking on Valencia, and a paid lot at 17th and Valencia, about a two minute walk.", audioIndex: 2 },
-      { speaker: "caller", text: "Perfect, thanks!", audioIndex: 2 },
-      { speaker: "vera", text: "You're welcome. Anything else I can help with tonight?", audioIndex: 3 },
+      { speaker: "vera", text: "Thanks for calling Olive and Ember, this is Vera. How can I help tonight?" },
+      { speaker: "caller", text: "Hey, what time do you guys close on Sundays?" },
+      { speaker: "vera", text: "We're open until 9 PM on Sundays. Kitchen takes last orders at 8:30." },
+      { speaker: "caller", text: "And is there parking nearby?" },
+      { speaker: "vera", text: "There's metered street parking on Valencia, and a paid lot at 17th and Valencia, about a two minute walk." },
+      { speaker: "caller", text: "Perfect, thanks!" },
+      { speaker: "vera", text: "You're welcome. Anything else I can help with tonight?" },
     ],
   },
   {
+    audioUrl: "/audio/call-order.mp3",
     caller: { color: "#D4568E", initials: "SM", name: "Sarah M.", phone: "+1 (415) 555-0238" },
     captured: "3 items",
+    icon: ShoppingBag,
     id: "order",
     intent: "Order",
     label: "Pickup order",
     outcome: "$54 captured",
     lines: [
-      { speaker: "vera", text: "Thanks for calling Olive and Ember, this is Vera. How can I help?", audioIndex: 0 },
-      { speaker: "caller", text: "I'd like to place a pickup order. Two margherita pizzas and a Caesar salad.", audioIndex: 0 },
-      { speaker: "vera", text: "Got it. Two margheritas and one Caesar. Any modifications? We can do gluten-free crust for four dollars more.", audioIndex: 1 },
-      { speaker: "caller", text: "Gluten-free on one pizza, and no anchovy on the Caesar.", audioIndex: 1 },
-      { speaker: "vera", text: "Perfect. One regular margherita, one gluten-free, Caesar no anchovy. That's fifty four dollars. What name for pickup?", audioIndex: 2 },
-      { speaker: "caller", text: "Sarah.", audioIndex: 2 },
-      { speaker: "vera", text: "Sarah, your order will be ready in about 25 minutes. Pay at the counter. Sending you a text confirmation now.", audioIndex: 3 },
+      { speaker: "vera", text: "Thanks for calling Olive and Ember, this is Vera. How can I help?" },
+      { speaker: "caller", text: "I'd like to place a pickup order. Two margherita pizzas and a Caesar salad." },
+      { speaker: "vera", text: "Got it. Two margheritas and one Caesar. Any modifications? We can do gluten-free crust for four dollars more." },
+      { speaker: "caller", text: "Gluten-free on one pizza, and no anchovy on the Caesar." },
+      { speaker: "vera", text: "Perfect. One regular margherita, one gluten-free, Caesar no anchovy. That's fifty four dollars. What name for pickup?" },
+      { speaker: "caller", text: "Sarah." },
+      { speaker: "vera", text: "Sarah, your order will be ready in about 25 minutes. Pay at the counter. Sending you a text confirmation now." },
     ],
   },
   {
     caller: { color: "#8B5CF6", initials: "PS", name: "Priya S.", phone: "+1 (510) 555-0391" },
     captured: "Party of 6",
+    icon: CalendarDays,
     id: "reservation",
     intent: "Reservation",
     label: "Reservation",
     outcome: "Staff review",
     lines: [
-      { speaker: "vera", text: "Thanks for calling Olive and Ember, this is Vera. How can I help?", audioIndex: 0 },
-      { speaker: "caller", text: "I'd like to book a table for six this Saturday at 7:30.", audioIndex: 0 },
-      { speaker: "vera", text: "Saturday at 7:30 for six. I'll put in a reservation request for you. Any special occasion?", audioIndex: 1 },
-      { speaker: "caller", text: "It's my mom's sixtieth birthday. Could we get a quiet table near the window?", audioIndex: 1 },
-      { speaker: "vera", text: "Happy birthday to her. I've noted the birthday and window preference. What name should I put it under?", audioIndex: 2 },
-      { speaker: "caller", text: "Priya Shah.", audioIndex: 2 },
-      { speaker: "vera", text: "Priya, I've sent the request to the team. You'll get a text once they confirm. Anything else?", audioIndex: 3 },
+      { speaker: "vera", text: "Thanks for calling Olive and Ember, this is Vera. How can I help?" },
+      { speaker: "caller", text: "I'd like to book a table for six this Saturday at 7:30." },
+      { speaker: "vera", text: "Saturday at 7:30 for six. I'll put in a reservation request for you. Any special occasion?" },
+      { speaker: "caller", text: "It's my mom's sixtieth birthday. Could we get a quiet table near the window?" },
+      { speaker: "vera", text: "Happy birthday to her. I've noted the birthday and window preference. What name should I put it under?" },
+      { speaker: "caller", text: "Priya Shah." },
+      { speaker: "vera", text: "Priya, I've sent the request to the team. You'll get a text once they confirm. Anything else?" },
     ],
   },
   {
     caller: { color: "#059669", initials: "JR", name: "James R.", phone: "+1 (628) 555-0187" },
     captured: "Wine upsell",
+    icon: Wine,
     id: "specials",
     intent: "FAQ",
     label: "Specials and wine",
     outcome: "Upsell offered",
     lines: [
-      { speaker: "vera", text: "Thanks for calling Olive and Ember, this is Vera. How can I help?", audioIndex: 0 },
-      { speaker: "caller", text: "What specials do you have tonight?", audioIndex: 0 },
-      { speaker: "vera", text: "Tonight's special is a wood-fired branzino with lemon and capers for thirty four dollars. The chef's burrata is also back with heirloom tomatoes.", audioIndex: 1 },
-      { speaker: "caller", text: "Ooh, nice. Do you have good red wines by the glass?", audioIndex: 1 },
-      { speaker: "vera", text: "We have a Chianti Classico and a Montepulciano, both around sixteen dollars. Full wine list is on our website too.", audioIndex: 2 },
-      { speaker: "caller", text: "Is there live music tonight?", audioIndex: 2 },
-      { speaker: "vera", text: "Not tonight, but we have live jazz every Thursday from 7 to 10. Would you like to make a reservation for Thursday?", audioIndex: 3 },
+      { speaker: "vera", text: "Thanks for calling Olive and Ember, this is Vera. How can I help?" },
+      { speaker: "caller", text: "What specials do you have tonight?" },
+      { speaker: "vera", text: "Tonight's special is a wood-fired branzino with lemon and capers for thirty four dollars. The chef's burrata is also back with heirloom tomatoes." },
+      { speaker: "caller", text: "Ooh, nice. Do you have good red wines by the glass?" },
+      { speaker: "vera", text: "We have a Chianti Classico and a Montepulciano, both around sixteen dollars. Full wine list is on our website too." },
+      { speaker: "caller", text: "Is there live music tonight?" },
+      { speaker: "vera", text: "Not tonight, but we have live jazz every Thursday from 7 to 10. Would you like to make a reservation for Thursday?" },
     ],
   },
   {
     caller: { color: "#D97706", initials: "LK", name: "Linda K.", phone: "+1 (831) 555-0445" },
     captured: "Allergy flag",
+    icon: Utensils,
     id: "allergy",
     intent: "FAQ",
     label: "Dietary and allergy",
     outcome: "Staff-safe answer",
     lines: [
-      { speaker: "vera", text: "Thanks for calling Olive and Ember, this is Vera. How can I help?", audioIndex: 0 },
-      { speaker: "caller", text: "My daughter has a severe nut allergy. Can you accommodate that?", audioIndex: 0 },
-      { speaker: "vera", text: "I want to be upfront. We do use nuts in several dishes, and cross-contact is possible in our kitchen. For severe allergies, I'd recommend speaking with the chef directly.", audioIndex: 1 },
-      { speaker: "caller", text: "Okay. Do you have gluten-free options?", audioIndex: 1 },
-      { speaker: "vera", text: "We do. Gluten-free pizza crust is available for four dollars more, and several pasta dishes can be made with gluten-free pasta. I can note the allergy for your order.", audioIndex: 2 },
-      { speaker: "caller", text: "That's helpful. What about vegan options?", audioIndex: 2 },
-      { speaker: "vera", text: "Our roasted vegetable antipasto and the marinara pizza are both vegan. I can also ask the kitchen about modifications on other dishes.", audioIndex: 3 },
+      { speaker: "vera", text: "Thanks for calling Olive and Ember, this is Vera. How can I help?" },
+      { speaker: "caller", text: "My daughter has a severe nut allergy. Can you accommodate that?" },
+      { speaker: "vera", text: "I want to be upfront. We do use nuts in several dishes, and cross-contact is possible in our kitchen. For severe allergies, I'd recommend speaking with the chef directly." },
+      { speaker: "caller", text: "Okay. Do you have gluten-free options?" },
+      { speaker: "vera", text: "We do. Gluten-free pizza crust is available for four dollars more, and several pasta dishes can be made with gluten-free pasta. I can note the allergy for your order." },
+      { speaker: "caller", text: "That's helpful. What about vegan options?" },
+      { speaker: "vera", text: "Our roasted vegetable antipasto and the marinara pizza are both vegan. I can also ask the kitchen about modifications on other dishes." },
     ],
   },
   {
     caller: { color: "#DC2626", initials: "?", name: "+1 (415) 555-0177", phone: "+1 (415) 555-0177" },
     captured: "Manager alert",
+    icon: AlertTriangle,
     id: "complaint",
     intent: "Complaint",
     label: "Complaint",
     outcome: "Escalated",
     lines: [
-      { speaker: "vera", text: "Thanks for calling Olive and Ember, this is Vera. How can I help?", audioIndex: 0 },
-      { speaker: "caller", text: "I was there last night and my order was completely wrong. I got chicken instead of salmon.", audioIndex: 0 },
-      { speaker: "vera", text: "I'm really sorry to hear that. That's not the experience we want for you. Let me get the manager involved right away.", audioIndex: 1 },
-      { speaker: "caller", text: "This is the second time it's happened. I want a refund.", audioIndex: 1 },
-      { speaker: "vera", text: "I understand your frustration. I've texted the manager with the details. They'll call you back within the hour to make this right.", audioIndex: 2 },
-      { speaker: "caller", text: "Fine. My number is 415-555-0177.", audioIndex: 2 },
-      { speaker: "vera", text: "Got it. The manager will reach out shortly. I'm sorry again. We want to fix this.", audioIndex: 3 },
+      { speaker: "vera", text: "Thanks for calling Olive and Ember, this is Vera. How can I help?" },
+      { speaker: "caller", text: "I was there last night and my order was completely wrong. I got chicken instead of salmon." },
+      { speaker: "vera", text: "I'm really sorry to hear that. That's not the experience we want for you. Let me get the manager involved right away." },
+      { speaker: "caller", text: "This is the second time it's happened. I want a refund." },
+      { speaker: "vera", text: "I understand your frustration. I've texted the manager with the details. They'll call you back within the hour to make this right." },
+      { speaker: "caller", text: "Fine. My number is 415-555-0177." },
+      { speaker: "vera", text: "Got it. The manager will reach out shortly. I'm sorry again. We want to fix this." },
     ],
   },
   {
     caller: { color: "#0891B2", initials: "CR", name: "Carlos R.", phone: "+1 (650) 555-0299" },
     captured: "After-hours request",
+    icon: Moon,
     id: "afterhours",
     intent: "Reservation",
     label: "After hours",
     outcome: "Captured",
     lines: [
-      { speaker: "vera", text: "Thanks for calling Olive and Ember. We're closed right now, but this is Vera. I can still help.", audioIndex: 0 },
-      { speaker: "caller", text: "Oh, when do you open tomorrow?", audioIndex: 0 },
-      { speaker: "vera", text: "We open at 5 PM tomorrow, Tuesday. Kitchen takes orders until 9:30.", audioIndex: 1 },
-      { speaker: "caller", text: "Can I make a reservation for tomorrow at 7?", audioIndex: 1 },
-      { speaker: "vera", text: "I can put in a request for tomorrow at 7. How many guests?", audioIndex: 2 },
-      { speaker: "caller", text: "Four, under the name Rodriguez.", audioIndex: 2 },
-      { speaker: "vera", text: "Done. Party of four, tomorrow at 7, under Rodriguez. The team will confirm by text in the morning. Anything else?", audioIndex: 3 },
+      { speaker: "vera", text: "Thanks for calling Olive and Ember. We're closed right now, but this is Vera. I can still help." },
+      { speaker: "caller", text: "Oh, when do you open tomorrow?" },
+      { speaker: "vera", text: "We open at 5 PM tomorrow, Tuesday. Kitchen takes orders until 9:30." },
+      { speaker: "caller", text: "Can I make a reservation for tomorrow at 7?" },
+      { speaker: "vera", text: "I can put in a request for tomorrow at 7. How many guests?" },
+      { speaker: "caller", text: "Four, under the name Rodriguez." },
+      { speaker: "vera", text: "Done. Party of four, tomorrow at 7, under Rodriguez. The team will confirm by text in the morning. Anything else?" },
     ],
   },
 ];
 
 export function VoiceDemoPlayer() {
   const [scenarioIndex, setScenarioIndex] = useState(0);
-  const [visibleCount, setVisibleCount] = useState(0);
-  const [state, setState] = useState<"done" | "idle" | "playing">("idle");
+  const [playback, setPlayback] = useState<PlaybackState>("idle");
   const [elapsed, setElapsed] = useState(0);
-  const [audioMissing, setAudioMissing] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [audioFallback, setAudioFallback] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const runIdRef = useRef(0);
+  const timerRef = useRef<number | null>(null);
+
   const scenario = scenarios[scenarioIndex];
-  const currentLine = visibleCount > 0 ? scenario.lines[visibleCount - 1] : undefined;
+  const effectiveDuration = duration || estimateScenarioSeconds(scenario.lines);
+  const progress = effectiveDuration > 0 ? Math.min(100, (elapsed / effectiveDuration) * 100) : 0;
+  const activeLineIndex = playback === "idle" ? -1 : getActiveLineIndex(scenario.lines, elapsed, effectiveDuration);
+  const isReadyAudio = Boolean(scenario.audioUrl);
 
-  const stop = useCallback(() => {
-    runIdRef.current += 1;
-    audioRef.current?.pause();
-    audioRef.current = null;
-    setState("idle");
-  }, []);
-
-  useEffect(() => {
-    if (state !== "playing") return undefined;
-    const timer = window.setInterval(() => setElapsed((seconds) => seconds + 1), 1000);
-    return () => window.clearInterval(timer);
-  }, [state]);
-
-  useEffect(() => () => stop(), [stop]);
-
-  const playClip = useCallback((url: string, runId: number) => {
-    return new Promise<boolean>((resolve) => {
-      const audio = new Audio(url);
-      audioRef.current = audio;
-      let settled = false;
-
-      const settle = (played: boolean) => {
-        if (settled) return;
-        settled = true;
-        window.clearTimeout(timeout);
-        audio.onended = null;
-        audio.onerror = null;
-        if (audioRef.current === audio) audioRef.current = null;
-        resolve(played && runIdRef.current === runId);
-      };
-
-      const timeout = window.setTimeout(() => settle(false), 3500);
-      audio.onended = () => settle(true);
-      audio.onerror = () => settle(false);
-      void audio.play().catch(() => settle(false));
-    });
-  }, []);
-
-  const play = useCallback(async (nextScenarioIndex = scenarioIndex) => {
-    runIdRef.current += 1;
-    const runId = runIdRef.current;
-    audioRef.current?.pause();
-    const nextScenario = scenarios[nextScenarioIndex];
-
-    setScenarioIndex(nextScenarioIndex);
-    setVisibleCount(0);
-    setElapsed(0);
-    setState("playing");
-
-    for (let index = 0; index < nextScenario.lines.length; index += 1) {
-      if (runIdRef.current !== runId) return;
-
-      const line = nextScenario.lines[index];
-      setVisibleCount(index + 1);
-
-      let played = false;
-      if (!audioMissing) {
-        const prefix = line.speaker === "vera" ? "vera" : "caller";
-        played = await playClip(`/audio/${prefix}-${nextScenario.id}-${line.audioIndex}.mp3`, runId);
-        if (!played && runIdRef.current === runId) setAudioMissing(true);
-      }
-
-      if (!played) {
-        await sleep(Math.max(1300, line.text.split(" ").length * 115));
-      }
+  const clearPlaybackResources = useCallback(() => {
+    if (timerRef.current !== null) {
+      window.clearInterval(timerRef.current);
+      timerRef.current = null;
     }
 
-    if (runIdRef.current === runId) setState("done");
-  }, [audioMissing, playClip, scenarioIndex]);
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.onended = null;
+      audioRef.current.onerror = null;
+      audioRef.current.onloadedmetadata = null;
+      audioRef.current.ontimeupdate = null;
+      audioRef.current = null;
+    }
+  }, []);
+
+  const startScriptPreview = useCallback((nextScenario: DemoScenario, failedAudio = false) => {
+    const previewDuration = estimateScenarioSeconds(nextScenario.lines);
+
+    setDuration(previewDuration);
+    setAudioFallback(failedAudio);
+
+    timerRef.current = window.setInterval(() => {
+      setElapsed((current) => {
+        const nextElapsed = Math.min(previewDuration, current + 0.25);
+        if (nextElapsed >= previewDuration) {
+          if (timerRef.current !== null) {
+            window.clearInterval(timerRef.current);
+            timerRef.current = null;
+          }
+          setPlayback("done");
+        }
+        return nextElapsed;
+      });
+    }, 250);
+  }, []);
+
+  const stop = useCallback(() => {
+    clearPlaybackResources();
+    setPlayback("idle");
+    setElapsed(0);
+    setDuration(0);
+  }, [clearPlaybackResources]);
+
+  useEffect(() => () => clearPlaybackResources(), [clearPlaybackResources]);
+
+  const play = useCallback((nextScenarioIndex = scenarioIndex) => {
+    clearPlaybackResources();
+
+    const nextScenario = scenarios[nextScenarioIndex];
+    setScenarioIndex(nextScenarioIndex);
+    setPlayback("playing");
+    setElapsed(0);
+    setDuration(0);
+    setAudioFallback(false);
+
+    if (!nextScenario.audioUrl) {
+      startScriptPreview(nextScenario);
+      return;
+    }
+
+    const audio = new Audio(nextScenario.audioUrl);
+    audioRef.current = audio;
+
+    audio.onloadedmetadata = () => {
+      if (Number.isFinite(audio.duration)) setDuration(audio.duration);
+    };
+
+    audio.ontimeupdate = () => {
+      setElapsed(audio.currentTime);
+      if (Number.isFinite(audio.duration)) setDuration(audio.duration);
+    };
+
+    audio.onended = () => {
+      setElapsed(Number.isFinite(audio.duration) ? audio.duration : estimateScenarioSeconds(nextScenario.lines));
+      setPlayback("done");
+      audioRef.current = null;
+    };
+
+    audio.onerror = () => {
+      clearPlaybackResources();
+      startScriptPreview(nextScenario, true);
+    };
+
+    void audio.play().catch(() => {
+      clearPlaybackResources();
+      startScriptPreview(nextScenario, true);
+    });
+  }, [clearPlaybackResources, scenarioIndex, startScriptPreview]);
 
   const chooseScenario = (index: number) => {
     stop();
     setScenarioIndex(index);
-    setVisibleCount(0);
-    setElapsed(0);
+    setAudioFallback(false);
   };
 
+  const statusText = useMemo(() => {
+    if (playback === "playing") return isReadyAudio && !audioFallback ? "Live audio playing" : "Script preview playing";
+    if (playback === "done") return "Call complete";
+    return isReadyAudio ? "Audio ready" : "Script preview";
+  }, [audioFallback, isReadyAudio, playback]);
+
   return (
-    <Card className="overflow-hidden border-border bg-foreground text-background shadow-[0_28px_80px_-36px_hsl(var(--foreground)/0.65)]">
-      <div className="border-b border-background/10 px-5 py-4 md:px-7">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <Badge className="mb-2 border-primary/30 bg-primary/20 text-primary-glow" variant="outline">
-              <Volume2 className="mr-1 h-3 w-3" />
-              Voice demo
-            </Badge>
-            <h3 className="text-xl font-semibold tracking-tight text-background md:text-2xl">
-              Hear Vera handle real restaurant call scenarios.
-            </h3>
-            <p className="mt-1 max-w-2xl text-sm text-background/60">
-              Generate the ElevenLabs clips locally, then these demos play Vera and unique caller voices from /audio.
-            </p>
+    <div className="mx-auto max-w-5xl">
+      <div className="mb-8 flex flex-wrap justify-center gap-2">
+        {scenarios.map((item, index) => {
+          const Icon = item.icon;
+          const isActive = index === scenarioIndex;
+
+          return (
+            <button
+              aria-pressed={isActive}
+              className={cn(
+                "inline-flex h-10 items-center gap-2 rounded-full border px-4 text-sm font-medium transition-colors",
+                isActive
+                  ? "border-primary bg-primary text-primary-foreground shadow-[0_0_0_4px_hsl(var(--primary)/0.12)]"
+                  : "border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground",
+              )}
+              key={item.id}
+              onClick={() => chooseScenario(index)}
+              type="button"
+            >
+              <Icon className="h-4 w-4" />
+              {item.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <Card className="overflow-hidden rounded-lg border-border/70 bg-[#18120e] text-white shadow-[0_30px_90px_-40px_rgba(24,18,14,0.8)]">
+        <div className="border-b border-white/10 px-5 py-5 md:px-7">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
+                <Volume2 className="h-3.5 w-3.5" />
+                Live call demo
+              </div>
+              <h3 className="mt-3 text-2xl font-semibold tracking-tight md:text-3xl">
+                Listen to Vera handle real restaurant calls.
+              </h3>
+              <p className="mt-2 max-w-2xl text-sm text-white/55">
+                Vera answers as the restaurant host, gathers the caller's intent, and captures the details your team needs.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/60">
+              {isReadyAudio && !audioFallback ? (
+                <CheckCircle2 className="h-4 w-4 text-success" />
+              ) : (
+                <Headphones className="h-4 w-4 text-primary" />
+              )}
+              {statusText}
+            </div>
           </div>
-          <Button
-            className="shrink-0 bg-primary text-primary-foreground hover:bg-primary/90"
-            onClick={() => (state === "playing" ? stop() : play())}
-          >
-            {state === "playing" ? <Pause className="mr-1.5 h-4 w-4" /> : <Play className="mr-1.5 h-4 w-4" />}
-            {state === "playing" ? "Stop" : state === "done" ? "Replay call" : "Play call"}
-          </Button>
         </div>
-        {audioMissing && (
-          <div className="mt-4 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-background/70">
-            Audio files are not in public/audio yet, so the transcript is playing as a timed preview. Run npm run marketing:audio with ELEVENLABS_API_KEY to generate clips.
+
+        {audioFallback && (
+          <div className="border-b border-warning/20 bg-warning/10 px-5 py-3 text-xs text-white/70 md:px-7">
+            The full-call MP3 did not load, so this scenario is playing as a timed transcript preview.
           </div>
         )}
-      </div>
 
-      <div className="grid gap-px bg-background/10 lg:grid-cols-[260px_1fr]">
-        <div className="bg-foreground p-3">
-          <div className="grid grid-cols-2 gap-2 lg:grid-cols-1">
-            {scenarios.map((item, index) => (
-              <button
-                className={cn(
-                  "rounded-md border px-3 py-2 text-left text-sm transition-colors",
-                  index === scenarioIndex
-                    ? "border-primary/60 bg-primary/15 text-primary-glow"
-                    : "border-background/10 bg-background/5 text-background/60 hover:bg-background/10 hover:text-background",
-                )}
-                key={item.id}
-                onClick={() => chooseScenario(index)}
+        <div className="grid gap-px bg-white/10">
+          <div className="grid gap-px bg-white/10 lg:grid-cols-[1fr_220px_1fr]">
+            <PersonPanel active={activeLineIndex >= 0 && scenario.lines[activeLineIndex]?.speaker === "caller"} caller={scenario.caller} speaker="caller" />
+
+            <div className="flex min-h-[210px] flex-col items-center justify-center bg-[#201913] px-5 py-7 text-center">
+              <Button
+                aria-label={playback === "playing" ? "Stop demo call" : "Play demo call"}
+                className="h-16 w-16 rounded-full bg-primary p-0 text-primary-foreground shadow-[0_16px_45px_-16px_hsl(var(--primary))] hover:bg-primary/90"
+                onClick={() => (playback === "playing" ? stop() : play())}
               >
-                <span className="block font-medium">{item.label}</span>
-                <span className="mt-0.5 block text-xs opacity-70">{item.outcome}</span>
-              </button>
-            ))}
-          </div>
-        </div>
+                {playback === "playing" ? <Pause className="h-7 w-7" /> : <Play className="ml-1 h-7 w-7" />}
+              </Button>
 
-        <div className="bg-foreground">
-          <div className="grid gap-px bg-background/10 sm:grid-cols-3">
-            <DemoStat label="Intent" value={scenario.intent} />
-            <DemoStat label="Outcome" value={scenario.outcome} />
-            <DemoStat label="Captured" value={scenario.captured} />
-          </div>
-
-          <div className="grid gap-px bg-background/10 md:grid-cols-[220px_1fr]">
-            <div className="bg-foreground p-5">
-              <div className="flex items-center justify-between gap-3 md:block">
-                <SpeakerBadge active={currentLine?.speaker === "caller"} caller={scenario.caller} speaker="caller" />
-                <div className="my-4 hidden h-px bg-background/10 md:block" />
-                <div className="mx-3 h-px flex-1 bg-background/10 md:hidden" />
-                <SpeakerBadge active={currentLine?.speaker === "vera"} caller={scenario.caller} speaker="vera" />
+              <div className="mt-5 flex h-5 items-end justify-center gap-1">
+                {Array.from({ length: 18 }).map((_, index) => (
+                  <span
+                    className={cn(
+                      "w-1 rounded-full bg-primary/70 transition-all",
+                      playback === "playing" ? "animate-pulse" : "h-1 opacity-40",
+                    )}
+                    key={index}
+                    style={{
+                      animationDelay: `${index * 55}ms`,
+                      height: playback === "playing" ? `${6 + ((index * 7) % 18)}px` : undefined,
+                    }}
+                  />
+                ))}
               </div>
-              <div className="mt-5 flex items-center justify-center gap-2 rounded-full border border-background/10 bg-background/5 px-3 py-2 text-xs text-background/50">
-                <PhoneCall className="h-3.5 w-3.5" />
-                {state === "playing" ? formatElapsed(elapsed) : state === "done" ? `Ended at ${formatElapsed(elapsed)}` : "Ready"}
+
+              <div className="mt-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/35">
+                {playback === "playing" ? "On the call" : playback === "done" ? "Replay call" : "Press play"}
+              </div>
+              <div className="mt-2 flex items-center gap-2 text-sm text-white/70">
+                <PhoneCall className="h-4 w-4 text-primary" />
+                {formatElapsed(elapsed)} / {formatElapsed(effectiveDuration)}
               </div>
             </div>
 
-            <div className="max-h-[440px] min-h-[360px] overflow-y-auto bg-foreground px-5 py-4">
-              {visibleCount === 0 ? (
-                <div className="flex min-h-[320px] flex-col items-center justify-center text-center">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/20 text-primary-glow">
-                    <Play className="h-6 w-6" />
-                  </div>
-                  <div className="mt-4 text-sm font-medium text-background">Choose a scenario and press play.</div>
-                  <div className="mt-1 max-w-sm text-xs text-background/50">
-                    Without generated audio, this still previews the transcript pacing.
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {scenario.lines.slice(0, visibleCount).map((line, index) => (
+            <PersonPanel active={activeLineIndex >= 0 && scenario.lines[activeLineIndex]?.speaker === "vera"} caller={scenario.caller} speaker="vera" />
+          </div>
+
+          <div className="bg-[#18120e]">
+            <div className="h-1 bg-white/10">
+              <div className="h-full bg-primary transition-[width]" style={{ width: `${progress}%` }} />
+            </div>
+
+            <div className="grid gap-px bg-white/10 sm:grid-cols-4">
+              <DemoStat label="Intent" value={scenario.intent} />
+              <DemoStat label="Outcome" value={scenario.outcome} />
+              <DemoStat label="Captured" value={scenario.captured} />
+              <DemoStat label="Caller" value={scenario.caller.name} />
+            </div>
+          </div>
+
+          <div className="max-h-[430px] overflow-y-auto bg-[#201913] px-4 py-5 md:px-7">
+            <div className="mx-auto max-w-3xl space-y-3">
+              {scenario.lines.map((line, index) => {
+                const isVera = line.speaker === "vera";
+                const isActive = index === activeLineIndex;
+                const hasPlayed = playback !== "idle" && index < activeLineIndex;
+
+                return (
+                  <div
+                    className={cn(
+                      "flex transition-opacity",
+                      isVera ? "justify-end" : "justify-start",
+                      playback === "idle" && "opacity-75",
+                      hasPlayed && "opacity-70",
+                    )}
+                    key={`${scenario.id}-${index}`}
+                  >
                     <div
                       className={cn(
-                        "rounded-lg border px-4 py-3",
-                        line.speaker === "vera"
-                          ? "border-primary/25 bg-primary/10"
-                          : "border-background/10 bg-background/5",
+                        "max-w-[86%] rounded-lg border px-4 py-3 text-sm leading-relaxed shadow-sm md:max-w-[72%]",
+                        isVera
+                          ? "border-primary/30 bg-primary/15 text-white"
+                          : "border-white/10 bg-white/[0.06] text-white/85",
+                        isActive && "border-primary bg-primary/25 shadow-[0_0_0_3px_hsl(var(--primary)/0.18)]",
                       )}
-                      key={`${scenario.id}-${index}`}
                     >
-                      <div className="mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em]">
-                        {line.speaker === "vera" ? (
-                          <Sparkles className="h-3 w-3 text-primary-glow" />
+                      <div className="mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em]">
+                        {isVera ? (
+                          <Sparkles className="h-3 w-3 text-primary" />
                         ) : (
-                          <UserRound className="h-3 w-3 text-background/50" />
+                          <UserRound className="h-3 w-3 text-white/45" />
                         )}
-                        <span className={line.speaker === "vera" ? "text-primary-glow" : "text-background/50"}>
-                          {line.speaker === "vera" ? "Vera" : scenario.caller.name}
+                        <span className={isVera ? "text-primary" : "text-white/45"}>
+                          {isVera ? "Vera" : scenario.caller.name}
                         </span>
-                        {state === "playing" && index === visibleCount - 1 && (
-                          <span className="ml-auto flex items-center gap-[3px]">
-                            {Array.from({ length: 8 }).map((_, barIndex) => (
-                              <span
-                                className="h-3 w-[2px] animate-pulse rounded-full bg-success"
-                                key={barIndex}
-                                style={{ animationDelay: `${barIndex * 90}ms` }}
-                              />
-                            ))}
-                          </span>
-                        )}
                       </div>
-                      <p className="text-sm leading-relaxed text-background/90">{line.text}</p>
+                      {line.text}
                     </div>
-                  ))}
-                </div>
-              )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
-      </div>
-    </Card>
-  );
-}
-
-function DemoStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="bg-foreground px-4 py-3">
-      <div className="text-[10px] uppercase tracking-[0.16em] text-background/35">{label}</div>
-      <div className="mt-0.5 text-sm font-semibold text-background">{value}</div>
+      </Card>
     </div>
   );
 }
 
-function SpeakerBadge({
+function PersonPanel({
   active,
   caller,
   speaker,
@@ -388,27 +468,54 @@ function SpeakerBadge({
 }) {
   const isVera = speaker === "vera";
   return (
-    <div className="flex flex-col items-center text-center">
+    <div className="flex min-h-[210px] flex-col items-center justify-center bg-[#201913] px-5 py-7 text-center">
       <div
         className={cn(
-          "flex h-14 w-14 items-center justify-center rounded-full text-sm font-semibold ring-4 transition-transform",
-          isVera ? "bg-primary text-primary-foreground ring-primary/20" : "text-white ring-background/10",
-          active && "scale-105",
+          "flex h-16 w-16 items-center justify-center rounded-full text-base font-semibold ring-4 transition-transform",
+          isVera ? "bg-primary text-primary-foreground ring-primary/15" : "text-white ring-white/10",
+          active && "scale-105 ring-primary/35",
         )}
         style={isVera ? undefined : { background: caller.color }}
       >
         {isVera ? "V" : caller.initials}
       </div>
-      <div className="mt-2 text-sm font-semibold text-background">{isVera ? "Vera" : caller.name}</div>
-      <div className="text-[11px] text-background/45">{isVera ? "AI host" : caller.phone}</div>
+      <div className="mt-3 text-sm font-semibold text-white">{isVera ? "Vera" : caller.name}</div>
+      <div className="mt-1 text-xs text-white/40">{isVera ? "AI host - Olive & Ember" : caller.phone}</div>
     </div>
   );
 }
 
-function formatElapsed(seconds: number) {
-  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+function DemoStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-[#18120e] px-4 py-4">
+      <div className="text-[10px] uppercase tracking-[0.16em] text-white/30">{label}</div>
+      <div className="mt-1 text-sm font-semibold text-white">{value}</div>
+    </div>
+  );
 }
 
-function sleep(ms: number) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
+function estimateScenarioSeconds(lines: DemoLine[]) {
+  const wordCount = lines.reduce((total, line) => total + line.text.split(/\s+/).length, 0);
+  return Math.max(18, Math.round(wordCount * 0.36 + lines.length * 0.55));
+}
+
+function getActiveLineIndex(lines: DemoLine[], elapsed: number, duration: number) {
+  if (duration <= 0) return 0;
+
+  const weights = lines.map((line) => Math.max(1.6, line.text.split(/\s+/).length * 0.34));
+  const totalWeight = weights.reduce((total, weight) => total + weight, 0);
+  const target = (elapsed / duration) * totalWeight;
+  let running = 0;
+
+  for (let index = 0; index < weights.length; index += 1) {
+    running += weights[index];
+    if (target <= running) return index;
+  }
+
+  return lines.length - 1;
+}
+
+function formatElapsed(seconds: number) {
+  const safeSeconds = Math.max(0, Math.floor(seconds));
+  return `${String(Math.floor(safeSeconds / 60)).padStart(2, "0")}:${String(safeSeconds % 60).padStart(2, "0")}`;
 }

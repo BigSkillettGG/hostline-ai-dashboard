@@ -33,13 +33,16 @@ The Lovable project uses Vite, React, TypeScript, Tailwind, shadcn/ui, Recharts,
 
 ## Marketing Audio Demo
 
-The homepage includes a call-demo player that looks for generated clips in `public/audio`.
+The homepage voice demo prefers full-call MP3 files in `public/audio`.
+
+- `call-faq.mp3` powers the Hours and parking demo.
+- `call-order.mp3` powers the Pickup order demo.
+
+Scenarios without a full-call MP3 still play as timed transcript previews. The older ElevenLabs helper can still generate per-line clips while we iterate on voice direction:
 
 ```sh
 ELEVENLABS_API_KEY=sk-... npm run marketing:audio
 ```
-
-The generator creates Vera and caller audio for each homepage scenario. If the clips are not present, the homepage still shows the scripted transcript and tells the user how to generate the audio.
 
 ## Voice Service
 
