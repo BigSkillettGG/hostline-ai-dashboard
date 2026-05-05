@@ -5,13 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { menuCategories } from "@/data/mock";
-import { Upload, Plus, Clock, Sparkles, FileUp } from "lucide-react";
+import { Upload, Plus, Clock, Sparkles, FileUp, Link2, RefreshCw, Trash2, Globe } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import type { MenuSource, SyncFrequency } from "@/types/sources";
 
 export default function MenuPage() {
   const [activeCat, setActiveCat] = useState(menuCategories[0].id);
