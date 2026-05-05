@@ -122,6 +122,132 @@ export default function Knowledge() {
             ))}
           </div>
         </Card>
+
+        <Card className="p-5">
+          <div className="mb-3 flex items-start gap-2">
+            <Music className="mt-0.5 h-4 w-4 text-primary" />
+            <div>
+              <div className="text-sm font-semibold">Music & Entertainment</div>
+              <p className="text-xs text-muted-foreground">The AI host will reference these when callers ask about live music, DJs, or events.</p>
+            </div>
+          </div>
+
+          <div className="space-y-5">
+            <div>
+              <div className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <Globe className="h-3.5 w-3.5" />Live calendar URL
+              </div>
+              <div className="space-y-2">
+                {musicSources.length === 0 && (
+                  <div className="rounded-md border border-dashed border-border p-3 text-center text-xs text-muted-foreground">
+                    No URLs yet — add a "what's on" page and we'll keep events fresh automatically.
+                  </div>
+                )}
+                {musicSources.map((s) => (
+                  <div key={s.id} className="flex flex-wrap items-center gap-2 rounded-md border border-border p-2.5">
+                    <Link2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <a href={s.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-sm hover:underline">{s.url}</a>
+                    <Badge variant="outline" className={
+                      s.status === "synced" ? "border-primary/30 bg-primary/10 text-primary"
+                      : s.status === "error" ? "border-destructive/30 bg-destructive/10 text-destructive"
+                      : "bg-muted text-muted-foreground"
+                    }>{s.status}</Badge>
+                    <span className="text-xs text-muted-foreground tabular-nums">{s.frequency} · {s.lastSyncedAt}</span>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => toast.success("Sync queued")}>
+                      <RefreshCw className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setMusicSources(musicSources.filter(x => x.id !== s.id))}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <Input
+                  value={newMusicUrl}
+                  onChange={(e) => setNewMusicUrl(e.target.value)}
+                  placeholder="https://your-restaurant.com/events"
+                  className="h-9 flex-1 min-w-[180px]"
+                />
+                <Select value={newMusicFreq} onValueChange={(v) => setNewMusicFreq(v as SyncFrequency)}>
+                  <SelectTrigger className="h-9 w-28"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="hourly">Hourly</SelectItem>
+                    <SelectItem value="daily">Daily</SelectItem>
+                    <SelectItem value="weekly">Weekly</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button size="sm" onClick={addSource}><Plus className="mr-1.5 h-3.5 w-3.5" />Add</Button>
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <CalendarDays className="h-3.5 w-3.5" />Scheduled events
+              </div>
+              <div className="space-y-2">
+                {sortedEvents.length === 0 && (
+                  <div className="rounded-md border border-dashed border-border p-3 text-center text-xs text-muted-foreground">
+                    No events scheduled — add tonight's act so the AI host can answer "who's playing tonight?".
+                  </div>
+                )}
+                {sortedEvents.map((e) => (
+                  <div key={e.id} className="flex flex-wrap items-center gap-3 rounded-md border border-border p-3">
+                    <div className="text-xs tabular-nums text-muted-foreground w-28 shrink-0">
+                      <div className="font-medium text-foreground">{new Date(e.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</div>
+                      <div>{e.startTime}{e.endTime ? `–${e.endTime}` : ""}</div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate">{e.performer}</div>
+                      {e.notes && <div className="text-xs text-muted-foreground truncate">{e.notes}</div>}
+                    </div>
+                    <Badge variant="secondary" className="text-[10px]">{e.type}</Badge>
+                    <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setEvents(events.filter(x => x.id !== e.id))}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-3 rounded-md border border-dashed border-border p-3">
+                <div className="grid gap-2 sm:grid-cols-12">
+                  <div className="sm:col-span-3 space-y-1">
+                    <Label className="text-xs">Date</Label>
+                    <Input type="date" value={draft.date || ""} onChange={(e) => setDraft({ ...draft, date: e.target.value })} className="h-9" />
+                  </div>
+                  <div className="sm:col-span-2 space-y-1">
+                    <Label className="text-xs">Start</Label>
+                    <Input type="time" value={draft.startTime || ""} onChange={(e) => setDraft({ ...draft, startTime: e.target.value })} className="h-9" />
+                  </div>
+                  <div className="sm:col-span-2 space-y-1">
+                    <Label className="text-xs">End</Label>
+                    <Input type="time" value={draft.endTime || ""} onChange={(e) => setDraft({ ...draft, endTime: e.target.value })} className="h-9" />
+                  </div>
+                  <div className="sm:col-span-3 space-y-1">
+                    <Label className="text-xs">Performer / act</Label>
+                    <Input value={draft.performer || ""} onChange={(e) => setDraft({ ...draft, performer: e.target.value })} placeholder="e.g. Jazz Quartet" className="h-9" />
+                  </div>
+                  <div className="sm:col-span-2 space-y-1">
+                    <Label className="text-xs">Type</Label>
+                    <Select value={(draft.type as string) || "Live music"} onValueChange={(v) => setDraft({ ...draft, type: v as EventType })}>
+                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {EVENT_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="sm:col-span-12 space-y-1">
+                    <Label className="text-xs">Notes (optional)</Label>
+                    <Input value={draft.notes || ""} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} placeholder="Cover charge, age restriction…" className="h-9" />
+                  </div>
+                </div>
+                <div className="mt-3 flex justify-end">
+                  <Button size="sm" onClick={addEvent}><Plus className="mr-1.5 h-3.5 w-3.5" />Add event</Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Card>
       </PageBody>
     </>
   );
