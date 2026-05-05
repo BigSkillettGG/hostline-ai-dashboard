@@ -1,4 +1,4 @@
-import { Outlet } from "react-router-dom";
+import { Outlet, useNavigate } from "react-router-dom";
 import { Bell, Search, MapPin, ChevronDown } from "lucide-react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
@@ -12,9 +12,13 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
+import { useCurrentUser, signOut, setRole } from "@/lib/auth";
 
 export default function AppLayout() {
   const [agentLive, setAgentLive] = useState(true);
+  const user = useCurrentUser();
+  const navigate = useNavigate();
+  const initials = (user?.name ?? "ML").split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase();
 
   return (
     <SidebarProvider>
@@ -64,19 +68,23 @@ export default function AppLayout() {
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full">
                     <Avatar className="h-8 w-8">
-                      <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">ML</AvatarFallback>
+                      <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">{initials}</AvatarFallback>
                     </Avatar>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
                   <DropdownMenuLabel>
-                    <div className="text-sm">Maria Lombardi</div>
-                    <div className="text-xs font-normal text-muted-foreground">Owner</div>
+                    <div className="text-sm">{user?.name ?? "Maria Lombardi"}</div>
+                    <div className="text-xs font-normal text-muted-foreground">{user?.email ?? "Owner"}</div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem>Profile</DropdownMenuItem>
-                  <DropdownMenuItem>Billing</DropdownMenuItem>
-                  <DropdownMenuItem>Sign out</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate("/app/profile")}>Profile</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate("/app/billing")}>Billing</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => { setRole("superadmin"); navigate("/super"); }}>
+                    Switch to Super Admin
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => { signOut(); navigate("/"); }}>Sign out</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
