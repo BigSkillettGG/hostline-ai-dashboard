@@ -1,9 +1,25 @@
 // Mock data for HostLine AI — restaurant: "Olive & Ember"
 
-export type CallIntent = "order" | "reservation" | "faq" | "hours" | "other";
-export type CallOutcome = "resolved" | "order_placed" | "reservation_booked" | "escalated" | "voicemail" | "missed" | "unknown";
+export type CallIntent = "order" | "reservation" | "faq" | "hours" | "complaint" | "sales" | "other";
+export type CallOutcome = "resolved" | "order_placed" | "reservation_booked" | "escalated" | "manager_alerted" | "message_taken" | "voicemail" | "missed" | "unknown";
 export type CallStatus = "new" | "reviewed" | "needs_review" | "resolved";
 export type TranscriptSpeaker = "agent" | "caller" | "staff";
+
+export type EscalationType = "complaint" | "sales";
+export type EscalationSeverity = "low" | "medium" | "high";
+export type EscalationStatus = "pending_callback" | "callback_made" | "closed";
+export type AlertChannel = "sms" | "email";
+
+export interface CallEscalation {
+  type: EscalationType;
+  severity?: EscalationSeverity;
+  summary: string;
+  alertedAt: string;
+  alertedTo: string[];
+  channels: AlertChannel[];
+  status: EscalationStatus;
+  callerCallback?: boolean;
+}
 
 export interface Call {
   id: string;
@@ -19,6 +35,7 @@ export interface Call {
   transcript: { speaker: TranscriptSpeaker; text: string; t: string }[];
   orderId?: string;
   reservationId?: string;
+  escalation?: CallEscalation;
 }
 
 export type OrderStatus = "new" | "accepted" | "in_progress" | "completed" | "canceled";
