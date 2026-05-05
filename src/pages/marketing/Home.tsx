@@ -92,16 +92,9 @@ export default function MarketingHome() {
       </section>
 
       {/* LIVE DEMO */}
-      <section id="live-demo" className="border-b border-border bg-card/40">
+      <section id="live-demo" className="border-b border-[#2c2119] bg-[#120f0c]">
         <div className="mx-auto max-w-6xl px-5 py-20 md:py-28">
-          <SectionHeader
-            eyebrow="Live demo"
-            title="Real calls, answered by a restaurant-trained host."
-            subtitle="Hear finished audio demos for parking questions and pickup orders, then preview the remaining call flows while we add the next recordings."
-          />
-          <div className="mt-10">
-            <VoiceDemoPlayer />
-          </div>
+          <VoiceDemoPlayer />
         </div>
       </section>
 

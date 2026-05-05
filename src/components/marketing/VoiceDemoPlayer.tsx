@@ -5,6 +5,7 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock,
+  FileText,
   Headphones,
   Moon,
   Pause,
@@ -18,7 +19,6 @@ import {
   Wine,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 type PlaybackState = "done" | "idle" | "playing";
@@ -295,8 +295,21 @@ export function VoiceDemoPlayer() {
   }, [audioFallback, isReadyAudio, playback]);
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <div className="mb-8 flex flex-wrap justify-center gap-2">
+    <div className="mx-auto max-w-5xl text-white">
+      <div className="mx-auto max-w-3xl text-center">
+        <div className="mb-4 inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
+          <span className="h-px w-7 bg-primary/60" />
+          Live demo
+        </div>
+        <h2 className="text-3xl font-semibold tracking-tight md:text-4xl lg:text-[44px] lg:leading-[1.05]">
+          Listen to Vera handle real restaurant calls.
+        </h2>
+        <p className="mx-auto mt-4 max-w-2xl text-base text-white/60 md:text-lg">
+          Finished audio is live for parking questions and pickup orders, with the remaining scenarios available as timed previews.
+        </p>
+      </div>
+
+      <div className="mt-10 flex flex-wrap justify-center gap-2">
         {scenarios.map((item, index) => {
           const Icon = item.icon;
           const isActive = index === scenarioIndex;
@@ -305,10 +318,10 @@ export function VoiceDemoPlayer() {
             <button
               aria-pressed={isActive}
               className={cn(
-                "inline-flex h-10 items-center gap-2 rounded-full border px-4 text-sm font-medium transition-colors",
+                "inline-flex min-h-10 items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors",
                 isActive
-                  ? "border-primary bg-primary text-primary-foreground shadow-[0_0_0_4px_hsl(var(--primary)/0.12)]"
-                  : "border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground",
+                  ? "border-primary bg-primary text-primary-foreground shadow-[0_0_0_4px_hsl(var(--primary)/0.14)]"
+                  : "border-white/10 bg-white/[0.04] text-white/65 hover:border-primary/50 hover:bg-white/[0.07] hover:text-white",
               )}
               key={item.id}
               onClick={() => chooseScenario(index)}
@@ -316,25 +329,33 @@ export function VoiceDemoPlayer() {
             >
               <Icon className="h-4 w-4" />
               {item.label}
+              {item.audioUrl && (
+                <span className="ml-1 rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-success">
+                  Audio
+                </span>
+              )}
             </button>
           );
         })}
       </div>
 
-      <Card className="overflow-hidden rounded-lg border-border/70 bg-[#18120e] text-white shadow-[0_30px_90px_-40px_rgba(24,18,14,0.8)]">
-        <div className="border-b border-white/10 px-5 py-5 md:px-7">
+      <div className="mt-8 overflow-hidden rounded-lg border border-white/10 bg-[#18120e] shadow-[0_32px_100px_-42px_rgba(0,0,0,0.85)]">
+        <div className="border-b border-white/10 bg-[#1c1611] px-5 py-4 md:px-7">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
-                <Volume2 className="h-3.5 w-3.5" />
-                Live call demo
+              <div className="flex flex-wrap items-center gap-2 text-xs text-white/45">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.06] px-2.5 py-1">
+                  <PhoneCall className="h-3.5 w-3.5 text-primary" />
+                  Olive & Ember inbound line
+                </span>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.06] px-2.5 py-1">
+                  <Volume2 className="h-3.5 w-3.5 text-primary" />
+                  {scenario.label}
+                </span>
               </div>
-              <h3 className="mt-3 text-2xl font-semibold tracking-tight md:text-3xl">
-                Listen to Vera handle real restaurant calls.
+              <h3 className="mt-3 text-xl font-semibold tracking-tight md:text-2xl">
+                {scenario.caller.name} is calling. Vera picks up.
               </h3>
-              <p className="mt-2 max-w-2xl text-sm text-white/55">
-                Vera answers as the restaurant host, gathers the caller's intent, and captures the details your team needs.
-              </p>
             </div>
 
             <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/60">
@@ -355,20 +376,25 @@ export function VoiceDemoPlayer() {
         )}
 
         <div className="grid gap-px bg-white/10">
-          <div className="grid gap-px bg-white/10 lg:grid-cols-[1fr_220px_1fr]">
+          <div className="grid gap-px bg-white/10 lg:grid-cols-[1fr_260px_1fr]">
             <PersonPanel active={activeLineIndex >= 0 && scenario.lines[activeLineIndex]?.speaker === "caller"} caller={scenario.caller} speaker="caller" />
 
-            <div className="flex min-h-[210px] flex-col items-center justify-center bg-[#201913] px-5 py-7 text-center">
+            <div className="flex min-h-[240px] flex-col items-center justify-center bg-[#241b14] px-5 py-8 text-center">
+              <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-[#18120e] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/40">
+                <span className={cn("h-2 w-2 rounded-full", playback === "playing" ? "bg-success" : "bg-primary")} />
+                {playback === "playing" ? "Connected" : playback === "done" ? "Complete" : "Ready"}
+              </div>
+
               <Button
                 aria-label={playback === "playing" ? "Stop demo call" : "Play demo call"}
-                className="h-16 w-16 rounded-full bg-primary p-0 text-primary-foreground shadow-[0_16px_45px_-16px_hsl(var(--primary))] hover:bg-primary/90"
+                className="h-[72px] w-[72px] rounded-full bg-primary p-0 text-primary-foreground shadow-[0_18px_50px_-16px_hsl(var(--primary))] hover:bg-primary/90"
                 onClick={() => (playback === "playing" ? stop() : play())}
               >
-                {playback === "playing" ? <Pause className="h-7 w-7" /> : <Play className="ml-1 h-7 w-7" />}
+                {playback === "playing" ? <Pause className="h-8 w-8" /> : <Play className="ml-1 h-8 w-8" />}
               </Button>
 
-              <div className="mt-5 flex h-5 items-end justify-center gap-1">
-                {Array.from({ length: 18 }).map((_, index) => (
+              <div className="mt-6 flex h-7 items-end justify-center gap-1">
+                {Array.from({ length: 22 }).map((_, index) => (
                   <span
                     className={cn(
                       "w-1 rounded-full bg-primary/70 transition-all",
@@ -396,8 +422,8 @@ export function VoiceDemoPlayer() {
           </div>
 
           <div className="bg-[#18120e]">
-            <div className="h-1 bg-white/10">
-              <div className="h-full bg-primary transition-[width]" style={{ width: `${progress}%` }} />
+            <div className="h-1.5 bg-white/10">
+              <div className="h-full rounded-r-full bg-primary transition-[width]" style={{ width: `${progress}%` }} />
             </div>
 
             <div className="grid gap-px bg-white/10 sm:grid-cols-4">
@@ -408,8 +434,16 @@ export function VoiceDemoPlayer() {
             </div>
           </div>
 
-          <div className="max-h-[430px] overflow-y-auto bg-[#201913] px-4 py-5 md:px-7">
+          <div className="max-h-[430px] overflow-y-auto bg-[#211912] px-4 py-5 md:px-7">
             <div className="mx-auto max-w-3xl space-y-3">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-white/35">
+                  <FileText className="h-4 w-4 text-primary" />
+                  Live transcript
+                </div>
+                <div className="text-xs text-white/35">{scenario.lines.length} turns</div>
+              </div>
+
               {scenario.lines.map((line, index) => {
                 const isVera = line.speaker === "vera";
                 const isActive = index === activeLineIndex;
@@ -430,7 +464,7 @@ export function VoiceDemoPlayer() {
                         "max-w-[86%] rounded-lg border px-4 py-3 text-sm leading-relaxed shadow-sm md:max-w-[72%]",
                         isVera
                           ? "border-primary/30 bg-primary/15 text-white"
-                          : "border-white/10 bg-white/[0.06] text-white/85",
+                          : "border-white/10 bg-white/[0.055] text-white/85",
                         isActive && "border-primary bg-primary/25 shadow-[0_0_0_3px_hsl(var(--primary)/0.18)]",
                       )}
                     >
@@ -452,7 +486,7 @@ export function VoiceDemoPlayer() {
             </div>
           </div>
         </div>
-      </Card>
+      </div>
     </div>
   );
 }
@@ -468,19 +502,32 @@ function PersonPanel({
 }) {
   const isVera = speaker === "vera";
   return (
-    <div className="flex min-h-[210px] flex-col items-center justify-center bg-[#201913] px-5 py-7 text-center">
-      <div
-        className={cn(
-          "flex h-16 w-16 items-center justify-center rounded-full text-base font-semibold ring-4 transition-transform",
-          isVera ? "bg-primary text-primary-foreground ring-primary/15" : "text-white ring-white/10",
-          active && "scale-105 ring-primary/35",
-        )}
-        style={isVera ? undefined : { background: caller.color }}
-      >
-        {isVera ? "V" : caller.initials}
+    <div className="flex min-h-[240px] flex-col items-center justify-center bg-[#211912] px-5 py-8 text-center">
+      <div className="mb-3 rounded-full border border-white/10 bg-white/[0.045] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">
+        {isVera ? "Restaurant host" : "Caller"}
       </div>
-      <div className="mt-3 text-sm font-semibold text-white">{isVera ? "Vera" : caller.name}</div>
+      <div className="relative">
+        {active && <span className="absolute inset-[-8px] rounded-full border border-primary/50" />}
+        <div
+          className={cn(
+            "flex h-[72px] w-[72px] items-center justify-center rounded-full text-lg font-semibold ring-4 transition-transform",
+            isVera ? "bg-primary text-primary-foreground ring-primary/15" : "text-white ring-white/10",
+            active && "scale-105 ring-primary/35",
+          )}
+          style={isVera ? undefined : { background: caller.color }}
+        >
+          {isVera ? "V" : caller.initials}
+        </div>
+      </div>
+      <div className="mt-4 text-sm font-semibold text-white">{isVera ? "Vera" : caller.name}</div>
       <div className="mt-1 text-xs text-white/40">{isVera ? "AI host - Olive & Ember" : caller.phone}</div>
+      <div className={cn(
+        "mt-4 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]",
+        active ? "border-primary/35 bg-primary/10 text-primary" : "border-white/10 bg-white/[0.04] text-white/30",
+      )}>
+        <span className={cn("h-1.5 w-1.5 rounded-full", active ? "bg-primary" : "bg-white/25")} />
+        {active ? "Speaking" : "Listening"}
+      </div>
     </div>
   );
 }
