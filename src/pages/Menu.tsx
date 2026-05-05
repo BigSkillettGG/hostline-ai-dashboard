@@ -5,18 +5,39 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { menuCategories } from "@/data/mock";
-import { Upload, Plus, Clock, Sparkles, FileUp } from "lucide-react";
+import { Upload, Plus, Clock, Sparkles, FileUp, Link2, RefreshCw, Trash2, Globe } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import type { MenuSource, SyncFrequency } from "@/types/sources";
 
 export default function MenuPage() {
   const [activeCat, setActiveCat] = useState(menuCategories[0].id);
   const [editing, setEditing] = useState<any>(null);
   const cat = menuCategories.find(c => c.id === activeCat)!;
+
+  // TODO: replace local state with Lovable Cloud + Firecrawl-backed sync job
+  const [sources, setSources] = useState<MenuSource[]>([
+    { id: "1", url: "https://oliveandember.com/menu", frequency: "daily", lastSyncedAt: "2h ago", status: "synced" },
+  ]);
+  const [newUrl, setNewUrl] = useState("");
+  const [newFreq, setNewFreq] = useState<SyncFrequency>("daily");
+
+  const addSource = () => {
+    try {
+      const u = new URL(newUrl.trim());
+      if (!/^https?:$/.test(u.protocol)) throw new Error();
+      setSources([...sources, { id: crypto.randomUUID(), url: u.toString(), frequency: newFreq, lastSyncedAt: "—", status: "pending" }]);
+      setNewUrl("");
+      toast.success("Source added — first sync queued");
+    } catch {
+      toast.error("Enter a valid http(s) URL");
+    }
+  };
 
   return (
     <>
@@ -31,16 +52,72 @@ export default function MenuPage() {
         }
       />
       <PageBody className="space-y-5">
-        <Card className="border-dashed bg-muted/20 p-5">
-          <div className="flex flex-col items-center justify-center gap-2 text-center">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-              <FileUp className="h-5 w-5" />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card className="border-dashed bg-muted/20 p-5">
+            <div className="flex flex-col items-center justify-center gap-2 text-center">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <FileUp className="h-5 w-5" />
+              </div>
+              <div className="text-sm font-medium">Upload menu PDF, image, or CSV</div>
+              <div className="text-xs text-muted-foreground">Drop your file here or click to browse · we'll extract items automatically</div>
+              <Button variant="outline" size="sm" className="mt-2" onClick={() => toast("Upload coming soon")}>Choose file</Button>
             </div>
-            <div className="text-sm font-medium">Upload menu PDF, image, or CSV</div>
-            <div className="text-xs text-muted-foreground">Drop your file here or click to browse · we'll extract items automatically</div>
-            <Button variant="outline" size="sm" className="mt-2" onClick={() => toast("Upload coming soon")}>Choose file</Button>
-          </div>
-        </Card>
+          </Card>
+
+          <Card className="p-5">
+            <div className="mb-3 flex items-start gap-2">
+              <Globe className="mt-0.5 h-4 w-4 text-primary" />
+              <div>
+                <div className="text-sm font-semibold">Menu URLs</div>
+                <div className="text-xs text-muted-foreground">We'll re-check these on a schedule and keep your menu in sync.</div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {sources.length === 0 && (
+                <div className="rounded-md border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
+                  No URLs yet — add your menu page so the AI host always has the latest.
+                </div>
+              )}
+              {sources.map((s) => (
+                <div key={s.id} className="flex flex-wrap items-center gap-2 rounded-md border border-border p-2.5">
+                  <Link2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <a href={s.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-sm hover:underline">{s.url}</a>
+                  <Badge variant="outline" className={
+                    s.status === "synced" ? "border-primary/30 bg-primary/10 text-primary"
+                    : s.status === "error" ? "border-destructive/30 bg-destructive/10 text-destructive"
+                    : "bg-muted text-muted-foreground"
+                  }>{s.status}</Badge>
+                  <span className="text-xs text-muted-foreground tabular-nums">{s.frequency} · {s.lastSyncedAt}</span>
+                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => toast.success("Sync queued")}>
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setSources(sources.filter(x => x.id !== s.id))}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Input
+                value={newUrl}
+                onChange={(e) => setNewUrl(e.target.value)}
+                placeholder="https://your-restaurant.com/menu"
+                className="h-9 flex-1 min-w-[180px]"
+              />
+              <Select value={newFreq} onValueChange={(v) => setNewFreq(v as SyncFrequency)}>
+                <SelectTrigger className="h-9 w-28"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="hourly">Hourly</SelectItem>
+                  <SelectItem value="daily">Daily</SelectItem>
+                  <SelectItem value="weekly">Weekly</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button size="sm" onClick={addSource}><Plus className="mr-1.5 h-3.5 w-3.5" />Add</Button>
+            </div>
+          </Card>
+        </div>
 
         <div className="grid gap-4 lg:grid-cols-[200px_1fr]">
           <Card className="p-2 h-fit">
