@@ -62,6 +62,7 @@ It exposes:
 - `POST /debug/reply` in non-production for testing restaurant replies.
 
 It also creates staff-review pickup orders from clear order language when menu items are recognized, and staff-confirmed reservation requests when date, time, party size, and guest details are captured. Orders are pay-at-pickup and are not auto-sent to the kitchen or POS.
+Staff alerts can be sent by Twilio SMS or webhook for captured orders, reservation requests, complaints, and human handoffs.
 
 See `services/voice/README.md` for provider setup.
 

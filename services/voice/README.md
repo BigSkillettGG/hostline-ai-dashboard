@@ -15,6 +15,7 @@ This service is the production path for inbound restaurant phone calls.
 - Loads the onboarded restaurant profile from Supabase for greetings, policies, hours, parking, reservation rules, and menu items.
 - Creates staff-review pickup orders when the caller clearly asks for pickup/takeout and mentions recognized menu items.
 - Creates staff-confirmed reservation requests when a caller provides date, time, party size, and guest details.
+- Sends staff alerts by SMS or webhook for captured orders, reservation requests, complaints, and human handoffs.
 - Provides a direct ElevenLabs preview endpoint at `POST /voice/preview`.
 - Validates Twilio signatures when `REQUIRE_TWILIO_SIGNATURE=true`.
 
@@ -53,6 +54,7 @@ POST https://your-tunnel.ngrok.app/twilio/voice
 - `HOSTLINE_INTERNAL_API_KEY` for protecting internal provisioning endpoints in production.
 - OpenAI API key for real LLM replies.
 - ElevenLabs voice ID for branded voice.
+- `STAFF_ALERT_SMS_TO` plus `TWILIO_SMS_FROM_NUMBER` or `TWILIO_MESSAGING_SERVICE_SID` for SMS staff alerts, or `STAFF_ALERT_WEBHOOK_URL` for webhook alerts.
 - Supabase project with `docs/supabase-schema.sql` applied.
 - `SUPABASE_SECRET_KEY` or legacy service role key stored only on the voice-service backend.
 - `SUPABASE_DEMO_LOCATION_ID` set to a real `locations.id` value.

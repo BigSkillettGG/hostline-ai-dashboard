@@ -2,6 +2,7 @@ import type { IncomingMessage } from "node:http";
 import type { WebSocket } from "ws";
 import type { CallStore } from "./call-store";
 import type { VoiceServiceEnv } from "./env";
+import type { StaffAlertKind, StaffNotificationService } from "./notification-service";
 import { capturePickupOrder, mergeCapturedOrderItems, type CapturedOrderItem } from "./order-intake";
 import { captureReservationRequest, hasReservationIntent } from "./reservation-intake";
 import type { RestaurantContextStore } from "./restaurant-context-store";
@@ -25,6 +26,7 @@ interface RelaySession {
   orderDraftItems: CapturedOrderItem[];
   reservationCreatedId?: string;
   reservationIntentSeen: boolean;
+  staffAlertIntents: Set<StaffAlertKind>;
   startedAt: number;
   transcript: TranscriptTurn[];
 }
@@ -33,6 +35,7 @@ export function createConversationRelayHandler(
   env: VoiceServiceEnv,
   callStore: CallStore,
   contextStore: RestaurantContextStore,
+  staffNotifications: StaffNotificationService,
 ) {
   const sessions = new WeakMap<WebSocket, RelaySession>();
 
@@ -41,6 +44,7 @@ export function createConversationRelayHandler(
       context: demoRestaurantContext,
       orderDraftItems: [],
       reservationIntentSeen: false,
+      staffAlertIntents: new Set(),
       startedAt: Date.now(),
       transcript: [],
     };
@@ -99,9 +103,16 @@ export function createConversationRelayHandler(
           env,
           transcript: session.transcript,
         });
+        void maybeSendEscalationAlert({
+          session,
+          staffNotifications,
+          utterance: message.voicePrompt,
+        }).catch((error) => console.error("[conversation-relay] staff escalation alert failed", error));
+
         const createdOrderId = await maybeCreateStaffReviewOrder({
           callStore,
           session,
+          staffNotifications,
           utterance: message.voicePrompt,
         });
 
@@ -112,6 +123,7 @@ export function createConversationRelayHandler(
         const createdReservationId = await maybeCreateStaffReviewReservation({
           callStore,
           session,
+          staffNotifications,
           utterance: message.voicePrompt,
         });
 
@@ -219,10 +231,12 @@ function summarizeTranscript(transcript: TranscriptTurn[]) {
 async function maybeCreateStaffReviewOrder({
   callStore,
   session,
+  staffNotifications,
   utterance,
 }: {
   callStore: CallStore;
   session: RelaySession;
+  staffNotifications: StaffNotificationService;
   utterance: string;
 }) {
   if (session.orderCreatedId || !session.callRecordId) return null;
@@ -245,6 +259,19 @@ async function maybeCreateStaffReviewOrder({
     });
 
     session.orderCreatedId = result.orderId;
+    void staffNotifications.sendStaffAlert({
+      callId: session.callRecordId,
+      callerPhone: session.callerPhone,
+      details: [
+        `Items: ${session.orderDraftItems.map((item) => `${item.quantity} ${item.name}`).join(", ")}`,
+        `ETA: ${session.context.defaultPickupEtaMinutes ?? 25} min`,
+        `Payment: pay at pickup`,
+      ],
+      kind: "order",
+      locationId: session.locationId,
+      restaurantName: session.context.restaurantName,
+      summary: `Staff-review pickup order created${capturedOrder.customerName ? ` for ${capturedOrder.customerName}` : ""}.`,
+    }).catch((error) => console.error("[conversation-relay] order staff alert failed", error));
     return result.orderId ?? null;
   } catch (error) {
     console.error("[conversation-relay] staff-review order persistence failed", error);
@@ -255,10 +282,12 @@ async function maybeCreateStaffReviewOrder({
 async function maybeCreateStaffReviewReservation({
   callStore,
   session,
+  staffNotifications,
   utterance,
 }: {
   callStore: CallStore;
   session: RelaySession;
+  staffNotifications: StaffNotificationService;
   utterance: string;
 }) {
   if (session.reservationCreatedId || !session.callRecordId) return null;
@@ -282,9 +311,61 @@ async function maybeCreateStaffReviewReservation({
     });
 
     session.reservationCreatedId = result.reservationId;
+    void staffNotifications.sendStaffAlert({
+      callId: session.callRecordId,
+      callerPhone: session.callerPhone,
+      details: [
+        `Party: ${capturedReservation.partySize}`,
+        `When: ${capturedReservation.date} at ${capturedReservation.time}`,
+        capturedReservation.guestName ? `Name: ${capturedReservation.guestName}` : "Name: not captured",
+        capturedReservation.notes ? `Notes: ${capturedReservation.notes}` : "Status: needs staff confirmation",
+      ],
+      kind: "reservation",
+      locationId: session.locationId,
+      restaurantName: session.context.restaurantName,
+      summary: "Staff-confirmed reservation request captured.",
+    }).catch((error) => console.error("[conversation-relay] reservation staff alert failed", error));
     return result.reservationId ?? null;
   } catch (error) {
     console.error("[conversation-relay] reservation request persistence failed", error);
     return null;
   }
+}
+
+async function maybeSendEscalationAlert({
+  session,
+  staffNotifications,
+  utterance,
+}: {
+  session: RelaySession;
+  staffNotifications: StaffNotificationService;
+  utterance: string;
+}) {
+  const kind = classifyEscalationIntent(utterance);
+  if (!kind || session.staffAlertIntents.has(kind)) return;
+
+  session.staffAlertIntents.add(kind);
+  await staffNotifications.sendStaffAlert({
+    callId: session.callRecordId,
+    callerPhone: session.callerPhone,
+    details: [`Caller said: ${utterance.slice(0, 260)}`],
+    kind,
+    locationId: session.locationId,
+    restaurantName: session.context.restaurantName,
+    summary: kind === "complaint" ? "Complaint or refund risk detected." : "Caller asked for a human handoff.",
+  });
+}
+
+function classifyEscalationIntent(utterance: string): StaffAlertKind | null {
+  const normalized = utterance.toLowerCase();
+
+  if (/\b(refund|complain|complaint|wrong order|incorrect|bad service|terrible|upset|angry|manager)\b/.test(normalized)) {
+    return "complaint";
+  }
+
+  if (/\b(human|person|someone|staff|owner|call me back|callback|call back)\b/.test(normalized)) {
+    return "handoff";
+  }
+
+  return null;
 }

@@ -16,6 +16,10 @@ const envSchema = z.object({
   TWILIO_API_BASE_URL: z.string().url().default("https://api.twilio.com"),
   TWILIO_AUTH_TOKEN: z.string().optional(),
   TWILIO_DEFAULT_COUNTRY: z.string().default("US"),
+  TWILIO_MESSAGING_SERVICE_SID: z.string().optional(),
+  TWILIO_SMS_FROM_NUMBER: z.string().optional(),
+  STAFF_ALERT_SMS_TO: z.string().optional(),
+  STAFF_ALERT_WEBHOOK_URL: z.string().url().optional(),
   REQUIRE_TWILIO_SIGNATURE: z
     .enum(["true", "false"])
     .default("false")

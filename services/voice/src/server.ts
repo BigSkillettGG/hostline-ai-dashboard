@@ -5,6 +5,7 @@ import { createCallStore } from "./call-store";
 import { createConversationRelayHandler } from "./conversation-relay";
 import { createElevenLabsPreview } from "./elevenlabs";
 import { loadEnv, type VoiceServiceEnv } from "./env";
+import { createStaffNotificationService } from "./notification-service";
 import { createPhoneNumberStore } from "./phone-number-store";
 import { createRestaurantContextStore } from "./restaurant-context-store";
 import { createTelephonyService } from "./telephony";
@@ -18,12 +19,18 @@ const callStore = createCallStore(env);
 const phoneNumberStore = createPhoneNumberStore(env);
 const restaurantContextStore = createRestaurantContextStore(env);
 const telephonyService = createTelephonyService(env);
+const staffNotificationService = createStaffNotificationService(env);
 const server = createServer((req, res) => {
   void handleRequest(req, res, env);
 });
 
 const wss = new WebSocketServer({ noServer: true });
-const handleConversationRelayConnection = createConversationRelayHandler(env, callStore, restaurantContextStore);
+const handleConversationRelayConnection = createConversationRelayHandler(
+  env,
+  callStore,
+  restaurantContextStore,
+  staffNotificationService,
+);
 
 server.on("upgrade", (req, socket, head) => {
   const path = new URL(req.url ?? "/", "http://localhost").pathname;
@@ -75,6 +82,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
           currentEnv.SUPABASE_DEMO_LOCATION_ID,
       ),
       twilioProvisioningConfigured: telephonyService.configured,
+      staffAlertsConfigured: staffNotificationService.configured,
       twilioSignatureRequired: currentEnv.REQUIRE_TWILIO_SIGNATURE,
     });
     return;

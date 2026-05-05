@@ -630,6 +630,11 @@ export default function VoiceAgent() {
                   value={serviceHealth?.twilioProvisioningConfigured ? "API credentials configured" : "Manual setup"}
                   state={serviceHealth?.twilioProvisioningConfigured ? "ready" : "pending"}
                 />
+                <ServiceStatusRow
+                  label="Staff alerts"
+                  value={serviceHealth?.staffAlertsConfigured ? "SMS or webhook configured" : "Not connected"}
+                  state={serviceHealth?.staffAlertsConfigured ? "ready" : "pending"}
+                />
 
                 {serviceError && (
                   <div className="rounded-md border border-warning/30 bg-warning/10 p-3 text-xs text-muted-foreground">

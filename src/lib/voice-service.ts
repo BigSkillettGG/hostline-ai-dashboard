@@ -4,6 +4,7 @@ export interface VoiceServiceHealth {
   openaiConfigured: boolean;
   elevenLabsConfigured: boolean;
   onboardedContextConfigured?: boolean;
+  staffAlertsConfigured?: boolean;
   supabaseConfigured: boolean;
   twilioProvisioningConfigured?: boolean;
   twilioSignatureRequired: boolean;
