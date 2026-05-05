@@ -26,7 +26,6 @@ import {
   AlertTriangle,
   Bot,
   CalendarDays,
-  ChevronDown,
   CreditCard,
   PhoneCall,
   Play,
