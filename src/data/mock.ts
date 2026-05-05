@@ -448,7 +448,8 @@ export const dashboardStats = {
   ordersCaptured: { value: 23, delta: 5 },
   reservationRequests: { value: 11, delta: -2 },
   revenueCaptured: { value: 1842, delta: 240 },
-  needsReview: { value: 4, delta: -1 },
+  complaints: { value: 3, delta: 1 },
+  salesCalls: { value: 5, delta: 2 },
 };
 
 export const topIntents = [
