@@ -7,6 +7,7 @@ export type OnboardingStepId =
   | "orders"
   | "reservations"
   | "policies"
+  | "escalations"
   | "voice"
   | "launch";
 
@@ -321,6 +322,43 @@ export const onboardingSections: OnboardingSection[] = [
         prompt: "What questions do staff answer over and over?",
         placeholder: "Do you sell gift cards? Can I bring a cake? Do you have vegan options?",
         control: "long",
+      },
+    ],
+  },
+  {
+    id: "escalations",
+    title: "Escalations & alerts",
+    eyebrow: "Manager alerts",
+    assistantPrompt: "Tell us how to handle upset callers and sales calls so the right person hears about them.",
+    outcome: "Manager contacts for complaints and sales/vendor calls, plus default callback behavior.",
+    fields: [
+      {
+        id: "complaintsManagerPhone",
+        label: "Manager phone for complaints (SMS)",
+        prompt: "Who should get a text when a caller is upset or reports an issue?",
+        placeholder: "+1 (415) 555-0148",
+        control: "short",
+        required: true,
+      },
+      {
+        id: "salesManagerEmail",
+        label: "Manager email for sales/vendor calls",
+        prompt: "Where should we email summaries of vendor and sales calls?",
+        placeholder: "owner@oliveandember.com",
+        control: "short",
+        required: true,
+      },
+      {
+        id: "offerComplaintCallback",
+        label: "Offer a manager callback for complaints",
+        prompt: "Should the AI host promise the caller that the manager will call them back?",
+        control: "toggle",
+      },
+      {
+        id: "askSalesIntent",
+        label: "Ask sales callers to identify themselves",
+        prompt: "Should the host ask whether it's a sales/vendor inquiry before deciding what to do?",
+        control: "toggle",
       },
     ],
   },

@@ -1,9 +1,25 @@
 // Mock data for HostLine AI — restaurant: "Olive & Ember"
 
-export type CallIntent = "order" | "reservation" | "faq" | "hours" | "other";
-export type CallOutcome = "resolved" | "order_placed" | "reservation_booked" | "escalated" | "voicemail" | "missed" | "unknown";
+export type CallIntent = "order" | "reservation" | "faq" | "hours" | "complaint" | "sales" | "other";
+export type CallOutcome = "resolved" | "order_placed" | "reservation_booked" | "escalated" | "manager_alerted" | "message_taken" | "voicemail" | "missed" | "unknown";
 export type CallStatus = "new" | "reviewed" | "needs_review" | "resolved";
 export type TranscriptSpeaker = "agent" | "caller" | "staff";
+
+export type EscalationType = "complaint" | "sales";
+export type EscalationSeverity = "low" | "medium" | "high";
+export type EscalationStatus = "pending_callback" | "callback_made" | "closed";
+export type AlertChannel = "sms" | "email";
+
+export interface CallEscalation {
+  type: EscalationType;
+  severity?: EscalationSeverity;
+  summary: string;
+  alertedAt: string;
+  alertedTo: string[];
+  channels: AlertChannel[];
+  status: EscalationStatus;
+  callerCallback?: boolean;
+}
 
 export interface Call {
   id: string;
@@ -19,6 +35,7 @@ export interface Call {
   transcript: { speaker: TranscriptSpeaker; text: string; t: string }[];
   orderId?: string;
   reservationId?: string;
+  escalation?: CallEscalation;
 }
 
 export type OrderStatus = "new" | "accepted" | "in_progress" | "completed" | "canceled";
@@ -174,8 +191,67 @@ export const calls: Call[] = [
     summary: "Missed call — no voicemail.",
     transcript: [],
   },
+  {
+    id: "c_011", caller: "Rachel Nguyen", phone: "+1 (415) 555-0177",
+    time: iso(15), duration: 198, intent: "complaint", outcome: "manager_alerted",
+    confidence: 84, status: "needs_review",
+    summary: "Order arrived with wrong pizza and cold pasta. Caller upset; AI offered manager callback.",
+    transcript: [
+      { speaker: "caller", t: "00:00", text: "I'm really frustrated — my order was completely wrong and the pasta was cold." },
+      { speaker: "agent", t: "00:05", text: "I'm so sorry to hear that. I'll let the manager know right away and they'll call you back shortly. Could you share what happened so I can pass it along?" },
+      { speaker: "caller", t: "00:14", text: "I ordered a Margherita and got a Diavola, and the carbonara was cold by the time it arrived." },
+      { speaker: "agent", t: "00:22", text: "Got it. The manager will reach out within the next few minutes. Thank you for letting us know." },
+    ],
+    escalation: {
+      type: "complaint",
+      severity: "high",
+      summary: "Wrong pizza delivered (Diavola instead of Margherita) and pasta arrived cold. Order #o_001-ish. Caller wants a callback.",
+      alertedAt: iso(14),
+      alertedTo: ["Maria Lombardi (+1 415-555-0148)"],
+      channels: ["sms"],
+      status: "pending_callback",
+      callerCallback: true,
+    },
+  },
+  {
+    id: "c_012", caller: "Acme Restaurant Supply", phone: "+1 (800) 555-0123",
+    time: iso(55), duration: 92, intent: "sales", outcome: "message_taken",
+    confidence: 90, status: "needs_review",
+    summary: "Vendor sales call about restaurant equipment financing. Message taken for owner.",
+    transcript: [
+      { speaker: "caller", t: "00:00", text: "Hi, I'd like to speak to the manager about equipment financing programs." },
+      { speaker: "agent", t: "00:04", text: "Happy to help. May I ask if this is a sales or vendor inquiry, or something else?" },
+      { speaker: "caller", t: "00:08", text: "Yes, it's a sales call." },
+      { speaker: "agent", t: "00:11", text: "Thanks. The manager isn't available to take sales calls live — I can take a message and email it over. What's the best way to reach you?" },
+    ],
+    escalation: {
+      type: "sales",
+      summary: "Acme Restaurant Supply offering equipment financing. Wants callback on +1 800-555-0123. Not urgent.",
+      alertedAt: iso(54),
+      alertedTo: ["owner@oliveandember.com"],
+      channels: ["email"],
+      status: "pending_callback",
+    },
+  },
+  {
+    id: "c_013", caller: "David Kim", phone: "+1 (415) 555-0118",
+    time: iso(180), duration: 240, intent: "complaint", outcome: "manager_alerted",
+    confidence: 88, status: "resolved",
+    summary: "Birthday reservation seated 40 min late. Manager called back, comped dessert.",
+    transcript: [],
+    escalation: {
+      type: "complaint",
+      severity: "medium",
+      summary: "Party of 6 birthday seated 40 minutes late on Saturday. Wants acknowledgment and a comp.",
+      alertedAt: iso(178),
+      alertedTo: ["Maria Lombardi (+1 415-555-0148)"],
+      channels: ["sms", "email"],
+      status: "callback_made",
+      callerCallback: true,
+    },
+  },
   ...Array.from({ length: 30 }, (_, i) => ({
-    id: `c_0${11 + i}`,
+    id: `c_${100 + i}`,
     caller: ["Unknown", "Mike R.", "Anna L.", "Jordan K.", "Sam P."][i % 5],
     phone: `+1 (415) 555-0${200 + i}`,
     time: iso(420 + i * 27),

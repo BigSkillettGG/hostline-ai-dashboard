@@ -48,6 +48,7 @@ const sectionIcons: Record<OnboardingStepId, LucideIcon> = {
   orders: ShoppingBag,
   policies: ShieldCheck,
   reservations: CalendarDays,
+  escalations: ClipboardCheck,
   voice: Bot,
 };
 

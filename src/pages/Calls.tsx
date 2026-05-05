@@ -12,7 +12,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { calls as sampleCalls, type Call } from "@/data/mock";
 import { formatTime, formatDuration } from "@/lib/format";
-import { Search, Download, Play, FileText, MessageSquare, UserCheck, Send, Phone, Filter, RefreshCw } from "lucide-react";
+import { Search, Download, Play, FileText, MessageSquare, UserCheck, Send, Phone, Filter, RefreshCw, AlertTriangle, Mail } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
@@ -23,6 +23,8 @@ const intentColor: Record<string, string> = {
   reservation: "bg-warning/15 text-warning border-warning/20",
   faq: "bg-info/10 text-info border-info/20",
   hours: "bg-info/10 text-info border-info/20",
+  complaint: "bg-destructive/10 text-destructive border-destructive/20",
+  sales: "bg-warning/15 text-warning border-warning/20",
   other: "bg-muted text-muted-foreground border-border",
 };
 const statusColor: Record<string, string> = {
@@ -96,6 +98,8 @@ export default function Calls() {
               <SelectItem value="all">All intents</SelectItem>
               <SelectItem value="order">Order</SelectItem>
               <SelectItem value="reservation">Reservation</SelectItem>
+              <SelectItem value="complaint">Complaint</SelectItem>
+              <SelectItem value="sales">Sales / Vendor</SelectItem>
               <SelectItem value="faq">FAQ</SelectItem>
               <SelectItem value="hours">Hours</SelectItem>
               <SelectItem value="other">Other</SelectItem>
@@ -179,6 +183,46 @@ export default function Calls() {
                   {selected.phone} · {formatTime(selected.time)} · {formatDuration(selected.duration)}
                 </div>
               </SheetHeader>
+
+              {selected.escalation && (
+                <Card className={`mt-4 p-4 border-l-4 ${selected.escalation.type === "complaint" ? "border-l-destructive bg-destructive/5" : "border-l-warning bg-warning/5"}`}>
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className={`mt-0.5 h-4 w-4 shrink-0 ${selected.escalation.type === "complaint" ? "text-destructive" : "text-warning"}`} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-semibold capitalize">
+                          {selected.escalation.type === "complaint" ? "Customer complaint" : "Sales / vendor call"}
+                        </span>
+                        {selected.escalation.severity && (
+                          <Badge variant="outline" className="text-[10px] capitalize">{selected.escalation.severity} severity</Badge>
+                        )}
+                        <Badge variant="outline" className={selected.escalation.status === "callback_made" ? "bg-success/15 text-success border-success/20" : "bg-warning/15 text-warning border-warning/20"}>
+                          {selected.escalation.status.replace(/_/g, " ")}
+                        </Badge>
+                      </div>
+                      <p className="mt-2 text-sm">{selected.escalation.summary}</p>
+                      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                        <span className="inline-flex items-center gap-1">Alerted {formatTime(selected.escalation.alertedAt)}</span>
+                        <span>To: {selected.escalation.alertedTo.join(", ")}</span>
+                        <span className="inline-flex items-center gap-1">
+                          {selected.escalation.channels.includes("sms") && <><Send className="h-3 w-3" />SMS</>}
+                          {selected.escalation.channels.includes("email") && <><Mail className="ml-1 h-3 w-3" />Email</>}
+                        </span>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {selected.escalation.status !== "callback_made" && (
+                          <Button size="sm" onClick={() => toast.success("Callback marked complete")}>
+                            <UserCheck className="mr-1.5 h-3.5 w-3.5" />Mark callback made
+                          </Button>
+                        )}
+                        <Button size="sm" variant="outline" onClick={() => toast.success("Alert re-sent to manager")}>
+                          <Send className="mr-1.5 h-3.5 w-3.5" />Re-send alert
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              )}
 
               <Tabs defaultValue="transcript" className="mt-5">
                 <TabsList className="grid w-full grid-cols-4">
