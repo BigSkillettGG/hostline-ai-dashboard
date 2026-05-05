@@ -20,6 +20,25 @@ export default function MenuPage() {
   const [editing, setEditing] = useState<any>(null);
   const cat = menuCategories.find(c => c.id === activeCat)!;
 
+  // TODO: replace local state with Lovable Cloud + Firecrawl-backed sync job
+  const [sources, setSources] = useState<MenuSource[]>([
+    { id: "1", url: "https://oliveandember.com/menu", frequency: "daily", lastSyncedAt: "2h ago", status: "synced" },
+  ]);
+  const [newUrl, setNewUrl] = useState("");
+  const [newFreq, setNewFreq] = useState<SyncFrequency>("daily");
+
+  const addSource = () => {
+    try {
+      const u = new URL(newUrl.trim());
+      if (!/^https?:$/.test(u.protocol)) throw new Error();
+      setSources([...sources, { id: crypto.randomUUID(), url: u.toString(), frequency: newFreq, lastSyncedAt: "—", status: "pending" }]);
+      setNewUrl("");
+      toast.success("Source added — first sync queued");
+    } catch {
+      toast.error("Enter a valid http(s) URL");
+    }
+  };
+
   return (
     <>
       <PageHeader
