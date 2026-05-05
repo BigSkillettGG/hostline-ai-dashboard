@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PageHeader, PageBody } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,13 +8,22 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { calls } from "@/data/mock";
 import { formatTime } from "@/lib/format";
 import { AlertTriangle, Mail, MessageSquareText, ShieldAlert } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 type TabKey = "all" | "complaint" | "sales" | "pending";
 
 export default function Escalations() {
-  const [tab, setTab] = useState<TabKey>("all");
+  const [searchParams] = useSearchParams();
+  const initialTab = (searchParams.get("type") as TabKey) || "all";
+  const [tab, setTab] = useState<TabKey>(
+    ["all", "complaint", "sales", "pending"].includes(initialTab) ? initialTab : "all"
+  );
+
+  useEffect(() => {
+    const t = searchParams.get("type") as TabKey | null;
+    if (t && ["all", "complaint", "sales", "pending"].includes(t)) setTab(t);
+  }, [searchParams]);
 
   const escalated = useMemo(
     () => calls.filter((c) => c.escalation).sort((a, b) => b.time.localeCompare(a.time)),
