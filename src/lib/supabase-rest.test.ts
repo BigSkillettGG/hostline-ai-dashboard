@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { sampleOnboardingDraft } from "@/domain/onboarding";
 import {
+  buildMenuCategoryInsertRows,
+  buildMenuItemInsertRows,
   buildOnboardingProfilePayload,
   mapSupabaseCalls,
+  mapSupabaseMenu,
   mapSupabaseOrders,
   mapSupabasePhoneNumber,
 } from "./supabase-rest";
@@ -201,5 +204,98 @@ describe("Supabase phone number mapping", () => {
       updatedAt: "2026-05-05T14:00:00.000Z",
       voiceWebhookUrl: "https://voice.hostline.test/twilio/voice",
     });
+  });
+});
+
+describe("Supabase menu mapping", () => {
+  it("groups persisted menu items into dashboard categories", () => {
+    const menu = mapSupabaseMenu(
+      [
+        { id: "cat_pizza", name: "Pizza", sort_order: 2 },
+        { id: "cat_starters", name: "Starters", sort_order: 1 },
+      ],
+      [
+        {
+          available: true,
+          category_id: "cat_pizza",
+          description: "Tomato, mozzarella, basil",
+          id: "item_1",
+          modifiers: ["Light cheese"],
+          name: "Margherita",
+          prep_minutes: 11,
+          price_cents: 1800,
+          upsell_suggestions: ["Add truffle oil +$3"],
+        },
+        {
+          available: null,
+          category_id: "cat_starters",
+          description: null,
+          id: "item_2",
+          modifiers: [],
+          name: "Burrata",
+          prep_minutes: null,
+          price_cents: 1600,
+          upsell_suggestions: [],
+        },
+      ],
+    );
+
+    expect(menu.map((category) => category.name)).toEqual(["Starters", "Pizza"]);
+    expect(menu[0].items[0]).toEqual({
+      available: true,
+      description: undefined,
+      id: "item_2",
+      modifiers: undefined,
+      name: "Burrata",
+      prepMinutes: 10,
+      price: 16,
+      upsell: undefined,
+    });
+    expect(menu[1].items[0]).toMatchObject({
+      description: "Tomato, mozzarella, basil",
+      modifiers: ["Light cheese"],
+      name: "Margherita",
+      prepMinutes: 11,
+      price: 18,
+      upsell: ["Add truffle oil +$3"],
+    });
+  });
+
+  it("builds menu insert rows from parsed categories", () => {
+    const parsedCategories = [
+      {
+        items: [
+          {
+            available: true,
+            description: "Fresh tomato",
+            modifiers: ["No basil"],
+            name: "Margherita",
+            prepMinutes: 10,
+            priceCents: 1800,
+          },
+        ],
+        name: "Pizza",
+      },
+    ];
+
+    expect(buildMenuCategoryInsertRows(parsedCategories, "location_1")).toEqual([
+      {
+        location_id: "location_1",
+        name: "Pizza",
+        sort_order: 0,
+      },
+    ]);
+    expect(buildMenuItemInsertRows(parsedCategories, [{ id: "cat_1" }])).toEqual([
+      {
+        available: true,
+        category_id: "cat_1",
+        description: "Fresh tomato",
+        modifiers: ["No basil"],
+        name: "Margherita",
+        prep_minutes: 10,
+        price_cents: 1800,
+        upsell_suggestions: [],
+      },
+    ]);
   });
 });

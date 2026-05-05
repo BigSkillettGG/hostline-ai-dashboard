@@ -3,10 +3,12 @@ import type {
   CallIntent,
   CallOutcome,
   CallStatus,
+  MenuItem,
   Order,
   OrderStatus,
   TranscriptSpeaker,
 } from "@/data/mock";
+import type { ParsedMenuCategory } from "@/domain/menu-ingestion";
 import { calculateOnboardingProgress, type OnboardingDraft } from "@/domain/onboarding";
 
 const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL ?? "").replace(/\/$/, "");
@@ -86,6 +88,24 @@ interface SupabasePhoneNumberRow {
   updated_at: string | null;
 }
 
+interface SupabaseMenuCategoryRow {
+  id: string;
+  name: string;
+  sort_order: number | null;
+}
+
+interface SupabaseMenuItemRow {
+  available: boolean | null;
+  category_id: string;
+  description: string | null;
+  id: string;
+  modifiers: unknown;
+  name: string;
+  prep_minutes: number | null;
+  price_cents: number | null;
+  upsell_suggestions: unknown;
+}
+
 export interface PhoneNumberRecord {
   forwardingMode: string;
   forwardingStatus: string;
@@ -100,11 +120,21 @@ export interface PhoneNumberRecord {
   voiceWebhookUrl?: string;
 }
 
+export interface MenuCategoryRecord {
+  id: string;
+  items: MenuItem[];
+  name: string;
+}
+
 export function isSupabaseConfigured() {
   return Boolean(supabaseUrl && supabasePublishableKey);
 }
 
 export function isOnboardingPersistenceConfigured() {
+  return Boolean(isSupabaseConfigured() && supabaseDemoLocationId);
+}
+
+export function isMenuPersistenceConfigured() {
   return Boolean(isSupabaseConfigured() && supabaseDemoLocationId);
 }
 
@@ -245,6 +275,86 @@ export async function fetchPhoneNumbersFromSupabase(
   return rows.map(mapSupabasePhoneNumber);
 }
 
+export async function fetchMenuFromSupabase(locationId = supabaseDemoLocationId): Promise<MenuCategoryRecord[]> {
+  if (!isSupabaseConfigured() || !locationId) {
+    throw new Error("Supabase menu persistence is not configured.");
+  }
+
+  const categories = await supabaseRequest<SupabaseMenuCategoryRow[]>(
+    "menu_categories",
+    new URLSearchParams({
+      location_id: `eq.${locationId}`,
+      order: "sort_order.asc",
+      select: "id,name,sort_order",
+    }),
+  );
+
+  const categoryIds = categories.map((category) => category.id);
+  const items = categoryIds.length
+    ? await supabaseRequest<SupabaseMenuItemRow[]>(
+        "menu_items",
+        new URLSearchParams({
+          category_id: `in.(${categoryIds.join(",")})`,
+          order: "name.asc",
+          select: "id,category_id,name,description,price_cents,prep_minutes,available,modifiers,upsell_suggestions",
+        }),
+      )
+    : [];
+
+  return mapSupabaseMenu(categories, items);
+}
+
+export async function importParsedMenuToSupabase(
+  categories: ParsedMenuCategory[],
+  locationId = supabaseDemoLocationId,
+): Promise<MenuCategoryRecord[]> {
+  if (!isSupabaseConfigured() || !locationId) {
+    throw new Error("Supabase menu persistence is not configured.");
+  }
+
+  const importableCategories = categories.filter((category) => category.items.length > 0);
+  if (!importableCategories.length) {
+    throw new Error("No menu items were found to import.");
+  }
+
+  await supabaseRequest("menu_categories", new URLSearchParams({ location_id: `eq.${locationId}` }), {
+    method: "DELETE",
+  });
+
+  const insertedCategories = await supabaseRequest<SupabaseMenuCategoryRow[]>(
+    "menu_categories",
+    new URLSearchParams({
+      select: "id,name,sort_order",
+    }),
+    {
+      body: buildMenuCategoryInsertRows(importableCategories, locationId),
+      headers: {
+        Prefer: "return=representation",
+      },
+      method: "POST",
+    },
+  );
+
+  const itemRows = buildMenuItemInsertRows(importableCategories, insertedCategories);
+  const insertedItems = itemRows.length
+    ? await supabaseRequest<SupabaseMenuItemRow[]>(
+        "menu_items",
+        new URLSearchParams({
+          select: "id,category_id,name,description,price_cents,prep_minutes,available,modifiers,upsell_suggestions",
+        }),
+        {
+          body: itemRows,
+          headers: {
+            Prefer: "return=representation",
+          },
+          method: "POST",
+        },
+      )
+    : [];
+
+  return mapSupabaseMenu(insertedCategories, insertedItems);
+}
+
 export function buildOnboardingProfilePayload(draft: OnboardingDraft, locationId: string) {
   const progress = calculateOnboardingProgress(draft);
 
@@ -273,6 +383,65 @@ export function mapSupabasePhoneNumber(row: SupabasePhoneNumberRow): PhoneNumber
     updatedAt: row.updated_at ?? undefined,
     voiceWebhookUrl: row.voice_webhook_url ?? undefined,
   };
+}
+
+export function buildMenuCategoryInsertRows(categories: ParsedMenuCategory[], locationId: string) {
+  return categories.map((category, index) => ({
+    location_id: locationId,
+    name: category.name,
+    sort_order: index,
+  }));
+}
+
+export function buildMenuItemInsertRows(
+  categories: ParsedMenuCategory[],
+  insertedCategories: Array<Pick<SupabaseMenuCategoryRow, "id">>,
+) {
+  return categories.flatMap((category, categoryIndex) => {
+    const insertedCategory = insertedCategories[categoryIndex];
+    if (!insertedCategory) return [];
+
+    return category.items.map((item) => ({
+      available: item.available,
+      category_id: insertedCategory.id,
+      description: item.description ?? null,
+      modifiers: item.modifiers ?? [],
+      name: item.name,
+      prep_minutes: item.prepMinutes,
+      price_cents: item.priceCents,
+      upsell_suggestions: item.upsellSuggestions ?? [],
+    }));
+  });
+}
+
+export function mapSupabaseMenu(
+  categories: SupabaseMenuCategoryRow[],
+  items: SupabaseMenuItemRow[],
+): MenuCategoryRecord[] {
+  const itemsByCategoryId = new Map<string, SupabaseMenuItemRow[]>();
+
+  for (const item of items) {
+    const currentItems = itemsByCategoryId.get(item.category_id) ?? [];
+    currentItems.push(item);
+    itemsByCategoryId.set(item.category_id, currentItems);
+  }
+
+  return [...categories]
+    .sort((first, second) => (first.sort_order ?? 0) - (second.sort_order ?? 0))
+    .map((category) => ({
+      id: category.id,
+      items: (itemsByCategoryId.get(category.id) ?? []).map((item) => ({
+        available: item.available ?? true,
+        description: item.description ?? undefined,
+        id: item.id,
+        modifiers: normalizeStringArray(item.modifiers),
+        name: item.name,
+        prepMinutes: item.prep_minutes ?? 10,
+        price: centsToDollars(item.price_cents ?? 0),
+        upsell: normalizeStringArray(item.upsell_suggestions),
+      })),
+      name: category.name,
+    }));
 }
 
 export function mapSupabaseCalls(
@@ -378,7 +547,7 @@ async function supabaseRequest<T>(
   options?: {
     body?: unknown;
     headers?: Record<string, string>;
-    method?: "GET" | "PATCH" | "POST";
+    method?: "DELETE" | "GET" | "PATCH" | "POST";
   },
 ) {
   const response = await fetch(`${supabaseUrl}/rest/v1/${table}?${params.toString()}`, {
