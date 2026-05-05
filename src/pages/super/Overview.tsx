@@ -2,8 +2,23 @@ import { PageHeader, PageBody } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { tenants } from "@/data/tenants";
-import { Building2, PhoneCall, DollarSign, AlertTriangle } from "lucide-react";
-import StatCard from "@/components/StatCard";
+import { Building2, PhoneCall, DollarSign, AlertTriangle, LucideIcon } from "lucide-react";
+
+function MiniStat({ label, value, icon: Icon, tone = "default" }: { label: string; value: string; icon: LucideIcon; tone?: "default" | "warning" }) {
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between">
+          <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
+          <div className={`flex h-7 w-7 items-center justify-center rounded-md ${tone === "warning" ? "bg-warning/15 text-warning" : "bg-primary/10 text-primary"}`}>
+            <Icon className="h-3.5 w-3.5" />
+          </div>
+        </div>
+        <div className="mt-2 text-2xl font-semibold tabular-nums">{value}</div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function SuperOverview() {
   const totalCalls = tenants.reduce((s, t) => s + t.callsThisMonth, 0);
@@ -15,10 +30,10 @@ export default function SuperOverview() {
       <PageHeader title="HostLine AI · Operations" description="Internal overview across all tenants" />
       <PageBody>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="Active tenants" value={tenants.length.toString()} icon={Building2} />
-          <StatCard label="Calls this month" value={totalCalls.toLocaleString()} icon={PhoneCall} delta={{ value: "+12%", positive: true }} />
-          <StatCard label="MRR" value={`$${mrr.toLocaleString()}`} icon={DollarSign} delta={{ value: "+8%", positive: true }} />
-          <StatCard label="Tenants needing attention" value={alerts.toString()} icon={AlertTriangle} tone={alerts > 0 ? "warning" : "default"} />
+          <MiniStat label="Active tenants" value={tenants.length.toString()} icon={Building2} />
+          <MiniStat label="Calls this month" value={totalCalls.toLocaleString()} icon={PhoneCall} />
+          <MiniStat label="MRR" value={`$${mrr.toLocaleString()}`} icon={DollarSign} />
+          <MiniStat label="Needs attention" value={alerts.toString()} icon={AlertTriangle} tone={alerts > 0 ? "warning" : "default"} />
         </div>
 
         <Card className="mt-5">
