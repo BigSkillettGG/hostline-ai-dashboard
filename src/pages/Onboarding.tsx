@@ -85,7 +85,7 @@ export default function Onboarding() {
         actions={
           <>
             <Button variant="outline" size="sm" asChild>
-              <Link to="/voice-agent">
+              <Link to="/app/voice-agent">
                 Voice Agent
                 <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
               </Link>

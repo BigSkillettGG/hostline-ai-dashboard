@@ -63,7 +63,7 @@ export default function Dashboard() {
             <div className="flex flex-wrap items-center gap-2">
               <Button variant="outline" size="sm">Export report</Button>
               <Button size="sm" asChild>
-                <Link to="/calls">View calls<ArrowRight className="ml-1.5 h-3.5 w-3.5" /></Link>
+                <Link to="/app/calls">View calls<ArrowRight className="ml-1.5 h-3.5 w-3.5" /></Link>
               </Button>
             </div>
           </div>
@@ -200,7 +200,7 @@ export default function Dashboard() {
                 <Activity className="h-4 w-4 text-muted-foreground" />
                 Recent activity
               </CardTitle>
-              <Link to="/calls" className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+              <Link to="/app/calls" className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
                 View all <ArrowRight className="h-3 w-3" />
               </Link>
             </div>

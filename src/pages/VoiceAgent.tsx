@@ -46,6 +46,7 @@ import {
   type VoiceServiceHealth,
 } from "@/lib/voice-service";
 import { loadOnboardingDraft } from "@/lib/onboarding-draft";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 const variables = ["{restaurant_name}", "{caller_name}", "{hours_today}"];
 
