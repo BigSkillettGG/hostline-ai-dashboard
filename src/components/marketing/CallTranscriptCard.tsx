@@ -8,8 +8,8 @@ const SCRIPT: Line[] = [
   { who: "vera",   text: "Thanks for calling Trattoria Rinaldi, this is Vera. How can I help?", dur: "0:04" },
   { who: "caller", text: "Hi — can I order a large margherita and a Caesar for pickup at 7?",   dur: "0:09" },
   { who: "vera",   text: "Absolutely. One large margherita, one Caesar, ready 7:00.",           dur: "0:14" },
-  { who: "caller", text: "Perfect. And a bottle of the house red, please.",                     dur: "0:18" },
-  { who: "vera",   text: "Got it. Total is $48.50. Confirming via text — see you at 7.",        dur: "0:24" },
+  { who: "caller", text: "Perfect. Can you also add an order of garlic knots and two tiramisus to that?", dur: "0:18" },
+  { who: "vera",   text: "Got it — garlic knots and two tiramisus added. Total is $54.00. Confirming via text now.", dur: "0:24" },
 ];
 
 export function CallTranscriptCard({ className }: { className?: string }) {
