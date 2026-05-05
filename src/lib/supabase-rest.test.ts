@@ -43,6 +43,10 @@ describe("Supabase call mapping", () => {
           text: "We close at 10 tonight.",
         },
       ],
+      {
+        orderLinks: [{ id: "order_1", source_call_id: "call_1" }],
+        reservationLinks: [{ id: "reservation_1", source_call_id: "call_1" }],
+      },
     );
 
     expect(calls[0]).toMatchObject({
@@ -50,8 +54,10 @@ describe("Supabase call mapping", () => {
       confidence: 0,
       duration: 42,
       intent: "faq",
+      orderId: "order_1",
       outcome: "unknown",
       phone: "+15551234567",
+      reservationId: "reservation_1",
       status: "new",
     });
     expect(calls[0].transcript).toEqual([

@@ -68,6 +68,11 @@ interface SupabaseOrderItemRow {
   notes: string | null;
 }
 
+interface SupabaseCallOrderLinkRow {
+  id: string;
+  source_call_id: string | null;
+}
+
 interface SupabaseOnboardingProfileRow {
   completed_required: number | null;
   draft: unknown;
@@ -125,6 +130,11 @@ interface SupabaseReservationRow {
   source: string | null;
   source_call_id: string | null;
   status: string | null;
+}
+
+interface SupabaseCallReservationLinkRow {
+  id: string;
+  source_call_id: string | null;
 }
 
 export interface PhoneNumberRecord {
@@ -191,18 +201,34 @@ export async function fetchCallsFromSupabase(): Promise<Call[]> {
   );
 
   const callIds = calls.map((call) => call.id);
-  const transcriptTurns = callIds.length
-    ? await supabaseRequest<SupabaseTranscriptTurnRow[]>(
-        "transcript_turns",
-        new URLSearchParams({
-          call_id: `in.(${callIds.join(",")})`,
-          order: "offset_seconds.asc",
-          select: "call_id,speaker,text,offset_seconds",
-        }),
-      )
-    : [];
+  const [transcriptTurns, orderLinks, reservationLinks] = callIds.length
+    ? await Promise.all([
+        supabaseRequest<SupabaseTranscriptTurnRow[]>(
+          "transcript_turns",
+          new URLSearchParams({
+            call_id: `in.(${callIds.join(",")})`,
+            order: "offset_seconds.asc",
+            select: "call_id,speaker,text,offset_seconds",
+          }),
+        ),
+        supabaseRequest<SupabaseCallOrderLinkRow[]>(
+          "orders",
+          new URLSearchParams({
+            source_call_id: `in.(${callIds.join(",")})`,
+            select: "id,source_call_id",
+          }),
+        ),
+        supabaseRequest<SupabaseCallReservationLinkRow[]>(
+          "reservations",
+          new URLSearchParams({
+            source_call_id: `in.(${callIds.join(",")})`,
+            select: "id,source_call_id",
+          }),
+        ),
+      ])
+    : [[], [], []];
 
-  return mapSupabaseCalls(calls, transcriptTurns);
+  return mapSupabaseCalls(calls, transcriptTurns, { orderLinks, reservationLinks });
 }
 
 export async function fetchOrdersFromSupabase(): Promise<Order[]> {
@@ -596,8 +622,14 @@ export function mapSupabaseReservations(rows: SupabaseReservationRow[]): Reserva
 export function mapSupabaseCalls(
   calls: SupabaseCallRow[],
   transcriptTurns: SupabaseTranscriptTurnRow[],
+  links: {
+    orderLinks?: SupabaseCallOrderLinkRow[];
+    reservationLinks?: SupabaseCallReservationLinkRow[];
+  } = {},
 ): Call[] {
   const turnsByCallId = new Map<string, SupabaseTranscriptTurnRow[]>();
+  const orderIdByCallId = mapFirstLinkByCallId(links.orderLinks ?? []);
+  const reservationIdByCallId = mapFirstLinkByCallId(links.reservationLinks ?? []);
 
   for (const turn of transcriptTurns) {
     const currentTurns = turnsByCallId.get(turn.call_id) ?? [];
@@ -616,12 +648,26 @@ export function mapSupabaseCalls(
     confidence: call.confidence ?? 0,
     status: normalizeEnum(call.status, callStatuses, "new"),
     summary: call.summary?.trim() || "No summary available yet.",
+    orderId: orderIdByCallId.get(call.id),
+    reservationId: reservationIdByCallId.get(call.id),
     transcript: (turnsByCallId.get(call.id) ?? []).map((turn) => ({
       speaker: normalizeEnum(turn.speaker, transcriptSpeakers, "caller"),
       text: turn.text,
       t: formatOffset(turn.offset_seconds ?? 0),
     })),
   }));
+}
+
+function mapFirstLinkByCallId(rows: Array<{ id: string; source_call_id: string | null }>) {
+  const links = new Map<string, string>();
+
+  for (const row of rows) {
+    if (row.source_call_id && !links.has(row.source_call_id)) {
+      links.set(row.source_call_id, row.id);
+    }
+  }
+
+  return links;
 }
 
 export function mapSupabaseOrders(

@@ -36,6 +36,7 @@ The first implementation is in `services/voice`:
 - OpenAI Responses API powers the restaurant-host reply path when an API key is configured.
 - A deterministic fallback responds safely without OpenAI during local development.
 - Clear pickup-order language with recognized menu items creates a staff-review, pay-at-pickup order in Supabase.
+- Reservation requests with date, time, party size, and guest name create staff-confirmed reservation rows in Supabase.
 
 ### Integration Workers
 

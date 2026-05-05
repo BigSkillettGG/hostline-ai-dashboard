@@ -116,4 +116,46 @@ describe("Supabase call store", () => {
       }),
     );
   });
+
+  it("creates a staff-confirmed reservation request", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ id: "reservation_uuid" }]), { status: 201 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const store = createCallStore(env);
+
+    const result = await store.createStaffReviewReservation({
+      callId: "call_uuid",
+      callerPhone: "+15551234567",
+      confidence: 85,
+      date: "2026-05-08",
+      guestName: "Marcus Webb",
+      locationId: "00000000-0000-4000-8000-000000000002",
+      notes: "Birthday",
+      partySize: 4,
+      time: "19:30",
+    });
+
+    expect(result.reservationId).toBe("reservation_uuid");
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://example.supabase.co/rest/v1/reservations?select=id",
+      expect.objectContaining({
+        body: expect.stringContaining('"manual_request":true'),
+        method: "POST",
+      }),
+    );
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain('"reservation_time":"19:30:00"');
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain(
+      '"location_id":"00000000-0000-4000-8000-000000000002"',
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://example.supabase.co/rest/v1/calls?id=eq.call_uuid",
+      expect.objectContaining({
+        body: expect.stringContaining('"intent":"reservation"'),
+        method: "PATCH",
+      }),
+    );
+  });
 });

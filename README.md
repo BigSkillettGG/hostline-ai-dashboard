@@ -47,7 +47,7 @@ It exposes:
 - `POST /voice/preview` for ElevenLabs voice previews.
 - `POST /debug/reply` in non-production for testing restaurant replies.
 
-It also creates staff-review pickup orders from clear order language when menu items are recognized. These orders are pay-at-pickup and are not auto-sent to the kitchen or POS.
+It also creates staff-review pickup orders from clear order language when menu items are recognized, and staff-confirmed reservation requests when date, time, party size, and guest details are captured. Orders are pay-at-pickup and are not auto-sent to the kitchen or POS.
 
 See `services/voice/README.md` for provider setup.
 
@@ -65,8 +65,8 @@ See:
 ## Next Engineering Milestones
 
 1. Add file/link extraction jobs for uploaded PDFs, images, CSVs, and menu URLs.
-2. Wire the voice service to create staff-confirmed reservation requests from calls.
-3. Implement FAQ calls from the restaurant knowledge base.
-4. Add staff notification channels for orders, complaints, and handoffs.
-5. Add Toast as the first POS integration.
-6. Add OpenTable as the first live reservation API integration.
+2. Implement FAQ calls from the restaurant knowledge base.
+3. Add staff notification channels for orders, reservation requests, complaints, and handoffs.
+4. Add Toast as the first POS integration.
+5. Add OpenTable as the first live reservation API integration.
+6. Add production auth, RLS, and organization/location switching.

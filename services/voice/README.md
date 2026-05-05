@@ -14,6 +14,7 @@ This service is the production path for inbound restaurant phone calls.
 - Persists calls and transcript turns to Supabase when the server has a secret key and location ID.
 - Loads the onboarded restaurant profile from Supabase for greetings, policies, hours, parking, reservation rules, and menu items.
 - Creates staff-review pickup orders when the caller clearly asks for pickup/takeout and mentions recognized menu items.
+- Creates staff-confirmed reservation requests when a caller provides date, time, party size, and guest details.
 - Provides a direct ElevenLabs preview endpoint at `POST /voice/preview`.
 - Validates Twilio signatures when `REQUIRE_TWILIO_SIGNATURE=true`.
 

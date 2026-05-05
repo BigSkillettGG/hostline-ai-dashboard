@@ -1,5 +1,6 @@
 import type { VoiceServiceEnv } from "./env";
 import type { CapturedOrderItem } from "./order-intake";
+import type { CapturedReservationRequest } from "./reservation-intake";
 import type { ConversationRelaySetupMessage, TranscriptRole } from "./types";
 
 export interface StartCallInput {
@@ -31,11 +32,19 @@ export interface CreateStaffReviewOrderInput {
   notes?: string;
 }
 
+export interface CreateStaffReviewReservationInput extends CapturedReservationRequest {
+  callId?: string;
+  callerPhone?: string;
+  locationId?: string;
+  provider?: string;
+}
+
 export interface CallStore {
   startCall(input: StartCallInput): Promise<{ callId?: string }>;
   addTranscriptTurn(input: AddTranscriptTurnInput): Promise<void>;
   completeCall(input: CompleteCallInput): Promise<void>;
   createStaffReviewOrder(input: CreateStaffReviewOrderInput): Promise<{ orderId?: string }>;
+  createStaffReviewReservation(input: CreateStaffReviewReservationInput): Promise<{ reservationId?: string }>;
 }
 
 export function createCallStore(env: VoiceServiceEnv): CallStore {
@@ -75,6 +84,16 @@ class NoopCallStore implements CallStore {
     console.info("[call-store] Supabase not configured; staff-review order not persisted", {
       callId: input.callId,
       itemCount: input.items.length,
+    });
+    return {};
+  }
+
+  async createStaffReviewReservation(input: CreateStaffReviewReservationInput) {
+    console.info("[call-store] Supabase not configured; reservation request not persisted", {
+      callId: input.callId,
+      date: input.date,
+      partySize: input.partySize,
+      time: input.time,
     });
     return {};
   }
@@ -193,6 +212,47 @@ class SupabaseCallStore implements CallStore {
     return { orderId };
   }
 
+  async createStaffReviewReservation(input: CreateStaffReviewReservationInput) {
+    if (!input.callId) return {};
+
+    const rows = await this.request<Array<{ id: string }>>("reservations", {
+      body: {
+        guest_name: input.guestName ?? "Unknown",
+        guest_phone: input.callerPhone ?? null,
+        location_id: normalizeLocationId(input.locationId) ?? this.locationId,
+        manual_request: true,
+        notes: buildReservationNotes(input),
+        party_size: input.partySize,
+        provider: input.provider ?? "manual_request",
+        reservation_date: input.date,
+        reservation_time: `${input.time}:00`,
+        source: "ai_host",
+        source_call_id: input.callId,
+        status: "pending",
+      },
+      headers: {
+        Prefer: "return=representation",
+      },
+      method: "POST",
+      query: "select=id",
+    });
+
+    const reservationId = rows?.[0]?.id;
+    if (!reservationId) return {};
+
+    await this.request("calls", {
+      body: {
+        intent: "reservation",
+        outcome: "escalated",
+        summary: `Staff-confirmed reservation request created for ${input.partySize} on ${input.date} at ${input.time}.`,
+      },
+      method: "PATCH",
+      query: `id=eq.${encodeURIComponent(input.callId)}`,
+    });
+
+    return { reservationId };
+  }
+
   private async request<T = unknown>(
     table: string,
     options: {
@@ -228,4 +288,13 @@ class SupabaseCallStore implements CallStore {
 function normalizeLocationId(locationId?: string) {
   if (!locationId || locationId === "demo-location") return undefined;
   return locationId;
+}
+
+function buildReservationNotes(input: CreateStaffReviewReservationInput) {
+  return [
+    input.notes,
+    `AI-created staff-confirmed reservation request. Not confirmed until staff approves. Confidence: ${input.confidence}%.`,
+  ]
+    .filter(Boolean)
+    .join(" ");
 }

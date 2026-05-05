@@ -3,6 +3,7 @@ import type { WebSocket } from "ws";
 import type { CallStore } from "./call-store";
 import type { VoiceServiceEnv } from "./env";
 import { capturePickupOrder, mergeCapturedOrderItems, type CapturedOrderItem } from "./order-intake";
+import { captureReservationRequest, hasReservationIntent } from "./reservation-intake";
 import type { RestaurantContextStore } from "./restaurant-context-store";
 import { demoRestaurantContext } from "./restaurant-context";
 import { generateRestaurantReply } from "./restaurant-agent";
@@ -22,6 +23,8 @@ interface RelaySession {
   locationId?: string;
   orderCreatedId?: string;
   orderDraftItems: CapturedOrderItem[];
+  reservationCreatedId?: string;
+  reservationIntentSeen: boolean;
   startedAt: number;
   transcript: TranscriptTurn[];
 }
@@ -37,6 +40,7 @@ export function createConversationRelayHandler(
     const session: RelaySession = {
       context: demoRestaurantContext,
       orderDraftItems: [],
+      reservationIntentSeen: false,
       startedAt: Date.now(),
       transcript: [],
     };
@@ -103,6 +107,16 @@ export function createConversationRelayHandler(
 
         if (createdOrderId) {
           reply = `${reply} I have sent that pickup order to the staff review queue. It will be pay at pickup.`;
+        }
+
+        const createdReservationId = await maybeCreateStaffReviewReservation({
+          callStore,
+          session,
+          utterance: message.voicePrompt,
+        });
+
+        if (createdReservationId) {
+          reply = `${reply} I have sent that reservation request to staff. It is not confirmed until the restaurant confirms it.`;
         }
 
         session.transcript.push({
@@ -234,6 +248,43 @@ async function maybeCreateStaffReviewOrder({
     return result.orderId ?? null;
   } catch (error) {
     console.error("[conversation-relay] staff-review order persistence failed", error);
+    return null;
+  }
+}
+
+async function maybeCreateStaffReviewReservation({
+  callStore,
+  session,
+  utterance,
+}: {
+  callStore: CallStore;
+  session: RelaySession;
+  utterance: string;
+}) {
+  if (session.reservationCreatedId || !session.callRecordId) return null;
+
+  const intentInUtterance = hasReservationIntent(utterance);
+  if (intentInUtterance) {
+    session.reservationIntentSeen = true;
+  }
+
+  const capturedReservation = captureReservationRequest(utterance, {
+    requireIntent: !session.reservationIntentSeen,
+  });
+  if (!capturedReservation) return null;
+
+  try {
+    const result = await callStore.createStaffReviewReservation({
+      ...capturedReservation,
+      callId: session.callRecordId,
+      callerPhone: session.callerPhone,
+      locationId: session.locationId,
+    });
+
+    session.reservationCreatedId = result.reservationId;
+    return result.reservationId ?? null;
+  } catch (error) {
+    console.error("[conversation-relay] reservation request persistence failed", error);
     return null;
   }
 }
