@@ -23,6 +23,8 @@ const intentColor: Record<string, string> = {
   reservation: "bg-warning/15 text-warning border-warning/20",
   faq: "bg-info/10 text-info border-info/20",
   hours: "bg-info/10 text-info border-info/20",
+  complaint: "bg-destructive/10 text-destructive border-destructive/20",
+  sales: "bg-warning/15 text-warning border-warning/20",
   other: "bg-muted text-muted-foreground border-border",
 };
 const statusColor: Record<string, string> = {
@@ -96,6 +98,8 @@ export default function Calls() {
               <SelectItem value="all">All intents</SelectItem>
               <SelectItem value="order">Order</SelectItem>
               <SelectItem value="reservation">Reservation</SelectItem>
+              <SelectItem value="complaint">Complaint</SelectItem>
+              <SelectItem value="sales">Sales / Vendor</SelectItem>
               <SelectItem value="faq">FAQ</SelectItem>
               <SelectItem value="hours">Hours</SelectItem>
               <SelectItem value="other">Other</SelectItem>
