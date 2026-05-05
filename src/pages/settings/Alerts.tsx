@@ -66,7 +66,9 @@ export default function Alerts() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) setConfig({ ...defaults, ...JSON.parse(raw) });
-    } catch {}
+    } catch {
+      setConfig(defaults);
+    }
   }, []);
 
   const save = () => {

@@ -63,6 +63,14 @@ The onboarding interview must create enough structured context for a restaurant 
 - Patio, heaters, weather closures, music volume, sports viewing, Wi-Fi.
 - Refunds, complaints, lost and found, donations, press, job inquiries.
 
+### Escalations And Alerts
+
+- Complaint manager phone number and callback promise rules.
+- Sales/vendor routing, summary email, and whether to identify vendor calls before routing.
+- Allergy, refund, angry caller, private event, catering, low-confidence, and explicit-human-request triggers.
+- Staff notification channels: SMS, email, dashboard task, phone transfer, or future POS/KDS alert.
+- Callback expectations: immediate transfer, manager callback, next-day follow-up, or message only.
+
 ### Voice And Behavior
 
 - Host name, tone, accent preference, greeting, disclosure preference.
@@ -83,6 +91,7 @@ The onboarding interview must create enough structured context for a restaurant 
 The interview should eventually write to:
 
 - `organizations` and `locations` for account/location identity.
+- `onboarding_profiles` for the full interview draft, progress, and launch-readiness status.
 - `agent_configs` for voice, call handling, capabilities, and escalation.
 - `knowledge_documents` and `faqs` for restaurant policies and Q&A.
 - `menu_categories`, `menu_items`, and modifiers/options for order understanding.

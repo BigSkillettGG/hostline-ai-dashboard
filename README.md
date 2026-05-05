@@ -53,7 +53,9 @@ See `services/voice/README.md` for provider setup.
 
 ## Onboarding
 
-The app now includes a guided onboarding surface at `/onboarding`. It captures the restaurant profile, menu sources, service periods, order rules, reservation rules, policies, voice behavior, and phone launch details needed before the first test call.
+The app now includes a guided onboarding surface at `/app/onboarding`. It captures the restaurant profile, menu sources, service periods, order rules, reservation rules, policies, voice behavior, and phone launch details needed before the first test call.
+
+When `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, and `VITE_SUPABASE_DEMO_LOCATION_ID` are set, onboarding drafts sync to the `onboarding_profiles` table. Without those values, the dashboard saves the draft to local browser storage.
 
 See:
 

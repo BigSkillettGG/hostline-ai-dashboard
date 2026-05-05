@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { mapSupabaseCalls, mapSupabaseOrders } from "./supabase-rest";
+import { sampleOnboardingDraft } from "@/domain/onboarding";
+import { buildOnboardingProfilePayload, mapSupabaseCalls, mapSupabaseOrders } from "./supabase-rest";
 
 describe("Supabase call mapping", () => {
   it("maps persisted calls and transcript turns into dashboard call records", () => {
@@ -148,5 +149,20 @@ describe("Supabase order mapping", () => {
     expect(orders[0].customer).toBe("Unknown");
     expect(orders[0].status).toBe("new");
     expect(orders[0].total).toBe(0);
+  });
+});
+
+describe("Supabase onboarding profile payload", () => {
+  it("stores the draft with launch-readiness metadata", () => {
+    const payload = buildOnboardingProfilePayload(sampleOnboardingDraft, "location_1");
+
+    expect(payload).toMatchObject({
+      draft: sampleOnboardingDraft,
+      location_id: "location_1",
+      status: "ready_for_test_call",
+    });
+    expect(payload.completed_required).toBe(payload.total_required);
+    expect(payload.progress_percent).toBe(100);
+    expect(new Date(payload.updated_at).toString()).not.toBe("Invalid Date");
   });
 });

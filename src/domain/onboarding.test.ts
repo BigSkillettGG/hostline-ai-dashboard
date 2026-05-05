@@ -15,6 +15,7 @@ describe("restaurant onboarding scope", () => {
       "orders",
       "reservations",
       "policies",
+      "escalations",
       "voice",
       "launch",
     ]);

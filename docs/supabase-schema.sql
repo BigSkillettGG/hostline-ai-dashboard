@@ -72,6 +72,18 @@ create table faqs (
   updated_at timestamptz not null default now()
 );
 
+create table onboarding_profiles (
+  id uuid primary key default gen_random_uuid(),
+  location_id uuid not null references locations(id) on delete cascade,
+  draft jsonb not null default '{}'::jsonb,
+  progress_percent integer not null default 0 check (progress_percent between 0 and 100),
+  completed_required integer not null default 0,
+  total_required integer not null default 0,
+  status text not null default 'in_progress',
+  updated_at timestamptz not null default now(),
+  unique(location_id)
+);
+
 create table menu_categories (
   id uuid primary key default gen_random_uuid(),
   location_id uuid not null references locations(id) on delete cascade,

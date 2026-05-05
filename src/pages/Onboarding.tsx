@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
@@ -38,6 +38,11 @@ import {
   type OnboardingStepId,
 } from "@/domain/onboarding";
 import { loadOnboardingDraft, saveOnboardingDraft } from "@/lib/onboarding-draft";
+import {
+  fetchOnboardingProfileFromSupabase,
+  isOnboardingPersistenceConfigured,
+  saveOnboardingProfileToSupabase,
+} from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
 
 const sectionIcons: Record<OnboardingStepId, LucideIcon> = {
@@ -64,18 +69,78 @@ const launchChecklist = [
 export default function Onboarding() {
   const [activeSectionId, setActiveSectionId] = useState<OnboardingStepId>("basics");
   const [draft, setDraft] = useState<OnboardingDraft>(() => loadOnboardingDraft());
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [syncState, setSyncState] = useState<"local" | "loading" | "live" | "error">(
+    isOnboardingPersistenceConfigured() ? "loading" : "local",
+  );
+  const [syncMessage, setSyncMessage] = useState(
+    isOnboardingPersistenceConfigured() ? "Checking Supabase profile" : "Saved to this browser",
+  );
   const progress = useMemo(() => calculateOnboardingProgress(draft), [draft]);
   const activeSection = onboardingSections.find((section) => section.id === activeSectionId) ?? onboardingSections[0];
   const ActiveIcon = sectionIcons[activeSection.id];
   const assignedNumber = String(draft.assignedHostLineNumber || assignedDemoPhoneNumber);
 
+  useEffect(() => {
+    if (!isOnboardingPersistenceConfigured()) return;
+
+    let active = true;
+
+    fetchOnboardingProfileFromSupabase()
+      .then((remoteDraft) => {
+        if (!active) return;
+
+        if (!remoteDraft) {
+          setSyncState("live");
+          setSyncMessage("Ready to create Supabase profile");
+          return;
+        }
+
+        const mergedDraft = { ...loadOnboardingDraft(), ...remoteDraft };
+        setDraft(mergedDraft);
+        saveOnboardingDraft(mergedDraft);
+        setSyncState("live");
+        setSyncMessage("Loaded from Supabase");
+      })
+      .catch((error) => {
+        if (!active) return;
+        setSyncState("error");
+        setSyncMessage(error instanceof Error ? error.message : "Supabase profile load failed");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const updateField = (fieldId: string, value: string | boolean) => {
     setDraft((current) => ({ ...current, [fieldId]: value }));
   };
 
-  const saveDraft = () => {
+  const saveDraft = async () => {
     saveOnboardingDraft(draft);
-    toast.success("Onboarding draft saved");
+
+    if (!isOnboardingPersistenceConfigured()) {
+      setSyncState("local");
+      setSyncMessage("Saved to this browser");
+      toast.success("Onboarding draft saved locally");
+      return;
+    }
+
+    setSavingDraft(true);
+
+    try {
+      const result = await saveOnboardingProfileToSupabase(draft);
+      setSyncState("live");
+      setSyncMessage(`Synced to Supabase at ${result.progress_percent ?? progress.percent}% readiness`);
+      toast.success("Onboarding profile synced to Supabase");
+    } catch (error) {
+      setSyncState("error");
+      setSyncMessage(error instanceof Error ? error.message : "Supabase profile sync failed");
+      toast.error("Saved locally, but Supabase sync failed");
+    } finally {
+      setSavingDraft(false);
+    }
   };
 
   return (
@@ -91,9 +156,9 @@ export default function Onboarding() {
                 <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
               </Link>
             </Button>
-            <Button size="sm" onClick={saveDraft}>
+            <Button size="sm" onClick={saveDraft} disabled={savingDraft}>
               <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" />
-              Save draft
+              {savingDraft ? "Saving..." : "Save draft"}
             </Button>
           </>
         }
@@ -102,7 +167,7 @@ export default function Onboarding() {
       <PageBody className="space-y-5">
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
           <div className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-3 md:grid-cols-4">
               <Card>
                 <CardContent className="p-4">
                   <div className="text-xs font-medium text-muted-foreground">Launch readiness</div>
@@ -127,6 +192,14 @@ export default function Onboarding() {
                   <div className="text-xs font-medium text-muted-foreground">HostLine number</div>
                   <div className="mt-2 truncate text-xl font-semibold tabular-nums">{assignedNumber}</div>
                   <div className="mt-1 text-xs text-muted-foreground">Twilio provisioning target</div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-4">
+                  <div className="text-xs font-medium text-muted-foreground">Persistence</div>
+                  <div className="mt-2 text-lg font-semibold capitalize">{syncState}</div>
+                  <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{syncMessage}</div>
                 </CardContent>
               </Card>
             </div>
@@ -175,8 +248,8 @@ export default function Onboarding() {
                         {activeSection.title}
                       </CardTitle>
                     </div>
-                    <Button size="sm" variant="outline" onClick={saveDraft}>
-                      Save
+                    <Button size="sm" variant="outline" onClick={saveDraft} disabled={savingDraft}>
+                      {savingDraft ? "Saving..." : "Save"}
                     </Button>
                   </div>
                 </CardHeader>

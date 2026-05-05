@@ -7,10 +7,12 @@ import type {
   OrderStatus,
   TranscriptSpeaker,
 } from "@/data/mock";
+import { calculateOnboardingProgress, type OnboardingDraft } from "@/domain/onboarding";
 
 const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL ?? "").replace(/\/$/, "");
 const supabasePublishableKey =
   import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? import.meta.env.VITE_SUPABASE_ANON_KEY ?? "";
+const supabaseDemoLocationId = import.meta.env.VITE_SUPABASE_DEMO_LOCATION_ID ?? "";
 
 const callIntents: CallIntent[] = ["order", "reservation", "faq", "hours", "other"];
 const callOutcomes: CallOutcome[] = ["resolved", "order_placed", "reservation_booked", "escalated", "voicemail", "missed", "unknown"];
@@ -60,8 +62,22 @@ interface SupabaseOrderItemRow {
   notes: string | null;
 }
 
+interface SupabaseOnboardingProfileRow {
+  completed_required: number | null;
+  draft: unknown;
+  location_id: string;
+  progress_percent: number | null;
+  status: string | null;
+  total_required: number | null;
+  updated_at: string | null;
+}
+
 export function isSupabaseConfigured() {
   return Boolean(supabaseUrl && supabasePublishableKey);
+}
+
+export function isOnboardingPersistenceConfigured() {
+  return Boolean(isSupabaseConfigured() && supabaseDemoLocationId);
 }
 
 export async function fetchCallsFromSupabase(): Promise<Call[]> {
@@ -132,6 +148,67 @@ export async function updateOrderStatusInSupabase(orderId: string, status: Order
     },
     method: "PATCH",
   });
+}
+
+export async function fetchOnboardingProfileFromSupabase(
+  locationId = supabaseDemoLocationId,
+): Promise<OnboardingDraft | null> {
+  if (!isSupabaseConfigured() || !locationId) {
+    throw new Error("Supabase onboarding persistence is not configured.");
+  }
+
+  const rows = await supabaseRequest<SupabaseOnboardingProfileRow[]>(
+    "onboarding_profiles",
+    new URLSearchParams({
+      limit: "1",
+      location_id: `eq.${locationId}`,
+      select: "location_id,draft,progress_percent,completed_required,total_required,status,updated_at",
+    }),
+  );
+
+  const draft = rows?.[0]?.draft;
+  return isObjectRecord(draft) ? (draft as OnboardingDraft) : null;
+}
+
+export async function saveOnboardingProfileToSupabase(
+  draft: OnboardingDraft,
+  locationId = supabaseDemoLocationId,
+) {
+  if (!isSupabaseConfigured() || !locationId) {
+    throw new Error("Supabase onboarding persistence is not configured.");
+  }
+
+  const payload = buildOnboardingProfilePayload(draft, locationId);
+  const rows = await supabaseRequest<SupabaseOnboardingProfileRow[]>(
+    "onboarding_profiles",
+    new URLSearchParams({
+      on_conflict: "location_id",
+      select: "location_id,progress_percent,completed_required,total_required,status,updated_at",
+    }),
+    {
+      body: payload,
+      headers: {
+        Prefer: "return=representation,resolution=merge-duplicates",
+      },
+      method: "POST",
+    },
+  );
+
+  return rows?.[0] ?? payload;
+}
+
+export function buildOnboardingProfilePayload(draft: OnboardingDraft, locationId: string) {
+  const progress = calculateOnboardingProgress(draft);
+
+  return {
+    completed_required: progress.completedRequired,
+    draft,
+    location_id: locationId,
+    progress_percent: progress.percent,
+    status: progress.percent === 100 ? "ready_for_test_call" : "in_progress",
+    total_required: progress.totalRequired,
+    updated_at: new Date().toISOString(),
+  };
 }
 
 export function mapSupabaseCalls(
@@ -227,12 +304,17 @@ function normalizeStringArray(value: unknown) {
   return strings.length ? strings : undefined;
 }
 
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
 async function supabaseRequest<T>(
   table: string,
   params: URLSearchParams,
   options?: {
     body?: unknown;
-    method?: "GET" | "PATCH";
+    headers?: Record<string, string>;
+    method?: "GET" | "PATCH" | "POST";
   },
 ) {
   const response = await fetch(`${supabaseUrl}/rest/v1/${table}?${params.toString()}`, {
@@ -242,6 +324,7 @@ async function supabaseRequest<T>(
       Authorization: `Bearer ${supabasePublishableKey}`,
       "Content-Type": "application/json",
       Prefer: "return=minimal",
+      ...options?.headers,
     },
     method: options?.method ?? "GET",
   });
