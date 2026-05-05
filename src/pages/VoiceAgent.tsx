@@ -534,6 +534,11 @@ export default function VoiceAgent() {
                   state={serviceHealth?.supabaseConfigured ? "ready" : "pending"}
                 />
                 <ServiceStatusRow
+                  label="Onboarded context"
+                  value={serviceHealth?.onboardedContextConfigured ? "Loaded for calls" : "Demo fallback"}
+                  state={serviceHealth?.onboardedContextConfigured ? "ready" : "pending"}
+                />
+                <ServiceStatusRow
                   label="Twilio signatures"
                   value={serviceHealth?.twilioSignatureRequired ? "Required" : "Relaxed for local dev"}
                   state={serviceHealth?.twilioSignatureRequired ? "ready" : "pending"}

@@ -3,6 +3,7 @@ export interface RestaurantVoiceContext {
   hostName: string;
   timezone: string;
   greeting: string;
+  defaultPickupEtaMinutes?: number;
   menuHighlights: string[];
   menuItems: RestaurantMenuItem[];
   policies: Record<string, string>;

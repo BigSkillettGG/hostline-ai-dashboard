@@ -81,6 +81,7 @@ describe("Supabase call store", () => {
         { modifiers: ["Light cheese"], name: "Margherita Pizza", priceCents: 1800, quantity: 2 },
         { name: "Caesar Salad", priceCents: 1400, quantity: 1 },
       ],
+      locationId: "00000000-0000-4000-8000-000000000002",
       notes: "AI-created staff-review order.",
     });
 
@@ -92,6 +93,9 @@ describe("Supabase call store", () => {
         body: expect.stringContaining('"total_cents":5000'),
         method: "POST",
       }),
+    );
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain(
+      '"location_id":"00000000-0000-4000-8000-000000000002"',
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,

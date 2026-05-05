@@ -5,6 +5,7 @@ import { createCallStore } from "./call-store";
 import { createConversationRelayHandler } from "./conversation-relay";
 import { createElevenLabsPreview } from "./elevenlabs";
 import { loadEnv, type VoiceServiceEnv } from "./env";
+import { createRestaurantContextStore } from "./restaurant-context-store";
 import { demoRestaurantContext } from "./restaurant-context";
 import { generateRestaurantReply } from "./restaurant-agent";
 import { validateTwilioSignature } from "./twilio-signature";
@@ -12,12 +13,13 @@ import { buildConversationRelayTwiML, buildUnavailableTwiML } from "./twiml";
 
 const env = loadEnv();
 const callStore = createCallStore(env);
+const restaurantContextStore = createRestaurantContextStore(env);
 const server = createServer((req, res) => {
   void handleRequest(req, res, env);
 });
 
 const wss = new WebSocketServer({ noServer: true });
-const handleConversationRelayConnection = createConversationRelayHandler(env, callStore);
+const handleConversationRelayConnection = createConversationRelayHandler(env, callStore, restaurantContextStore);
 
 server.on("upgrade", (req, socket, head) => {
   const path = new URL(req.url ?? "/", "http://localhost").pathname;
@@ -63,6 +65,11 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
           currentEnv.SUPABASE_SECRET_KEY &&
           currentEnv.SUPABASE_DEMO_LOCATION_ID,
       ),
+      onboardedContextConfigured: Boolean(
+        currentEnv.SUPABASE_URL &&
+          currentEnv.SUPABASE_SECRET_KEY &&
+          currentEnv.SUPABASE_DEMO_LOCATION_ID,
+      ),
       twilioSignatureRequired: currentEnv.REQUIRE_TWILIO_SIGNATURE,
     });
     return;
@@ -82,18 +89,24 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       return;
     }
 
+    const locationId =
+      params.locationId ??
+      url.searchParams.get("locationId") ??
+      currentEnv.SUPABASE_DEMO_LOCATION_ID ??
+      "demo-location";
+    const restaurantContext = await restaurantContextStore.getContext(locationId);
     const httpBaseUrl = currentEnv.PUBLIC_HTTP_BASE_URL;
     const twiml = buildConversationRelayTwiML({
       actionUrl: httpBaseUrl ? `${httpBaseUrl}/twilio/conversation-ended` : undefined,
       customParameters: {
-        locationId: params.locationId ?? "demo-location",
+        locationId,
       },
       language: currentEnv.TWILIO_LANGUAGE,
       transcriptionProvider: currentEnv.TWILIO_TRANSCRIPTION_PROVIDER,
       ttsProvider: currentEnv.TWILIO_TTS_PROVIDER,
       ttsVoice: currentEnv.TWILIO_TTS_VOICE,
       websocketUrl: `${currentEnv.PUBLIC_WS_BASE_URL}/twilio/conversation-relay`,
-      welcomeGreeting: demoRestaurantContext.greeting,
+      welcomeGreeting: restaurantContext.greeting,
     });
 
     sendXml(res, 200, twiml);
@@ -125,10 +138,11 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
   }
 
   if (req.method === "POST" && url.pathname === "/debug/reply" && currentEnv.NODE_ENV !== "production") {
-    const body = JSON.parse(await readRequestBody(req)) as { prompt?: string };
+    const body = JSON.parse(await readRequestBody(req)) as { locationId?: string; prompt?: string };
+    const restaurantContext = await restaurantContextStore.getContext(body.locationId);
     const reply = await generateRestaurantReply({
       callerUtterance: body.prompt ?? "",
-      context: demoRestaurantContext,
+      context: restaurantContext,
       env: currentEnv,
       transcript: [],
     });

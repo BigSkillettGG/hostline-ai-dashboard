@@ -11,6 +11,7 @@ This service is the production path for inbound restaurant phone calls.
 - Generates restaurant-host replies with OpenAI Responses API when `OPENAI_API_KEY` is set.
 - Falls back to deterministic restaurant-safe replies when OpenAI is not configured.
 - Persists calls and transcript turns to Supabase when the server has a secret key and location ID.
+- Loads the onboarded restaurant profile from Supabase for greetings, policies, hours, parking, reservation rules, and menu items.
 - Creates staff-review pickup orders when the caller clearly asks for pickup/takeout and mentions recognized menu items.
 - Provides a direct ElevenLabs preview endpoint at `POST /voice/preview`.
 - Validates Twilio signatures when `REQUIRE_TWILIO_SIGNATURE=true`.
@@ -45,6 +46,8 @@ POST https://your-tunnel.ngrok.app/twilio/voice
 - Supabase project with `docs/supabase-schema.sql` applied.
 - `SUPABASE_SECRET_KEY` or legacy service role key stored only on the voice-service backend.
 - `SUPABASE_DEMO_LOCATION_ID` set to a real `locations.id` value.
+
+When Supabase is configured, Twilio requests can include `locationId` in the webhook URL or ConversationRelay custom parameters. The service loads `locations`, `agent_configs`, `onboarding_profiles`, `menu_categories`, and `menu_items` for that location. Without a matching profile, calls use the demo context.
 
 ## Important Safety Defaults
 

@@ -27,6 +27,7 @@ export interface CreateStaffReviewOrderInput {
   customerPhone?: string;
   etaMinutes?: number;
   items: CapturedOrderItem[];
+  locationId?: string;
   notes?: string;
 }
 
@@ -98,7 +99,7 @@ class SupabaseCallStore implements CallStore {
         caller_phone: input.setup.from ?? null,
         external_call_sid: input.setup.callSid,
         external_session_id: input.setup.sessionId,
-        location_id: input.locationId ?? this.locationId,
+        location_id: normalizeLocationId(input.locationId) ?? this.locationId,
         started_at: startedAt,
         status: "new",
         twilio_payload: input.setup,
@@ -151,7 +152,7 @@ class SupabaseCallStore implements CallStore {
         customer_phone: input.customerPhone ?? null,
         destination: "staff_review",
         eta_minutes: input.etaMinutes ?? 25,
-        location_id: this.locationId,
+        location_id: normalizeLocationId(input.locationId) ?? this.locationId,
         notes: input.notes ?? null,
         payment_mode: "pay_at_pickup",
         source_call_id: input.callId,
@@ -222,4 +223,9 @@ class SupabaseCallStore implements CallStore {
     const text = await response.text();
     return text ? (JSON.parse(text) as T) : (undefined as T);
   }
+}
+
+function normalizeLocationId(locationId?: string) {
+  if (!locationId || locationId === "demo-location") return undefined;
+  return locationId;
 }

@@ -3,6 +3,7 @@ import type { WebSocket } from "ws";
 import type { CallStore } from "./call-store";
 import type { VoiceServiceEnv } from "./env";
 import { capturePickupOrder, mergeCapturedOrderItems, type CapturedOrderItem } from "./order-intake";
+import type { RestaurantContextStore } from "./restaurant-context-store";
 import { demoRestaurantContext } from "./restaurant-context";
 import { generateRestaurantReply } from "./restaurant-agent";
 import type {
@@ -17,17 +18,28 @@ interface RelaySession {
   callRecordId?: string;
   callSid?: string;
   callerPhone?: string;
+  context: typeof demoRestaurantContext;
+  locationId?: string;
   orderCreatedId?: string;
   orderDraftItems: CapturedOrderItem[];
   startedAt: number;
   transcript: TranscriptTurn[];
 }
 
-export function createConversationRelayHandler(env: VoiceServiceEnv, callStore: CallStore) {
+export function createConversationRelayHandler(
+  env: VoiceServiceEnv,
+  callStore: CallStore,
+  contextStore: RestaurantContextStore,
+) {
   const sessions = new WeakMap<WebSocket, RelaySession>();
 
   return function handleConversationRelayConnection(ws: WebSocket, req: IncomingMessage) {
-    const session: RelaySession = { orderDraftItems: [], startedAt: Date.now(), transcript: [] };
+    const session: RelaySession = {
+      context: demoRestaurantContext,
+      orderDraftItems: [],
+      startedAt: Date.now(),
+      transcript: [],
+    };
     sessions.set(ws, session);
 
     console.info("[conversation-relay] connected", req.url);
@@ -39,8 +51,14 @@ export function createConversationRelayHandler(env: VoiceServiceEnv, callStore: 
       if (message.type === "setup") {
         applySetupMessage(session, message);
         try {
+          session.context = await contextStore.getContext(session.locationId);
+        } catch (error) {
+          console.error("[conversation-relay] context load failed", error);
+        }
+
+        try {
           const result = await callStore.startCall({
-            locationId: message.customParameters?.locationId,
+            locationId: session.locationId,
             setup: message,
           });
           session.callRecordId = result.callId;
@@ -73,7 +91,7 @@ export function createConversationRelayHandler(env: VoiceServiceEnv, callStore: 
 
         let reply = await generateRestaurantReply({
           callerUtterance: message.voicePrompt,
-          context: demoRestaurantContext,
+          context: session.context,
           env,
           transcript: session.transcript,
         });
@@ -170,6 +188,7 @@ function applySetupMessage(session: RelaySession, message: ConversationRelaySetu
   session.id = message.sessionId;
   session.callSid = message.callSid;
   session.callerPhone = message.from;
+  session.locationId = message.customParameters?.locationId;
 }
 
 function getSessionOffsetSeconds(session: RelaySession) {
@@ -194,7 +213,7 @@ async function maybeCreateStaffReviewOrder({
 }) {
   if (session.orderCreatedId || !session.callRecordId) return null;
 
-  const capturedOrder = capturePickupOrder(utterance, demoRestaurantContext);
+  const capturedOrder = capturePickupOrder(utterance, session.context);
   if (!capturedOrder) return null;
 
   session.orderDraftItems = mergeCapturedOrderItems(session.orderDraftItems, capturedOrder.items);
@@ -205,8 +224,9 @@ async function maybeCreateStaffReviewOrder({
       callId: session.callRecordId,
       customerName: capturedOrder.customerName,
       customerPhone: session.callerPhone,
-      etaMinutes: 25,
+      etaMinutes: session.context.defaultPickupEtaMinutes ?? 25,
       items: session.orderDraftItems,
+      locationId: session.locationId,
       notes: `${capturedOrder.notes} Confidence: ${capturedOrder.confidence}%.`,
     });
 
