@@ -70,6 +70,8 @@ The app now includes a guided onboarding surface at `/app/onboarding`. It captur
 
 When `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, and `VITE_SUPABASE_DEMO_LOCATION_ID` are set, onboarding drafts sync to the `onboarding_profiles` table. Without those values, the dashboard saves the draft to local browser storage.
 
+The Voice Agent settings page also persists locally and syncs to `agent_configs` when Supabase is configured. The voice service reads that table while building live restaurant call context.
+
 See:
 
 - `docs/onboarding-knowledge-scope.md`

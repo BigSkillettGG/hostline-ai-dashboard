@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { defaultRestaurantAgentConfig } from "@/domain/restaurant-config";
 import { sampleOnboardingDraft } from "@/domain/onboarding";
 import {
+  buildAgentConfigPayload,
   buildMenuCategoryInsertRows,
   buildMenuItemInsertRows,
   buildOnboardingProfilePayload,
   buildReservationInsertPayload,
   mapSupabaseCalls,
+  mapSupabaseAgentConfig,
   mapSupabaseMenu,
   mapSupabaseOrders,
   mapSupabasePhoneNumber,
@@ -88,6 +91,85 @@ describe("Supabase call mapping", () => {
     expect(calls[0].intent).toBe("other");
     expect(calls[0].outcome).toBe("unknown");
     expect(calls[0].status).toBe("new");
+  });
+});
+
+describe("Supabase agent config mapping", () => {
+  it("builds persisted agent-config payloads from dashboard settings", () => {
+    const payload = buildAgentConfigPayload(
+      {
+        ...defaultRestaurantAgentConfig,
+        hostName: "Mina",
+        orders: {
+          ...defaultRestaurantAgentConfig.orders,
+          destinations: ["staff_review", "printer"],
+          enabled: false,
+        },
+      },
+      "location_1",
+    );
+
+    expect(payload).toMatchObject({
+      answer_after_rings: 3,
+      greeting_template: defaultRestaurantAgentConfig.greetingTemplate,
+      host_name: "Mina",
+      location_id: "location_1",
+      order_destinations: ["staff_review", "printer"],
+      orders_enabled: false,
+      payment_mode: "pay_at_pickup",
+      reservation_provider: "opentable",
+    });
+    expect(new Date(payload.updated_at).toString()).not.toBe("Invalid Date");
+  });
+
+  it("maps persisted agent-config rows back into dashboard settings", () => {
+    const mapped = mapSupabaseAgentConfig(
+      {
+        after_hours_behavior: "full_service",
+        answer_after_rings: 4,
+        answer_faqs_enabled: false,
+        call_handling_mode: "answer_immediately",
+        disclosure_enabled: false,
+        escalation_phone_number: "+15550199",
+        greeting_template: "Hello from Mina.",
+        host_name: "Mina",
+        id: "agent_1",
+        order_destinations: ["printer"],
+        orders_enabled: false,
+        payment_mode: "pay_at_pickup",
+        reservations_enabled: true,
+        reservation_mode: "manual_request",
+        reservation_provider: "resy",
+        sms_confirmations_enabled: false,
+        staff_escalation_enabled: true,
+        tone: "professional",
+        updated_at: "2026-05-05T20:00:00.000Z",
+      },
+      defaultRestaurantAgentConfig,
+    );
+
+    expect(mapped).toMatchObject({
+      afterHoursBehavior: "full_service",
+      answerAfterRings: 4,
+      callHandlingMode: "answer_immediately",
+      disclosureEnabled: false,
+      escalationPhoneNumber: "+15550199",
+      greetingTemplate: "Hello from Mina.",
+      hostName: "Mina",
+      tone: "professional",
+    });
+    expect(mapped.capabilities).toMatchObject({
+      answerFaqs: false,
+      handleReservations: true,
+      sendSmsConfirmations: false,
+      takeOrders: false,
+    });
+    expect(mapped.orders.destinations).toEqual(["printer"]);
+    expect(mapped.orders.enabled).toBe(false);
+    expect(mapped.reservations).toMatchObject({
+      mode: "manual_request",
+      provider: "resy",
+    });
   });
 });
 

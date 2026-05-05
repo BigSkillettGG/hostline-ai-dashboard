@@ -45,7 +45,13 @@ import {
   voiceServiceBaseUrl,
   type VoiceServiceHealth,
 } from "@/lib/voice-service";
+import { loadAgentConfigDraft, saveAgentConfigDraft } from "@/lib/agent-config-storage";
 import { loadOnboardingDraft } from "@/lib/onboarding-draft";
+import {
+  fetchAgentConfigFromSupabase,
+  isAgentConfigPersistenceConfigured,
+  saveAgentConfigToSupabase,
+} from "@/lib/supabase-rest";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 const variables = ["{restaurant_name}", "{caller_name}", "{hours_today}"];
@@ -59,11 +65,18 @@ const capabilityRows = [
 ] as const;
 
 export default function VoiceAgent() {
-  const [config, setConfig] = useState<RestaurantAgentConfig>(() => createConfigFromOnboardingDraft());
+  const [config, setConfig] = useState<RestaurantAgentConfig>(() => loadAgentConfigDraft() ?? createConfigFromOnboardingDraft());
   const [serviceHealth, setServiceHealth] = useState<VoiceServiceHealth | null>(null);
   const [serviceError, setServiceError] = useState<string | null>(null);
   const [checkingService, setCheckingService] = useState(false);
   const [playingPreview, setPlayingPreview] = useState(false);
+  const [savingConfig, setSavingConfig] = useState(false);
+  const [configSyncState, setConfigSyncState] = useState<"error" | "live" | "loading" | "local">(
+    isAgentConfigPersistenceConfigured() ? "loading" : "local",
+  );
+  const [configSyncMessage, setConfigSyncMessage] = useState(
+    isAgentConfigPersistenceConfigured() ? "Checking saved voice config" : "Saved to this browser",
+  );
 
   const checkVoiceService = async () => {
     if (!isVoiceServiceConfigured()) {
@@ -89,6 +102,63 @@ export default function VoiceAgent() {
   useEffect(() => {
     void checkVoiceService();
   }, []);
+
+  useEffect(() => {
+    if (!isAgentConfigPersistenceConfigured()) return;
+
+    let active = true;
+
+    fetchAgentConfigFromSupabase(loadAgentConfigDraft() ?? createConfigFromOnboardingDraft())
+      .then((remoteConfig) => {
+        if (!active) return;
+
+        if (!remoteConfig) {
+          setConfigSyncState("live");
+          setConfigSyncMessage("Ready to create Supabase voice config");
+          return;
+        }
+
+        setConfig(remoteConfig);
+        saveAgentConfigDraft(remoteConfig);
+        setConfigSyncState("live");
+        setConfigSyncMessage("Loaded from Supabase agent_configs");
+      })
+      .catch((error) => {
+        if (!active) return;
+        setConfigSyncState("error");
+        setConfigSyncMessage(error instanceof Error ? error.message : "Voice config load failed");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const saveConfig = async () => {
+    saveAgentConfigDraft(config);
+
+    if (!isAgentConfigPersistenceConfigured()) {
+      setConfigSyncState("local");
+      setConfigSyncMessage("Saved to this browser");
+      toast.success("Voice configuration saved locally");
+      return;
+    }
+
+    setSavingConfig(true);
+
+    try {
+      await saveAgentConfigToSupabase(config);
+      setConfigSyncState("live");
+      setConfigSyncMessage("Synced to Supabase agent_configs");
+      toast.success("Voice configuration synced");
+    } catch (error) {
+      setConfigSyncState("error");
+      setConfigSyncMessage(error instanceof Error ? error.message : "Voice config sync failed");
+      toast.error("Saved locally, but Supabase sync failed");
+    } finally {
+      setSavingConfig(false);
+    }
+  };
 
   const playVoicePreview = async () => {
     if (!isVoiceServiceConfigured()) {
@@ -140,8 +210,8 @@ export default function VoiceAgent() {
               <Play className="mr-1.5 h-3.5 w-3.5" />
               {playingPreview ? "Loading..." : "Preview"}
             </Button>
-            <Button size="sm" onClick={() => toast.success("Configuration saved")}>
-              Save changes
+            <Button size="sm" onClick={saveConfig} disabled={savingConfig}>
+              {savingConfig ? "Saving..." : "Save changes"}
             </Button>
           </>
         }
@@ -504,6 +574,18 @@ export default function VoiceAgent() {
                     {voiceServiceBaseUrl || "Not configured"}
                   </div>
                 </div>
+                <div className="rounded-md border border-border bg-muted/20 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-medium text-muted-foreground">Config persistence</div>
+                      <div className="mt-1 text-sm font-medium">{configSyncLabel(configSyncState)}</div>
+                    </div>
+                    <Badge variant={configSyncState === "error" ? "destructive" : "secondary"} className="capitalize">
+                      {configSyncState}
+                    </Badge>
+                  </div>
+                  <div className="mt-2 text-xs text-muted-foreground">{configSyncMessage}</div>
+                </div>
 
                 <ServiceStatusRow
                   label="Backend"
@@ -681,6 +763,13 @@ function mapVoiceTone(value: string): RestaurantAgentConfig["tone"] {
 function parsePickupEta(value: string) {
   const minutes = Number.parseInt(value, 10);
   return Number.isFinite(minutes) && minutes > 0 ? minutes : defaultRestaurantAgentConfig.orders.defaultPickupEtaMinutes;
+}
+
+function configSyncLabel(state: "error" | "live" | "loading" | "local") {
+  if (state === "live") return "Supabase sync active";
+  if (state === "loading") return "Checking saved config";
+  if (state === "error") return "Needs attention";
+  return "Local browser storage";
 }
 
 function ServiceStatusRow({

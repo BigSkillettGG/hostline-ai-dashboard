@@ -12,6 +12,7 @@ import type {
 } from "@/data/mock";
 import type { ParsedMenuCategory } from "@/domain/menu-ingestion";
 import { calculateOnboardingProgress, type OnboardingDraft } from "@/domain/onboarding";
+import type { RestaurantAgentConfig } from "@/domain/restaurant-config";
 
 const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL ?? "").replace(/\/$/, "");
 const supabasePublishableKey =
@@ -80,6 +81,28 @@ interface SupabaseOnboardingProfileRow {
   progress_percent: number | null;
   status: string | null;
   total_required: number | null;
+  updated_at: string | null;
+}
+
+interface SupabaseAgentConfigRow {
+  after_hours_behavior: string | null;
+  answer_after_rings: number | null;
+  answer_faqs_enabled: boolean | null;
+  call_handling_mode: string | null;
+  disclosure_enabled: boolean | null;
+  escalation_phone_number: string | null;
+  greeting_template: string | null;
+  host_name: string | null;
+  id: string;
+  order_destinations: unknown;
+  orders_enabled: boolean | null;
+  payment_mode: string | null;
+  reservations_enabled: boolean | null;
+  reservation_mode: string | null;
+  reservation_provider: string | null;
+  sms_confirmations_enabled: boolean | null;
+  staff_escalation_enabled: boolean | null;
+  tone: string | null;
   updated_at: string | null;
 }
 
@@ -183,6 +206,10 @@ export function isMenuPersistenceConfigured() {
 }
 
 export function isReservationPersistenceConfigured() {
+  return Boolean(isSupabaseConfigured() && supabaseDemoLocationId);
+}
+
+export function isAgentConfigPersistenceConfigured() {
   return Boolean(isSupabaseConfigured() && supabaseDemoLocationId);
 }
 
@@ -317,6 +344,82 @@ export async function saveOnboardingProfileToSupabase(
   );
 
   return rows?.[0] ?? payload;
+}
+
+export async function fetchAgentConfigFromSupabase(
+  fallbackConfig: RestaurantAgentConfig,
+  locationId = supabaseDemoLocationId,
+): Promise<RestaurantAgentConfig | null> {
+  if (!isSupabaseConfigured() || !locationId) {
+    throw new Error("Supabase agent-config persistence is not configured.");
+  }
+
+  const rows = await supabaseRequest<SupabaseAgentConfigRow[]>(
+    "agent_configs",
+    new URLSearchParams({
+      limit: "1",
+      location_id: `eq.${locationId}`,
+      order: "updated_at.desc",
+      select: agentConfigSelectColumns,
+    }),
+  );
+
+  return rows[0] ? mapSupabaseAgentConfig(rows[0], fallbackConfig) : null;
+}
+
+export async function saveAgentConfigToSupabase(
+  config: RestaurantAgentConfig,
+  locationId = supabaseDemoLocationId,
+) {
+  if (!isSupabaseConfigured() || !locationId) {
+    throw new Error("Supabase agent-config persistence is not configured.");
+  }
+
+  const existingRows = await supabaseRequest<Array<Pick<SupabaseAgentConfigRow, "id">>>(
+    "agent_configs",
+    new URLSearchParams({
+      limit: "1",
+      location_id: `eq.${locationId}`,
+      select: "id",
+    }),
+  );
+
+  const payload = buildAgentConfigPayload(config, locationId);
+
+  if (existingRows[0]?.id) {
+    const rows = await supabaseRequest<SupabaseAgentConfigRow[]>(
+      "agent_configs",
+      new URLSearchParams({
+        id: `eq.${existingRows[0].id}`,
+        select: agentConfigSelectColumns,
+      }),
+      {
+        body: payload,
+        headers: {
+          Prefer: "return=representation",
+        },
+        method: "PATCH",
+      },
+    );
+
+    return rows[0] ?? payload;
+  }
+
+  const rows = await supabaseRequest<SupabaseAgentConfigRow[]>(
+    "agent_configs",
+    new URLSearchParams({
+      select: agentConfigSelectColumns,
+    }),
+    {
+      body: payload,
+      headers: {
+        Prefer: "return=representation",
+      },
+      method: "POST",
+    },
+  );
+
+  return rows[0] ?? payload;
 }
 
 export async function fetchPhoneNumbersFromSupabase(
@@ -520,6 +623,69 @@ export function mapSupabasePhoneNumber(row: SupabasePhoneNumberRow): PhoneNumber
     status: row.status ?? "provisioned",
     updatedAt: row.updated_at ?? undefined,
     voiceWebhookUrl: row.voice_webhook_url ?? undefined,
+  };
+}
+
+export function buildAgentConfigPayload(config: RestaurantAgentConfig, locationId: string) {
+  return {
+    after_hours_behavior: config.afterHoursBehavior,
+    answer_after_rings: config.answerAfterRings,
+    answer_faqs_enabled: config.capabilities.answerFaqs,
+    call_handling_mode: config.callHandlingMode,
+    disclosure_enabled: config.disclosureEnabled,
+    escalation_phone_number: config.escalationPhoneNumber,
+    greeting_template: config.greetingTemplate,
+    host_name: config.hostName,
+    location_id: locationId,
+    order_destinations: config.orders.destinations,
+    orders_enabled: config.orders.enabled,
+    payment_mode: config.orders.paymentMode,
+    reservations_enabled: config.capabilities.handleReservations,
+    reservation_mode: config.reservations.mode,
+    reservation_provider: config.reservations.provider,
+    sms_confirmations_enabled: config.capabilities.sendSmsConfirmations,
+    staff_escalation_enabled: config.capabilities.escalateToStaff,
+    tone: config.tone,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+export function mapSupabaseAgentConfig(
+  row: SupabaseAgentConfigRow,
+  fallbackConfig: RestaurantAgentConfig,
+): RestaurantAgentConfig {
+  const ordersEnabled = row.orders_enabled ?? fallbackConfig.orders.enabled;
+  const reservationsEnabled = row.reservations_enabled ?? fallbackConfig.capabilities.handleReservations;
+
+  return {
+    ...fallbackConfig,
+    afterHoursBehavior: normalizeStringField(row.after_hours_behavior, fallbackConfig.afterHoursBehavior),
+    answerAfterRings: row.answer_after_rings ?? fallbackConfig.answerAfterRings,
+    callHandlingMode: normalizeStringField(row.call_handling_mode, fallbackConfig.callHandlingMode),
+    capabilities: {
+      ...fallbackConfig.capabilities,
+      answerFaqs: row.answer_faqs_enabled ?? fallbackConfig.capabilities.answerFaqs,
+      escalateToStaff: row.staff_escalation_enabled ?? fallbackConfig.capabilities.escalateToStaff,
+      handleReservations: reservationsEnabled,
+      sendSmsConfirmations: row.sms_confirmations_enabled ?? fallbackConfig.capabilities.sendSmsConfirmations,
+      takeOrders: ordersEnabled,
+    },
+    disclosureEnabled: row.disclosure_enabled ?? fallbackConfig.disclosureEnabled,
+    escalationPhoneNumber: normalizeStringField(row.escalation_phone_number, fallbackConfig.escalationPhoneNumber),
+    greetingTemplate: normalizeStringField(row.greeting_template, fallbackConfig.greetingTemplate),
+    hostName: normalizeStringField(row.host_name, fallbackConfig.hostName),
+    orders: {
+      ...fallbackConfig.orders,
+      destinations: normalizeStringArrayWithFallback(row.order_destinations, fallbackConfig.orders.destinations),
+      enabled: ordersEnabled,
+      paymentMode: normalizeStringField(row.payment_mode, fallbackConfig.orders.paymentMode),
+    },
+    reservations: {
+      ...fallbackConfig.reservations,
+      mode: normalizeStringField(row.reservation_mode, fallbackConfig.reservations.mode),
+      provider: normalizeStringField(row.reservation_provider, fallbackConfig.reservations.provider),
+    },
+    tone: normalizeStringField(row.tone, fallbackConfig.tone),
   };
 }
 
@@ -743,6 +909,16 @@ function normalizeStringArray(value: unknown) {
   return strings.length ? strings : undefined;
 }
 
+function normalizeStringArrayWithFallback<T extends string>(value: unknown, fallback: T[]): T[] {
+  if (!Array.isArray(value)) return fallback;
+  const strings = value.filter((item): item is T => typeof item === "string" && item.trim().length > 0);
+  return strings.length ? strings : fallback;
+}
+
+function normalizeStringField<T extends string>(value: string | null | undefined, fallback: T): T {
+  return value?.trim() ? (value.trim() as T) : fallback;
+}
+
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
@@ -780,3 +956,6 @@ async function supabaseRequest<T>(
 
 const reservationSelectColumns =
   "id,guest_name,guest_phone,party_size,reservation_date,reservation_time,status,source,source_call_id,manual_request,provider,provider_reservation_id,notes,created_at";
+
+const agentConfigSelectColumns =
+  "id,host_name,tone,greeting_template,disclosure_enabled,call_handling_mode,answer_after_rings,after_hours_behavior,escalation_phone_number,answer_faqs_enabled,orders_enabled,reservations_enabled,sms_confirmations_enabled,staff_escalation_enabled,order_destinations,payment_mode,reservation_mode,reservation_provider,updated_at";

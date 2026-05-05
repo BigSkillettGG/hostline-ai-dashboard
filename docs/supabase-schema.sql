@@ -51,7 +51,8 @@ create table agent_configs (
   payment_mode text not null default 'pay_at_pickup',
   reservation_mode text not null default 'manual_request',
   reservation_provider text not null default 'none',
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  unique(location_id)
 );
 
 create table knowledge_sections (
