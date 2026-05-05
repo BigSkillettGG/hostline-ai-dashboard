@@ -2,7 +2,7 @@ import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, Phone, ShoppingBag, CalendarDays, BookOpen,
   Bot, Plug, Settings as SettingsIcon, UtensilsCrossed, Flame,
-  CreditCard, Users, Building2, ChevronDown,
+  CreditCard, Users, Building2, ChevronDown, AlertTriangle, BellRing,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
@@ -15,6 +15,7 @@ import { useState } from "react";
 const operations = [
   { title: "Dashboard", url: "/app", icon: LayoutDashboard, end: true },
   { title: "Calls", url: "/app/calls", icon: Phone },
+  { title: "Escalations", url: "/app/escalations", icon: AlertTriangle },
   { title: "Orders", url: "/app/orders", icon: ShoppingBag },
   { title: "Reservations", url: "/app/reservations", icon: CalendarDays },
 ];
@@ -26,6 +27,7 @@ const settings = [
   { title: "Voice Agent", url: "/app/voice-agent", icon: Bot },
   { title: "Integrations", url: "/app/integrations", icon: Plug },
   { title: "Phone & Hours", url: "/app/settings", icon: Phone },
+  { title: "Alerts & Routing", url: "/app/settings/alerts", icon: BellRing },
   { title: "Team", url: "/app/team", icon: Users },
   { title: "Restaurant Profile", url: "/app/profile", icon: Building2 },
   { title: "Billing", url: "/app/billing", icon: CreditCard },
