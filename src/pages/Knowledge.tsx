@@ -4,14 +4,64 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { knowledgeSections, faqs } from "@/data/mock";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Plus, Trash2, BookOpen } from "lucide-react";
+import { Plus, Trash2, BookOpen, Music, Globe, Link2, RefreshCw, CalendarDays } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import type { EntertainmentSource, EntertainmentEvent, SyncFrequency, EventType } from "@/types/sources";
+
+const EVENT_TYPES: EventType[] = ["Live music", "DJ", "Trivia", "Open mic", "Other"];
 
 export default function Knowledge() {
   const [items, setItems] = useState(faqs);
+
+  // TODO: replace local state with Lovable Cloud + Firecrawl-backed sync job
+  const [musicSources, setMusicSources] = useState<EntertainmentSource[]>([]);
+  const [newMusicUrl, setNewMusicUrl] = useState("");
+  const [newMusicFreq, setNewMusicFreq] = useState<SyncFrequency>("daily");
+
+  const [events, setEvents] = useState<EntertainmentEvent[]>([
+    { id: "e1", date: new Date(Date.now() + 86400000).toISOString().slice(0, 10), startTime: "20:00", endTime: "23:00", performer: "The Wandering Trio", type: "Live music", notes: "No cover" },
+  ]);
+  const [draft, setDraft] = useState<Partial<EntertainmentEvent>>({ type: "Live music" });
+
+  const addSource = () => {
+    try {
+      const u = new URL(newMusicUrl.trim());
+      if (!/^https?:$/.test(u.protocol)) throw new Error();
+      setMusicSources([...musicSources, { id: crypto.randomUUID(), url: u.toString(), frequency: newMusicFreq, lastSyncedAt: "—", status: "pending" }]);
+      setNewMusicUrl("");
+      toast.success("Source added — first sync queued");
+    } catch {
+      toast.error("Enter a valid http(s) URL");
+    }
+  };
+
+  const addEvent = () => {
+    if (!draft.date || !draft.startTime || !draft.performer) {
+      toast.error("Date, start time, and performer are required");
+      return;
+    }
+    setEvents([
+      ...events,
+      {
+        id: crypto.randomUUID(),
+        date: draft.date!,
+        startTime: draft.startTime!,
+        endTime: draft.endTime || "",
+        performer: draft.performer!,
+        type: (draft.type as EventType) || "Live music",
+        notes: draft.notes,
+      },
+    ]);
+    setDraft({ type: "Live music" });
+    toast.success("Event added");
+  };
+
+  const sortedEvents = [...events].sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
 
   return (
     <>
