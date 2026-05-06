@@ -101,9 +101,11 @@ describe("staff alert formatting", () => {
       summary: "Staff-review pickup order created.",
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(fetchMock.mock.calls[0]?.[0]).toContain("/rest/v1/alert_routing_configs?");
     expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toContain("To=%2B15550100");
     expect(String(fetchMock.mock.calls[2]?.[1]?.body)).toContain("To=%2B15550200");
+    expect(fetchMock.mock.calls[3]?.[0]).toBe("https://example.supabase.co/rest/v1/staff_alert_events");
+    expect(String(fetchMock.mock.calls[3]?.[1]?.body)).toContain('"status":"sent"');
   });
 });

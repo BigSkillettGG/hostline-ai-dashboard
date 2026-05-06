@@ -16,8 +16,16 @@ import { calculateOnboardingProgress, type OnboardingDraft } from "@/domain/onbo
 import {
   defaultAlertRoutingConfig,
   normalizeAlertRoutingConfig,
+  type AlertRecipient,
+  type AlertRouteKind,
   type AlertRoutingConfig,
+  type AlertSeverity,
 } from "@/domain/alert-routing";
+import {
+  channelsForRecipients,
+  normalizeStaffAlertEventStatus,
+  type StaffAlertEvent,
+} from "@/domain/alert-events";
 import type { RestaurantAgentConfig } from "@/domain/restaurant-config";
 import type {
   IngestionJob,
@@ -142,6 +150,23 @@ interface SupabaseAlertRoutingConfigRow {
   config: unknown;
   id: string;
   updated_at: string | null;
+}
+
+interface SupabaseStaffAlertEventRow {
+  call_id: string | null;
+  caller_phone: string | null;
+  channels: unknown;
+  created_at: string | null;
+  error_message: string | null;
+  id: string;
+  kind: string | null;
+  message: string | null;
+  recipients: unknown;
+  route_snapshot: unknown;
+  sent_at: string | null;
+  severity: string | null;
+  status: string | null;
+  summary: string | null;
 }
 
 interface SupabasePhoneNumberRow {
@@ -308,6 +333,10 @@ export function isAgentConfigPersistenceConfigured() {
 }
 
 export function isAlertRoutingPersistenceConfigured() {
+  return Boolean(isSupabaseConfigured() && supabaseDemoLocationId);
+}
+
+export function isStaffAlertEventPersistenceConfigured() {
   return Boolean(isSupabaseConfigured() && supabaseDemoLocationId);
 }
 
@@ -617,6 +646,26 @@ export async function saveAlertRoutingConfigToSupabase(
         updatedAt: rows[0].updated_at ?? undefined,
       })
     : config;
+}
+
+export async function fetchStaffAlertEventsFromSupabase(
+  locationId = supabaseDemoLocationId,
+): Promise<StaffAlertEvent[]> {
+  if (!isSupabaseConfigured() || !locationId) {
+    throw new Error("Supabase alert event persistence is not configured.");
+  }
+
+  const rows = await supabaseRequest<SupabaseStaffAlertEventRow[]>(
+    "staff_alert_events",
+    new URLSearchParams({
+      limit: "100",
+      location_id: `eq.${locationId}`,
+      order: "created_at.desc",
+      select: staffAlertEventSelectColumns,
+    }),
+  );
+
+  return rows.map(mapSupabaseStaffAlertEvent);
 }
 
 export async function fetchPhoneNumbersFromSupabase(
@@ -1279,6 +1328,33 @@ export function mapSupabaseReservations(rows: SupabaseReservationRow[]): Reserva
   }));
 }
 
+export function mapSupabaseStaffAlertEvent(row: SupabaseStaffAlertEventRow): StaffAlertEvent {
+  const recipients = normalizeAlertRecipients(row.recipients);
+  const routeSnapshot = isObjectRecord(row.route_snapshot) ? row.route_snapshot : {};
+  const smsRecipientCount = readNumber(routeSnapshot.smsRecipientCount) ?? countRecipientsByChannel(recipients, "sms");
+  const emailRecipientCount =
+    readNumber(routeSnapshot.emailRecipientCount) ?? countRecipientsByChannel(recipients, "email");
+
+  return {
+    callId: row.call_id ?? undefined,
+    callerPhone: row.caller_phone ?? undefined,
+    channels: normalizeStringArray(row.channels) ?? channelsForRecipients({ emailRecipientCount, smsRecipientCount }),
+    createdAt: row.created_at ?? "",
+    emailRecipientCount,
+    errorMessage: row.error_message ?? undefined,
+    fallbackUsed: readBoolean(routeSnapshot.fallbackUsed) ?? false,
+    id: row.id,
+    kind: normalizeAlertRouteKind(row.kind),
+    message: row.message ?? "",
+    recipients,
+    sentAt: row.sent_at ?? undefined,
+    severity: normalizeAlertSeverity(row.severity),
+    smsRecipientCount,
+    status: normalizeStaffAlertEventStatus(row.status),
+    summary: row.summary ?? "",
+  };
+}
+
 export function mapSupabaseCalls(
   calls: SupabaseCallRow[],
   transcriptTurns: SupabaseTranscriptTurnRow[],
@@ -1420,6 +1496,57 @@ function normalizeStringArray(value: unknown) {
   return strings.length ? strings : undefined;
 }
 
+function normalizeAlertRecipients(value: unknown): AlertRecipient[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .filter(isObjectRecord)
+    .map((recipient) => ({
+      channel: recipient.channel === "email" || recipient.channel === "both" ? recipient.channel : "sms",
+      email: typeof recipient.email === "string" ? recipient.email : "",
+      id: typeof recipient.id === "string" ? recipient.id : "recipient",
+      name: typeof recipient.name === "string" ? recipient.name : "",
+      phone: typeof recipient.phone === "string" ? recipient.phone : "",
+    }));
+}
+
+function normalizeAlertRouteKind(value: string | null | undefined): AlertRouteKind {
+  if (
+    value === "complaint" ||
+    value === "delivery_failure" ||
+    value === "handoff" ||
+    value === "low_confidence" ||
+    value === "order" ||
+    value === "reservation" ||
+    value === "sales"
+  ) {
+    return value;
+  }
+
+  return "handoff";
+}
+
+function normalizeAlertSeverity(value: string | null | undefined): AlertSeverity {
+  if (value === "low" || value === "medium" || value === "high") return value;
+  return "medium";
+}
+
+function countRecipientsByChannel(recipients: AlertRecipient[], channel: "email" | "sms") {
+  return recipients.filter((recipient) =>
+    channel === "sms"
+      ? Boolean(recipient.phone && (recipient.channel === "sms" || recipient.channel === "both"))
+      : Boolean(recipient.email && (recipient.channel === "email" || recipient.channel === "both")),
+  ).length;
+}
+
+function readNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function readBoolean(value: unknown) {
+  return typeof value === "boolean" ? value : undefined;
+}
+
 function normalizeStringArrayWithFallback<T extends string>(value: unknown, fallback: T[]): T[] {
   if (!Array.isArray(value)) return fallback;
   const strings = value.filter((item): item is T => typeof item === "string" && item.trim().length > 0);
@@ -1511,3 +1638,6 @@ const menuSourceSelectColumns =
 
 const ingestionJobSelectColumns =
   "id,source_id,job_type,status,result,error_message,created_at,completed_at";
+
+const staffAlertEventSelectColumns =
+  "id,call_id,kind,severity,status,summary,message,caller_phone,recipients,channels,route_snapshot,error_message,sent_at,created_at";

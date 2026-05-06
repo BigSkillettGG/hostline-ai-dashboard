@@ -63,6 +63,24 @@ create table alert_routing_configs (
   unique(location_id)
 );
 
+create table staff_alert_events (
+  id uuid primary key default gen_random_uuid(),
+  location_id uuid not null references locations(id) on delete cascade,
+  call_id uuid references calls(id) on delete set null,
+  kind text not null,
+  severity text not null default 'medium',
+  status text not null default 'sent',
+  summary text not null,
+  message text not null,
+  caller_phone text,
+  recipients jsonb not null default '[]'::jsonb,
+  channels jsonb not null default '[]'::jsonb,
+  route_snapshot jsonb not null default '{}'::jsonb,
+  error_message text,
+  sent_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
 create table knowledge_sections (
   id uuid primary key default gen_random_uuid(),
   location_id uuid not null references locations(id) on delete cascade,

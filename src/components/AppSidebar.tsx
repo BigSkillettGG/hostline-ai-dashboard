@@ -15,6 +15,7 @@ import { useState } from "react";
 
 const operations = [
   { title: "Dashboard", url: "/app", icon: LayoutDashboard, end: true },
+  { title: "Alert Log", url: "/app/alert-log", icon: BellRing },
   { title: "Calls", url: "/app/calls", icon: Phone },
   { title: "Orders", url: "/app/orders", icon: ShoppingBag },
   { title: "Kitchen", url: "/app/kitchen", icon: ChefHat },

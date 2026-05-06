@@ -20,6 +20,7 @@ import {
   mapSupabaseOrders,
   mapSupabasePhoneNumber,
   mapSupabaseReservations,
+  mapSupabaseStaffAlertEvent,
 } from "./supabase-rest";
 import { defaultAlertRoutingConfig } from "@/domain/alert-routing";
 
@@ -192,6 +193,46 @@ describe("Supabase alert routing payloads", () => {
     expect(payload.config.routes.order.recipients.length).toBeGreaterThan(0);
     expect(new Date(payload.updated_at).toString()).not.toBe("Invalid Date");
     expect(payload.config.updatedAt).toBe(payload.updated_at);
+  });
+});
+
+describe("Supabase staff alert event mapping", () => {
+  it("maps persisted alert events into dashboard records", () => {
+    const event = mapSupabaseStaffAlertEvent({
+      call_id: "call_1",
+      caller_phone: "+15550100",
+      channels: ["sms", "email/webhook"],
+      created_at: "2026-05-06T14:00:00.000Z",
+      error_message: null,
+      id: "alert_1",
+      kind: "complaint",
+      message: "Complaint alert - Olive & Ember",
+      recipients: [
+        { channel: "both", email: "gm@example.com", id: "gm", name: "GM", phone: "+15550200" },
+      ],
+      route_snapshot: {
+        emailRecipientCount: 1,
+        fallbackUsed: false,
+        smsRecipientCount: 1,
+      },
+      sent_at: "2026-05-06T14:00:01.000Z",
+      severity: "high",
+      status: "sent",
+      summary: "Complaint or refund risk detected.",
+    });
+
+    expect(event).toMatchObject({
+      callId: "call_1",
+      channels: ["sms", "email/webhook"],
+      emailRecipientCount: 1,
+      fallbackUsed: false,
+      id: "alert_1",
+      kind: "complaint",
+      severity: "high",
+      smsRecipientCount: 1,
+      status: "sent",
+    });
+    expect(event.recipients[0]).toMatchObject({ channel: "both", name: "GM" });
   });
 });
 

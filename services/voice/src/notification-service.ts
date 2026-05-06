@@ -38,6 +38,18 @@ interface StaffAlertRoutingProvider {
   resolve(input: StaffAlertInput): Promise<ResolvedStaffAlertRoute>;
 }
 
+interface StaffAlertEventLogger {
+  record(input: StaffAlertEventLogInput): Promise<void>;
+}
+
+interface StaffAlertEventLogInput {
+  errorMessage?: string;
+  input: StaffAlertInput;
+  message: string;
+  route: ResolvedStaffAlertRoute;
+  status: "failed" | "sent" | "skipped";
+}
+
 export function createStaffNotificationService(env: VoiceServiceEnv): StaffNotificationService {
   const channels: StaffNotificationService[] = [];
 
@@ -53,10 +65,16 @@ export function createStaffNotificationService(env: VoiceServiceEnv): StaffNotif
     channels.push(new WebhookStaffNotificationService(env.STAFF_ALERT_WEBHOOK_URL));
   }
 
-  if (!channels.length) return new NoopStaffNotificationService();
-
-  const sink = channels.length === 1 ? channels[0] : new CompositeStaffNotificationService(channels);
-  return new RoutedStaffNotificationService(sink, new SupabaseAlertRoutingProvider(env));
+  const sink = channels.length === 0
+    ? new NoopStaffNotificationService()
+    : channels.length === 1
+      ? channels[0]
+      : new CompositeStaffNotificationService(channels);
+  return new RoutedStaffNotificationService(
+    sink,
+    new SupabaseAlertRoutingProvider(env),
+    new SupabaseStaffAlertEventLogger(env),
+  );
 }
 
 export function formatStaffAlertMessage(input: StaffAlertInput) {
@@ -97,22 +115,60 @@ class RoutedStaffNotificationService implements StaffNotificationService {
   constructor(
     private readonly sink: StaffNotificationService,
     private readonly routingProvider: StaffAlertRoutingProvider,
+    private readonly eventLogger: StaffAlertEventLogger,
   ) {
     this.configured = sink.configured;
   }
 
   async sendStaffAlert(input: StaffAlertInput) {
     const route = await this.routingProvider.resolve(input);
+    const message = formatStaffAlertMessage(input);
 
     if (!route.enabled) {
       console.info("[staff-alerts] route disabled; alert not sent", {
         kind: input.kind,
         summary: input.summary,
       });
+      await this.eventLogger.record({
+        errorMessage: "Route disabled",
+        input,
+        message,
+        route,
+        status: "skipped",
+      });
       return;
     }
 
-    await this.sink.sendStaffAlert(input, route);
+    if (!this.sink.configured) {
+      await this.sink.sendStaffAlert(input, route);
+      await this.eventLogger.record({
+        errorMessage: "No staff alert delivery channels configured",
+        input,
+        message,
+        route,
+        status: "skipped",
+      });
+      return;
+    }
+
+    try {
+      await this.sink.sendStaffAlert(input, route);
+      await this.eventLogger.record({
+        input,
+        message,
+        route,
+        status: "sent",
+      });
+    } catch (error) {
+      await this.eventLogger.record({
+        errorMessage: error instanceof Error ? error.message : "Staff alert delivery failed",
+        input,
+        message,
+        route,
+        status: "failed",
+      });
+      throw error;
+    }
   }
 }
 
@@ -301,10 +357,74 @@ class SupabaseAlertRoutingProvider implements StaffAlertRoutingProvider {
   }
 }
 
+class SupabaseStaffAlertEventLogger implements StaffAlertEventLogger {
+  private readonly key?: string;
+  private readonly locationId?: string;
+  private readonly restUrl?: string;
+
+  constructor(env: VoiceServiceEnv) {
+    this.key = env.SUPABASE_SECRET_KEY;
+    this.locationId = env.SUPABASE_DEMO_LOCATION_ID;
+    this.restUrl = env.SUPABASE_URL ? `${env.SUPABASE_URL.replace(/\/$/, "")}/rest/v1` : undefined;
+  }
+
+  async record(input: StaffAlertEventLogInput) {
+    if (!this.restUrl || !this.key) return;
+
+    const locationId = normalizeLocationId(input.input.locationId) ?? this.locationId;
+    if (!locationId) return;
+
+    try {
+      const now = new Date().toISOString();
+      const response = await fetch(`${this.restUrl}/staff_alert_events`, {
+        body: JSON.stringify({
+          call_id: input.input.callId ?? null,
+          caller_phone: input.input.callerPhone ?? null,
+          channels: channelsForRoute(input.route),
+          error_message: input.errorMessage ?? null,
+          kind: input.input.kind,
+          location_id: locationId,
+          message: input.message,
+          recipients: input.route.recipients,
+          route_snapshot: {
+            emailRecipientCount: input.route.emailRecipients.length,
+            enabled: input.route.enabled,
+            fallbackUsed: input.route.fallbackUsed,
+            smsRecipientCount: input.route.smsRecipients.length,
+          },
+          sent_at: input.status === "sent" ? now : null,
+          severity: input.input.severity ?? defaultSeverityFor(input.input.kind),
+          status: input.status,
+          summary: input.input.summary,
+        }),
+        headers: {
+          apikey: this.key,
+          Authorization: `Bearer ${this.key}`,
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        console.warn("[staff-alerts] alert event log failed", response.status, await response.text());
+      }
+    } catch (error) {
+      console.warn("[staff-alerts] alert event log failed", error);
+    }
+  }
+}
+
 function defaultSeverityFor(kind: StaffAlertKind): AlertSeverity {
   if (kind === "complaint" || kind === "delivery_failure") return "high";
   if (kind === "low_confidence") return "medium";
   return "medium";
+}
+
+function channelsForRoute(route: ResolvedStaffAlertRoute) {
+  return [
+    route.smsRecipients.length ? "sms" : undefined,
+    route.emailRecipients.length ? "email/webhook" : undefined,
+  ].filter((channel): channel is string => Boolean(channel));
 }
 
 function normalizeLocationId(locationId?: string) {

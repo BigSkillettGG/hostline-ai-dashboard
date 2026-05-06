@@ -14,6 +14,7 @@ import AppLayout from "./components/AppLayout";
 import { RequireRole } from "./components/RequireRole";
 import Dashboard from "./pages/Dashboard";
 import Onboarding from "./pages/Onboarding";
+import AlertLog from "./pages/AlertLog";
 import Calls from "./pages/Calls";
 import Escalations from "./pages/Escalations";
 import Orders from "./pages/Orders";
@@ -60,6 +61,7 @@ const App = () => (
           <Route path="/app" element={<RequireRole role="admin"><AppLayout /></RequireRole>}>
             <Route index element={<Dashboard />} />
             <Route path="onboarding" element={<Onboarding />} />
+            <Route path="alert-log" element={<AlertLog />} />
             <Route path="calls" element={<Calls />} />
             <Route path="escalations" element={<Escalations />} />
             <Route path="orders" element={<Orders />} />

@@ -18,6 +18,7 @@ This service is the production path for inbound restaurant phone calls.
 - Records a staff-review order delivery attempt for each captured phone order.
 - Creates staff-confirmed reservation requests when a caller provides date, time, party size, and guest details.
 - Sends staff alerts by Supabase-configured route for captured orders, reservation requests, complaints, human handoffs, delivery failures, low-confidence reviews, and sales/vendor messages.
+- Writes staff alert delivery audit rows to `staff_alert_events` for sent, skipped, and failed alerts.
 - Provides a direct ElevenLabs preview endpoint at `POST /voice/preview`.
 - Validates Twilio signatures when `REQUIRE_TWILIO_SIGNATURE=true`.
 
@@ -70,6 +71,7 @@ When Supabase is configured, Twilio requests can include `locationId` in the web
 - `POST /telephony/provision-number` purchases a selected number, sets its voice webhook to `/twilio/voice?locationId=...`, writes `phone_numbers`, and updates `locations.ai_host_phone`.
 - `POST /ingestion/run-next` processes one queued menu ingestion job, fetches URL/text content, parses menu items, replaces `menu_categories` and `menu_items`, and updates `ingestion_jobs` plus `menu_sources`.
 - Staff alert routing is loaded from `alert_routing_configs` per location when Supabase is configured. If no route exists, the service falls back to `STAFF_ALERT_SMS_TO`.
+- Staff alert outcomes are logged to `staff_alert_events` when Supabase is configured. Logging failures are warned but do not block the live call.
 
 When `HOSTLINE_INTERNAL_API_KEY` is set, callers must send `x-hostline-api-key`. In production, provisioning and ingestion worker endpoints are rejected unless this key is configured.
 
