@@ -6,6 +6,7 @@ import {
   type RestaurantMenuItem,
   type RestaurantVoiceContext,
 } from "./restaurant-context";
+import { buildSupabaseServiceHeaders } from "./supabase-headers";
 
 type OnboardingDraftValue = string | boolean | undefined;
 type OnboardingDraft = Record<string, OnboardingDraftValue>;
@@ -207,11 +208,7 @@ class SupabaseRestaurantContextStore implements RestaurantContextStore {
 
   private async request<T>(table: string, query: string) {
     const response = await fetch(`${this.restUrl}/${table}?${query}`, {
-      headers: {
-        apikey: this.key,
-        Authorization: `Bearer ${this.key}`,
-        "Content-Type": "application/json",
-      },
+      headers: buildSupabaseServiceHeaders(this.key),
     });
 
     if (!response.ok) {

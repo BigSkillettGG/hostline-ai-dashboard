@@ -8,6 +8,7 @@ const baseEnv: VoiceServiceEnv = {
   ELEVENLABS_VOICE_ID: "voice_1",
   NODE_ENV: "production",
   OPENAI_MODEL: "gpt-5-mini",
+  OPENAI_REPLY_TIMEOUT_MS: 4500,
   PORT: 8787,
   REQUIRE_TWILIO_SIGNATURE: true,
   TWILIO_API_BASE_URL: "https://api.twilio.com",

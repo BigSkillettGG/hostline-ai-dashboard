@@ -28,4 +28,10 @@ describe("restaurant fallback replies", () => {
     expect(instructions).toContain("FAQs: Q: Do you sell gift cards?");
     expect(instructions).toContain("Knowledge sections: Private events");
   });
+
+  it("coaches the model for noisy calls and rude callers", () => {
+    const instructions = buildRestaurantInstructions(demoRestaurantContext);
+    expect(instructions).toContain("noisy phone audio");
+    expect(instructions).toContain("If a caller is rude");
+  });
 });

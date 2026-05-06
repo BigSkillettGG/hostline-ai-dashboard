@@ -1,5 +1,6 @@
 import type { VoiceServiceEnv } from "./env";
 import { parseMenuText, type ParsedMenuCategory } from "../../../src/domain/menu-ingestion";
+import { buildSupabaseServiceHeaders } from "./supabase-headers";
 
 export interface MenuIngestionService {
   configured: boolean;
@@ -315,12 +316,7 @@ class SupabaseMenuIngestionService implements MenuIngestionService {
     const query = options.query ? `?${options.query}` : "";
     const response = await fetch(`${this.restUrl}/${table}${query}`, {
       body: options.body ? JSON.stringify(options.body) : undefined,
-      headers: {
-        apikey: this.key,
-        Authorization: `Bearer ${this.key}`,
-        "Content-Type": "application/json",
-        ...options.headers,
-      },
+      headers: buildSupabaseServiceHeaders(this.key, options.headers),
       method: options.method,
     });
 

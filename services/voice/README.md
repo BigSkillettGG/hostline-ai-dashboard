@@ -12,9 +12,12 @@ This service is the production path for inbound restaurant phone calls.
 - Receives ConversationRelay setup, prompt, DTMF, interrupt, and error messages.
 - Generates restaurant-host replies with OpenAI Responses API when `OPENAI_API_KEY` is set.
 - Falls back to deterministic restaurant-safe replies when OpenAI is not configured.
+- Times out slow OpenAI replies using `OPENAI_REPLY_TIMEOUT_MS` and falls back safely instead of leaving dead air.
+- Handles unclear audio, bad connections, and rude callers with short recovery replies and staff-review tasks when needed.
 - Persists calls and transcript turns to Supabase when the server has a secret key and location ID.
 - Loads the onboarded restaurant profile from Supabase for greetings, policies, hours, parking, reservation rules, menu items, FAQs, and knowledge sections.
 - Creates staff-review pickup orders when the caller clearly asks for pickup/takeout and mentions recognized menu items.
+- Accumulates multi-turn pickup order drafts, so callers can pause between items before saying they are done.
 - Records a staff-review order delivery attempt for each captured phone order.
 - Creates staff-confirmed reservation requests when a caller provides date, time, party size, and guest details.
 - Sends staff alerts by Supabase-configured route for captured orders, reservation requests, complaints, human handoffs, delivery failures, low-confidence reviews, and sales/vendor messages.

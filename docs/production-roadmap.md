@@ -60,6 +60,7 @@ There are 12 production workstreams:
 - The voice service health response now includes production readiness checks for deployment URLs, secrets, Supabase, OpenAI, ElevenLabs, Twilio, CORS, and signature enforcement.
 - The voice service now has a bundled production build, Dockerfile, `/ready` endpoint, and deployment-check script for the first live call bring-up.
 - The internal Telephony page now shows live-call webhook URLs, ConversationRelay websocket targets, TwiML preview, and first-call checklist status from the deployed voice service.
+- The live voice runtime now includes first-call hardening for unclear audio, rude callers, multi-turn order capture, OpenAI response timeouts, prompt failure recovery, and structured turn-latency logs.
 
 ## Key Product Standard
 

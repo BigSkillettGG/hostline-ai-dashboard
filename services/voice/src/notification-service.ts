@@ -1,4 +1,5 @@
 import type { VoiceServiceEnv } from "./env";
+import { buildSupabaseServiceHeaders } from "./supabase-headers";
 import {
   normalizeAlertRoutingConfig,
   resolveAlertRoute,
@@ -312,11 +313,7 @@ class SupabaseAlertRoutingProvider implements StaffAlertRoutingProvider {
         select: "config,updated_at",
       });
       const response = await fetch(`${this.restUrl}/alert_routing_configs?${params.toString()}`, {
-        headers: {
-          apikey: this.key,
-          Authorization: `Bearer ${this.key}`,
-          "Content-Type": "application/json",
-        },
+        headers: buildSupabaseServiceHeaders(this.key),
       });
 
       if (!response.ok) return null;
@@ -397,11 +394,7 @@ class SupabaseStaffAlertEventLogger implements StaffAlertEventLogger {
           status: input.status,
           summary: input.input.summary,
         }),
-        headers: {
-          apikey: this.key,
-          Authorization: `Bearer ${this.key}`,
-          "Content-Type": "application/json",
-        },
+        headers: buildSupabaseServiceHeaders(this.key),
         method: "POST",
       });
 
@@ -431,11 +424,7 @@ class SupabaseStaffAlertEventLogger implements StaffAlertEventLogger {
           task_type: taskTypeFor(input.input.kind),
           title: taskTitleFor(input),
         }),
-        headers: {
-          apikey: this.key,
-          Authorization: `Bearer ${this.key}`,
-          "Content-Type": "application/json",
-        },
+        headers: buildSupabaseServiceHeaders(this.key),
         method: "POST",
       });
 

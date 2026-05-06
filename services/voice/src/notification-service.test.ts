@@ -8,6 +8,7 @@ const env: VoiceServiceEnv = {
   ELEVENLABS_VOICE_ID: "voice_123",
   NODE_ENV: "test",
   OPENAI_MODEL: "gpt-5-mini",
+  OPENAI_REPLY_TIMEOUT_MS: 4500,
   PORT: 8787,
   REQUIRE_TWILIO_SIGNATURE: false,
   STAFF_ALERT_SMS_TO: "+15550999",

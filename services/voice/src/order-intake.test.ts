@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { capturePickupOrder, mergeCapturedOrderItems } from "./order-intake";
+import {
+  captureCustomerName,
+  capturePickupOrder,
+  hasOrderSubmitIntent,
+  mergeCapturedOrderItems,
+  summarizeCapturedOrderItems,
+} from "./order-intake";
 import { demoRestaurantContext } from "./restaurant-context";
 
 describe("pickup order intake", () => {
@@ -24,6 +30,24 @@ describe("pickup order intake", () => {
     expect(capturePickupOrder("Do you have caesar salad tonight?", demoRestaurantContext)).toBeNull();
   });
 
+  it("can capture follow-up items after order intent was already established", () => {
+    const order = capturePickupOrder("and one caesar salad", demoRestaurantContext, { requireIntent: false });
+
+    expect(order?.items).toEqual([
+      { modifiers: undefined, name: "Caesar Salad", priceCents: 1400, quantity: 1 },
+    ]);
+  });
+
+  it("captures lowercase spoken names from STT", () => {
+    expect(captureCustomerName("that is all under tim chen")).toBe("Tim Chen");
+    expect(captureCustomerName("name is sarah")).toBe("Sarah");
+  });
+
+  it("detects order submission language", () => {
+    expect(hasOrderSubmitIntent("that's all under Sarah")).toBe(true);
+    expect(hasOrderSubmitIntent("go ahead and place it")).toBe(true);
+  });
+
   it("merges duplicate captured items", () => {
     const items = mergeCapturedOrderItems(
       [{ name: "Margherita Pizza", priceCents: 1800, quantity: 1 }],
@@ -33,5 +57,6 @@ describe("pickup order intake", () => {
     expect(items).toEqual([
       { modifiers: ["Light cheese"], name: "Margherita Pizza", priceCents: 1800, quantity: 3 },
     ]);
+    expect(summarizeCapturedOrderItems(items)).toBe("3 Margherita Pizza");
   });
 });

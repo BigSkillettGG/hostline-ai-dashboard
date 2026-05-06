@@ -30,6 +30,7 @@ const envSchema = z.object({
   TWILIO_LANGUAGE: z.string().default("en-US"),
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_MODEL: z.string().default("gpt-5-mini"),
+  OPENAI_REPLY_TIMEOUT_MS: z.coerce.number().int().positive().default(4500),
   ELEVENLABS_API_KEY: z.string().optional(),
   ELEVENLABS_VOICE_ID: z.string().default("UgBBYS2sOqTuMpoF3BR0"),
   ELEVENLABS_MODEL_ID: z.string().default("eleven_flash_v2_5"),

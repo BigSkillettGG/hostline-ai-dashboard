@@ -5,7 +5,7 @@ import type { TranscriptTurn } from "./types";
 export interface GenerateRestaurantReplyInput {
   callerUtterance: string;
   context: RestaurantVoiceContext;
-  env: Pick<VoiceServiceEnv, "OPENAI_API_KEY" | "OPENAI_MODEL">;
+  env: Pick<VoiceServiceEnv, "OPENAI_API_KEY" | "OPENAI_MODEL" | "OPENAI_REPLY_TIMEOUT_MS">;
   transcript: TranscriptTurn[];
 }
 
@@ -14,8 +14,12 @@ export async function generateRestaurantReply(input: GenerateRestaurantReplyInpu
     return fallbackRestaurantReply(input.callerUtterance, input.context);
   }
 
+  const startedAt = Date.now();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), input.env.OPENAI_REPLY_TIMEOUT_MS);
   try {
     const response = await fetch("https://api.openai.com/v1/responses", {
+      signal: controller.signal,
       method: "POST",
       headers: {
         Authorization: `Bearer ${input.env.OPENAI_API_KEY}`,
@@ -25,7 +29,7 @@ export async function generateRestaurantReply(input: GenerateRestaurantReplyInpu
         model: input.env.OPENAI_MODEL,
         instructions: buildRestaurantInstructions(input.context),
         input: buildConversationInput(input.callerUtterance, input.transcript),
-        max_output_tokens: 160,
+        max_output_tokens: 120,
         store: false,
       }),
     });
@@ -36,10 +40,22 @@ export async function generateRestaurantReply(input: GenerateRestaurantReplyInpu
     }
 
     const data = (await response.json()) as { output_text?: string; output?: unknown[] };
-    return extractOutputText(data) ?? fallbackRestaurantReply(input.callerUtterance, input.context);
+    const reply = extractOutputText(data) ?? fallbackRestaurantReply(input.callerUtterance, input.context);
+    console.info("[voice-agent] OpenAI reply generated", {
+      latencyMs: Date.now() - startedAt,
+      model: input.env.OPENAI_MODEL,
+      replyLength: reply.length,
+    });
+    return reply;
   } catch (error) {
-    console.error("[voice-agent] Falling back after OpenAI error", error);
+    console.error("[voice-agent] Falling back after OpenAI error", {
+      error,
+      latencyMs: Date.now() - startedAt,
+      model: input.env.OPENAI_MODEL,
+    });
     return fallbackRestaurantReply(input.callerUtterance, input.context);
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -56,7 +72,10 @@ export function buildRestaurantInstructions(context: RestaurantVoiceContext) {
   return [
     `You are ${context.hostName}, the virtual host for ${context.restaurantName}.`,
     "Sound warm, concise, and natural on the phone.",
+    "Expect callers with accents, noisy phone audio, fragments, and corrections. Ask one short clarifying question when needed.",
     "Keep replies under two short sentences unless confirming an order.",
+    "For multi-item orders, acknowledge captured items briefly and ask what else until the caller says they are done.",
+    "If a caller is rude, stay calm and helpful. Do not argue, shame, or mirror profanity.",
     "Never collect raw credit card numbers. Payment is pay at pickup unless a POS payment flow is explicitly connected.",
     "Never guarantee allergen safety. Severe allergies require staff confirmation.",
     "If a caller asks for refunds, complaints, catering, private events, alcohol policy, or a human, escalate.",

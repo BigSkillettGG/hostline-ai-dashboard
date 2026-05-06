@@ -8,6 +8,7 @@ const env: VoiceServiceEnv = {
   ELEVENLABS_VOICE_ID: "voice_123",
   NODE_ENV: "test",
   OPENAI_MODEL: "gpt-5-mini",
+  OPENAI_REPLY_TIMEOUT_MS: 4500,
   PORT: 8787,
   REQUIRE_TWILIO_SIGNATURE: false,
   SUPABASE_DEMO_LOCATION_ID: "00000000-0000-4000-8000-000000000001",
@@ -48,11 +49,13 @@ describe("Supabase call store", () => {
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({
-          Authorization: "Bearer sb_secret_test",
+          apikey: "sb_secret_test",
           Prefer: "return=representation,resolution=merge-duplicates",
         }),
       }),
     );
+    const headers = fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>;
+    expect(headers.Authorization).toBeUndefined();
   });
 
   it("skips transcript writes until a call id exists", async () => {

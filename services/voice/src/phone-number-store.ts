@@ -1,4 +1,5 @@
 import type { VoiceServiceEnv } from "./env";
+import { buildSupabaseServiceHeaders } from "./supabase-headers";
 import type { ProvisionPhoneNumberInput, ProvisionedPhoneNumber } from "./telephony";
 
 export interface PhoneNumberStore {
@@ -83,12 +84,7 @@ class SupabasePhoneNumberStore implements PhoneNumberStore {
     const query = options.query ? `?${options.query}` : "";
     const response = await fetch(`${this.restUrl}/${table}${query}`, {
       body: JSON.stringify(options.body),
-      headers: {
-        apikey: this.key,
-        Authorization: `Bearer ${this.key}`,
-        "Content-Type": "application/json",
-        ...options.headers,
-      },
+      headers: buildSupabaseServiceHeaders(this.key, options.headers),
       method: options.method,
     });
 

@@ -5,6 +5,7 @@ describe("conversation relay staff-review triggers", () => {
   it("classifies complaint and refund language as a complaint", () => {
     expect(classifyEscalationIntent("My order was wrong and I want a refund")).toBe("complaint");
     expect(classifyEscalationIntent("I need to talk to a manager about terrible service")).toBe("complaint");
+    expect(classifyEscalationIntent("this is bullshit and useless")).toBe("complaint");
   });
 
   it("classifies direct human requests as handoffs", () => {

@@ -14,6 +14,10 @@ export interface CapturedOrder {
   notes: string;
 }
 
+export interface OrderCaptureOptions {
+  requireIntent?: boolean;
+}
+
 const numberWords: Record<string, number> = {
   a: 1,
   an: 1,
@@ -32,9 +36,25 @@ const numberWords: Record<string, number> = {
 const orderIntentPattern =
   /\b(place (?:a )?(?:pickup |takeout )?order|pickup order|pick up order|takeout order|take out order|to go order|order for pickup|i d like|i would like|i want|can i get|could i get|can i have|let me get|i ll have|we ll have|we d like)\b/i;
 
-export function capturePickupOrder(utterance: string, context: RestaurantVoiceContext): CapturedOrder | null {
+const orderSubmitPattern =
+  /\b(that'?s all|that is all|that'?ll be all|nothing else|no thanks|complete|submit|send it|place it|put it through|go ahead|name is|under)\b/i;
+
+export function hasOrderIntent(utterance: string) {
+  return orderIntentPattern.test(normalize(utterance));
+}
+
+export function hasOrderSubmitIntent(utterance: string) {
+  return orderSubmitPattern.test(normalize(utterance));
+}
+
+export function capturePickupOrder(
+  utterance: string,
+  context: RestaurantVoiceContext,
+  options: OrderCaptureOptions = {},
+): CapturedOrder | null {
   const normalizedUtterance = normalize(utterance);
-  if (!orderIntentPattern.test(normalizedUtterance)) return null;
+  const requireIntent = options.requireIntent ?? true;
+  if (requireIntent && !orderIntentPattern.test(normalizedUtterance)) return null;
 
   const items = captureMenuItems(normalizedUtterance, context.menuItems);
   if (!items.length) return null;
@@ -45,6 +65,10 @@ export function capturePickupOrder(utterance: string, context: RestaurantVoiceCo
     items,
     notes: "AI-created staff-review pickup order. Staff should confirm before kitchen production.",
   };
+}
+
+export function summarizeCapturedOrderItems(items: CapturedOrderItem[]) {
+  return items.map((item) => `${item.quantity} ${item.name}`).join(", ");
 }
 
 export function mergeCapturedOrderItems(
@@ -111,9 +135,11 @@ function captureModifiers(normalizedUtterance: string, menuItem: RestaurantMenuI
   return modifiers.length ? modifiers : undefined;
 }
 
-function captureCustomerName(utterance: string) {
-  const match = utterance.match(/\b(?:name is|under|for)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/);
-  return match?.[1];
+export function captureCustomerName(utterance: string) {
+  const match = utterance.match(
+    /\b(?:name is|name's|under(?: the name)?|for pickup under)\s+([a-z][a-z'-]+(?:\s+[a-z][a-z'-]+)?)/i,
+  );
+  return match?.[1] ? titleCaseName(match[1]) : undefined;
 }
 
 function normalize(value: string) {
@@ -123,4 +149,12 @@ function normalize(value: string) {
 function mergeModifiers(left?: string[], right?: string[]) {
   const merged = Array.from(new Set([...(left ?? []), ...(right ?? [])]));
   return merged.length ? merged : undefined;
+}
+
+function titleCaseName(value: string) {
+  return value
+    .trim()
+    .split(/\s+/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
 }

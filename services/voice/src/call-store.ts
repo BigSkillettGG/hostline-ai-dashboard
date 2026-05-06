@@ -1,6 +1,7 @@
 import type { VoiceServiceEnv } from "./env";
 import type { CapturedOrderItem } from "./order-intake";
 import type { CapturedReservationRequest } from "./reservation-intake";
+import { buildSupabaseServiceHeaders } from "./supabase-headers";
 import type { ConversationRelaySetupMessage, TranscriptRole } from "./types";
 
 export interface StartCallInput {
@@ -328,12 +329,7 @@ class SupabaseCallStore implements CallStore {
     const query = options.query ? `?${options.query}` : "";
     const response = await fetch(`${this.restUrl}/${table}${query}`, {
       body: options.body ? JSON.stringify(options.body) : undefined,
-      headers: {
-        apikey: this.key,
-        Authorization: `Bearer ${this.key}`,
-        "Content-Type": "application/json",
-        ...options.headers,
-      },
+      headers: buildSupabaseServiceHeaders(this.key, options.headers),
       method: options.method,
     });
 

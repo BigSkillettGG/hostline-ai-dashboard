@@ -1,16 +1,32 @@
 import type { IncomingMessage } from "node:http";
 import type { WebSocket } from "ws";
+import {
+  buildFailureReply,
+  buildGuardrailReply,
+  classifyCallerUtterance,
+  normalizeCallerUtterance,
+} from "./call-guardrails";
 import type { CallStore, StaffTaskPriority, StaffTaskType } from "./call-store";
 import type { VoiceServiceEnv } from "./env";
 import type { GuestConfirmationService } from "./guest-confirmation-service";
 import type { StaffAlertKind, StaffNotificationService } from "./notification-service";
-import { capturePickupOrder, mergeCapturedOrderItems, type CapturedOrder, type CapturedOrderItem } from "./order-intake";
+import {
+  captureCustomerName,
+  capturePickupOrder,
+  hasOrderIntent,
+  hasOrderSubmitIntent,
+  mergeCapturedOrderItems,
+  summarizeCapturedOrderItems,
+  type CapturedOrder,
+  type CapturedOrderItem,
+} from "./order-intake";
 import { captureReservationRequest, hasReservationIntent, type CapturedReservationRequest } from "./reservation-intake";
 import type { RestaurantContextStore } from "./restaurant-context-store";
 import { demoRestaurantContext } from "./restaurant-context";
 import { generateRestaurantReply } from "./restaurant-agent";
 import type {
   ConversationRelayInboundMessage,
+  ConversationRelayPromptMessage,
   ConversationRelaySetupMessage,
   ConversationRelayTextMessage,
   TranscriptTurn,
@@ -23,8 +39,11 @@ interface RelaySession {
   callerPhone?: string;
   context: typeof demoRestaurantContext;
   locationId?: string;
+  orderCustomerName?: string;
   orderCreatedId?: string;
   orderDraftItems: CapturedOrderItem[];
+  orderIntentSeen: boolean;
+  unclearPromptCount: number;
   reservationCreatedId?: string;
   reservationIntentSeen: boolean;
   staffAlertIntents: Set<StaffAlertKind>;
@@ -47,6 +66,8 @@ export function createConversationRelayHandler(
     const session: RelaySession = {
       context: demoRestaurantContext,
       orderDraftItems: [],
+      orderIntentSeen: false,
+      unclearPromptCount: 0,
       needsStaffReview: false,
       reservationIntentSeen: false,
       staffAlertIntents: new Set(),
@@ -91,75 +112,28 @@ export function createConversationRelayHandler(
       if (message.type === "prompt") {
         if (message.last === false) return;
 
-        session.transcript.push({
-          role: "caller",
-          text: message.voicePrompt,
-          at: new Date().toISOString(),
-        });
-        void callStore.addTranscriptTurn({
-          callId: session.callRecordId,
-          offsetSeconds: getSessionOffsetSeconds(session),
-          speaker: "caller",
-          text: message.voicePrompt,
-        }).catch((error) => console.error("[conversation-relay] caller transcript persistence failed", error));
-
-        let reply = await generateRestaurantReply({
-          callerUtterance: message.voicePrompt,
-          context: session.context,
-          env,
-          transcript: session.transcript,
-        });
-        const escalationKind = classifyEscalationIntent(message.voicePrompt);
-        void maybeSendEscalationAlert({
-          kind: escalationKind,
-          session,
-          staffNotifications,
-          utterance: message.voicePrompt,
-        }).catch((error) => console.error("[conversation-relay] staff escalation alert failed", error));
-        void maybeCreateStaffFollowUpTask({
-          callStore,
-          kind: escalationKind,
-          session,
-          utterance: message.voicePrompt,
-        }).catch((error) => console.error("[conversation-relay] staff task persistence failed", error));
-
-        const createdOrderId = await maybeCreateStaffReviewOrder({
-          callStore,
-          guestConfirmations,
-          session,
-          staffNotifications,
-          utterance: message.voicePrompt,
-        });
-
-        if (createdOrderId) {
-          reply = `${reply} I have sent that pickup order to the staff review queue. It will be pay at pickup.${confirmationReplySuffix(session, guestConfirmations)}`;
+        try {
+          await handlePromptMessage({
+            callStore,
+            env,
+            guestConfirmations,
+            message,
+            session,
+            staffNotifications,
+            ws,
+          });
+        } catch (error) {
+          session.needsStaffReview = true;
+          console.error("[conversation-relay] prompt handling failed", {
+            callSid: session.callSid,
+            error,
+            sessionId: session.id,
+          });
+          const reply = buildFailureReply();
+          await maybeCreateSystemFailureTask({ callStore, error, session });
+          persistAgentTurn({ callStore, reply, session });
+          sendText(ws, reply, message.lang);
         }
-
-        const createdReservationId = await maybeCreateStaffReviewReservation({
-          callStore,
-          guestConfirmations,
-          session,
-          staffNotifications,
-          utterance: message.voicePrompt,
-        });
-
-        if (createdReservationId) {
-          reply = `${reply} I have sent that reservation request to staff. It is not confirmed until the restaurant confirms it.${confirmationReplySuffix(session, guestConfirmations)}`;
-        }
-
-        session.transcript.push({
-          role: "agent",
-          text: reply,
-          at: new Date().toISOString(),
-        });
-        void callStore.addTranscriptTurn({
-          callId: session.callRecordId,
-          offsetSeconds: getSessionOffsetSeconds(session),
-          speaker: "agent",
-          text: reply,
-        }).catch((error) => console.error("[conversation-relay] agent transcript persistence failed", error));
-
-        sendText(ws, reply, message.lang);
         return;
       }
 
@@ -199,6 +173,108 @@ export function createConversationRelayHandler(
   };
 }
 
+async function handlePromptMessage({
+  callStore,
+  env,
+  guestConfirmations,
+  message,
+  session,
+  staffNotifications,
+  ws,
+}: {
+  callStore: CallStore;
+  env: VoiceServiceEnv;
+  guestConfirmations: GuestConfirmationService;
+  message: ConversationRelayPromptMessage;
+  session: RelaySession;
+  staffNotifications: StaffNotificationService;
+  ws: WebSocket;
+}) {
+  const turnStartedAt = Date.now();
+  const utterance = normalizeCallerUtterance(message.voicePrompt);
+  const classification = classifyCallerUtterance(utterance);
+
+  if (utterance) {
+    persistCallerTurn({ callStore, session, utterance });
+  }
+
+  if (classification !== "normal") {
+    session.unclearPromptCount += classification === "empty" || classification === "connection_issue" ? 1 : 0;
+    if (classification === "abusive") session.needsStaffReview = true;
+    const reply = buildGuardrailReply({
+      classification,
+      repeatCount: session.unclearPromptCount,
+      restaurantName: session.context.restaurantName,
+    });
+
+    if (session.unclearPromptCount >= 2 || classification === "abusive") {
+      await maybeCreateStaffFollowUpTask({
+        callStore,
+        kind: classification === "abusive" ? "complaint" : "low_confidence",
+        session,
+        utterance: utterance || "Unclear or missing caller audio.",
+      });
+    }
+
+    persistAgentTurn({ callStore, reply, session });
+    sendText(ws, reply, message.lang);
+    logTurnComplete({ classification, latencyMs: Date.now() - turnStartedAt, reply, session, utterance });
+    return;
+  }
+
+  session.unclearPromptCount = 0;
+
+  let reply = await generateRestaurantReply({
+    callerUtterance: utterance,
+    context: session.context,
+    env,
+    transcript: session.transcript,
+  });
+  const escalationKind = classifyEscalationIntent(utterance);
+  void maybeSendEscalationAlert({
+    kind: escalationKind,
+    session,
+    staffNotifications,
+    utterance,
+  }).catch((error) => console.error("[conversation-relay] staff escalation alert failed", error));
+  void maybeCreateStaffFollowUpTask({
+    callStore,
+    kind: escalationKind,
+    session,
+    utterance,
+  }).catch((error) => console.error("[conversation-relay] staff task persistence failed", error));
+
+  const orderOutcome = await maybeAdvanceStaffReviewOrder({
+    callStore,
+    guestConfirmations,
+    session,
+    staffNotifications,
+    utterance,
+  });
+
+  if (orderOutcome.status === "created") {
+    reply = `${reply} I have sent that pickup order to the staff review queue. It will be pay at pickup.${confirmationReplySuffix(session, guestConfirmations)}`;
+  } else if (orderOutcome.status === "draft") {
+    reply = `Got it. I have ${summarizeCapturedOrderItems(session.orderDraftItems)}. What else can I get for you?`;
+  }
+
+  const createdReservationId = await maybeCreateStaffReviewReservation({
+    callStore,
+    guestConfirmations,
+    session,
+    staffNotifications,
+    utterance,
+  });
+
+  if (createdReservationId) {
+    reply = `${reply} I have sent that reservation request to staff. It is not confirmed until the restaurant confirms it.${confirmationReplySuffix(session, guestConfirmations)}`;
+  }
+
+  persistAgentTurn({ callStore, reply, session });
+  sendText(ws, reply, message.lang);
+  logTurnComplete({ classification, latencyMs: Date.now() - turnStartedAt, reply, session, utterance });
+}
+
 export function sendText(ws: WebSocket, token: string, lang?: string) {
   const message: ConversationRelayTextMessage = {
     type: "text",
@@ -233,6 +309,75 @@ function applySetupMessage(session: RelaySession, message: ConversationRelaySetu
   session.locationId = message.customParameters?.locationId;
 }
 
+function persistCallerTurn({
+  callStore,
+  session,
+  utterance,
+}: {
+  callStore: CallStore;
+  session: RelaySession;
+  utterance: string;
+}) {
+  session.transcript.push({
+    role: "caller",
+    text: utterance,
+    at: new Date().toISOString(),
+  });
+  void callStore.addTranscriptTurn({
+    callId: session.callRecordId,
+    offsetSeconds: getSessionOffsetSeconds(session),
+    speaker: "caller",
+    text: utterance,
+  }).catch((error) => console.error("[conversation-relay] caller transcript persistence failed", error));
+}
+
+function persistAgentTurn({
+  callStore,
+  reply,
+  session,
+}: {
+  callStore: CallStore;
+  reply: string;
+  session: RelaySession;
+}) {
+  session.transcript.push({
+    role: "agent",
+    text: reply,
+    at: new Date().toISOString(),
+  });
+  void callStore.addTranscriptTurn({
+    callId: session.callRecordId,
+    offsetSeconds: getSessionOffsetSeconds(session),
+    speaker: "agent",
+    text: reply,
+  }).catch((error) => console.error("[conversation-relay] agent transcript persistence failed", error));
+}
+
+function logTurnComplete({
+  classification,
+  latencyMs,
+  reply,
+  session,
+  utterance,
+}: {
+  classification: string;
+  latencyMs: number;
+  reply: string;
+  session: RelaySession;
+  utterance: string;
+}) {
+  console.info("[conversation-relay] turn complete", {
+    callSid: session.callSid,
+    classification,
+    latencyMs,
+    orderDraftItemCount: session.orderDraftItems.length,
+    promptLength: utterance.length,
+    replyLength: reply.length,
+    sessionId: session.id,
+    transcriptTurns: session.transcript.length,
+  });
+}
+
 function getSessionOffsetSeconds(session: RelaySession) {
   return (Date.now() - session.startedAt) / 1000;
 }
@@ -244,7 +389,7 @@ function summarizeTranscript(transcript: TranscriptTurn[]) {
   return `Caller asked: ${lastCallerTurn.text.slice(0, 220)}`;
 }
 
-async function maybeCreateStaffReviewOrder({
+async function maybeAdvanceStaffReviewOrder({
   callStore,
   guestConfirmations,
   session,
@@ -256,29 +401,56 @@ async function maybeCreateStaffReviewOrder({
   session: RelaySession;
   staffNotifications: StaffNotificationService;
   utterance: string;
-}) {
-  if (session.orderCreatedId || !session.callRecordId) return null;
+}): Promise<{ status: "created" | "draft" | "none"; orderId?: string }> {
+  if (session.orderCreatedId || !session.callRecordId) return { status: "none" };
 
-  const capturedOrder = capturePickupOrder(utterance, session.context);
-  if (!capturedOrder) return null;
+  if (hasOrderIntent(utterance)) {
+    session.orderIntentSeen = true;
+  }
 
-  session.orderDraftItems = mergeCapturedOrderItems(session.orderDraftItems, capturedOrder.items);
-  if (!session.orderDraftItems.length) return null;
+  const capturedName = captureCustomerName(utterance);
+  if (capturedName) {
+    session.orderCustomerName = capturedName;
+  }
+
+  const capturedOrder = capturePickupOrder(utterance, session.context, {
+    requireIntent: !session.orderIntentSeen,
+  });
+
+  if (capturedOrder) {
+    session.orderDraftItems = mergeCapturedOrderItems(session.orderDraftItems, capturedOrder.items);
+    if (capturedOrder.customerName) session.orderCustomerName = capturedOrder.customerName;
+  }
+
+  if (!session.orderDraftItems.length) return { status: "none" };
+
+  const submitOrder =
+    hasOrderSubmitIntent(utterance) ||
+    Boolean(session.orderCustomerName && capturedOrder && capturedOrder.items.length > 1);
+
+  if (!submitOrder) return { status: "draft" };
 
   try {
     const result = await callStore.createStaffReviewOrder({
       callId: session.callRecordId,
-      customerName: capturedOrder.customerName,
+      customerName: session.orderCustomerName,
       customerPhone: session.callerPhone,
       etaMinutes: session.context.defaultPickupEtaMinutes ?? 25,
       items: session.orderDraftItems,
       locationId: session.locationId,
-      notes: `${capturedOrder.notes} Confidence: ${capturedOrder.confidence}%.`,
+      notes: `AI-created staff-review pickup order. Staff should confirm before kitchen production. Confidence: ${
+        capturedOrder?.confidence ?? 75
+      }%.`,
     });
 
     session.orderCreatedId = result.orderId;
     void maybeSendOrderConfirmation({
-      capturedOrder,
+      capturedOrder: {
+        confidence: capturedOrder?.confidence ?? 75,
+        customerName: session.orderCustomerName,
+        items: session.orderDraftItems,
+        notes: "AI-created staff-review pickup order. Staff should confirm before kitchen production.",
+      },
       guestConfirmations,
       session,
     }).catch((error) => console.error("[conversation-relay] guest order confirmation failed", error));
@@ -293,12 +465,12 @@ async function maybeCreateStaffReviewOrder({
       kind: "order",
       locationId: session.locationId,
       restaurantName: session.context.restaurantName,
-      summary: `Staff-review pickup order created${capturedOrder.customerName ? ` for ${capturedOrder.customerName}` : ""}.`,
+      summary: `Staff-review pickup order created${session.orderCustomerName ? ` for ${session.orderCustomerName}` : ""}.`,
     }).catch((error) => console.error("[conversation-relay] order staff alert failed", error));
-    return result.orderId ?? null;
+    return { orderId: result.orderId, status: "created" };
   } catch (error) {
     console.error("[conversation-relay] staff-review order persistence failed", error);
-    return null;
+    return { status: "none" };
   }
 }
 
@@ -466,10 +638,33 @@ async function maybeCreateStaffFollowUpTask({
   });
 }
 
+async function maybeCreateSystemFailureTask({
+  callStore,
+  error,
+  session,
+}: {
+  callStore: CallStore;
+  error: unknown;
+  session: RelaySession;
+}) {
+  if (session.staffTaskIntents.has("low_confidence")) return;
+  session.staffTaskIntents.add("low_confidence");
+
+  await callStore.createStaffTask({
+    body: `Voice service prompt handling failed. ${error instanceof Error ? error.message : String(error)}`,
+    callId: session.callRecordId,
+    dueMinutes: 10,
+    locationId: session.locationId,
+    priority: "urgent",
+    title: "Review failed live call",
+    type: "low_confidence_review",
+  });
+}
+
 export function classifyEscalationIntent(utterance: string): StaffAlertKind | null {
   const normalized = utterance.toLowerCase();
 
-  if (/\b(refund|complain|complaint|wrong order|incorrect|bad service|terrible|upset|angry)\b/.test(normalized)) {
+  if (/\b(refund|complain|complaint|wrong order|incorrect|bad service|terrible|upset|angry|fuck|shit|bullshit|asshole|useless)\b/.test(normalized)) {
     return "complaint";
   }
 
