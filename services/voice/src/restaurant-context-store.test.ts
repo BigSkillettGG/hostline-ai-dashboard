@@ -10,6 +10,30 @@ describe("restaurant context store", () => {
         host_name: "Maya",
         reservation_provider: "opentable",
       },
+      faqs: [
+        {
+          answer: "Gift cards are sold at the host stand.",
+          is_active: true,
+          question: "Do you sell gift cards?",
+        },
+        {
+          answer: "This should not be included.",
+          is_active: false,
+          question: "Inactive question",
+        },
+      ],
+      knowledgeSections: [
+        {
+          body: "Step-free entrance is available on Main Street.",
+          is_active: true,
+          title: "Accessibility",
+        },
+        {
+          body: "This should not be included.",
+          is_active: false,
+          title: "Inactive section",
+        },
+      ],
       location: {
         address: "10 Main St",
         ai_host_phone: "+15550199",
@@ -47,6 +71,7 @@ describe("restaurant context store", () => {
           hostName: "Nina",
           parking: "Parking behind the building.",
           paymentPolicy: "Pay at pickup.",
+          privateEvents: "Collect event date, guest count, and phone number for the events manager.",
           regularHours: "Daily 11 AM to 9 PM.",
           reservationProvider: "Manual requests only",
           restaurantName: "Saffron Table",
@@ -70,6 +95,24 @@ describe("restaurant context store", () => {
     expect(context.policies.hours).toContain("Closed July 4");
     expect(context.policies.pickup).toContain("20 minutes");
     expect(context.policies.parking).toBe("Parking behind the building.");
+    expect(context.faqs).toEqual([
+      {
+        answer: "Gift cards are sold at the host stand.",
+        question: "Do you sell gift cards?",
+      },
+    ]);
+    expect(context.knowledgeSections).toEqual(
+      expect.arrayContaining([
+        {
+          body: "Step-free entrance is available on Main Street.",
+          title: "Accessibility",
+        },
+        {
+          body: "Collect event date, guest count, and phone number for the events manager.",
+          title: "Private events and catering",
+        },
+      ]),
+    );
   });
 
   it("falls back to location data and demo-safe policies when onboarding is missing", () => {

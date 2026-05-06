@@ -4,9 +4,21 @@ export interface RestaurantVoiceContext {
   timezone: string;
   greeting: string;
   defaultPickupEtaMinutes?: number;
+  faqs: RestaurantFaq[];
+  knowledgeSections: RestaurantKnowledgeSection[];
   menuHighlights: string[];
   menuItems: RestaurantMenuItem[];
   policies: Record<string, string>;
+}
+
+export interface RestaurantFaq {
+  question: string;
+  answer: string;
+}
+
+export interface RestaurantKnowledgeSection {
+  title: string;
+  body: string;
 }
 
 export interface RestaurantMenuItem {
@@ -21,6 +33,22 @@ export const demoRestaurantContext: RestaurantVoiceContext = {
   hostName: "Vera",
   timezone: "America/Los_Angeles",
   greeting: "Thanks for calling Olive & Ember, this is Vera, the restaurant's virtual host. How can I help?",
+  faqs: [
+    {
+      answer: "Yes, gift cards are available in person at the host stand.",
+      question: "Do you sell gift cards?",
+    },
+    {
+      answer: "Outside cakes are allowed with a small plating fee. The staff can confirm details for your party.",
+      question: "Can I bring a cake?",
+    },
+  ],
+  knowledgeSections: [
+    {
+      body: "Private event and catering inquiries should be collected and sent to the events manager for follow-up.",
+      title: "Private events",
+    },
+  ],
   menuHighlights: [
     "Margherita pizza",
     "Diavola pizza",

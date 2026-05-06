@@ -1,5 +1,11 @@
 import type { VoiceServiceEnv } from "./env";
-import { demoRestaurantContext, type RestaurantMenuItem, type RestaurantVoiceContext } from "./restaurant-context";
+import {
+  demoRestaurantContext,
+  type RestaurantFaq,
+  type RestaurantKnowledgeSection,
+  type RestaurantMenuItem,
+  type RestaurantVoiceContext,
+} from "./restaurant-context";
 
 type OnboardingDraftValue = string | boolean | undefined;
 type OnboardingDraft = Record<string, OnboardingDraftValue>;
@@ -43,8 +49,22 @@ export interface SupabaseMenuItemRow {
   available: boolean | null;
 }
 
+export interface SupabaseKnowledgeSectionRow {
+  title: string | null;
+  body: string | null;
+  is_active: boolean | null;
+}
+
+export interface SupabaseFaqRow {
+  question: string | null;
+  answer: string | null;
+  is_active: boolean | null;
+}
+
 export interface BuildRestaurantContextInput {
   agentConfig?: SupabaseAgentConfigRow | null;
+  faqs?: SupabaseFaqRow[];
+  knowledgeSections?: SupabaseKnowledgeSectionRow[];
   location?: SupabaseLocationRow | null;
   menuCategories?: SupabaseMenuCategoryRow[];
   menuItems?: SupabaseMenuItemRow[];
@@ -65,6 +85,8 @@ export function createRestaurantContextStore(env: VoiceServiceEnv): RestaurantCo
 
 export function buildRestaurantContext({
   agentConfig,
+  faqs = [],
+  knowledgeSections = [],
   location,
   menuCategories = [],
   menuItems = [],
@@ -81,11 +103,17 @@ export function buildRestaurantContext({
     ? menu.map((item) => item.name)
     : splitList(stringValue(draft.menuCategories) ?? location?.cuisine ?? "").slice(0, 8);
   const categoryNames = menuCategories.map((category) => category.name).filter(Boolean).join(", ");
+  const mappedKnowledgeSections = [
+    ...mapKnowledgeSections(knowledgeSections),
+    ...buildDraftKnowledgeSections(draft),
+  ];
 
   return {
     defaultPickupEtaMinutes: parseMinutes(stringValue(draft.defaultPickupEta)),
+    faqs: mapFaqs(faqs),
     greeting: renderTemplate(greetingTemplate, { hostName, restaurantName }),
     hostName,
+    knowledgeSections: mappedKnowledgeSections,
     menuHighlights: menuHighlights.length ? menuHighlights : demoRestaurantContext.menuHighlights,
     menuItems: menu,
     policies: {
@@ -125,7 +153,7 @@ class SupabaseRestaurantContextStore implements RestaurantContextStore {
     const resolvedLocationId = normalizeLocationId(locationId) ?? this.defaultLocationId;
 
     try {
-      const [locations, agentConfigs, onboardingProfiles, menuCategories] = await Promise.all([
+      const [locations, agentConfigs, onboardingProfiles, menuCategories, knowledgeSections, faqs] = await Promise.all([
         this.request<SupabaseLocationRow[]>(
           "locations",
           `id=eq.${encodeURIComponent(resolvedLocationId)}&limit=1&select=id,name,cuisine,timezone,phone,ai_host_phone,address`,
@@ -142,6 +170,14 @@ class SupabaseRestaurantContextStore implements RestaurantContextStore {
           "menu_categories",
           `location_id=eq.${encodeURIComponent(resolvedLocationId)}&select=id,name`,
         ),
+        this.request<SupabaseKnowledgeSectionRow[]>(
+          "knowledge_sections",
+          `location_id=eq.${encodeURIComponent(resolvedLocationId)}&is_active=eq.true&select=title,body,is_active`,
+        ),
+        this.request<SupabaseFaqRow[]>(
+          "faqs",
+          `location_id=eq.${encodeURIComponent(resolvedLocationId)}&is_active=eq.true&select=question,answer,is_active`,
+        ),
       ]);
 
       const categoryIds = menuCategories.map((category) => category.id);
@@ -154,6 +190,8 @@ class SupabaseRestaurantContextStore implements RestaurantContextStore {
 
       return buildRestaurantContext({
         agentConfig: agentConfigs[0],
+        faqs,
+        knowledgeSections,
         location: locations[0],
         menuCategories,
         menuItems,
@@ -261,6 +299,40 @@ function mapMenuItems(rows: SupabaseMenuItemRow[]): RestaurantMenuItem[] {
       name: row.name,
       priceCents: row.price_cents ?? 0,
     }));
+}
+
+function mapFaqs(rows: SupabaseFaqRow[]): RestaurantFaq[] {
+  return rows
+    .filter((row) => row.is_active !== false)
+    .map((row) => ({
+      answer: row.answer?.trim() ?? "",
+      question: row.question?.trim() ?? "",
+    }))
+    .filter((faq) => faq.question && faq.answer);
+}
+
+function mapKnowledgeSections(rows: SupabaseKnowledgeSectionRow[]): RestaurantKnowledgeSection[] {
+  return rows
+    .filter((row) => row.is_active !== false)
+    .map((row) => ({
+      body: row.body?.trim() ?? "",
+      title: row.title?.trim() ?? "",
+    }))
+    .filter((section) => section.title && section.body);
+}
+
+function buildDraftKnowledgeSections(draft: OnboardingDraft): RestaurantKnowledgeSection[] {
+  const sections: RestaurantKnowledgeSection[] = [];
+
+  addDraftSection(sections, "Private events and catering", stringValue(draft.privateEvents));
+  addDraftSection(sections, "Fees and house rules", stringValue(draft.feesAndRules));
+  addDraftSection(sections, "Common FAQs", stringValue(draft.customFaqs));
+
+  return sections;
+}
+
+function addDraftSection(sections: RestaurantKnowledgeSection[], title: string, body?: string) {
+  if (body) sections.push({ body, title });
 }
 
 function normalizeStringArray(value: unknown) {

@@ -61,7 +61,7 @@ It exposes:
 - `GET /telephony/available-numbers` and `POST /telephony/provision-number` for Twilio number launch.
 - `POST /debug/reply` in non-production for testing restaurant replies.
 
-It also creates staff-review pickup orders from clear order language when menu items are recognized, and staff-confirmed reservation requests when date, time, party size, and guest details are captured. Orders are pay-at-pickup and are not auto-sent to the kitchen or POS.
+It also includes Supabase FAQs and knowledge sections in live call replies, creates staff-review pickup orders from clear order language when menu items are recognized, and creates staff-confirmed reservation requests when date, time, party size, and guest details are captured. Orders are pay-at-pickup and are not auto-sent to the kitchen or POS.
 Staff alerts can be sent by Twilio SMS or webhook for captured orders, reservation requests, complaints, and human handoffs.
 
 See `services/voice/README.md` for provider setup.
@@ -84,8 +84,6 @@ See:
 ## Next Engineering Milestones
 
 1. Add file/link extraction jobs for uploaded PDFs, images, CSVs, and menu URLs.
-2. Implement FAQ calls from the restaurant knowledge base.
-3. Add staff notification channels for orders, reservation requests, complaints, and handoffs.
-4. Add Toast as the first POS integration.
-5. Add OpenTable as the first live reservation API integration.
-6. Add production auth, RLS, and organization/location switching.
+2. Add Toast as the first POS integration.
+3. Add OpenTable as the first live reservation API integration.
+4. Add production auth, RLS, and organization/location switching.

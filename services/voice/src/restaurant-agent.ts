@@ -44,6 +44,15 @@ export async function generateRestaurantReply(input: GenerateRestaurantReplyInpu
 }
 
 export function buildRestaurantInstructions(context: RestaurantVoiceContext) {
+  const faqLines = context.faqs
+    .slice(0, 16)
+    .map((faq) => `Q: ${faq.question} A: ${faq.answer}`)
+    .join(" | ");
+  const knowledgeLines = context.knowledgeSections
+    .slice(0, 12)
+    .map((section) => `${section.title}: ${section.body}`)
+    .join(" | ");
+
   return [
     `You are ${context.hostName}, the virtual host for ${context.restaurantName}.`,
     "Sound warm, concise, and natural on the phone.",
@@ -53,10 +62,14 @@ export function buildRestaurantInstructions(context: RestaurantVoiceContext) {
     "If a caller asks for refunds, complaints, catering, private events, alcohol policy, or a human, escalate.",
     "Manual reservation requests are not confirmed until staff confirms them.",
     `Menu highlights: ${context.menuHighlights.join(", ")}.`,
+    faqLines && `FAQs: ${faqLines}`,
+    knowledgeLines && `Knowledge sections: ${knowledgeLines}`,
     `Policies: ${Object.entries(context.policies)
       .map(([key, value]) => `${key}: ${value}`)
       .join(" | ")}`,
-  ].join("\n");
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join("\n");
 }
 
 export function fallbackRestaurantReply(callerUtterance: string, context: RestaurantVoiceContext) {
@@ -82,7 +95,106 @@ export function fallbackRestaurantReply(callerUtterance: string, context: Restau
     return context.policies.parking;
   }
 
+  const faqAnswer = findFaqAnswer(callerUtterance, context);
+  if (faqAnswer) return faqAnswer;
+
+  const knowledgeAnswer = findKnowledgeAnswer(callerUtterance, context);
+  if (knowledgeAnswer) return knowledgeAnswer;
+
   return `Thanks for calling ${context.restaurantName}. I can help with hours, menu questions, pickup orders, or reservation requests.`;
+}
+
+const STOP_WORDS = new Set([
+  "a",
+  "about",
+  "an",
+  "and",
+  "are",
+  "at",
+  "can",
+  "do",
+  "does",
+  "for",
+  "have",
+  "i",
+  "in",
+  "is",
+  "it",
+  "of",
+  "on",
+  "or",
+  "that",
+  "the",
+  "there",
+  "this",
+  "to",
+  "we",
+  "with",
+  "you",
+  "your",
+]);
+
+function findFaqAnswer(callerUtterance: string, context: RestaurantVoiceContext) {
+  const utteranceTokens = tokenize(callerUtterance);
+  if (!utteranceTokens.size) return null;
+
+  let bestScore = 0;
+  let bestAnswer: string | null = null;
+
+  for (const faq of context.faqs) {
+    const questionTokens = tokenize(faq.question);
+    const answerTokens = tokenize(faq.answer);
+    const score = scoreTokens(utteranceTokens, questionTokens, 2) + scoreTokens(utteranceTokens, answerTokens, 1);
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestAnswer = faq.answer;
+    }
+  }
+
+  return bestScore >= 2 ? bestAnswer : null;
+}
+
+function findKnowledgeAnswer(callerUtterance: string, context: RestaurantVoiceContext) {
+  const utteranceTokens = tokenize(callerUtterance);
+  if (!utteranceTokens.size) return null;
+
+  let bestScore = 0;
+  let bestBody: string | null = null;
+
+  for (const section of context.knowledgeSections) {
+    const titleTokens = tokenize(section.title);
+    const bodyTokens = tokenize(section.body);
+    const score = scoreTokens(utteranceTokens, titleTokens, 2) + scoreTokens(utteranceTokens, bodyTokens, 1);
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestBody = section.body;
+    }
+  }
+
+  return bestScore >= 2 ? bestBody : null;
+}
+
+function scoreTokens(utteranceTokens: Set<string>, candidateTokens: Set<string>, weight: number) {
+  let score = 0;
+
+  for (const token of utteranceTokens) {
+    if (candidateTokens.has(token)) score += weight;
+  }
+
+  return score;
+}
+
+function tokenize(value: string) {
+  return new Set(
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .map((token) => token.trim())
+      .filter((token) => token.length > 1 && !STOP_WORDS.has(token)),
+  );
 }
 
 function buildConversationInput(callerUtterance: string, transcript: TranscriptTurn[]) {
