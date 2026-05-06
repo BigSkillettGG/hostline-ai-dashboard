@@ -123,6 +123,36 @@ create table menu_items (
   updated_at timestamptz not null default now()
 );
 
+create table menu_sources (
+  id uuid primary key default gen_random_uuid(),
+  location_id uuid not null references locations(id) on delete cascade,
+  source_type text not null default 'url',
+  label text,
+  url text,
+  file_name text,
+  sync_frequency text not null default 'daily',
+  status text not null default 'pending',
+  last_synced_at timestamptz,
+  last_error text,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table ingestion_jobs (
+  id uuid primary key default gen_random_uuid(),
+  location_id uuid not null references locations(id) on delete cascade,
+  source_id uuid references menu_sources(id) on delete set null,
+  job_type text not null default 'menu_source_sync',
+  status text not null default 'queued',
+  input jsonb not null default '{}'::jsonb,
+  result jsonb not null default '{}'::jsonb,
+  error_message text,
+  created_at timestamptz not null default now(),
+  started_at timestamptz,
+  completed_at timestamptz
+);
+
 create table calls (
   id uuid primary key default gen_random_uuid(),
   location_id uuid not null references locations(id) on delete cascade,

@@ -3,13 +3,17 @@ import { defaultRestaurantAgentConfig } from "@/domain/restaurant-config";
 import { sampleOnboardingDraft } from "@/domain/onboarding";
 import {
   buildAgentConfigPayload,
+  buildIngestionJobInsertPayload,
   buildMenuCategoryInsertRows,
   buildMenuItemInsertRows,
+  buildMenuSourceInsertPayload,
   buildOnboardingProfilePayload,
   buildReservationInsertPayload,
   mapSupabaseCalls,
   mapSupabaseAgentConfig,
+  mapSupabaseIngestionJob,
   mapSupabaseMenu,
+  mapSupabaseMenuSource,
   mapSupabaseOrders,
   mapSupabasePhoneNumber,
   mapSupabaseReservations,
@@ -387,6 +391,105 @@ describe("Supabase menu mapping", () => {
         upsell_suggestions: [],
       },
     ]);
+  });
+});
+
+describe("Supabase menu source mapping", () => {
+  it("builds source and job payloads for queued menu URL ingestion", () => {
+    const sourcePayload = buildMenuSourceInsertPayload(
+      {
+        frequency: "daily",
+        url: " https://www.saffrontable.com/menu ",
+      },
+      "location_1",
+    );
+
+    expect(sourcePayload).toMatchObject({
+      label: "saffrontable.com",
+      location_id: "location_1",
+      source_type: "url",
+      status: "pending",
+      sync_frequency: "daily",
+      url: "https://www.saffrontable.com/menu",
+    });
+
+    const jobPayload = buildIngestionJobInsertPayload({
+      jobType: "menu_source_sync",
+      locationId: "location_1",
+      source: {
+        file_name: null,
+        id: "source_1",
+        label: "saffrontable.com",
+        source_type: "url",
+        sync_frequency: "daily",
+        url: "https://www.saffrontable.com/menu",
+      },
+    });
+
+    expect(jobPayload).toEqual({
+      input: {
+        fileName: null,
+        frequency: "daily",
+        label: "saffrontable.com",
+        sourceType: "url",
+        url: "https://www.saffrontable.com/menu",
+      },
+      job_type: "menu_source_sync",
+      location_id: "location_1",
+      result: {},
+      source_id: "source_1",
+      status: "queued",
+    });
+  });
+
+  it("maps persisted menu sources and ingestion jobs into dashboard records", () => {
+    const source = mapSupabaseMenuSource({
+      created_at: "2026-05-05T20:00:00.000Z",
+      file_name: null,
+      id: "source_1",
+      label: null,
+      last_error: "Could not fetch URL",
+      last_synced_at: null,
+      source_type: "url",
+      status: "error",
+      sync_frequency: "hourly",
+      updated_at: "2026-05-05T20:15:00.000Z",
+      url: "https://www.saffrontable.com/menu",
+    });
+
+    expect(source).toEqual({
+      fileName: undefined,
+      frequency: "hourly",
+      id: "source_1",
+      label: "saffrontable.com",
+      lastError: "Could not fetch URL",
+      lastSyncedAt: "Never",
+      status: "error",
+      type: "url",
+      url: "https://www.saffrontable.com/menu",
+    });
+
+    const job = mapSupabaseIngestionJob({
+      completed_at: null,
+      created_at: "2026-05-05T20:16:00.000Z",
+      error_message: null,
+      id: "job_1",
+      job_type: "menu_source_sync",
+      result: { summary: "Found 24 items" },
+      source_id: "source_1",
+      status: "queued",
+    });
+
+    expect(job).toEqual({
+      completedAt: undefined,
+      createdAt: "2026-05-05T20:16:00.000Z",
+      errorMessage: undefined,
+      id: "job_1",
+      sourceId: "source_1",
+      status: "queued",
+      summary: "Found 24 items",
+      type: "menu_source_sync",
+    });
   });
 });
 

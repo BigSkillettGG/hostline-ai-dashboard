@@ -13,6 +13,15 @@ import type {
 import type { ParsedMenuCategory } from "@/domain/menu-ingestion";
 import { calculateOnboardingProgress, type OnboardingDraft } from "@/domain/onboarding";
 import type { RestaurantAgentConfig } from "@/domain/restaurant-config";
+import type {
+  IngestionJob,
+  IngestionJobStatus,
+  IngestionJobType,
+  MenuSource,
+  MenuSourceType,
+  SyncFrequency,
+  SyncStatus,
+} from "@/types/sources";
 
 const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL ?? "").replace(/\/$/, "");
 const supabasePublishableKey =
@@ -26,6 +35,11 @@ const transcriptSpeakers: TranscriptSpeaker[] = ["agent", "caller", "staff"];
 const orderStatuses: OrderStatus[] = ["new", "accepted", "in_progress", "completed", "canceled"];
 const reservationStatuses: ReservationStatus[] = ["pending", "confirmed", "declined", "seated", "canceled"];
 const reservationSources: Reservation["source"][] = ["ai_host", "web", "walk_in"];
+const menuSourceTypes: MenuSourceType[] = ["url", "file", "paste"];
+const syncFrequencies: SyncFrequency[] = ["hourly", "daily", "weekly"];
+const syncStatuses: SyncStatus[] = ["synced", "error", "pending", "processing"];
+const ingestionJobStatuses: IngestionJobStatus[] = ["queued", "processing", "completed", "failed"];
+const ingestionJobTypes: IngestionJobType[] = ["menu_source_sync", "menu_text_import", "menu_file_import"];
 
 interface SupabaseCallRow {
   id: string;
@@ -138,6 +152,31 @@ interface SupabaseMenuItemRow {
   upsell_suggestions: unknown;
 }
 
+interface SupabaseMenuSourceRow {
+  created_at: string | null;
+  file_name: string | null;
+  id: string;
+  label: string | null;
+  last_error: string | null;
+  last_synced_at: string | null;
+  source_type: string | null;
+  status: string | null;
+  sync_frequency: string | null;
+  updated_at: string | null;
+  url: string | null;
+}
+
+interface SupabaseIngestionJobRow {
+  completed_at: string | null;
+  created_at: string | null;
+  error_message: string | null;
+  id: string;
+  job_type: string | null;
+  result: unknown;
+  source_id: string | null;
+  status: string | null;
+}
+
 interface SupabaseReservationRow {
   created_at: string | null;
   guest_name: string | null;
@@ -193,6 +232,13 @@ export interface CreateReservationInput {
   time: string;
 }
 
+export interface CreateMenuSourceInput {
+  frequency: SyncFrequency;
+  label?: string;
+  type?: MenuSourceType;
+  url: string;
+}
+
 export function isSupabaseConfigured() {
   return Boolean(supabaseUrl && supabasePublishableKey);
 }
@@ -202,6 +248,10 @@ export function isOnboardingPersistenceConfigured() {
 }
 
 export function isMenuPersistenceConfigured() {
+  return Boolean(isSupabaseConfigured() && supabaseDemoLocationId);
+}
+
+export function isMenuSourcePersistenceConfigured() {
   return Boolean(isSupabaseConfigured() && supabaseDemoLocationId);
 }
 
@@ -471,6 +521,129 @@ export async function fetchMenuFromSupabase(locationId = supabaseDemoLocationId)
   return mapSupabaseMenu(categories, items);
 }
 
+export async function fetchMenuSourcesFromSupabase(
+  locationId = supabaseDemoLocationId,
+): Promise<{ jobs: IngestionJob[]; sources: MenuSource[] }> {
+  if (!isSupabaseConfigured() || !locationId) {
+    throw new Error("Supabase menu-source persistence is not configured.");
+  }
+
+  const sources = await supabaseRequest<SupabaseMenuSourceRow[]>(
+    "menu_sources",
+    new URLSearchParams({
+      location_id: `eq.${locationId}`,
+      order: "updated_at.desc",
+      select: menuSourceSelectColumns,
+    }),
+  );
+
+  const sourceIds = sources.map((source) => source.id);
+  const jobs = sourceIds.length
+    ? await supabaseRequest<SupabaseIngestionJobRow[]>(
+        "ingestion_jobs",
+        new URLSearchParams({
+          limit: "20",
+          order: "created_at.desc",
+          source_id: `in.(${sourceIds.join(",")})`,
+          select: ingestionJobSelectColumns,
+        }),
+      )
+    : [];
+
+  return {
+    jobs: jobs.map(mapSupabaseIngestionJob),
+    sources: sources.map(mapSupabaseMenuSource),
+  };
+}
+
+export async function createMenuSourceInSupabase(
+  input: CreateMenuSourceInput,
+  locationId = supabaseDemoLocationId,
+): Promise<{ job?: IngestionJob; source: MenuSource }> {
+  if (!isSupabaseConfigured() || !locationId) {
+    throw new Error("Supabase menu-source persistence is not configured.");
+  }
+
+  const sourceRows = await supabaseRequest<SupabaseMenuSourceRow[]>(
+    "menu_sources",
+    new URLSearchParams({
+      select: menuSourceSelectColumns,
+    }),
+    {
+      body: buildMenuSourceInsertPayload(input, locationId),
+      headers: {
+        Prefer: "return=representation",
+      },
+      method: "POST",
+    },
+  );
+  const source = sourceRows[0];
+  if (!source) throw new Error("Menu source was not created.");
+
+  const jobRows = await createIngestionJobForSource(source, "menu_source_sync", locationId);
+
+  return {
+    job: jobRows[0] ? mapSupabaseIngestionJob(jobRows[0]) : undefined,
+    source: mapSupabaseMenuSource(source),
+  };
+}
+
+export async function queueMenuSourceSyncInSupabase(
+  source: MenuSource,
+  locationId = supabaseDemoLocationId,
+): Promise<{ job?: IngestionJob; source?: MenuSource }> {
+  if (!isSupabaseConfigured() || !locationId) {
+    throw new Error("Supabase menu-source persistence is not configured.");
+  }
+
+  const updatedRows = await supabaseRequest<SupabaseMenuSourceRow[]>(
+    "menu_sources",
+    new URLSearchParams({
+      id: `eq.${source.id}`,
+      select: menuSourceSelectColumns,
+    }),
+    {
+      body: {
+        last_error: null,
+        status: "pending",
+        updated_at: new Date().toISOString(),
+      },
+      headers: {
+        Prefer: "return=representation",
+      },
+      method: "PATCH",
+    },
+  );
+
+  const jobRows = await createIngestionJobForSource(
+    {
+      file_name: source.fileName ?? null,
+      id: source.id,
+      label: source.label ?? null,
+      source_type: source.type,
+      sync_frequency: source.frequency,
+      url: source.url ?? null,
+    },
+    "menu_source_sync",
+    locationId,
+  );
+
+  return {
+    job: jobRows[0] ? mapSupabaseIngestionJob(jobRows[0]) : undefined,
+    source: updatedRows[0] ? mapSupabaseMenuSource(updatedRows[0]) : undefined,
+  };
+}
+
+export async function deleteMenuSourceFromSupabase(sourceId: string) {
+  if (!isSupabaseConfigured()) {
+    throw new Error("Supabase menu-source persistence is not configured.");
+  }
+
+  await supabaseRequest("menu_sources", new URLSearchParams({ id: `eq.${sourceId}` }), {
+    method: "DELETE",
+  });
+}
+
 export async function importParsedMenuToSupabase(
   categories: ParsedMenuCategory[],
   locationId = supabaseDemoLocationId,
@@ -718,6 +891,74 @@ export function buildMenuItemInsertRows(
   });
 }
 
+export function buildMenuSourceInsertPayload(input: CreateMenuSourceInput, locationId: string) {
+  const url = input.url.trim();
+
+  return {
+    file_name: null,
+    label: input.label?.trim() || deriveSourceLabel(url),
+    last_error: null,
+    location_id: locationId,
+    metadata: {},
+    source_type: input.type ?? "url",
+    status: "pending" as SyncStatus,
+    sync_frequency: input.frequency,
+    updated_at: new Date().toISOString(),
+    url,
+  };
+}
+
+export function buildIngestionJobInsertPayload(input: {
+  jobType: IngestionJobType;
+  locationId: string;
+  source: Pick<
+    SupabaseMenuSourceRow,
+    "file_name" | "id" | "label" | "source_type" | "sync_frequency" | "url"
+  >;
+}) {
+  return {
+    input: {
+      fileName: input.source.file_name,
+      frequency: input.source.sync_frequency,
+      label: input.source.label,
+      sourceType: input.source.source_type,
+      url: input.source.url,
+    },
+    job_type: input.jobType,
+    location_id: input.locationId,
+    result: {},
+    source_id: input.source.id,
+    status: "queued" as IngestionJobStatus,
+  };
+}
+
+export function mapSupabaseMenuSource(row: SupabaseMenuSourceRow): MenuSource {
+  return {
+    fileName: row.file_name ?? undefined,
+    frequency: normalizeEnum(row.sync_frequency, syncFrequencies, "daily"),
+    id: row.id,
+    label: row.label?.trim() || deriveSourceLabel(row.url ?? row.file_name ?? "Menu source"),
+    lastError: row.last_error ?? undefined,
+    lastSyncedAt: row.last_synced_at ?? "Never",
+    status: normalizeEnum(row.status, syncStatuses, "pending"),
+    type: normalizeEnum(row.source_type, menuSourceTypes, "url"),
+    url: row.url ?? undefined,
+  };
+}
+
+export function mapSupabaseIngestionJob(row: SupabaseIngestionJobRow): IngestionJob {
+  return {
+    completedAt: row.completed_at ?? undefined,
+    createdAt: row.created_at ?? "",
+    errorMessage: row.error_message ?? undefined,
+    id: row.id,
+    sourceId: row.source_id ?? undefined,
+    status: normalizeEnum(row.status, ingestionJobStatuses, "queued"),
+    summary: readResultSummary(row.result),
+    type: normalizeEnum(row.job_type, ingestionJobTypes, "menu_source_sync"),
+  };
+}
+
 export function mapSupabaseMenu(
   categories: SupabaseMenuCategoryRow[],
   items: SupabaseMenuItemRow[],
@@ -745,7 +986,30 @@ export function mapSupabaseMenu(
         upsell: normalizeStringArray(item.upsell_suggestions),
       })),
       name: category.name,
-    }));
+  }));
+}
+
+async function createIngestionJobForSource(
+  source: Pick<
+    SupabaseMenuSourceRow,
+    "file_name" | "id" | "label" | "source_type" | "sync_frequency" | "url"
+  >,
+  jobType: IngestionJobType,
+  locationId: string,
+) {
+  return supabaseRequest<SupabaseIngestionJobRow[]>(
+    "ingestion_jobs",
+    new URLSearchParams({
+      select: ingestionJobSelectColumns,
+    }),
+    {
+      body: buildIngestionJobInsertPayload({ jobType, locationId, source }),
+      headers: {
+        Prefer: "return=representation",
+      },
+      method: "POST",
+    },
+  );
 }
 
 export function buildReservationInsertPayload(input: CreateReservationInput, locationId: string) {
@@ -923,6 +1187,21 @@ function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
+function deriveSourceLabel(value: string) {
+  try {
+    const url = new URL(value);
+    return url.hostname.replace(/^www\./, "");
+  } catch {
+    return value.trim() || "Menu source";
+  }
+}
+
+function readResultSummary(value: unknown) {
+  if (!isObjectRecord(value)) return undefined;
+  const summary = value.summary;
+  return typeof summary === "string" && summary.trim() ? summary.trim() : undefined;
+}
+
 async function supabaseRequest<T>(
   table: string,
   params: URLSearchParams,
@@ -959,3 +1238,9 @@ const reservationSelectColumns =
 
 const agentConfigSelectColumns =
   "id,host_name,tone,greeting_template,disclosure_enabled,call_handling_mode,answer_after_rings,after_hours_behavior,escalation_phone_number,answer_faqs_enabled,orders_enabled,reservations_enabled,sms_confirmations_enabled,staff_escalation_enabled,order_destinations,payment_mode,reservation_mode,reservation_provider,updated_at";
+
+const menuSourceSelectColumns =
+  "id,source_type,label,url,file_name,sync_frequency,status,last_synced_at,last_error,created_at,updated_at";
+
+const ingestionJobSelectColumns =
+  "id,source_id,job_type,status,result,error_message,created_at,completed_at";

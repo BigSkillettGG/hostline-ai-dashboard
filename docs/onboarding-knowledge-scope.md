@@ -94,6 +94,7 @@ The interview should eventually write to:
 - `onboarding_profiles` for the full interview draft, progress, and launch-readiness status.
 - `agent_configs` for voice, call handling, capabilities, and escalation.
 - `knowledge_documents` and `faqs` for restaurant policies and Q&A.
+- `menu_sources` and `ingestion_jobs` for URLs, files, pasted text, extraction status, and retry history.
 - `menu_categories`, `menu_items`, and modifiers/options for order understanding.
 - `integration_connections` for POS, reservations, SMS, printers, and kitchen devices.
 - `phone_numbers` or equivalent for Twilio number assignment and forwarding status.
