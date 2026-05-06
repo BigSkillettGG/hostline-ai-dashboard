@@ -17,6 +17,7 @@ import Onboarding from "./pages/Onboarding";
 import Calls from "./pages/Calls";
 import Escalations from "./pages/Escalations";
 import Orders from "./pages/Orders";
+import Kitchen from "./pages/Kitchen";
 import Reservations from "./pages/Reservations";
 import MenuPage from "./pages/Menu";
 import Knowledge from "./pages/Knowledge";
@@ -62,6 +63,7 @@ const App = () => (
             <Route path="calls" element={<Calls />} />
             <Route path="escalations" element={<Escalations />} />
             <Route path="orders" element={<Orders />} />
+            <Route path="kitchen" element={<Kitchen />} />
             <Route path="reservations" element={<Reservations />} />
             <Route path="menu" element={<MenuPage />} />
             <Route path="knowledge" element={<Knowledge />} />

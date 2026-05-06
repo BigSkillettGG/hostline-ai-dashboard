@@ -5,7 +5,7 @@ HostLine AI is an AI phone host for restaurants. This repository contains the ad
 ## What The App Covers
 
 - Calls, transcripts, summaries, outcomes, and review queues. The Calls page reads from Supabase when dashboard keys are configured and falls back to sample data otherwise.
-- Pickup orders with pay-at-pickup workflow. The Orders page reads from Supabase when dashboard keys are configured, falls back to sample data otherwise, persists status changes, and records staff queue, tablet, and printer delivery attempts when live.
+- Pickup orders with pay-at-pickup workflow. The Orders page reads from Supabase when dashboard keys are configured, falls back to sample data otherwise, persists status changes, and records staff queue, tablet, and printer delivery attempts when live. The Kitchen page gives staff a tablet-friendly fulfillment board for accepting, starting, and marking phone orders ready.
 - Reservation bookings and manual staff-confirmed requests. The Reservations page reads from Supabase when dashboard keys are configured, persists status changes, and can create provider-tagged manual requests.
 - Menu, availability, modifiers, prep times, and upsell suggestions. The Menu page can import pasted menu text into structured Supabase `menu_categories` and `menu_items` rows, and it can persist menu URLs as `menu_sources` with queued `ingestion_jobs`.
 - Restaurant knowledge base and FAQs.
