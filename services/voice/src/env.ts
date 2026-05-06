@@ -38,10 +38,110 @@ const envSchema = z.object({
 
 export type VoiceServiceEnv = z.infer<typeof envSchema>;
 
+export interface VoiceServiceReadinessCheck {
+  detail: string;
+  id: string;
+  label: string;
+  ready: boolean;
+  required: boolean;
+}
+
+export interface VoiceServiceReadiness {
+  checks: VoiceServiceReadinessCheck[];
+  productionReady: boolean;
+}
+
 export function loadEnv(): VoiceServiceEnv {
   loadDotEnvFile(".env");
   loadDotEnvFile(".env.local");
   return envSchema.parse(process.env);
+}
+
+export function getVoiceServiceReadiness(env: VoiceServiceEnv): VoiceServiceReadiness {
+  const checks: VoiceServiceReadinessCheck[] = [
+    {
+      detail: "Needed so Twilio can reach the voice webhook over HTTPS.",
+      id: "public_http_base_url",
+      label: "Public HTTP base URL",
+      ready: Boolean(env.PUBLIC_HTTP_BASE_URL),
+      required: true,
+    },
+    {
+      detail: "Needed for Twilio ConversationRelay websocket audio.",
+      id: "public_ws_base_url",
+      label: "Public websocket base URL",
+      ready: Boolean(env.PUBLIC_WS_BASE_URL),
+      required: true,
+    },
+    {
+      detail: "Locks browser calls to the dashboard origin instead of wildcard CORS.",
+      id: "allowed_origin",
+      label: "Allowed dashboard origin",
+      ready: Boolean(env.VOICE_SERVICE_ALLOWED_ORIGIN && env.VOICE_SERVICE_ALLOWED_ORIGIN !== "*"),
+      required: true,
+    },
+    {
+      detail: "Protects internal menu ingestion and Twilio provisioning endpoints.",
+      id: "internal_api_key",
+      label: "Internal API key",
+      ready: Boolean(env.HOSTLINE_INTERNAL_API_KEY),
+      required: true,
+    },
+    {
+      detail: "Loads restaurant context, logs calls, and writes operational records.",
+      id: "supabase_service_role",
+      label: "Supabase service role",
+      ready: Boolean(env.SUPABASE_URL && env.SUPABASE_SECRET_KEY && env.SUPABASE_DEMO_LOCATION_ID),
+      required: true,
+    },
+    {
+      detail: "Generates low-latency restaurant replies when deterministic answers are not enough.",
+      id: "openai",
+      label: "OpenAI replies",
+      ready: Boolean(env.OPENAI_API_KEY),
+      required: true,
+    },
+    {
+      detail: "Powers the hosted voice preview and fallback TTS flows.",
+      id: "elevenlabs",
+      label: "ElevenLabs voice",
+      ready: Boolean(env.ELEVENLABS_API_KEY),
+      required: true,
+    },
+    {
+      detail: "Searches and provisions phone numbers, then receives inbound calls.",
+      id: "twilio_credentials",
+      label: "Twilio credentials",
+      ready: Boolean(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN),
+      required: true,
+    },
+    {
+      detail: "Rejects spoofed Twilio webhooks in production.",
+      id: "twilio_signatures",
+      label: "Twilio signature enforcement",
+      ready: Boolean(env.REQUIRE_TWILIO_SIGNATURE && env.TWILIO_AUTH_TOKEN && env.PUBLIC_HTTP_BASE_URL),
+      required: true,
+    },
+    {
+      detail: "Sends caller confirmations for captured orders and reservations.",
+      id: "guest_confirmations",
+      label: "Guest SMS confirmations",
+      ready: Boolean(env.TWILIO_MESSAGING_SERVICE_SID || env.TWILIO_SMS_FROM_NUMBER),
+      required: false,
+    },
+    {
+      detail: "Routes staff alerts through SMS or webhook destinations.",
+      id: "staff_alerts",
+      label: "Staff alert destination",
+      ready: Boolean(env.STAFF_ALERT_SMS_TO || env.STAFF_ALERT_WEBHOOK_URL),
+      required: false,
+    },
+  ];
+
+  return {
+    checks,
+    productionReady: checks.filter((check) => check.required).every((check) => check.ready),
+  };
 }
 
 function loadDotEnvFile(fileName: string) {

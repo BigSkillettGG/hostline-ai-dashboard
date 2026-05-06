@@ -5,7 +5,7 @@ import { createCallStore } from "./call-store";
 import { createConversationRelayHandler } from "./conversation-relay";
 import { createElevenLabsPreview } from "./elevenlabs";
 import { createGuestConfirmationService } from "./guest-confirmation-service";
-import { loadEnv, type VoiceServiceEnv } from "./env";
+import { getVoiceServiceReadiness, loadEnv, type VoiceServiceEnv } from "./env";
 import { createMenuIngestionService } from "./menu-ingestion-service";
 import { createStaffNotificationService } from "./notification-service";
 import { createPhoneNumberStore } from "./phone-number-store";
@@ -71,9 +71,12 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
   }
 
   if (req.method === "GET" && url.pathname === "/health") {
+    const readiness = getVoiceServiceReadiness(currentEnv);
     sendJson(res, 200, {
       ok: true,
       service: "hostline-voice",
+      productionReady: readiness.productionReady,
+      readinessChecks: readiness.checks,
       openaiConfigured: Boolean(currentEnv.OPENAI_API_KEY),
       elevenLabsConfigured: Boolean(currentEnv.ELEVENLABS_API_KEY),
       supabaseConfigured: Boolean(

@@ -9,6 +9,16 @@ export interface VoiceServiceHealth {
   supabaseConfigured: boolean;
   twilioProvisioningConfigured?: boolean;
   twilioSignatureRequired: boolean;
+  productionReady?: boolean;
+  readinessChecks?: VoiceServiceReadinessCheck[];
+}
+
+export interface VoiceServiceReadinessCheck {
+  detail: string;
+  id: string;
+  label: string;
+  ready: boolean;
+  required: boolean;
 }
 
 export interface AvailableVoicePhoneNumber {

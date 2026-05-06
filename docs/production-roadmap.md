@@ -55,6 +55,9 @@ There are 12 production workstreams:
 - The live voice service now creates staff Tasks for complaint callbacks, human handoff requests, and low-confidence special-handling topics even when staff alerts are delivered successfully.
 - The live voice service can now send caller-facing SMS confirmations for captured pickup orders and reservation requests when enabled for the location.
 - Supabase Auth mode, user access-token REST calls, organization memberships, platform admins, and production RLS policies are now documented and scaffolded.
+- Restaurant memberships now distinguish owner, admin, manager, and staff access in the dashboard, with a demo workspace that is separate from production roles.
+- Team invitations now have a dashboard flow, local demo fallback, Supabase REST hooks, and RLS-backed `team_invitations` schema.
+- The voice service health response now includes production readiness checks for deployment URLs, secrets, Supabase, OpenAI, ElevenLabs, Twilio, CORS, and signature enforcement.
 
 ## Key Product Standard
 

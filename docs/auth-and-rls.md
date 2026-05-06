@@ -17,14 +17,23 @@ insert into user_memberships (user_id, organization_id, role)
 values ('<auth-user-id>', '<organization-id>', 'owner');
 ```
 
-5. Insert HostLine internal staff as platform admins only when needed:
+Include `member_name` and `member_email` when creating memberships if you want the dashboard team page to show readable names without querying Supabase Auth admin APIs:
+
+```sql
+insert into user_memberships (user_id, organization_id, role, member_name, member_email)
+values ('<auth-user-id>', '<organization-id>', 'admin', 'Maria Lombardi', 'maria@example.com');
+```
+
+5. Team invitations are stored in `team_invitations`. The dashboard can create pending invitations when the signed-in user is an `owner` or `admin`; a backend worker should send the email invite and create the final Supabase Auth user plus membership after acceptance.
+
+6. Insert HostLine internal staff as platform admins only when needed:
 
 ```sql
 insert into platform_admins (user_id)
 values ('<hostline-staff-auth-user-id>');
 ```
 
-6. Set frontend environment variables:
+7. Set frontend environment variables:
 
 ```bash
 VITE_AUTH_MODE=supabase
@@ -41,5 +50,6 @@ The voice service should continue to use `SUPABASE_SECRET_KEY` from the backend 
 - `manager`: operate the restaurant workflow and manage most location content.
 - `staff`: operate calls, orders, reservations, and tasks.
 - `platform_admins`: HostLine internal support access across tenants.
+- Demo access is not a database role. It is a local seeded workspace for sales walkthroughs and Lovable/local development.
 
 The current UI still has a single active location selector driven by `VITE_SUPABASE_DEMO_LOCATION_ID`; the RLS policies are multi-tenant-ready while the location switcher becomes production-backed in a later slice.

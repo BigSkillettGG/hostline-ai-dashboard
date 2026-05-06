@@ -11,7 +11,7 @@ import type {
   ReservationStatus,
   TranscriptSpeaker,
 } from "@/data/mock";
-import { getSupabaseAccessToken } from "@/lib/auth";
+import { getActiveOrganizationId, getSupabaseAccessToken } from "@/lib/auth";
 import type { ParsedMenuCategory } from "@/domain/menu-ingestion";
 import { calculateOnboardingProgress, type OnboardingDraft } from "@/domain/onboarding";
 import {
@@ -36,6 +36,13 @@ import {
   type StaffTaskStatus,
   type StaffTaskType,
 } from "@/domain/staff-tasks";
+import {
+  normalizeInviteEmail,
+  normalizeTeamRole,
+  type TeamInvitation,
+  type TeamInviteStatus,
+  type TeamMember,
+} from "@/domain/team";
 import type { RestaurantAgentConfig } from "@/domain/restaurant-config";
 import type {
   IngestionJob,
@@ -275,6 +282,25 @@ interface SupabaseCallReservationLinkRow {
   source_call_id: string | null;
 }
 
+interface SupabaseTeamMemberRow {
+  created_at: string | null;
+  id: string;
+  member_email: string | null;
+  member_name: string | null;
+  role: string | null;
+  user_id: string | null;
+}
+
+interface SupabaseTeamInvitationRow {
+  created_at: string | null;
+  email: string;
+  expires_at: string | null;
+  id: string;
+  invited_by: string | null;
+  role: string | null;
+  status: string | null;
+}
+
 export interface PhoneNumberRecord {
   forwardingMode: string;
   forwardingStatus: string;
@@ -381,6 +407,78 @@ export function isStaffAlertEventPersistenceConfigured() {
 
 export function isStaffTaskPersistenceConfigured() {
   return Boolean(isSupabaseConfigured() && supabaseDemoLocationId);
+}
+
+export function isTeamPersistenceConfigured(organizationId = getActiveOrganizationId()) {
+  return Boolean(isSupabaseConfigured() && organizationId);
+}
+
+export async function fetchTeamMembersFromSupabase(
+  organizationId = getActiveOrganizationId(),
+): Promise<TeamMember[]> {
+  if (!isTeamPersistenceConfigured(organizationId)) {
+    throw new Error("Supabase team persistence is not configured.");
+  }
+
+  const rows = await supabaseRequest<SupabaseTeamMemberRow[]>(
+    "user_memberships",
+    new URLSearchParams({
+      order: "created_at.asc",
+      organization_id: `eq.${organizationId}`,
+      select: "id,user_id,role,member_name,member_email,created_at",
+    }),
+  );
+
+  return rows.map(mapSupabaseTeamMember);
+}
+
+export async function fetchTeamInvitationsFromSupabase(
+  organizationId = getActiveOrganizationId(),
+): Promise<TeamInvitation[]> {
+  if (!isTeamPersistenceConfigured(organizationId)) {
+    throw new Error("Supabase team invitations are not configured.");
+  }
+
+  const rows = await supabaseRequest<SupabaseTeamInvitationRow[]>(
+    "team_invitations",
+    new URLSearchParams({
+      order: "created_at.desc",
+      organization_id: `eq.${organizationId}`,
+      select: "id,email,role,status,invited_by,expires_at,created_at",
+    }),
+  );
+
+  return rows.map(mapSupabaseTeamInvitation);
+}
+
+export async function createTeamInvitationInSupabase(
+  input: { email: string; invitedBy?: string; role: TeamMember["role"] },
+  organizationId = getActiveOrganizationId(),
+): Promise<TeamInvitation> {
+  if (!isTeamPersistenceConfigured(organizationId)) {
+    throw new Error("Supabase team invitations are not configured.");
+  }
+
+  const role = normalizeTeamRole(input.role);
+  const email = normalizeInviteEmail(input.email);
+  const rows = await supabaseRequest<SupabaseTeamInvitationRow[]>(
+    "team_invitations",
+    new URLSearchParams(),
+    {
+      body: {
+        email,
+        invited_by: input.invitedBy,
+        organization_id: organizationId,
+        role,
+        status: "pending",
+      },
+      headers: { Prefer: "return=representation" },
+      method: "POST",
+    },
+  );
+
+  if (!rows?.[0]) throw new Error("Supabase did not return the created invitation.");
+  return mapSupabaseTeamInvitation(rows[0]);
 }
 
 export async function fetchCallsFromSupabase(): Promise<Call[]> {
@@ -1733,6 +1831,42 @@ function readResultSummary(value: unknown) {
   if (!isObjectRecord(value)) return undefined;
   const summary = value.summary;
   return typeof summary === "string" && summary.trim() ? summary.trim() : undefined;
+}
+
+function mapSupabaseTeamMember(row: SupabaseTeamMemberRow): TeamMember {
+  const email = row.member_email?.trim() || `${row.user_id?.slice(0, 8) ?? "member"}@membership.local`;
+  return {
+    email,
+    id: row.id,
+    lastActive: row.created_at ? `Added ${formatShortDate(row.created_at)}` : "Active",
+    name: row.member_name?.trim() || email.split("@")[0],
+    role: normalizeTeamRole(row.role),
+  };
+}
+
+function mapSupabaseTeamInvitation(row: SupabaseTeamInvitationRow): TeamInvitation {
+  return {
+    createdAt: row.created_at ?? new Date(0).toISOString(),
+    email: normalizeInviteEmail(row.email),
+    expiresAt: row.expires_at ?? new Date(0).toISOString(),
+    id: row.id,
+    invitedBy: row.invited_by ?? undefined,
+    role: normalizeTeamRole(row.role),
+    status: normalizeInviteStatus(row.status),
+  };
+}
+
+function normalizeInviteStatus(status: string | null): TeamInviteStatus {
+  if (status === "accepted" || status === "revoked" || status === "expired") return status;
+  return "pending";
+}
+
+function formatShortDate(value: string) {
+  try {
+    return new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(new Date(value));
+  } catch {
+    return "recently";
+  }
 }
 
 async function supabaseRequest<T>(

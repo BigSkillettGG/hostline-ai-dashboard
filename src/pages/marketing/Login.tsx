@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { isDemoAuthMode, signIn } from "@/lib/auth";
+import { isDemoAuthMode, signIn, startDemoSession } from "@/lib/auth";
 import { toast } from "sonner";
 
 export default function Login() {
@@ -33,6 +33,12 @@ export default function Login() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const openDemoWorkspace = () => {
+    const user = startDemoSession("admin");
+    toast.success(`Opening ${user.name}'s demo workspace`);
+    navigate("/app", { replace: true });
   };
 
   return (
@@ -64,12 +70,17 @@ export default function Login() {
             <Button type="submit" className="w-full" disabled={isSubmitting}>
               {isSubmitting ? "Signing in..." : "Sign in"}
             </Button>
+            {demoAuth && (
+              <Button type="button" variant="outline" className="w-full" onClick={openDemoWorkspace}>
+                Open demo workspace
+              </Button>
+            )}
             <p className="text-center text-xs text-muted-foreground">
               No account? <Link to="/signup" className="text-foreground underline-offset-4 hover:underline">Start free</Link>
             </p>
             {demoAuth && (
               <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
-                Demo: any email works. Use an email containing <code className="font-mono">staff</code> or <code className="font-mono">@hostline</code> to sign in as super admin.
+                Demo: any email works. Use the demo workspace for a restaurant-owner sales walkthrough, or an email containing <code className="font-mono">staff</code> or <code className="font-mono">@hostline</code> for the internal console.
               </p>
             )}
           </form>

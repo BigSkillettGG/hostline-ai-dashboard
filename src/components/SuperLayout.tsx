@@ -12,7 +12,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { getAuthReadiness, isDemoAuthMode, useCurrentUser, signOut, setRole } from "@/lib/auth";
+import { getAuthReadiness, isDemoAuthMode, isPlatformAdminUser, useCurrentUser, signOut, setRole } from "@/lib/auth";
 import { useNavigate } from "react-router-dom";
 
 const items = [
@@ -76,6 +76,7 @@ export default function SuperLayout() {
   const navigate = useNavigate();
   const authReadiness = getAuthReadiness();
   const demoAuth = isDemoAuthMode();
+  const platformAccess = isPlatformAdminUser(user);
   return (
     <SidebarProvider>
       <div className="flex min-h-screen w-full bg-background">
@@ -111,7 +112,9 @@ export default function SuperLayout() {
                 <DropdownMenuContent align="end" className="w-56">
                   <DropdownMenuLabel>
                     <div className="text-sm">{user?.name}</div>
-                    <div className="text-xs font-normal text-muted-foreground">Super Admin</div>
+                    <div className="text-xs font-normal text-muted-foreground">
+                      {platformAccess ? "Platform admin" : "Staff console"}
+                    </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => { signOut(); navigate("/"); }}>Sign out</DropdownMenuItem>

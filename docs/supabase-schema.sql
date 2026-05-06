@@ -24,9 +24,28 @@ create table user_memberships (
   user_id uuid not null references auth.users(id) on delete cascade,
   organization_id uuid not null references organizations(id) on delete cascade,
   role text not null check (role in ('owner', 'admin', 'manager', 'staff')),
+  member_name text,
+  member_email text,
   created_at timestamptz not null default now(),
   unique(user_id, organization_id)
 );
+
+create table team_invitations (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references organizations(id) on delete cascade,
+  email text not null,
+  role text not null check (role in ('owner', 'admin', 'manager', 'staff')),
+  status text not null default 'pending' check (status in ('pending', 'accepted', 'revoked', 'expired')),
+  invited_by uuid references auth.users(id) on delete set null,
+  token_hash text,
+  expires_at timestamptz not null default now() + interval '7 days',
+  accepted_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create unique index team_invitations_one_pending_email
+on team_invitations (organization_id, lower(email))
+where status = 'pending';
 
 create table platform_admins (
   id uuid primary key default gen_random_uuid(),

@@ -12,7 +12,15 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
-import { getAuthReadiness, isDemoAuthMode, useCurrentUser, signOut, setRole } from "@/lib/auth";
+import {
+  getAuthReadiness,
+  getRestaurantRoleLabel,
+  isDemoAuthMode,
+  isDemoWorkspace,
+  useCurrentUser,
+  signOut,
+  setRole,
+} from "@/lib/auth";
 
 export default function AppLayout() {
   const [agentLive, setAgentLive] = useState(true);
@@ -21,6 +29,7 @@ export default function AppLayout() {
   const initials = (user?.name ?? "ML").split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase();
   const authReadiness = getAuthReadiness();
   const demoAuth = isDemoAuthMode();
+  const restaurantRole = getRestaurantRoleLabel(user?.restaurantMembershipRole);
 
   return (
     <SidebarProvider>
@@ -62,6 +71,11 @@ export default function AppLayout() {
               >
                 {authReadiness.badge}
               </Badge>
+              {isDemoWorkspace(user) && (
+                <Badge variant="outline" className="hidden border-primary/20 bg-primary/10 text-primary lg:inline-flex">
+                  Demo workspace
+                </Badge>
+              )}
               <div className="hidden sm:flex items-center gap-2 rounded-full border border-border bg-card px-2.5 py-1">
                 <span className={`h-1.5 w-1.5 rounded-full ${agentLive ? "bg-success animate-pulse" : "bg-muted-foreground"}`} />
                 <span className="text-xs font-medium">{agentLive ? "AI Live" : "Paused"}</span>
@@ -85,6 +99,7 @@ export default function AppLayout() {
                   <DropdownMenuLabel>
                     <div className="text-sm">{user?.name ?? "Maria Lombardi"}</div>
                     <div className="text-xs font-normal text-muted-foreground">{user?.email ?? "Owner"}</div>
+                    <div className="text-xs font-normal text-muted-foreground">{restaurantRole}</div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => navigate("/app/profile")}>Profile</DropdownMenuItem>

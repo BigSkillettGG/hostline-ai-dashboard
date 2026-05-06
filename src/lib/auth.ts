@@ -1,17 +1,40 @@
 import { useEffect, useState } from "react";
+import {
+  canManageRestaurantSettings,
+  canManageRestaurantTeam,
+  compareRestaurantRoles,
+  getRestaurantRoleLabel,
+  isRestaurantMembershipRole,
+  type RestaurantMembershipRole,
+  type UserRole,
+} from "@/domain/access-control";
+
+export type { RestaurantMembershipRole, UserRole } from "@/domain/access-control";
 
 export type AuthMode = "demo" | "supabase";
-export type UserRole = "admin" | "superadmin";
+export type WorkspaceKind = "demo" | "restaurant" | "platform";
+
+export interface RestaurantMembership {
+  createdAt?: string;
+  id?: string;
+  organizationId: string;
+  role: RestaurantMembershipRole;
+}
 
 export interface CurrentUser {
   accessToken?: string;
+  activeOrganizationId?: string;
   authProvider: AuthMode;
   email: string;
+  isPlatformAdmin?: boolean;
+  memberships?: RestaurantMembership[];
   name: string;
   refreshToken?: string;
   restaurantId?: string;
+  restaurantMembershipRole?: RestaurantMembershipRole;
   role: UserRole;
   supabaseUserId?: string;
+  workspaceKind?: WorkspaceKind;
 }
 
 export interface AuthRuntimeConfig {
@@ -40,8 +63,16 @@ interface SupabaseAuthResponse {
   user?: SupabaseAuthUser;
 }
 
+interface SupabaseMembershipRow {
+  created_at?: string | null;
+  id?: string;
+  organization_id?: string;
+  role?: string;
+}
+
 const STORAGE_KEY = "hostline.currentUser";
 const EVENT = "hostline.auth.changed";
+const DEMO_ORGANIZATION_ID = "demo-olive-ember";
 const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL ?? "").replace(/\/$/, "");
 const supabasePublishableKey =
   import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? import.meta.env.VITE_SUPABASE_ANON_KEY ?? "";
@@ -85,10 +116,36 @@ export function isDemoAuthMode(config = getAuthRuntimeConfig()) {
   return config.mode === "demo";
 }
 
+export function getCurrentUser() {
+  return readUser();
+}
+
+export function getActiveOrganizationId() {
+  return readUser()?.activeOrganizationId;
+}
+
 export function getSupabaseAccessToken() {
   const user = readUser();
   return user?.authProvider === "supabase" ? user.accessToken : undefined;
 }
+
+export function isDemoWorkspace(user: CurrentUser | null | undefined) {
+  return user?.authProvider === "demo" || user?.workspaceKind === "demo";
+}
+
+export function isPlatformAdminUser(user: CurrentUser | null | undefined) {
+  return Boolean(user?.role === "superadmin" || user?.isPlatformAdmin);
+}
+
+export function canCurrentUserManageTeam(user: CurrentUser | null | undefined) {
+  return Boolean(user && user.role === "admin" && canManageRestaurantTeam(user.restaurantMembershipRole));
+}
+
+export function canCurrentUserManageSettings(user: CurrentUser | null | undefined) {
+  return Boolean(user && user.role === "admin" && canManageRestaurantSettings(user.restaurantMembershipRole));
+}
+
+export { getRestaurantRoleLabel };
 
 export async function signIn(email: string, password: string): Promise<CurrentUser> {
   const config = getAuthRuntimeConfig();
@@ -113,25 +170,19 @@ export async function signUp(input: {
   return user;
 }
 
+export function startDemoSession(role: UserRole = "admin") {
+  const user = role === "superadmin" ? buildDemoSuperAdmin() : buildDemoUser("maria@oliveandember.com", "Maria Lombardi");
+  writeUser(user);
+  return user;
+}
+
 export function signOut() {
   writeUser(null);
 }
 
 export function setRole(role: UserRole) {
   if (!isDemoAuthMode()) return;
-
-  const u = readUser();
-  if (!u) {
-    writeUser({
-      authProvider: "demo",
-      email: role === "superadmin" ? "staff@hostline.ai" : "maria@oliveandember.com",
-      name: role === "superadmin" ? "HostLine Staff" : "Maria Lombardi",
-      restaurantId: "olive-ember",
-      role,
-    });
-  } else {
-    writeUser({ ...u, authProvider: "demo", role });
-  }
+  writeUser(role === "superadmin" ? buildDemoSuperAdmin() : buildDemoUser("maria@oliveandember.com", "Maria Lombardi"));
 }
 
 export function useCurrentUser(): CurrentUser | null {
@@ -149,47 +200,88 @@ export function useCurrentUser(): CurrentUser | null {
 }
 
 export function buildDemoUser(email: string, name?: string): CurrentUser {
-  const role = roleFromEmailAndMetadata(email);
-  return {
+  if (isHostLineStaffEmail(email)) return buildDemoSuperAdmin(email, name);
+
+  const memberships: RestaurantMembership[] = [
+    {
+      createdAt: new Date(0).toISOString(),
+      id: "demo-membership-owner",
+      organizationId: DEMO_ORGANIZATION_ID,
+      role: "owner",
+    },
+  ];
+
+  return applyAccessModel({
     authProvider: "demo",
     email,
-    name: name?.trim() || defaultNameFor(email, role),
+    memberships,
+    name: name?.trim() || defaultNameFor(email, "admin"),
     restaurantId: "olive-ember",
-    role,
-  };
+    role: "admin",
+    workspaceKind: "demo",
+  });
 }
 
-export function mapSupabaseAuthResponse(data: SupabaseAuthResponse): CurrentUser {
+export function buildDemoSuperAdmin(email = "staff@hostline.ai", name = "HostLine Staff"): CurrentUser {
+  return applyAccessModel({
+    authProvider: "demo",
+    email,
+    isPlatformAdmin: true,
+    memberships: [],
+    name,
+    role: "superadmin",
+    workspaceKind: "platform",
+  });
+}
+
+export function mapSupabaseAuthResponse(
+  data: SupabaseAuthResponse,
+  access: { isPlatformAdmin?: boolean; memberships?: RestaurantMembership[] } = {},
+): CurrentUser {
   if (!data.access_token || !data.user?.email || !data.user.id) {
     throw new Error("Supabase Auth did not return an active session. Confirm the email address before signing in.");
   }
 
-  const role = roleFromEmailAndMetadata(data.user.email, data.user.app_metadata, data.user.user_metadata);
+  const memberships = sortMemberships(access.memberships ?? []);
+  const role = roleFromEmailAndMetadata(data.user.email, data.user.app_metadata, data.user.user_metadata, {
+    isPlatformAdmin: access.isPlatformAdmin,
+    memberships,
+  });
   const name =
     stringMetadataValue(data.user.user_metadata, "name") ??
     stringMetadataValue(data.user.user_metadata, "full_name") ??
     defaultNameFor(data.user.email, role);
 
-  return {
+  return applyAccessModel({
     accessToken: data.access_token,
     authProvider: "supabase",
     email: data.user.email,
+    isPlatformAdmin: Boolean(access.isPlatformAdmin),
+    memberships,
     name,
     refreshToken: data.refresh_token,
-    restaurantId: stringMetadataValue(data.user.app_metadata, "restaurant_id"),
+    restaurantId: stringMetadataValue(data.user.app_metadata, "restaurant_id") ?? memberships[0]?.organizationId,
     role,
     supabaseUserId: data.user.id,
-  };
+  });
 }
 
 export function roleFromEmailAndMetadata(
   email: string,
   appMetadata: Record<string, unknown> = {},
   userMetadata: Record<string, unknown> = {},
+  access: {
+    inferHostlineEmail?: boolean;
+    isPlatformAdmin?: boolean;
+    memberships?: RestaurantMembership[];
+  } = {},
 ): UserRole {
   const role = stringMetadataValue(appMetadata, "role") ?? stringMetadataValue(userMetadata, "role");
-  if (role === "superadmin" || role === "admin") return role;
-  return /staff|@hostline|admin@hostline/i.test(email) ? "superadmin" : "admin";
+  const platformFlag = booleanMetadataValue(appMetadata, "platform_admin") ?? booleanMetadataValue(appMetadata, "is_platform_admin");
+
+  if (access.isPlatformAdmin || platformFlag || role === "superadmin") return "superadmin";
+  if (access.memberships?.length || role === "admin") return "admin";
+  return access.inferHostlineEmail && isHostLineStaffEmail(email) ? "superadmin" : "admin";
 }
 
 function readUser(): CurrentUser | null {
@@ -205,7 +297,7 @@ function readUser(): CurrentUser | null {
 
 function writeUser(user: CurrentUser | null) {
   if (typeof window === "undefined") return;
-  if (user) localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+  if (user) localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizeStoredUser(user)));
   else localStorage.removeItem(STORAGE_KEY);
   window.dispatchEvent(new Event(EVENT));
 }
@@ -216,7 +308,7 @@ async function signInWithSupabase(email: string, password: string, config: AuthR
     { email, password },
     config,
   );
-  return mapSupabaseAuthResponse(response);
+  return hydrateSupabaseUser(response, config);
 }
 
 async function signUpWithSupabase(
@@ -235,7 +327,41 @@ async function signUpWithSupabase(
     },
     config,
   );
-  return mapSupabaseAuthResponse(response);
+  return hydrateSupabaseUser(response, config);
+}
+
+async function hydrateSupabaseUser(data: SupabaseAuthResponse, config: AuthRuntimeConfig) {
+  const base = mapSupabaseAuthResponse(data);
+  const [memberships, isPlatformAdmin] = await Promise.all([
+    fetchSupabaseMemberships(base, config),
+    fetchSupabasePlatformAdmin(base, config),
+  ]);
+
+  return mapSupabaseAuthResponse(data, { isPlatformAdmin, memberships });
+}
+
+async function fetchSupabaseMemberships(user: CurrentUser, config: AuthRuntimeConfig): Promise<RestaurantMembership[]> {
+  if (!user.accessToken || !user.supabaseUserId) return [];
+
+  const params = new URLSearchParams({
+    order: "created_at.asc",
+    select: "id,organization_id,role,created_at",
+    user_id: `eq.${user.supabaseUserId}`,
+  });
+  const rows = await supabaseRestRequest<SupabaseMembershipRow[]>("user_memberships", params, user.accessToken, config);
+  return sortMemberships(rows.map(mapSupabaseMembershipRow).filter(Boolean) as RestaurantMembership[]);
+}
+
+async function fetchSupabasePlatformAdmin(user: CurrentUser, config: AuthRuntimeConfig) {
+  if (!user.accessToken || !user.supabaseUserId) return false;
+
+  const params = new URLSearchParams({
+    limit: "1",
+    select: "id",
+    user_id: `eq.${user.supabaseUserId}`,
+  });
+  const rows = await supabaseRestRequest<Array<{ id?: string }>>("platform_admins", params, user.accessToken, config);
+  return rows.length > 0;
 }
 
 async function supabaseAuthRequest<T>(path: string, body: unknown, config: AuthRuntimeConfig): Promise<T> {
@@ -260,16 +386,96 @@ async function supabaseAuthRequest<T>(path: string, body: unknown, config: AuthR
   return (await response.json()) as T;
 }
 
+async function supabaseRestRequest<T>(
+  table: string,
+  params: URLSearchParams,
+  accessToken: string,
+  config: AuthRuntimeConfig,
+): Promise<T> {
+  if (!config.supabaseUrl || !config.supabasePublishableKey) {
+    throw new Error("Supabase Auth is not configured.");
+  }
+
+  const response = await fetch(`${config.supabaseUrl}/rest/v1/${table}?${params.toString()}`, {
+    headers: {
+      apikey: config.supabasePublishableKey,
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    method: "GET",
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Supabase ${table} request failed: ${response.status} ${text}`);
+  }
+
+  return (await response.json()) as T;
+}
+
 function normalizeStoredUser(user: CurrentUser): CurrentUser {
-  return {
+  const memberships = sortMemberships((user.memberships ?? []).map(normalizeMembership).filter(Boolean) as RestaurantMembership[]);
+  return applyAccessModel({
     ...user,
     authProvider: user.authProvider ?? "demo",
+    isPlatformAdmin: Boolean(user.isPlatformAdmin || user.role === "superadmin"),
+    memberships,
     role: user.role ?? "admin",
+  });
+}
+
+function applyAccessModel(user: CurrentUser): CurrentUser {
+  const memberships = sortMemberships((user.memberships ?? []).map(normalizeMembership).filter(Boolean) as RestaurantMembership[]);
+  const primaryMembership = memberships[0];
+  const restaurantMembershipRole = user.restaurantMembershipRole && isRestaurantMembershipRole(user.restaurantMembershipRole)
+    ? user.restaurantMembershipRole
+    : primaryMembership?.role;
+  const role: UserRole = user.isPlatformAdmin || user.role === "superadmin" ? "superadmin" : "admin";
+  const workspaceKind = user.workspaceKind ?? defaultWorkspaceKind(user.authProvider, role);
+
+  return {
+    ...user,
+    activeOrganizationId: user.activeOrganizationId ?? primaryMembership?.organizationId,
+    isPlatformAdmin: Boolean(user.isPlatformAdmin || role === "superadmin"),
+    memberships,
+    restaurantId: user.restaurantId ?? primaryMembership?.organizationId,
+    restaurantMembershipRole,
+    role,
+    workspaceKind,
   };
+}
+
+function mapSupabaseMembershipRow(row: SupabaseMembershipRow): RestaurantMembership | null {
+  if (!row.organization_id || !isRestaurantMembershipRole(row.role)) return null;
+  return {
+    createdAt: row.created_at ?? undefined,
+    id: row.id,
+    organizationId: row.organization_id,
+    role: row.role,
+  };
+}
+
+function normalizeMembership(value: RestaurantMembership): RestaurantMembership | null {
+  if (!value.organizationId || !isRestaurantMembershipRole(value.role)) return null;
+  return {
+    createdAt: value.createdAt,
+    id: value.id,
+    organizationId: value.organizationId,
+    role: value.role,
+  };
+}
+
+function sortMemberships(memberships: RestaurantMembership[]) {
+  return [...memberships].sort((a, b) => compareRestaurantRoles(a.role, b.role));
 }
 
 function normalizeAuthMode(value: unknown): AuthMode {
   return typeof value === "string" && value.toLowerCase() === "supabase" ? "supabase" : "demo";
+}
+
+function defaultWorkspaceKind(authProvider: AuthMode, role: UserRole): WorkspaceKind {
+  if (authProvider === "demo") return role === "superadmin" ? "platform" : "demo";
+  return role === "superadmin" ? "platform" : "restaurant";
 }
 
 function defaultNameFor(email: string, role: UserRole) {
@@ -280,4 +486,13 @@ function defaultNameFor(email: string, role: UserRole) {
 function stringMetadataValue(metadata: Record<string, unknown> | undefined, key: string) {
   const value = metadata?.[key];
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function booleanMetadataValue(metadata: Record<string, unknown> | undefined, key: string) {
+  const value = metadata?.[key];
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function isHostLineStaffEmail(email: string) {
+  return /staff|@hostline|admin@hostline/i.test(email);
 }

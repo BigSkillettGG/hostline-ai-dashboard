@@ -149,6 +149,7 @@ $$;
 
 alter table organizations enable row level security;
 alter table user_memberships enable row level security;
+alter table team_invitations enable row level security;
 alter table platform_admins enable row level security;
 alter table locations enable row level security;
 alter table agent_configs enable row level security;
@@ -198,6 +199,23 @@ using (public.can_manage_organization(organization_id))
 with check (public.can_manage_organization(organization_id));
 
 create policy user_memberships_delete_admins on user_memberships
+for delete to authenticated
+using (public.can_manage_organization(organization_id));
+
+create policy team_invitations_select_admins on team_invitations
+for select to authenticated
+using (public.can_manage_organization(organization_id) or public.is_platform_admin());
+
+create policy team_invitations_insert_admins on team_invitations
+for insert to authenticated
+with check (public.can_manage_organization(organization_id));
+
+create policy team_invitations_update_admins on team_invitations
+for update to authenticated
+using (public.can_manage_organization(organization_id))
+with check (public.can_manage_organization(organization_id));
+
+create policy team_invitations_delete_admins on team_invitations
 for delete to authenticated
 using (public.can_manage_organization(organization_id));
 

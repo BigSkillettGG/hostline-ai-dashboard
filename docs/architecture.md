@@ -23,7 +23,7 @@ Owns restaurant setup, operations views, order review, reservation review, knowl
 
 The Calls, Orders, and Reservations pages can read from Supabase REST using `VITE_SUPABASE_URL` and either `VITE_SUPABASE_PUBLISHABLE_KEY` or the legacy `VITE_SUPABASE_ANON_KEY`. If Supabase is missing or unavailable, these pages fall back to sample data and mark the source in the UI. The Orders and Reservations pages can also persist status changes back to Supabase.
 
-Dashboard auth can run in local demo mode or Supabase Auth mode. In Supabase mode, dashboard REST calls use the signed-in user's access token so `docs/supabase-rls.sql` can enforce organization and location access.
+Dashboard auth can run in local demo mode or Supabase Auth mode. In Supabase mode, dashboard REST calls use the signed-in user's access token so `docs/supabase-rls.sql` can enforce organization and location access. Restaurant users are modeled through organization memberships (`owner`, `admin`, `manager`, `staff`), while HostLine internal users are modeled through `platform_admins`. The demo workspace is a seeded local sales/development experience, not a production role.
 
 ### Voice Service
 
@@ -41,6 +41,7 @@ The first implementation is in `services/voice`:
 - Reservation requests with date, time, party size, and guest name create staff-confirmed reservation rows in Supabase.
 - Human handoff, complaint, and low-confidence special-handling prompts create staff task rows so managers have a follow-up queue even when the SMS alert succeeds.
 - If SMS confirmations are enabled for the location and Twilio SMS is configured, captured phone orders and reservation requests send concise confirmations to the caller.
+- `GET /health` returns production readiness checks for public URLs, CORS, internal API key, Supabase, OpenAI, ElevenLabs, Twilio credentials, and Twilio signature enforcement.
 
 ### Integration Workers
 
