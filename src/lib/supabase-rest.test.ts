@@ -8,6 +8,7 @@ import {
   buildMenuItemInsertRows,
   buildMenuSourceInsertPayload,
   buildOnboardingProfilePayload,
+  buildOrderDeliveryAttemptPayload,
   buildReservationInsertPayload,
   calculateForwardingStatus,
   mapSupabaseCalls,
@@ -186,6 +187,7 @@ describe("Supabase order mapping", () => {
           created_at: "2026-05-04T20:15:00.000Z",
           customer_name: "Sarah Chen",
           customer_phone: "+15551234567",
+          destination: "staff_review",
           eta_minutes: 25,
           id: "order_1",
           notes: "Pickup at counter",
@@ -213,10 +215,29 @@ describe("Supabase order mapping", () => {
           quantity: 1,
         },
       ],
+      [
+        {
+          created_at: "2026-05-04T20:16:00.000Z",
+          delivered_at: "2026-05-04T20:16:05.000Z",
+          destination: "printer",
+          error_message: null,
+          id: "attempt_1",
+          order_id: "order_1",
+          status: "sent",
+        },
+      ],
     );
 
     expect(orders[0]).toMatchObject({
       customer: "Sarah Chen",
+      deliveryAttempts: [
+        {
+          destination: "printer",
+          id: "attempt_1",
+          status: "sent",
+        },
+      ],
+      destination: "staff_review",
       etaMinutes: 25,
       payAtPickup: true,
       phone: "+15551234567",
@@ -237,6 +258,7 @@ describe("Supabase order mapping", () => {
           created_at: "2026-05-04T20:15:00.000Z",
           customer_name: null,
           customer_phone: null,
+          destination: null,
           eta_minutes: null,
           id: "order_2",
           notes: null,
@@ -252,6 +274,24 @@ describe("Supabase order mapping", () => {
     expect(orders[0].customer).toBe("Unknown");
     expect(orders[0].status).toBe("new");
     expect(orders[0].total).toBe(0);
+  });
+
+  it("builds delivery-attempt payloads for dashboard handoff actions", () => {
+    const payload = buildOrderDeliveryAttemptPayload({
+      destination: "printer",
+      orderId: "order_1",
+      payload: { source: "dashboard" },
+      status: "sent",
+    });
+
+    expect(payload).toMatchObject({
+      destination: "printer",
+      error_message: null,
+      order_id: "order_1",
+      payload: { source: "dashboard" },
+      status: "sent",
+    });
+    expect(new Date(payload.delivered_at ?? "").toString()).not.toBe("Invalid Date");
   });
 });
 

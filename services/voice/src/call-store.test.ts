@@ -72,6 +72,7 @@ describe("Supabase call store", () => {
       .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(new Response(JSON.stringify([{ id: "order_uuid" }]), { status: 201 }))
       .mockResolvedValueOnce(new Response("", { status: 201 }))
+      .mockResolvedValueOnce(new Response("", { status: 201 }))
       .mockResolvedValueOnce(new Response(null, { status: 204 }));
     const store = createCallStore(env);
 
@@ -109,6 +110,15 @@ describe("Supabase call store", () => {
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
+      "https://example.supabase.co/rest/v1/order_delivery_attempts",
+      expect.objectContaining({
+        body: expect.stringContaining('"destination":"staff_review"'),
+        method: "POST",
+      }),
+    );
+    expect(String(fetchMock.mock.calls[2]?.[1]?.body)).toContain('"source":"voice_agent"');
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
       "https://example.supabase.co/rest/v1/calls?id=eq.call_uuid",
       expect.objectContaining({
         body: expect.stringContaining('"intent":"order"'),

@@ -39,12 +39,22 @@ export interface Call {
 }
 
 export type OrderStatus = "new" | "accepted" | "in_progress" | "completed" | "canceled";
+export type OrderDeliveryDestination = "staff_review" | "kitchen_tablet" | "printer" | "pos" | string;
+export type OrderDeliveryStatus = "pending" | "sent" | "failed" | "not_configured";
 export interface OrderItem {
   name: string;
   qty: number;
   price: number;
   modifiers?: string[];
   notes?: string;
+}
+export interface OrderDeliveryAttempt {
+  id: string;
+  destination: OrderDeliveryDestination;
+  status: OrderDeliveryStatus;
+  createdAt?: string;
+  deliveredAt?: string;
+  errorMessage?: string;
 }
 export interface Order {
   id: string;
@@ -56,6 +66,8 @@ export interface Order {
   etaMinutes: number;
   payAtPickup: boolean;
   createdAt: string;
+  deliveryAttempts?: OrderDeliveryAttempt[];
+  destination?: OrderDeliveryDestination;
   sourceCallId?: string;
   notes?: string;
 }
@@ -277,7 +289,12 @@ export const orders: Order[] = [
       { name: "Caesar Salad", qty: 1, price: 14 },
     ],
     total: 53, status: "new", etaMinutes: 25, payAtPickup: true,
-    createdAt: iso(8), sourceCallId: "c_001",
+    createdAt: iso(8),
+    deliveryAttempts: [
+      { id: "od_001", destination: "staff_review", status: "sent", createdAt: iso(8), deliveredAt: iso(8) },
+    ],
+    destination: "staff_review",
+    sourceCallId: "c_001",
   },
   {
     id: "o_002", customer: "James O'Brien", phone: "+1 (415) 555-0166",
@@ -286,7 +303,13 @@ export const orders: Order[] = [
       { name: "Tiramisu", qty: 1, price: 11 },
     ],
     total: 55, status: "accepted", etaMinutes: 18, payAtPickup: true,
-    createdAt: iso(140), sourceCallId: "c_006",
+    createdAt: iso(140),
+    deliveryAttempts: [
+      { id: "od_002", destination: "staff_review", status: "sent", createdAt: iso(140), deliveredAt: iso(140) },
+      { id: "od_003", destination: "printer", status: "sent", createdAt: iso(138), deliveredAt: iso(138) },
+    ],
+    destination: "printer",
+    sourceCallId: "c_006",
   },
   {
     id: "o_003", customer: "Hana Liu", phone: "+1 (415) 555-0112",

@@ -199,6 +199,16 @@ class SupabaseCallStore implements CallStore {
       method: "POST",
     });
 
+    await this.request("order_delivery_attempts", {
+      body: buildStaffReviewOrderDeliveryAttemptPayload({
+        callId: input.callId,
+        itemCount: input.items.length,
+        orderId,
+        totalCents,
+      }),
+      method: "POST",
+    });
+
     await this.request("calls", {
       body: {
         intent: "order",
@@ -297,4 +307,26 @@ function buildReservationNotes(input: CreateStaffReviewReservationInput) {
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+function buildStaffReviewOrderDeliveryAttemptPayload(input: {
+  callId?: string;
+  itemCount: number;
+  orderId: string;
+  totalCents: number;
+}) {
+  const now = new Date().toISOString();
+
+  return {
+    delivered_at: now,
+    destination: "staff_review",
+    order_id: input.orderId,
+    payload: {
+      callId: input.callId,
+      itemCount: input.itemCount,
+      source: "voice_agent",
+      totalCents: input.totalCents,
+    },
+    status: "sent",
+  };
 }

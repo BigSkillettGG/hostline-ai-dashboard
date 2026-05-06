@@ -208,6 +208,17 @@ create table order_items (
   notes text
 );
 
+create table order_delivery_attempts (
+  id uuid primary key default gen_random_uuid(),
+  order_id uuid not null references orders(id) on delete cascade,
+  destination text not null,
+  status text not null default 'pending',
+  payload jsonb not null default '{}'::jsonb,
+  error_message text,
+  created_at timestamptz not null default now(),
+  delivered_at timestamptz
+);
+
 create table reservations (
   id uuid primary key default gen_random_uuid(),
   location_id uuid not null references locations(id) on delete cascade,

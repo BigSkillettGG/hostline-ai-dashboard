@@ -5,7 +5,7 @@ HostLine AI is an AI phone host for restaurants. This repository contains the ad
 ## What The App Covers
 
 - Calls, transcripts, summaries, outcomes, and review queues. The Calls page reads from Supabase when dashboard keys are configured and falls back to sample data otherwise.
-- Pickup orders with pay-at-pickup workflow. The Orders page reads from Supabase when dashboard keys are configured, falls back to sample data otherwise, and persists status changes when live.
+- Pickup orders with pay-at-pickup workflow. The Orders page reads from Supabase when dashboard keys are configured, falls back to sample data otherwise, persists status changes, and records staff queue, tablet, and printer delivery attempts when live.
 - Reservation bookings and manual staff-confirmed requests. The Reservations page reads from Supabase when dashboard keys are configured, persists status changes, and can create provider-tagged manual requests.
 - Menu, availability, modifiers, prep times, and upsell suggestions. The Menu page can import pasted menu text into structured Supabase `menu_categories` and `menu_items` rows, and it can persist menu URLs as `menu_sources` with queued `ingestion_jobs`.
 - Restaurant knowledge base and FAQs.
@@ -62,7 +62,7 @@ It exposes:
 - `POST /ingestion/run-next` for protected menu URL/text ingestion jobs.
 - `POST /debug/reply` in non-production for testing restaurant replies.
 
-It also processes queued menu URL/text ingestion into structured menu rows, includes Supabase FAQs and knowledge sections in live call replies, creates staff-review pickup orders from clear order language when menu items are recognized, and creates staff-confirmed reservation requests when date, time, party size, and guest details are captured. Orders are pay-at-pickup and are not auto-sent to the kitchen or POS.
+It also processes queued menu URL/text ingestion into structured menu rows, includes Supabase FAQs and knowledge sections in live call replies, creates staff-review pickup orders from clear order language when menu items are recognized, records the staff-review delivery attempt for each captured order, and creates staff-confirmed reservation requests when date, time, party size, and guest details are captured. Orders are pay-at-pickup and are not auto-sent to the kitchen or POS.
 Staff alerts can be sent by Twilio SMS or webhook for captured orders, reservation requests, complaints, and human handoffs.
 
 See `services/voice/README.md` for provider setup.

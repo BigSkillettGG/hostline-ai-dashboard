@@ -5,6 +5,7 @@ import type {
   CallStatus,
   MenuItem,
   Order,
+  OrderDeliveryStatus,
   OrderStatus,
   Reservation,
   ReservationStatus,
@@ -33,6 +34,7 @@ const callOutcomes: CallOutcome[] = ["resolved", "order_placed", "reservation_bo
 const callStatuses: CallStatus[] = ["new", "reviewed", "needs_review", "resolved"];
 const transcriptSpeakers: TranscriptSpeaker[] = ["agent", "caller", "staff"];
 const orderStatuses: OrderStatus[] = ["new", "accepted", "in_progress", "completed", "canceled"];
+const orderDeliveryStatuses: OrderDeliveryStatus[] = ["pending", "sent", "failed", "not_configured"];
 const reservationStatuses: ReservationStatus[] = ["pending", "confirmed", "declined", "seated", "canceled"];
 const reservationSources: Reservation["source"][] = ["ai_host", "web", "walk_in"];
 const menuSourceTypes: MenuSourceType[] = ["url", "file", "paste"];
@@ -62,6 +64,7 @@ interface SupabaseTranscriptTurnRow {
 }
 
 interface SupabaseOrderRow {
+  destination: string | null;
   id: string;
   source_call_id: string | null;
   customer_name: string | null;
@@ -81,6 +84,16 @@ interface SupabaseOrderItemRow {
   price_cents: number | null;
   modifiers: unknown;
   notes: string | null;
+}
+
+interface SupabaseOrderDeliveryAttemptRow {
+  created_at: string | null;
+  delivered_at: string | null;
+  destination: string | null;
+  error_message: string | null;
+  id: string;
+  order_id: string;
+  status: string | null;
 }
 
 interface SupabaseCallOrderLinkRow {
@@ -244,6 +257,14 @@ export interface CreateReservationInput {
   time: string;
 }
 
+export interface CreateOrderDeliveryAttemptInput {
+  destination: string;
+  errorMessage?: string;
+  orderId: string;
+  payload?: Record<string, unknown>;
+  status?: OrderDeliveryStatus;
+}
+
 export interface CreateMenuSourceInput {
   frequency: SyncFrequency;
   label?: string;
@@ -330,22 +351,33 @@ export async function fetchOrdersFromSupabase(): Promise<Order[]> {
     new URLSearchParams({
       limit: "100",
       order: "created_at.desc",
-      select: "id,source_call_id,customer_name,customer_phone,status,total_cents,eta_minutes,payment_mode,notes,created_at",
+      select:
+        "id,source_call_id,customer_name,customer_phone,status,total_cents,eta_minutes,payment_mode,destination,notes,created_at",
     }),
   );
 
   const orderIds = orders.map((order) => order.id);
-  const orderItems = orderIds.length
-    ? await supabaseRequest<SupabaseOrderItemRow[]>(
-        "order_items",
-        new URLSearchParams({
-          order_id: `in.(${orderIds.join(",")})`,
-          select: "order_id,name,quantity,price_cents,modifiers,notes",
-        }),
-      )
-    : [];
+  const [orderItems, deliveryAttempts]: [SupabaseOrderItemRow[], SupabaseOrderDeliveryAttemptRow[]] = orderIds.length
+    ? await Promise.all([
+        supabaseRequest<SupabaseOrderItemRow[]>(
+          "order_items",
+          new URLSearchParams({
+            order_id: `in.(${orderIds.join(",")})`,
+            select: "order_id,name,quantity,price_cents,modifiers,notes",
+          }),
+        ),
+        supabaseRequest<SupabaseOrderDeliveryAttemptRow[]>(
+          "order_delivery_attempts",
+          new URLSearchParams({
+            order: "created_at.desc",
+            order_id: `in.(${orderIds.join(",")})`,
+            select: "id,order_id,destination,status,error_message,created_at,delivered_at",
+          }),
+        ).catch(() => []),
+      ])
+    : [[], []];
 
-  return mapSupabaseOrders(orders, orderItems);
+  return mapSupabaseOrders(orders, orderItems, deliveryAttempts);
 }
 
 export async function updateOrderStatusInSupabase(orderId: string, status: OrderStatus) {
@@ -359,6 +391,37 @@ export async function updateOrderStatusInSupabase(orderId: string, status: Order
     },
     method: "PATCH",
   });
+}
+
+export async function createOrderDeliveryAttemptInSupabase(input: CreateOrderDeliveryAttemptInput) {
+  if (!isSupabaseConfigured()) {
+    throw new Error("Supabase is not configured.");
+  }
+
+  const rows = await supabaseRequest<SupabaseOrderDeliveryAttemptRow[]>(
+    "order_delivery_attempts",
+    new URLSearchParams({
+      select: "id,order_id,destination,status,error_message,created_at,delivered_at",
+    }),
+    {
+      body: buildOrderDeliveryAttemptPayload(input),
+      headers: {
+        Prefer: "return=representation",
+      },
+      method: "POST",
+    },
+  );
+
+  return rows?.[0]
+    ? {
+        createdAt: rows[0].created_at ?? undefined,
+        deliveredAt: rows[0].delivered_at ?? undefined,
+        destination: rows[0].destination ?? input.destination,
+        errorMessage: rows[0].error_message ?? undefined,
+        id: rows[0].id,
+        status: normalizeEnum(rows[0].status, orderDeliveryStatuses, input.status ?? "pending"),
+      }
+    : undefined;
 }
 
 export async function fetchOnboardingProfileFromSupabase(
@@ -891,6 +954,19 @@ export function buildAgentConfigPayload(config: RestaurantAgentConfig, locationI
   };
 }
 
+export function buildOrderDeliveryAttemptPayload(input: CreateOrderDeliveryAttemptInput) {
+  const status = input.status ?? "pending";
+
+  return {
+    delivered_at: status === "sent" ? new Date().toISOString() : null,
+    destination: input.destination,
+    error_message: input.errorMessage?.trim() || null,
+    order_id: input.orderId,
+    payload: input.payload ?? {},
+    status,
+  };
+}
+
 export function mapSupabaseAgentConfig(
   row: SupabaseAgentConfigRow,
   fallbackConfig: RestaurantAgentConfig,
@@ -1171,13 +1247,21 @@ function mapFirstLinkByCallId(rows: Array<{ id: string; source_call_id: string |
 export function mapSupabaseOrders(
   orders: SupabaseOrderRow[],
   orderItems: SupabaseOrderItemRow[],
+  deliveryAttempts: SupabaseOrderDeliveryAttemptRow[] = [],
 ): Order[] {
   const itemsByOrderId = new Map<string, SupabaseOrderItemRow[]>();
+  const deliveryAttemptsByOrderId = new Map<string, SupabaseOrderDeliveryAttemptRow[]>();
 
   for (const item of orderItems) {
     const currentItems = itemsByOrderId.get(item.order_id) ?? [];
     currentItems.push(item);
     itemsByOrderId.set(item.order_id, currentItems);
+  }
+
+  for (const attempt of deliveryAttempts) {
+    const currentAttempts = deliveryAttemptsByOrderId.get(attempt.order_id) ?? [];
+    currentAttempts.push(attempt);
+    deliveryAttemptsByOrderId.set(attempt.order_id, currentAttempts);
   }
 
   return orders.map((order) => {
@@ -1193,6 +1277,15 @@ export function mapSupabaseOrders(
       id: order.id,
       createdAt: order.created_at,
       customer: order.customer_name?.trim() || "Unknown",
+      deliveryAttempts: (deliveryAttemptsByOrderId.get(order.id) ?? []).map((attempt) => ({
+        createdAt: attempt.created_at ?? undefined,
+        deliveredAt: attempt.delivered_at ?? undefined,
+        destination: attempt.destination ?? "staff_review",
+        errorMessage: attempt.error_message ?? undefined,
+        id: attempt.id,
+        status: normalizeEnum(attempt.status, orderDeliveryStatuses, "pending"),
+      })),
+      destination: order.destination ?? "staff_review",
       etaMinutes: order.eta_minutes ?? 0,
       items,
       notes: order.notes ?? undefined,

@@ -15,6 +15,7 @@ This service is the production path for inbound restaurant phone calls.
 - Persists calls and transcript turns to Supabase when the server has a secret key and location ID.
 - Loads the onboarded restaurant profile from Supabase for greetings, policies, hours, parking, reservation rules, menu items, FAQs, and knowledge sections.
 - Creates staff-review pickup orders when the caller clearly asks for pickup/takeout and mentions recognized menu items.
+- Records a staff-review order delivery attempt for each captured phone order.
 - Creates staff-confirmed reservation requests when a caller provides date, time, party size, and guest details.
 - Sends staff alerts by SMS or webhook for captured orders, reservation requests, complaints, and human handoffs.
 - Provides a direct ElevenLabs preview endpoint at `POST /voice/preview`.
@@ -74,7 +75,7 @@ When `HOSTLINE_INTERNAL_API_KEY` is set, callers must send `x-hostline-api-key`.
 
 - Payment is pay at pickup.
 - The AI does not collect card numbers.
-- Staff-review orders are not automatically sent to the kitchen or POS.
+- Staff-review orders are logged to the staff queue first. Kitchen printer, tablet, and POS delivery should stay explicit until each destination is connected and tested.
 - Manual reservation requests are not confirmed until staff confirms them.
 - Severe allergies are escalated or flagged for staff confirmation.
 - Human handoff remains a first-class fallback path.

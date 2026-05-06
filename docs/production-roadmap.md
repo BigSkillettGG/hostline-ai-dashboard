@@ -35,8 +35,9 @@ There are 12 production workstreams:
 - ElevenLabs preview endpoint exists.
 - Twilio ConversationRelay webhook exists.
 - Calls can persist to Supabase.
-- Orders can read and update from Supabase.
+- Orders can read and update from Supabase, including delivery attempts for staff queue, kitchen tablet, printer, and future POS handoff.
 - Clear pickup orders can create staff-review orders.
+- Captured phone orders now create a staff-review delivery record so staff can audit whether an order reached an operational destination.
 - Reservations can read, create, and update status in Supabase, with provider fields ready for OpenTable-style sync.
 - The voice service can create staff-confirmed reservation requests from multi-turn calls.
 - The Menu page can parse pasted menu text and replace a location's structured Supabase menu rows.
