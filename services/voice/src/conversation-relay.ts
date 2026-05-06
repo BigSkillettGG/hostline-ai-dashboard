@@ -2,9 +2,10 @@ import type { IncomingMessage } from "node:http";
 import type { WebSocket } from "ws";
 import type { CallStore, StaffTaskPriority, StaffTaskType } from "./call-store";
 import type { VoiceServiceEnv } from "./env";
+import type { GuestConfirmationService } from "./guest-confirmation-service";
 import type { StaffAlertKind, StaffNotificationService } from "./notification-service";
-import { capturePickupOrder, mergeCapturedOrderItems, type CapturedOrderItem } from "./order-intake";
-import { captureReservationRequest, hasReservationIntent } from "./reservation-intake";
+import { capturePickupOrder, mergeCapturedOrderItems, type CapturedOrder, type CapturedOrderItem } from "./order-intake";
+import { captureReservationRequest, hasReservationIntent, type CapturedReservationRequest } from "./reservation-intake";
 import type { RestaurantContextStore } from "./restaurant-context-store";
 import { demoRestaurantContext } from "./restaurant-context";
 import { generateRestaurantReply } from "./restaurant-agent";
@@ -38,6 +39,7 @@ export function createConversationRelayHandler(
   callStore: CallStore,
   contextStore: RestaurantContextStore,
   staffNotifications: StaffNotificationService,
+  guestConfirmations: GuestConfirmationService,
 ) {
   const sessions = new WeakMap<WebSocket, RelaySession>();
 
@@ -123,24 +125,26 @@ export function createConversationRelayHandler(
 
         const createdOrderId = await maybeCreateStaffReviewOrder({
           callStore,
+          guestConfirmations,
           session,
           staffNotifications,
           utterance: message.voicePrompt,
         });
 
         if (createdOrderId) {
-          reply = `${reply} I have sent that pickup order to the staff review queue. It will be pay at pickup.`;
+          reply = `${reply} I have sent that pickup order to the staff review queue. It will be pay at pickup.${confirmationReplySuffix(session, guestConfirmations)}`;
         }
 
         const createdReservationId = await maybeCreateStaffReviewReservation({
           callStore,
+          guestConfirmations,
           session,
           staffNotifications,
           utterance: message.voicePrompt,
         });
 
         if (createdReservationId) {
-          reply = `${reply} I have sent that reservation request to staff. It is not confirmed until the restaurant confirms it.`;
+          reply = `${reply} I have sent that reservation request to staff. It is not confirmed until the restaurant confirms it.${confirmationReplySuffix(session, guestConfirmations)}`;
         }
 
         session.transcript.push({
@@ -242,11 +246,13 @@ function summarizeTranscript(transcript: TranscriptTurn[]) {
 
 async function maybeCreateStaffReviewOrder({
   callStore,
+  guestConfirmations,
   session,
   staffNotifications,
   utterance,
 }: {
   callStore: CallStore;
+  guestConfirmations: GuestConfirmationService;
   session: RelaySession;
   staffNotifications: StaffNotificationService;
   utterance: string;
@@ -271,6 +277,11 @@ async function maybeCreateStaffReviewOrder({
     });
 
     session.orderCreatedId = result.orderId;
+    void maybeSendOrderConfirmation({
+      capturedOrder,
+      guestConfirmations,
+      session,
+    }).catch((error) => console.error("[conversation-relay] guest order confirmation failed", error));
     void staffNotifications.sendStaffAlert({
       callId: session.callRecordId,
       callerPhone: session.callerPhone,
@@ -293,11 +304,13 @@ async function maybeCreateStaffReviewOrder({
 
 async function maybeCreateStaffReviewReservation({
   callStore,
+  guestConfirmations,
   session,
   staffNotifications,
   utterance,
 }: {
   callStore: CallStore;
+  guestConfirmations: GuestConfirmationService;
   session: RelaySession;
   staffNotifications: StaffNotificationService;
   utterance: string;
@@ -323,6 +336,11 @@ async function maybeCreateStaffReviewReservation({
     });
 
     session.reservationCreatedId = result.reservationId;
+    void maybeSendReservationConfirmation({
+      capturedReservation,
+      guestConfirmations,
+      session,
+    }).catch((error) => console.error("[conversation-relay] guest reservation confirmation failed", error));
     void staffNotifications.sendStaffAlert({
       callId: session.callRecordId,
       callerPhone: session.callerPhone,
@@ -342,6 +360,57 @@ async function maybeCreateStaffReviewReservation({
     console.error("[conversation-relay] reservation request persistence failed", error);
     return null;
   }
+}
+
+async function maybeSendOrderConfirmation({
+  capturedOrder,
+  guestConfirmations,
+  session,
+}: {
+  capturedOrder: CapturedOrder;
+  guestConfirmations: GuestConfirmationService;
+  session: RelaySession;
+}) {
+  if (!shouldSendGuestConfirmation(session, guestConfirmations)) return;
+
+  await guestConfirmations.sendOrderConfirmation({
+    customerName: capturedOrder.customerName,
+    etaMinutes: session.context.defaultPickupEtaMinutes ?? 25,
+    items: session.orderDraftItems,
+    orderId: session.orderCreatedId,
+    restaurantName: session.context.restaurantName,
+    to: session.callerPhone,
+  });
+}
+
+async function maybeSendReservationConfirmation({
+  capturedReservation,
+  guestConfirmations,
+  session,
+}: {
+  capturedReservation: CapturedReservationRequest;
+  guestConfirmations: GuestConfirmationService;
+  session: RelaySession;
+}) {
+  if (!shouldSendGuestConfirmation(session, guestConfirmations)) return;
+
+  await guestConfirmations.sendReservationConfirmation({
+    date: capturedReservation.date,
+    guestName: capturedReservation.guestName,
+    partySize: capturedReservation.partySize,
+    reservationId: session.reservationCreatedId,
+    restaurantName: session.context.restaurantName,
+    time: capturedReservation.time,
+    to: session.callerPhone,
+  });
+}
+
+function shouldSendGuestConfirmation(session: RelaySession, guestConfirmations: GuestConfirmationService) {
+  return Boolean(session.context.smsConfirmationsEnabled && guestConfirmations.configured && session.callerPhone);
+}
+
+function confirmationReplySuffix(session: RelaySession, guestConfirmations: GuestConfirmationService) {
+  return shouldSendGuestConfirmation(session, guestConfirmations) ? " I will text you a confirmation." : "";
 }
 
 async function maybeSendEscalationAlert({

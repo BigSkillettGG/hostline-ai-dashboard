@@ -38,6 +38,7 @@ The first implementation is in `services/voice`:
 - Clear pickup-order language with recognized menu items creates a staff-review, pay-at-pickup order in Supabase.
 - Reservation requests with date, time, party size, and guest name create staff-confirmed reservation rows in Supabase.
 - Human handoff, complaint, and low-confidence special-handling prompts create staff task rows so managers have a follow-up queue even when the SMS alert succeeds.
+- If SMS confirmations are enabled for the location and Twilio SMS is configured, captured phone orders and reservation requests send concise confirmations to the caller.
 
 ### Integration Workers
 

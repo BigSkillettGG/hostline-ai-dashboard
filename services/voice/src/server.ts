@@ -4,6 +4,7 @@ import { WebSocketServer } from "ws";
 import { createCallStore } from "./call-store";
 import { createConversationRelayHandler } from "./conversation-relay";
 import { createElevenLabsPreview } from "./elevenlabs";
+import { createGuestConfirmationService } from "./guest-confirmation-service";
 import { loadEnv, type VoiceServiceEnv } from "./env";
 import { createMenuIngestionService } from "./menu-ingestion-service";
 import { createStaffNotificationService } from "./notification-service";
@@ -21,6 +22,7 @@ const phoneNumberStore = createPhoneNumberStore(env);
 const restaurantContextStore = createRestaurantContextStore(env);
 const telephonyService = createTelephonyService(env);
 const staffNotificationService = createStaffNotificationService(env);
+const guestConfirmationService = createGuestConfirmationService(env);
 const menuIngestionService = createMenuIngestionService(env);
 const server = createServer((req, res) => {
   void handleRequest(req, res, env);
@@ -32,6 +34,7 @@ const handleConversationRelayConnection = createConversationRelayHandler(
   callStore,
   restaurantContextStore,
   staffNotificationService,
+  guestConfirmationService,
 );
 
 server.on("upgrade", (req, socket, head) => {
@@ -86,6 +89,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       menuIngestionConfigured: menuIngestionService.configured,
       twilioProvisioningConfigured: telephonyService.configured,
       staffAlertsConfigured: staffNotificationService.configured,
+      guestConfirmationsConfigured: guestConfirmationService.configured,
       twilioSignatureRequired: currentEnv.REQUIRE_TWILIO_SIGNATURE,
     });
     return;

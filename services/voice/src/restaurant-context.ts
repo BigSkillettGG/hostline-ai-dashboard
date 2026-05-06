@@ -4,6 +4,7 @@ export interface RestaurantVoiceContext {
   timezone: string;
   greeting: string;
   defaultPickupEtaMinutes?: number;
+  smsConfirmationsEnabled: boolean;
   faqs: RestaurantFaq[];
   knowledgeSections: RestaurantKnowledgeSection[];
   menuHighlights: string[];
@@ -33,6 +34,7 @@ export const demoRestaurantContext: RestaurantVoiceContext = {
   hostName: "Vera",
   timezone: "America/Los_Angeles",
   greeting: "Thanks for calling Olive & Ember, this is Vera, the restaurant's virtual host. How can I help?",
+  smsConfirmationsEnabled: true,
   faqs: [
     {
       answer: "Yes, gift cards are available in person at the host stand.",

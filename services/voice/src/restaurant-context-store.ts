@@ -29,6 +29,7 @@ export interface SupabaseAgentConfigRow {
   greeting_template: string | null;
   escalation_phone_number: string | null;
   reservation_provider: string | null;
+  sms_confirmations_enabled: boolean | null;
 }
 
 export interface SupabaseOnboardingProfileRow {
@@ -128,6 +129,7 @@ export function buildRestaurantContext({
       reservations: buildReservationPolicy(draft, agentConfig),
     },
     restaurantName,
+    smsConfirmationsEnabled: agentConfig?.sms_confirmations_enabled ?? true,
     timezone,
   };
 }
@@ -160,7 +162,7 @@ class SupabaseRestaurantContextStore implements RestaurantContextStore {
         ),
         this.request<SupabaseAgentConfigRow[]>(
           "agent_configs",
-          `location_id=eq.${encodeURIComponent(resolvedLocationId)}&limit=1&select=host_name,greeting_template,escalation_phone_number,reservation_provider`,
+          `location_id=eq.${encodeURIComponent(resolvedLocationId)}&limit=1&select=host_name,greeting_template,escalation_phone_number,reservation_provider,sms_confirmations_enabled`,
         ),
         this.request<SupabaseOnboardingProfileRow[]>(
           "onboarding_profiles",

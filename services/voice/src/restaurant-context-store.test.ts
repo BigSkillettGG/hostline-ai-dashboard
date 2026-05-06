@@ -9,6 +9,7 @@ describe("restaurant context store", () => {
         greeting_template: "Thanks for calling {restaurant_name}, this is {host_name}. How can I help?",
         host_name: "Maya",
         reservation_provider: "opentable",
+        sms_confirmations_enabled: false,
       },
       faqs: [
         {
@@ -84,6 +85,7 @@ describe("restaurant context store", () => {
     expect(context.hostName).toBe("Nina");
     expect(context.greeting).toBe("Hello from Saffron Table, Nina speaking.");
     expect(context.defaultPickupEtaMinutes).toBe(20);
+    expect(context.smsConfirmationsEnabled).toBe(false);
     expect(context.menuItems).toEqual([
       {
         aliases: ["Pad Thai", "Rice noodles with tamarind"],
@@ -130,6 +132,7 @@ describe("restaurant context store", () => {
 
     expect(context.restaurantName).toBe("Morning House");
     expect(context.timezone).toBe("America/Chicago");
+    expect(context.smsConfirmationsEnabled).toBe(true);
     expect(context.menuHighlights).toEqual(["Bakery", "coffee"]);
     expect(context.policies.location).toBe("55 Market St");
   });
