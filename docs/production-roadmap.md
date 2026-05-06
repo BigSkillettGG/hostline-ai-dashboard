@@ -49,6 +49,7 @@ There are 12 production workstreams:
 - The voice backend has internal Twilio number search/provisioning endpoints, and the dashboard can read persisted phone-number forwarding status.
 - The onboarding phone launch flow tracks direct-call, no-answer forwarding, and busy-line forwarding verification before no-busy-signal coverage is treated as ready.
 - The live voice service includes Supabase FAQs and knowledge sections in model instructions and deterministic fallback replies.
+- Alert routing rules can now persist per location, and the voice service can use those rules to route staff SMS/webhook alerts by event type and severity.
 
 ## Key Product Standard
 

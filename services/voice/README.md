@@ -17,7 +17,7 @@ This service is the production path for inbound restaurant phone calls.
 - Creates staff-review pickup orders when the caller clearly asks for pickup/takeout and mentions recognized menu items.
 - Records a staff-review order delivery attempt for each captured phone order.
 - Creates staff-confirmed reservation requests when a caller provides date, time, party size, and guest details.
-- Sends staff alerts by SMS or webhook for captured orders, reservation requests, complaints, and human handoffs.
+- Sends staff alerts by Supabase-configured route for captured orders, reservation requests, complaints, human handoffs, delivery failures, low-confidence reviews, and sales/vendor messages.
 - Provides a direct ElevenLabs preview endpoint at `POST /voice/preview`.
 - Validates Twilio signatures when `REQUIRE_TWILIO_SIGNATURE=true`.
 
@@ -56,7 +56,8 @@ POST https://your-tunnel.ngrok.app/twilio/voice
 - `HOSTLINE_INTERNAL_API_KEY` for protecting internal provisioning endpoints in production.
 - OpenAI API key for real LLM replies.
 - ElevenLabs voice ID for branded voice.
-- `STAFF_ALERT_SMS_TO` plus `TWILIO_SMS_FROM_NUMBER` or `TWILIO_MESSAGING_SERVICE_SID` for SMS staff alerts, or `STAFF_ALERT_WEBHOOK_URL` for webhook alerts.
+- `TWILIO_SMS_FROM_NUMBER` or `TWILIO_MESSAGING_SERVICE_SID` for direct SMS staff alerts. `STAFF_ALERT_SMS_TO` remains the fallback recipient when no Supabase route is configured.
+- `STAFF_ALERT_WEBHOOK_URL` for webhook alerts. Email recipients configured in the dashboard are included in the webhook payload for your email/helpdesk/Zapier layer.
 - Supabase project with `docs/supabase-schema.sql` applied.
 - `SUPABASE_SECRET_KEY` or legacy service role key stored only on the voice-service backend.
 - `SUPABASE_DEMO_LOCATION_ID` set to a real `locations.id` value.
@@ -68,6 +69,7 @@ When Supabase is configured, Twilio requests can include `locationId` in the web
 - `GET /telephony/available-numbers?areaCode=415&limit=5` searches Twilio local numbers with voice and SMS enabled.
 - `POST /telephony/provision-number` purchases a selected number, sets its voice webhook to `/twilio/voice?locationId=...`, writes `phone_numbers`, and updates `locations.ai_host_phone`.
 - `POST /ingestion/run-next` processes one queued menu ingestion job, fetches URL/text content, parses menu items, replaces `menu_categories` and `menu_items`, and updates `ingestion_jobs` plus `menu_sources`.
+- Staff alert routing is loaded from `alert_routing_configs` per location when Supabase is configured. If no route exists, the service falls back to `STAFF_ALERT_SMS_TO`.
 
 When `HOSTLINE_INTERNAL_API_KEY` is set, callers must send `x-hostline-api-key`. In production, provisioning and ingestion worker endpoints are rejected unless this key is configured.
 

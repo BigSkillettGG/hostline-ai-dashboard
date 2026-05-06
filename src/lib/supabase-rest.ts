@@ -13,6 +13,11 @@ import type {
 } from "@/data/mock";
 import type { ParsedMenuCategory } from "@/domain/menu-ingestion";
 import { calculateOnboardingProgress, type OnboardingDraft } from "@/domain/onboarding";
+import {
+  defaultAlertRoutingConfig,
+  normalizeAlertRoutingConfig,
+  type AlertRoutingConfig,
+} from "@/domain/alert-routing";
 import type { RestaurantAgentConfig } from "@/domain/restaurant-config";
 import type {
   IngestionJob,
@@ -130,6 +135,12 @@ interface SupabaseAgentConfigRow {
   sms_confirmations_enabled: boolean | null;
   staff_escalation_enabled: boolean | null;
   tone: string | null;
+  updated_at: string | null;
+}
+
+interface SupabaseAlertRoutingConfigRow {
+  config: unknown;
+  id: string;
   updated_at: string | null;
 }
 
@@ -293,6 +304,10 @@ export function isReservationPersistenceConfigured() {
 }
 
 export function isAgentConfigPersistenceConfigured() {
+  return Boolean(isSupabaseConfigured() && supabaseDemoLocationId);
+}
+
+export function isAlertRoutingPersistenceConfigured() {
   return Boolean(isSupabaseConfigured() && supabaseDemoLocationId);
 }
 
@@ -545,6 +560,63 @@ export async function saveAgentConfigToSupabase(
   );
 
   return rows[0] ?? payload;
+}
+
+export async function fetchAlertRoutingConfigFromSupabase(
+  locationId = supabaseDemoLocationId,
+): Promise<AlertRoutingConfig | null> {
+  if (!isSupabaseConfigured() || !locationId) {
+    throw new Error("Supabase alert-routing persistence is not configured.");
+  }
+
+  const rows = await supabaseRequest<SupabaseAlertRoutingConfigRow[]>(
+    "alert_routing_configs",
+    new URLSearchParams({
+      limit: "1",
+      location_id: `eq.${locationId}`,
+      select: "id,config,updated_at",
+    }),
+  );
+
+  if (!rows[0]) return null;
+
+  return normalizeAlertRoutingConfig({
+    ...(typeof rows[0].config === "object" && rows[0].config ? rows[0].config : defaultAlertRoutingConfig),
+    updatedAt: rows[0].updated_at ?? undefined,
+  });
+}
+
+export async function saveAlertRoutingConfigToSupabase(
+  config: AlertRoutingConfig,
+  locationId = supabaseDemoLocationId,
+) {
+  if (!isSupabaseConfigured() || !locationId) {
+    throw new Error("Supabase alert-routing persistence is not configured.");
+  }
+
+  const payload = buildAlertRoutingConfigPayload(config, locationId);
+  const rows = await supabaseRequest<SupabaseAlertRoutingConfigRow[]>(
+    "alert_routing_configs",
+    new URLSearchParams({
+      on_conflict: "location_id",
+      select: "id,config,updated_at",
+    }),
+    {
+      body: payload,
+      headers: {
+        Prefer: "return=representation,resolution=merge-duplicates",
+      },
+      method: "POST",
+    },
+  );
+
+  const savedConfig = rows?.[0]?.config;
+  return rows?.[0]
+    ? normalizeAlertRoutingConfig({
+        ...(isObjectRecord(savedConfig) ? savedConfig : {}),
+        updatedAt: rows[0].updated_at ?? undefined,
+      })
+    : config;
 }
 
 export async function fetchPhoneNumbersFromSupabase(
@@ -951,6 +1023,20 @@ export function buildAgentConfigPayload(config: RestaurantAgentConfig, locationI
     staff_escalation_enabled: config.capabilities.escalateToStaff,
     tone: config.tone,
     updated_at: new Date().toISOString(),
+  };
+}
+
+export function buildAlertRoutingConfigPayload(config: AlertRoutingConfig, locationId: string) {
+  const updatedAt = new Date().toISOString();
+  const normalized = normalizeAlertRoutingConfig(config);
+
+  return {
+    config: {
+      ...normalized,
+      updatedAt,
+    },
+    location_id: locationId,
+    updated_at: updatedAt,
   };
 }
 

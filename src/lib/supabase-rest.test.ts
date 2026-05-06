@@ -3,6 +3,7 @@ import { defaultRestaurantAgentConfig } from "@/domain/restaurant-config";
 import { sampleOnboardingDraft } from "@/domain/onboarding";
 import {
   buildAgentConfigPayload,
+  buildAlertRoutingConfigPayload,
   buildIngestionJobInsertPayload,
   buildMenuCategoryInsertRows,
   buildMenuItemInsertRows,
@@ -20,6 +21,7 @@ import {
   mapSupabasePhoneNumber,
   mapSupabaseReservations,
 } from "./supabase-rest";
+import { defaultAlertRoutingConfig } from "@/domain/alert-routing";
 
 describe("Supabase call mapping", () => {
   it("maps persisted calls and transcript turns into dashboard call records", () => {
@@ -176,6 +178,20 @@ describe("Supabase agent config mapping", () => {
       mode: "manual_request",
       provider: "resy",
     });
+  });
+});
+
+describe("Supabase alert routing payloads", () => {
+  it("builds alert-routing config payloads for Supabase persistence", () => {
+    const payload = buildAlertRoutingConfigPayload(defaultAlertRoutingConfig, "location_1");
+
+    expect(payload).toMatchObject({
+      location_id: "location_1",
+    });
+    expect(payload.config.routes.complaint.enabled).toBe(true);
+    expect(payload.config.routes.order.recipients.length).toBeGreaterThan(0);
+    expect(new Date(payload.updated_at).toString()).not.toBe("Invalid Date");
+    expect(payload.config.updatedAt).toBe(payload.updated_at);
   });
 });
 

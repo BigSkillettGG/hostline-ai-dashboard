@@ -352,6 +352,7 @@ async function maybeSendEscalationAlert({
     kind,
     locationId: session.locationId,
     restaurantName: session.context.restaurantName,
+    severity: kind === "complaint" ? "high" : "medium",
     summary: kind === "complaint" ? "Complaint or refund risk detected." : "Caller asked for a human handoff.",
   });
 }

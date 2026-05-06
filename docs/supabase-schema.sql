@@ -55,6 +55,14 @@ create table agent_configs (
   unique(location_id)
 );
 
+create table alert_routing_configs (
+  id uuid primary key default gen_random_uuid(),
+  location_id uuid not null references locations(id) on delete cascade,
+  config jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now(),
+  unique(location_id)
+);
+
 create table knowledge_sections (
   id uuid primary key default gen_random_uuid(),
   location_id uuid not null references locations(id) on delete cascade,

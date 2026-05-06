@@ -10,6 +10,7 @@ HostLine AI is an AI phone host for restaurants. This repository contains the ad
 - Menu, availability, modifiers, prep times, and upsell suggestions. The Menu page can import pasted menu text into structured Supabase `menu_categories` and `menu_items` rows, and it can persist menu URLs as `menu_sources` with queued `ingestion_jobs`.
 - Restaurant knowledge base and FAQs.
 - Voice agent configuration.
+- Staff alert routing for phone orders, reservation requests, complaints, handoffs, delivery failures, low-confidence calls, and sales/vendor messages.
 - POS, reservation, printer, and kitchen tablet integration placeholders.
 
 ## Product Direction
@@ -63,7 +64,7 @@ It exposes:
 - `POST /debug/reply` in non-production for testing restaurant replies.
 
 It also processes queued menu URL/text ingestion into structured menu rows, includes Supabase FAQs and knowledge sections in live call replies, creates staff-review pickup orders from clear order language when menu items are recognized, records the staff-review delivery attempt for each captured order, and creates staff-confirmed reservation requests when date, time, party size, and guest details are captured. Orders are pay-at-pickup and are not auto-sent to the kitchen or POS.
-Staff alerts can be sent by Twilio SMS or webhook for captured orders, reservation requests, complaints, and human handoffs.
+Staff alerts can be routed by location through Supabase `alert_routing_configs`, sent directly by Twilio SMS, and mirrored to a webhook for email/helpdesk/Zapier-style delivery.
 
 See `services/voice/README.md` for provider setup.
 
