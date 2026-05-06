@@ -12,13 +12,15 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
-import { useCurrentUser, signOut, setRole } from "@/lib/auth";
+import { getAuthReadiness, isDemoAuthMode, useCurrentUser, signOut, setRole } from "@/lib/auth";
 
 export default function AppLayout() {
   const [agentLive, setAgentLive] = useState(true);
   const user = useCurrentUser();
   const navigate = useNavigate();
   const initials = (user?.name ?? "ML").split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase();
+  const authReadiness = getAuthReadiness();
+  const demoAuth = isDemoAuthMode();
 
   return (
     <SidebarProvider>
@@ -53,6 +55,13 @@ export default function AppLayout() {
             </div>
 
             <div className="ml-auto md:ml-0 flex items-center gap-2">
+              <Badge
+                variant="outline"
+                className={authReadiness.ready ? "hidden border-success/20 bg-success/10 text-success lg:inline-flex" : "hidden border-warning/30 bg-warning/10 text-warning lg:inline-flex"}
+                title={authReadiness.detail}
+              >
+                {authReadiness.badge}
+              </Badge>
               <div className="hidden sm:flex items-center gap-2 rounded-full border border-border bg-card px-2.5 py-1">
                 <span className={`h-1.5 w-1.5 rounded-full ${agentLive ? "bg-success animate-pulse" : "bg-muted-foreground"}`} />
                 <span className="text-xs font-medium">{agentLive ? "AI Live" : "Paused"}</span>
@@ -80,10 +89,14 @@ export default function AppLayout() {
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => navigate("/app/profile")}>Profile</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate("/app/billing")}>Billing</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => { setRole("superadmin"); navigate("/super"); }}>
-                    Switch to Super Admin
-                  </DropdownMenuItem>
+                  {demoAuth && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => { setRole("superadmin"); navigate("/super"); }}>
+                        Switch to Super Admin
+                      </DropdownMenuItem>
+                    </>
+                  )}
                   <DropdownMenuItem onClick={() => { signOut(); navigate("/"); }}>Sign out</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

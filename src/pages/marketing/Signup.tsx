@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { signIn } from "@/lib/auth";
+import { signUp } from "@/lib/auth";
 import { toast } from "sonner";
 
 export default function Signup() {
@@ -14,16 +14,24 @@ export default function Signup() {
   const [restaurant, setRestaurant] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const onSubmit = (e: FormEvent) => {
+  const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
       toast.error("Enter email and password");
       return;
     }
-    signIn(email, password);
-    toast.success("Account created — let's get you set up");
-    navigate("/app/onboarding", { replace: true });
+    setIsSubmitting(true);
+    try {
+      await signUp({ email, name, password, restaurant });
+      toast.success("Account created - let's get you set up");
+      navigate("/app/onboarding", { replace: true });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Account creation failed");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -59,7 +67,9 @@ export default function Signup() {
               <Label htmlFor="password">Password</Label>
               <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
-            <Button type="submit" className="w-full">Create account</Button>
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
+              {isSubmitting ? "Creating..." : "Create account"}
+            </Button>
             <p className="text-center text-xs text-muted-foreground">
               Already have one? <Link to="/login" className="text-foreground underline-offset-4 hover:underline">Sign in</Link>
             </p>

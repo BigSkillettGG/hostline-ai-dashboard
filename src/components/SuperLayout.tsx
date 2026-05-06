@@ -12,7 +12,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useCurrentUser, signOut, setRole } from "@/lib/auth";
+import { getAuthReadiness, isDemoAuthMode, useCurrentUser, signOut, setRole } from "@/lib/auth";
 import { useNavigate } from "react-router-dom";
 
 const items = [
@@ -74,6 +74,8 @@ function SuperSidebar() {
 export default function SuperLayout() {
   const user = useCurrentUser();
   const navigate = useNavigate();
+  const authReadiness = getAuthReadiness();
+  const demoAuth = isDemoAuthMode();
   return (
     <SidebarProvider>
       <div className="flex min-h-screen w-full bg-background">
@@ -82,10 +84,19 @@ export default function SuperLayout() {
           <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border bg-background/80 px-3 backdrop-blur md:px-5">
             <SidebarTrigger />
             <Badge variant="outline" className="border-destructive/40 bg-destructive/10 text-destructive">HostLine AI Staff</Badge>
+            <Badge
+              variant="outline"
+              className={authReadiness.ready ? "hidden border-success/20 bg-success/10 text-success sm:inline-flex" : "hidden border-warning/30 bg-warning/10 text-warning sm:inline-flex"}
+              title={authReadiness.detail}
+            >
+              {authReadiness.badge}
+            </Badge>
             <div className="ml-auto flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => { setRole("admin"); navigate("/app"); }}>
-                View as Admin
-              </Button>
+              {demoAuth && (
+                <Button variant="outline" size="sm" onClick={() => { setRole("admin"); navigate("/app"); }}>
+                  View as Admin
+                </Button>
+              )}
               <Button variant="ghost" size="icon" className="relative h-9 w-9">
                 <Bell className="h-4 w-4" />
               </Button>

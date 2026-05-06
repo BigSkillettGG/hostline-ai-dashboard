@@ -19,6 +19,22 @@ create table organizations (
   created_at timestamptz not null default now()
 );
 
+create table user_memberships (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  organization_id uuid not null references organizations(id) on delete cascade,
+  role text not null check (role in ('owner', 'admin', 'manager', 'staff')),
+  created_at timestamptz not null default now(),
+  unique(user_id, organization_id)
+);
+
+create table platform_admins (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique(user_id)
+);
+
 create table locations (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references organizations(id) on delete cascade,
@@ -61,24 +77,6 @@ create table alert_routing_configs (
   config jsonb not null default '{}'::jsonb,
   updated_at timestamptz not null default now(),
   unique(location_id)
-);
-
-create table staff_alert_events (
-  id uuid primary key default gen_random_uuid(),
-  location_id uuid not null references locations(id) on delete cascade,
-  call_id uuid references calls(id) on delete set null,
-  kind text not null,
-  severity text not null default 'medium',
-  status text not null default 'sent',
-  summary text not null,
-  message text not null,
-  caller_phone text,
-  recipients jsonb not null default '[]'::jsonb,
-  channels jsonb not null default '[]'::jsonb,
-  route_snapshot jsonb not null default '{}'::jsonb,
-  error_message text,
-  sent_at timestamptz,
-  created_at timestamptz not null default now()
 );
 
 create table knowledge_sections (
@@ -196,6 +194,24 @@ create table calls (
   summary text,
   recording_url text,
   twilio_payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create table staff_alert_events (
+  id uuid primary key default gen_random_uuid(),
+  location_id uuid not null references locations(id) on delete cascade,
+  call_id uuid references calls(id) on delete set null,
+  kind text not null,
+  severity text not null default 'medium',
+  status text not null default 'sent',
+  summary text not null,
+  message text not null,
+  caller_phone text,
+  recipients jsonb not null default '[]'::jsonb,
+  channels jsonb not null default '[]'::jsonb,
+  route_snapshot jsonb not null default '{}'::jsonb,
+  error_message text,
+  sent_at timestamptz,
   created_at timestamptz not null default now()
 );
 

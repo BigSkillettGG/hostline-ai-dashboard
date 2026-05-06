@@ -54,6 +54,7 @@ There are 12 production workstreams:
 - Staff follow-ups now have a Tasks queue for callbacks, alert failures, reservation reviews, low-confidence calls, and order handoff issues.
 - The live voice service now creates staff Tasks for complaint callbacks, human handoff requests, and low-confidence special-handling topics even when staff alerts are delivered successfully.
 - The live voice service can now send caller-facing SMS confirmations for captured pickup orders and reservation requests when enabled for the location.
+- Supabase Auth mode, user access-token REST calls, organization memberships, platform admins, and production RLS policies are now documented and scaffolded.
 
 ## Key Product Standard
 

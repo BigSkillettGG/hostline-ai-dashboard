@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { signIn } from "@/lib/auth";
+import { isDemoAuthMode, signIn } from "@/lib/auth";
 import { toast } from "sonner";
 
 export default function Login() {
@@ -13,17 +13,26 @@ export default function Login() {
   const location = useLocation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const demoAuth = isDemoAuthMode();
 
-  const onSubmit = (e: FormEvent) => {
+  const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
       toast.error("Enter email and password");
       return;
     }
-    const user = signIn(email, password);
-    toast.success(`Welcome back, ${user.name}`);
-    const from = (location.state as { from?: string } | null)?.from;
-    navigate(from ?? (user.role === "superadmin" ? "/super" : "/app"), { replace: true });
+    setIsSubmitting(true);
+    try {
+      const user = await signIn(email, password);
+      toast.success(`Welcome back, ${user.name}`);
+      const from = (location.state as { from?: string } | null)?.from;
+      navigate(from ?? (user.role === "superadmin" ? "/super" : "/app"), { replace: true });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Sign in failed");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -52,13 +61,17 @@ export default function Login() {
               </div>
               <Input id="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
-            <Button type="submit" className="w-full">Sign in</Button>
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
+              {isSubmitting ? "Signing in..." : "Sign in"}
+            </Button>
             <p className="text-center text-xs text-muted-foreground">
               No account? <Link to="/signup" className="text-foreground underline-offset-4 hover:underline">Start free</Link>
             </p>
-            <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
-              Demo: any email works. Use an email containing <code className="font-mono">staff</code> or <code className="font-mono">@hostline</code> to sign in as super admin.
-            </p>
+            {demoAuth && (
+              <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+                Demo: any email works. Use an email containing <code className="font-mono">staff</code> or <code className="font-mono">@hostline</code> to sign in as super admin.
+              </p>
+            )}
           </form>
         </CardContent>
       </Card>

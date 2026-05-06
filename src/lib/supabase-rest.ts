@@ -11,6 +11,7 @@ import type {
   ReservationStatus,
   TranscriptSpeaker,
 } from "@/data/mock";
+import { getSupabaseAccessToken } from "@/lib/auth";
 import type { ParsedMenuCategory } from "@/domain/menu-ingestion";
 import { calculateOnboardingProgress, type OnboardingDraft } from "@/domain/onboarding";
 import {
@@ -1747,7 +1748,7 @@ async function supabaseRequest<T>(
     body: options?.body ? JSON.stringify(options.body) : undefined,
     headers: {
       apikey: supabasePublishableKey,
-      Authorization: `Bearer ${supabasePublishableKey}`,
+      Authorization: `Bearer ${getSupabaseAccessToken() ?? supabasePublishableKey}`,
       "Content-Type": "application/json",
       Prefer: "return=minimal",
       ...options?.headers,
