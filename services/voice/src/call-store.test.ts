@@ -127,6 +127,37 @@ describe("Supabase call store", () => {
     );
   });
 
+  it("creates a staff follow-up task", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ id: "task_uuid" }]), { status: 201 }));
+    const store = createCallStore(env);
+
+    const result = await store.createStaffTask({
+      body: "Caller asked for the manager.",
+      callId: "call_uuid",
+      dueMinutes: 15,
+      locationId: "00000000-0000-4000-8000-000000000002",
+      priority: "high",
+      title: "Follow up with caller",
+      type: "manager_callback",
+    });
+
+    expect(result.taskId).toBe("task_uuid");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://example.supabase.co/rest/v1/staff_tasks?select=id",
+      expect.objectContaining({
+        body: expect.stringContaining('"task_type":"manager_callback"'),
+        method: "POST",
+      }),
+    );
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain('"priority":"high"');
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain(
+      '"location_id":"00000000-0000-4000-8000-000000000002"',
+    );
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain('"call_id":"call_uuid"');
+  });
+
   it("creates a staff-confirmed reservation request", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")

@@ -39,10 +39,31 @@ export interface CreateStaffReviewReservationInput extends CapturedReservationRe
   provider?: string;
 }
 
+export type StaffTaskPriority = "low" | "normal" | "high" | "urgent";
+export type StaffTaskType =
+  | "delivery_issue"
+  | "general"
+  | "low_confidence_review"
+  | "manager_callback"
+  | "order_follow_up"
+  | "reservation_review";
+
+export interface CreateStaffTaskInput {
+  assignedTo?: string;
+  body?: string;
+  callId?: string;
+  dueMinutes?: number;
+  locationId?: string;
+  priority?: StaffTaskPriority;
+  title: string;
+  type?: StaffTaskType;
+}
+
 export interface CallStore {
   startCall(input: StartCallInput): Promise<{ callId?: string }>;
   addTranscriptTurn(input: AddTranscriptTurnInput): Promise<void>;
   completeCall(input: CompleteCallInput): Promise<void>;
+  createStaffTask(input: CreateStaffTaskInput): Promise<{ taskId?: string }>;
   createStaffReviewOrder(input: CreateStaffReviewOrderInput): Promise<{ orderId?: string }>;
   createStaffReviewReservation(input: CreateStaffReviewReservationInput): Promise<{ reservationId?: string }>;
 }
@@ -84,6 +105,15 @@ class NoopCallStore implements CallStore {
     console.info("[call-store] Supabase not configured; staff-review order not persisted", {
       callId: input.callId,
       itemCount: input.items.length,
+    });
+    return {};
+  }
+
+  async createStaffTask(input: CreateStaffTaskInput) {
+    console.info("[call-store] Supabase not configured; staff task not persisted", {
+      callId: input.callId,
+      title: input.title,
+      type: input.type,
     });
     return {};
   }
@@ -159,6 +189,29 @@ class SupabaseCallStore implements CallStore {
       method: "PATCH",
       query: `id=eq.${encodeURIComponent(input.callId)}`,
     });
+  }
+
+  async createStaffTask(input: CreateStaffTaskInput) {
+    const rows = await this.request<Array<{ id: string }>>("staff_tasks", {
+      body: {
+        assigned_to: input.assignedTo?.trim() || null,
+        body: input.body?.trim() || null,
+        call_id: input.callId ?? null,
+        due_at: dueAt(input.dueMinutes ?? 30),
+        location_id: normalizeLocationId(input.locationId) ?? this.locationId,
+        priority: input.priority ?? "normal",
+        status: "open",
+        task_type: input.type ?? "general",
+        title: input.title.trim(),
+      },
+      headers: {
+        Prefer: "return=representation",
+      },
+      method: "POST",
+      query: "select=id",
+    });
+
+    return { taskId: rows?.[0]?.id };
   }
 
   async createStaffReviewOrder(input: CreateStaffReviewOrderInput) {
@@ -307,6 +360,10 @@ function buildReservationNotes(input: CreateStaffReviewReservationInput) {
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+function dueAt(minutesFromNow: number) {
+  return new Date(Date.now() + Math.max(1, minutesFromNow) * 60_000).toISOString();
 }
 
 function buildStaffReviewOrderDeliveryAttemptPayload(input: {

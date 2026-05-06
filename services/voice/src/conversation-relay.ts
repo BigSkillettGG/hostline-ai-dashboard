@@ -1,6 +1,6 @@
 import type { IncomingMessage } from "node:http";
 import type { WebSocket } from "ws";
-import type { CallStore } from "./call-store";
+import type { CallStore, StaffTaskPriority, StaffTaskType } from "./call-store";
 import type { VoiceServiceEnv } from "./env";
 import type { StaffAlertKind, StaffNotificationService } from "./notification-service";
 import { capturePickupOrder, mergeCapturedOrderItems, type CapturedOrderItem } from "./order-intake";
@@ -27,7 +27,9 @@ interface RelaySession {
   reservationCreatedId?: string;
   reservationIntentSeen: boolean;
   staffAlertIntents: Set<StaffAlertKind>;
+  staffTaskIntents: Set<StaffAlertKind>;
   startedAt: number;
+  needsStaffReview: boolean;
   transcript: TranscriptTurn[];
 }
 
@@ -43,8 +45,10 @@ export function createConversationRelayHandler(
     const session: RelaySession = {
       context: demoRestaurantContext,
       orderDraftItems: [],
+      needsStaffReview: false,
       reservationIntentSeen: false,
       staffAlertIntents: new Set(),
+      staffTaskIntents: new Set(),
       startedAt: Date.now(),
       transcript: [],
     };
@@ -103,11 +107,19 @@ export function createConversationRelayHandler(
           env,
           transcript: session.transcript,
         });
+        const escalationKind = classifyEscalationIntent(message.voicePrompt);
         void maybeSendEscalationAlert({
+          kind: escalationKind,
           session,
           staffNotifications,
           utterance: message.voicePrompt,
         }).catch((error) => console.error("[conversation-relay] staff escalation alert failed", error));
+        void maybeCreateStaffFollowUpTask({
+          callStore,
+          kind: escalationKind,
+          session,
+          utterance: message.voicePrompt,
+        }).catch((error) => console.error("[conversation-relay] staff task persistence failed", error));
 
         const createdOrderId = await maybeCreateStaffReviewOrder({
           callStore,
@@ -170,7 +182,7 @@ export function createConversationRelayHandler(
       void callStore.completeCall({
         callId: session.callRecordId,
         durationSeconds,
-        status: session.transcript.length ? "resolved" : "needs_review",
+        status: session.needsStaffReview || !session.transcript.length ? "needs_review" : "resolved",
         summary: summarizeTranscript(session.transcript),
       }).catch((error) => console.error("[conversation-relay] call close persistence failed", error));
 
@@ -333,15 +345,16 @@ async function maybeCreateStaffReviewReservation({
 }
 
 async function maybeSendEscalationAlert({
+  kind,
   session,
   staffNotifications,
   utterance,
 }: {
+  kind: StaffAlertKind | null;
   session: RelaySession;
   staffNotifications: StaffNotificationService;
   utterance: string;
 }) {
-  const kind = classifyEscalationIntent(utterance);
   if (!kind || session.staffAlertIntents.has(kind)) return;
 
   session.staffAlertIntents.add(kind);
@@ -353,20 +366,90 @@ async function maybeSendEscalationAlert({
     locationId: session.locationId,
     restaurantName: session.context.restaurantName,
     severity: kind === "complaint" ? "high" : "medium",
-    summary: kind === "complaint" ? "Complaint or refund risk detected." : "Caller asked for a human handoff.",
+    summary: staffAlertSummaryFor(kind),
   });
 }
 
-function classifyEscalationIntent(utterance: string): StaffAlertKind | null {
+async function maybeCreateStaffFollowUpTask({
+  callStore,
+  kind,
+  session,
+  utterance,
+}: {
+  callStore: CallStore;
+  kind: StaffAlertKind | null;
+  session: RelaySession;
+  utterance: string;
+}) {
+  if (!kind || session.staffTaskIntents.has(kind)) return;
+
+  session.staffTaskIntents.add(kind);
+  session.needsStaffReview = true;
+
+  await callStore.createStaffTask({
+    body: buildStaffTaskBody(kind, utterance),
+    callId: session.callRecordId,
+    dueMinutes: staffTaskDueMinutesFor(kind),
+    locationId: session.locationId,
+    priority: staffTaskPriorityFor(kind),
+    title: staffTaskTitleFor(kind),
+    type: staffTaskTypeFor(kind),
+  });
+}
+
+export function classifyEscalationIntent(utterance: string): StaffAlertKind | null {
   const normalized = utterance.toLowerCase();
 
-  if (/\b(refund|complain|complaint|wrong order|incorrect|bad service|terrible|upset|angry|manager)\b/.test(normalized)) {
+  if (/\b(refund|complain|complaint|wrong order|incorrect|bad service|terrible|upset|angry)\b/.test(normalized)) {
     return "complaint";
   }
 
-  if (/\b(human|person|someone|staff|owner|call me back|callback|call back)\b/.test(normalized)) {
+  if (
+    /\b(cater|catering|private event|buyout|large party|wedding|corporate|banquet|alcohol|liquor|wine|cocktail|allergen|allergy|allergic|gluten|celiac|dairy|nut|peanut|shellfish)\b/.test(normalized)
+  ) {
+    return "low_confidence";
+  }
+
+  if (/\b(human|person|someone|staff|owner|manager|call me back|callback|call back)\b/.test(normalized)) {
     return "handoff";
   }
 
   return null;
+}
+
+function staffAlertSummaryFor(kind: StaffAlertKind) {
+  if (kind === "complaint") return "Complaint or refund risk detected.";
+  if (kind === "low_confidence") return "Caller asked about a topic that needs staff review.";
+  return "Caller asked for a human handoff.";
+}
+
+function staffTaskTitleFor(kind: StaffAlertKind) {
+  if (kind === "complaint") return "Call back complaint guest";
+  if (kind === "low_confidence") return "Review low-confidence call";
+  return "Follow up with caller";
+}
+
+function staffTaskTypeFor(kind: StaffAlertKind): StaffTaskType {
+  if (kind === "complaint" || kind === "handoff") return "manager_callback";
+  if (kind === "low_confidence") return "low_confidence_review";
+  return "general";
+}
+
+function staffTaskPriorityFor(kind: StaffAlertKind): StaffTaskPriority {
+  if (kind === "complaint") return "urgent";
+  if (kind === "handoff") return "high";
+  return "normal";
+}
+
+function staffTaskDueMinutesFor(kind: StaffAlertKind) {
+  if (kind === "complaint") return 10;
+  if (kind === "handoff") return 15;
+  return 45;
+}
+
+function buildStaffTaskBody(kind: StaffAlertKind, utterance: string) {
+  return [
+    staffAlertSummaryFor(kind),
+    `Caller said: ${utterance.slice(0, 500)}`,
+  ].join("\n");
 }
