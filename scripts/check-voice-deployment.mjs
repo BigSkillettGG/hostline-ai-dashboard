@@ -1,7 +1,9 @@
 const baseUrl = process.argv[2]?.replace(/\/$/, "");
+const locationId = process.argv[3];
+const internalApiKey = process.env.HOSTLINE_INTERNAL_API_KEY;
 
 if (!baseUrl) {
-  console.error("Usage: npm run check:voice -- https://voice.example.com");
+  console.error("Usage: npm run check:voice -- https://voice.example.com [location-id]");
   process.exit(1);
 }
 
@@ -17,12 +19,32 @@ for (const check of ready.readinessChecks ?? health.readinessChecks ?? []) {
   console.log(`${marker.padEnd(8)} ${check.label}`);
 }
 
+if (internalApiKey) {
+  const query = locationId ? `?locationId=${encodeURIComponent(locationId)}` : "";
+  const liveCallConfig = await readJson(`${baseUrl}/twilio/live-call-config${query}`, {
+    allowFailure: true,
+    headers: { "x-hostline-api-key": internalApiKey },
+  });
+  const twiml = await readText(`${baseUrl}/twilio/twiml-preview${query}`, {
+    allowFailure: true,
+    headers: { "x-hostline-api-key": internalApiKey },
+  });
+
+  console.log("");
+  console.log(`Voice webhook: ${liveCallConfig.voiceWebhookUrl ?? "unavailable"}`);
+  console.log(`ConversationRelay: ${liveCallConfig.conversationRelayUrl ?? "unavailable"}`);
+  console.log(`TwiML preview: ${twiml.includes("<ConversationRelay") ? "ok" : "missing ConversationRelay"}`);
+} else {
+  console.log("");
+  console.log("Skipping live-call URL preview because HOSTLINE_INTERNAL_API_KEY is not set.");
+}
+
 if (!health.ok || !ready.productionReady) {
   process.exit(2);
 }
 
 async function readJson(url, options = {}) {
-  const response = await fetch(url);
+  const response = await fetch(url, { headers: options.headers });
   if (!response.ok && !options.allowFailure) {
     throw new Error(`${url} returned ${response.status}`);
   }
@@ -33,4 +55,12 @@ async function readJson(url, options = {}) {
   } catch {
     throw new Error(`${url} did not return JSON: ${text.slice(0, 120)}`);
   }
+}
+
+async function readText(url, options = {}) {
+  const response = await fetch(url, { headers: options.headers });
+  if (!response.ok && !options.allowFailure) {
+    throw new Error(`${url} returned ${response.status}`);
+  }
+  return response.text();
 }

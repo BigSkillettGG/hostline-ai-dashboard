@@ -6,6 +6,7 @@ import { createConversationRelayHandler } from "./conversation-relay";
 import { createElevenLabsPreview } from "./elevenlabs";
 import { createGuestConfirmationService } from "./guest-confirmation-service";
 import { getVoiceServiceReadiness, loadEnv, type VoiceServiceEnv } from "./env";
+import { buildLiveCallConfig } from "./live-call";
 import { createMenuIngestionService } from "./menu-ingestion-service";
 import { createStaffNotificationService } from "./notification-service";
 import { createPhoneNumberStore } from "./phone-number-store";
@@ -109,6 +110,46 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
     return;
   }
 
+  if (req.method === "GET" && url.pathname === "/twilio/live-call-config") {
+    if (!isAuthorizedInternalRequest(req, currentEnv)) {
+      sendJson(res, 401, { error: "Unauthorized" });
+      return;
+    }
+
+    const liveCallConfig = buildLiveCallConfig(currentEnv, url.searchParams.get("locationId") ?? undefined);
+    sendJson(res, liveCallConfig.ready ? 200 : 503, liveCallConfig);
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/twilio/twiml-preview") {
+    if (!isAuthorizedInternalRequest(req, currentEnv)) {
+      sendText(res, 401, "Unauthorized");
+      return;
+    }
+
+    const locationId = url.searchParams.get("locationId") ?? currentEnv.SUPABASE_DEMO_LOCATION_ID ?? "demo-location";
+    const liveCallConfig = buildLiveCallConfig(currentEnv, locationId);
+    if (!liveCallConfig.conversationRelayUrl) {
+      sendXml(res, 503, buildUnavailableTwiML("HostLine AI needs PUBLIC_WS_BASE_URL before live calls."));
+      return;
+    }
+
+    const restaurantContext = await restaurantContextStore.getContext(locationId);
+    const twiml = buildConversationRelayTwiML({
+      actionUrl: liveCallConfig.actionUrl,
+      customParameters: { locationId },
+      language: currentEnv.TWILIO_LANGUAGE,
+      transcriptionProvider: currentEnv.TWILIO_TRANSCRIPTION_PROVIDER,
+      ttsProvider: currentEnv.TWILIO_TTS_PROVIDER,
+      ttsVoice: currentEnv.TWILIO_TTS_VOICE,
+      websocketUrl: liveCallConfig.conversationRelayUrl,
+      welcomeGreeting: restaurantContext.greeting,
+    });
+
+    sendXml(res, 200, twiml);
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/ingestion/run-next") {
     if (!isAuthorizedInternalRequest(req, currentEnv)) {
       sendJson(res, 401, { error: "Unauthorized" });
@@ -201,9 +242,9 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       currentEnv.SUPABASE_DEMO_LOCATION_ID ??
       "demo-location";
     const restaurantContext = await restaurantContextStore.getContext(locationId);
-    const httpBaseUrl = currentEnv.PUBLIC_HTTP_BASE_URL;
+    const liveCallConfig = buildLiveCallConfig(currentEnv, locationId);
     const twiml = buildConversationRelayTwiML({
-      actionUrl: httpBaseUrl ? `${httpBaseUrl}/twilio/conversation-ended` : undefined,
+      actionUrl: liveCallConfig.actionUrl,
       customParameters: {
         locationId,
       },
@@ -211,7 +252,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       transcriptionProvider: currentEnv.TWILIO_TRANSCRIPTION_PROVIDER,
       ttsProvider: currentEnv.TWILIO_TTS_PROVIDER,
       ttsVoice: currentEnv.TWILIO_TTS_VOICE,
-      websocketUrl: `${currentEnv.PUBLIC_WS_BASE_URL}/twilio/conversation-relay`,
+      websocketUrl: liveCallConfig.conversationRelayUrl ?? `${currentEnv.PUBLIC_WS_BASE_URL}/twilio/conversation-relay`,
       welcomeGreeting: restaurantContext.greeting,
     });
 

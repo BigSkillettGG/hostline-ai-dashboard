@@ -48,6 +48,17 @@ export interface RunMenuIngestionResult {
   summary?: string;
 }
 
+export interface LiveCallConfig {
+  actionUrl?: string;
+  conversationRelayUrl?: string;
+  locationId: string;
+  publicHttpBaseUrl?: string;
+  publicWsBaseUrl?: string;
+  ready: boolean;
+  twilioSignatureRequired: boolean;
+  voiceWebhookUrl?: string;
+}
+
 export const voiceServiceBaseUrl = (import.meta.env.VITE_VOICE_SERVICE_URL ?? "").replace(/\/$/, "");
 const internalApiKey = import.meta.env.VITE_HOSTLINE_INTERNAL_API_KEY ?? "";
 
@@ -66,6 +77,46 @@ export async function fetchVoiceServiceHealth() {
   }
 
   return (await response.json()) as VoiceServiceHealth;
+}
+
+export async function fetchLiveCallConfig(locationId?: string) {
+  if (!voiceServiceBaseUrl) {
+    throw new Error("VITE_VOICE_SERVICE_URL is not configured.");
+  }
+
+  const params = new URLSearchParams();
+  if (locationId?.trim()) params.set("locationId", locationId.trim());
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const response = await fetch(`${voiceServiceBaseUrl}/twilio/live-call-config${query}`, {
+    headers: buildInternalHeaders(),
+  });
+
+  if (!response.ok && response.status !== 503) {
+    const body = await response.text();
+    throw new Error(body || `Live call config failed with ${response.status}.`);
+  }
+
+  return (await response.json()) as LiveCallConfig;
+}
+
+export async function fetchTwiMLPreview(locationId?: string) {
+  if (!voiceServiceBaseUrl) {
+    throw new Error("VITE_VOICE_SERVICE_URL is not configured.");
+  }
+
+  const params = new URLSearchParams();
+  if (locationId?.trim()) params.set("locationId", locationId.trim());
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const response = await fetch(`${voiceServiceBaseUrl}/twilio/twiml-preview${query}`, {
+    headers: buildInternalHeaders(),
+  });
+
+  const text = await response.text();
+  if (!response.ok && response.status !== 503) {
+    throw new Error(text || `TwiML preview failed with ${response.status}.`);
+  }
+
+  return text;
 }
 
 export async function fetchVoicePreviewAudio(text: string) {

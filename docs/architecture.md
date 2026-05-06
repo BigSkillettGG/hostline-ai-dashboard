@@ -43,6 +43,7 @@ The first implementation is in `services/voice`:
 - If SMS confirmations are enabled for the location and Twilio SMS is configured, captured phone orders and reservation requests send concise confirmations to the caller.
 - `GET /health` returns production readiness checks for public URLs, CORS, internal API key, Supabase, OpenAI, ElevenLabs, Twilio credentials, and Twilio signature enforcement.
 - `GET /ready` returns `200` only when required production checks pass; container hosts can use `/health` for liveness and `/ready` for pre-call readiness.
+- Internal live-call endpoints expose generated Twilio webhook URLs and TwiML previews so operators can verify the deployed ConversationRelay path before calling the number.
 
 ### Integration Workers
 

@@ -59,6 +59,7 @@ There are 12 production workstreams:
 - Team invitations now have a dashboard flow, local demo fallback, Supabase REST hooks, and RLS-backed `team_invitations` schema.
 - The voice service health response now includes production readiness checks for deployment URLs, secrets, Supabase, OpenAI, ElevenLabs, Twilio, CORS, and signature enforcement.
 - The voice service now has a bundled production build, Dockerfile, `/ready` endpoint, and deployment-check script for the first live call bring-up.
+- The internal Telephony page now shows live-call webhook URLs, ConversationRelay websocket targets, TwiML preview, and first-call checklist status from the deployed voice service.
 
 ## Key Product Standard
 

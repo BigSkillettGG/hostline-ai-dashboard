@@ -47,6 +47,8 @@ Health endpoints:
 
 - `GET /health`: liveness plus readiness details. This should stay `200` so the host knows the process is alive.
 - `GET /ready`: returns `200` only when required production secrets, public URLs, CORS, and Twilio signature checks are ready.
+- `GET /twilio/live-call-config`: internal endpoint that returns the exact Twilio Voice webhook, ConversationRelay websocket, and callback URLs for a location.
+- `GET /twilio/twiml-preview`: internal endpoint that renders the TwiML Twilio will receive for the first live call.
 
 After deployment:
 
@@ -94,6 +96,8 @@ When Supabase is configured, Twilio requests can include `locationId` in the web
 
 - `GET /telephony/available-numbers?areaCode=415&limit=5` searches Twilio local numbers with voice and SMS enabled.
 - `POST /telephony/provision-number` purchases a selected number, sets its voice webhook to `/twilio/voice?locationId=...`, writes `phone_numbers`, and updates `locations.ai_host_phone`.
+- `GET /twilio/live-call-config?locationId=...` returns the generated live call URLs.
+- `GET /twilio/twiml-preview?locationId=...` renders the TwiML preview used to verify ConversationRelay before calling.
 - `POST /ingestion/run-next` processes one queued menu ingestion job, fetches URL/text content, parses menu items, replaces `menu_categories` and `menu_items`, and updates `ingestion_jobs` plus `menu_sources`.
 - Staff alert routing is loaded from `alert_routing_configs` per location when Supabase is configured. If no route exists, the service falls back to `STAFF_ALERT_SMS_TO`.
 - Staff alert outcomes are logged to `staff_alert_events` when Supabase is configured. Logging failures are warned but do not block the live call.

@@ -96,12 +96,16 @@ Optional checks:
 6. Open the super admin Overview and confirm production readiness.
 7. Run `npm run check:voice -- https://voice.your-domain.com`.
 
+Set `HOSTLINE_INTERNAL_API_KEY` in the shell before running the check command to include live-call URL and TwiML preview checks.
+
 ## First Live Call Checklist
 
 Before assigning a customer-facing number:
 
 - `/health` returns JSON with `ok: true`.
 - `/ready` returns `200` and `productionReady: true`.
+- `/twilio/live-call-config?locationId=<location-id>` returns `voiceWebhookUrl` and `conversationRelayUrl`.
+- `/twilio/twiml-preview?locationId=<location-id>` returns a `<ConversationRelay>` TwiML response.
 - Twilio number Voice webhook is `POST https://voice.your-domain.com/twilio/voice?locationId=<location-id>`.
 - `PUBLIC_HTTP_BASE_URL` exactly matches the public HTTPS origin Twilio calls.
 - `PUBLIC_WS_BASE_URL` is the same host with `wss://`.
