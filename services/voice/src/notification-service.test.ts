@@ -108,4 +108,52 @@ describe("staff alert formatting", () => {
     expect(fetchMock.mock.calls[3]?.[0]).toBe("https://example.supabase.co/rest/v1/staff_alert_events");
     expect(String(fetchMock.mock.calls[3]?.[1]?.body)).toContain('"status":"sent"');
   });
+
+  it("creates a staff task when routed delivery fails", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              config: {
+                routes: {
+                  delivery_failure: {
+                    enabled: true,
+                    quietHoursEnabled: false,
+                    recipients: [
+                      { channel: "sms", email: "", id: "counter", name: "Counter", phone: "+15550100" },
+                    ],
+                    severityThreshold: "low",
+                  },
+                },
+              },
+              updated_at: "2026-05-06T12:00:00.000Z",
+            },
+          ]),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(new Response("bad destination", { status: 400 }))
+      .mockResolvedValueOnce(new Response("{}", { status: 201 }))
+      .mockResolvedValueOnce(new Response("{}", { status: 201 }));
+    const service = createStaffNotificationService(env);
+
+    await expect(
+      service.sendStaffAlert({
+        kind: "delivery_failure",
+        locationId: "00000000-0000-4000-8000-000000000001",
+        restaurantName: "Olive & Ember",
+        severity: "high",
+        summary: "Kitchen printer did not acknowledge order ticket.",
+      }),
+    ).rejects.toThrow("Twilio staff alert failed");
+
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock.mock.calls[2]?.[0]).toBe("https://example.supabase.co/rest/v1/staff_alert_events");
+    expect(String(fetchMock.mock.calls[2]?.[1]?.body)).toContain('"status":"failed"');
+    expect(fetchMock.mock.calls[3]?.[0]).toBe("https://example.supabase.co/rest/v1/staff_tasks");
+    expect(String(fetchMock.mock.calls[3]?.[1]?.body)).toContain('"task_type":"delivery_issue"');
+    expect(String(fetchMock.mock.calls[3]?.[1]?.body)).toContain('"priority":"urgent"');
+  });
 });

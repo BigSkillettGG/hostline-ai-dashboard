@@ -283,6 +283,11 @@ create table staff_tasks (
   title text not null,
   body text,
   status text not null default 'open',
+  task_type text not null default 'general',
+  priority text not null default 'normal',
+  assigned_to text,
+  due_at timestamptz,
+  completed_at timestamptz,
   created_at timestamptz not null default now()
 );
 

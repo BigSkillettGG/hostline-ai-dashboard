@@ -51,6 +51,7 @@ There are 12 production workstreams:
 - The live voice service includes Supabase FAQs and knowledge sections in model instructions and deterministic fallback replies.
 - Alert routing rules can now persist per location, and the voice service can use those rules to route staff SMS/webhook alerts by event type and severity.
 - Staff alert delivery attempts now write audit events that the dashboard can review in the Alert Log.
+- Staff follow-ups now have a Tasks queue for callbacks, alert failures, reservation reviews, low-confidence calls, and order handoff issues.
 
 ## Key Product Standard
 

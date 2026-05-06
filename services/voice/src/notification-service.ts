@@ -378,7 +378,7 @@ class SupabaseStaffAlertEventLogger implements StaffAlertEventLogger {
       const now = new Date().toISOString();
       const response = await fetch(`${this.restUrl}/staff_alert_events`, {
         body: JSON.stringify({
-          call_id: input.input.callId ?? null,
+          call_id: normalizeUuid(input.input.callId) ?? null,
           caller_phone: input.input.callerPhone ?? null,
           channels: channelsForRoute(input.route),
           error_message: input.errorMessage ?? null,
@@ -407,9 +407,43 @@ class SupabaseStaffAlertEventLogger implements StaffAlertEventLogger {
 
       if (!response.ok) {
         console.warn("[staff-alerts] alert event log failed", response.status, await response.text());
+        return;
       }
+
+      await this.createFollowUpTask(input, locationId, now);
     } catch (error) {
       console.warn("[staff-alerts] alert event log failed", error);
+    }
+  }
+
+  private async createFollowUpTask(input: StaffAlertEventLogInput, locationId: string, createdAt: string) {
+    if (!this.restUrl || !this.key || !shouldCreateStaffTask(input)) return;
+
+    try {
+      const response = await fetch(`${this.restUrl}/staff_tasks`, {
+        body: JSON.stringify({
+          body: buildStaffTaskBody(input),
+          call_id: normalizeUuid(input.input.callId) ?? null,
+          due_at: taskDueAt(input, createdAt),
+          location_id: locationId,
+          priority: taskPriorityFor(input),
+          status: "open",
+          task_type: taskTypeFor(input.input.kind),
+          title: taskTitleFor(input),
+        }),
+        headers: {
+          apikey: this.key,
+          Authorization: `Bearer ${this.key}`,
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        console.warn("[staff-alerts] staff task create failed", response.status, await response.text());
+      }
+    } catch (error) {
+      console.warn("[staff-alerts] staff task create failed", error);
     }
   }
 }
@@ -430,6 +464,73 @@ function channelsForRoute(route: ResolvedStaffAlertRoute) {
 function normalizeLocationId(locationId?: string) {
   if (!locationId || locationId === "demo-location") return undefined;
   return locationId;
+}
+
+function normalizeUuid(value?: string) {
+  if (!value) return undefined;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+    ? value
+    : undefined;
+}
+
+function shouldCreateStaffTask(input: StaffAlertEventLogInput) {
+  if (input.status === "failed") return true;
+  if (input.status !== "skipped") return false;
+  return (
+    input.input.kind === "complaint" ||
+    input.input.kind === "delivery_failure" ||
+    input.input.kind === "handoff" ||
+    input.input.kind === "low_confidence"
+  );
+}
+
+function taskTypeFor(kind: StaffAlertKind) {
+  if (kind === "delivery_failure") return "delivery_issue";
+  if (kind === "low_confidence") return "low_confidence_review";
+  if (kind === "reservation") return "reservation_review";
+  if (kind === "order") return "order_follow_up";
+  if (kind === "complaint" || kind === "handoff") return "manager_callback";
+  return "general";
+}
+
+function taskPriorityFor(input: StaffAlertEventLogInput) {
+  const severity = input.input.severity ?? defaultSeverityFor(input.input.kind);
+  if (input.status === "failed" && severity === "high") return "urgent";
+  if (input.status === "failed") return "high";
+  if (severity === "high") return "high";
+  return "normal";
+}
+
+function taskTitleFor(input: StaffAlertEventLogInput) {
+  const noun = {
+    complaint: "complaint callback",
+    delivery_failure: "delivery failure",
+    handoff: "human handoff",
+    low_confidence: "low-confidence call",
+    order: "order follow-up",
+    reservation: "reservation request",
+    sales: "sales call",
+  } satisfies Record<StaffAlertKind, string>;
+
+  return input.status === "failed"
+    ? `Resolve failed ${noun[input.input.kind]} alert`
+    : `Review skipped ${noun[input.input.kind]} alert`;
+}
+
+function buildStaffTaskBody(input: StaffAlertEventLogInput) {
+  const parts = [
+    input.input.summary,
+    input.errorMessage && `Alert issue: ${input.errorMessage}`,
+    input.input.callerPhone && `Caller: ${input.input.callerPhone}`,
+    ...(input.input.details ?? []),
+  ].filter(Boolean);
+
+  return truncate(parts.join("\n"), 900);
+}
+
+function taskDueAt(input: StaffAlertEventLogInput, createdAt: string) {
+  const dueMinutes = taskPriorityFor(input) === "urgent" ? 15 : 60;
+  return new Date(new Date(createdAt).getTime() + dueMinutes * 60_000).toISOString();
 }
 
 function truncate(value: string, maxLength: number) {

@@ -26,6 +26,15 @@ import {
   normalizeStaffAlertEventStatus,
   type StaffAlertEvent,
 } from "@/domain/alert-events";
+import {
+  normalizeStaffTaskPriority,
+  normalizeStaffTaskStatus,
+  normalizeStaffTaskType,
+  type StaffTask,
+  type StaffTaskPriority,
+  type StaffTaskStatus,
+  type StaffTaskType,
+} from "@/domain/staff-tasks";
 import type { RestaurantAgentConfig } from "@/domain/restaurant-config";
 import type {
   IngestionJob,
@@ -169,6 +178,22 @@ interface SupabaseStaffAlertEventRow {
   summary: string | null;
 }
 
+interface SupabaseStaffTaskRow {
+  assigned_to: string | null;
+  body: string | null;
+  call_id: string | null;
+  completed_at: string | null;
+  created_at: string | null;
+  due_at: string | null;
+  id: string;
+  order_id: string | null;
+  priority: string | null;
+  reservation_id: string | null;
+  status: string | null;
+  task_type: string | null;
+  title: string;
+}
+
 interface SupabasePhoneNumberRow {
   id: string;
   phone_number: string;
@@ -301,6 +326,19 @@ export interface CreateOrderDeliveryAttemptInput {
   status?: OrderDeliveryStatus;
 }
 
+export interface CreateStaffTaskInput {
+  assignedTo?: string;
+  body?: string;
+  callId?: string;
+  dueAt?: string;
+  orderId?: string;
+  priority?: StaffTaskPriority;
+  reservationId?: string;
+  status?: StaffTaskStatus;
+  title: string;
+  type?: StaffTaskType;
+}
+
 export interface CreateMenuSourceInput {
   frequency: SyncFrequency;
   label?: string;
@@ -337,6 +375,10 @@ export function isAlertRoutingPersistenceConfigured() {
 }
 
 export function isStaffAlertEventPersistenceConfigured() {
+  return Boolean(isSupabaseConfigured() && supabaseDemoLocationId);
+}
+
+export function isStaffTaskPersistenceConfigured() {
   return Boolean(isSupabaseConfigured() && supabaseDemoLocationId);
 }
 
@@ -666,6 +708,65 @@ export async function fetchStaffAlertEventsFromSupabase(
   );
 
   return rows.map(mapSupabaseStaffAlertEvent);
+}
+
+export async function fetchStaffTasksFromSupabase(
+  locationId = supabaseDemoLocationId,
+): Promise<StaffTask[]> {
+  if (!isSupabaseConfigured() || !locationId) {
+    throw new Error("Supabase staff task persistence is not configured.");
+  }
+
+  const rows = await supabaseRequest<SupabaseStaffTaskRow[]>(
+    "staff_tasks",
+    new URLSearchParams({
+      limit: "100",
+      location_id: `eq.${locationId}`,
+      order: "created_at.desc",
+      select: staffTaskSelectColumns,
+    }),
+  );
+
+  return rows.map(mapSupabaseStaffTask);
+}
+
+export async function createStaffTaskInSupabase(
+  input: CreateStaffTaskInput,
+  locationId = supabaseDemoLocationId,
+): Promise<StaffTask | undefined> {
+  if (!isSupabaseConfigured() || !locationId) {
+    throw new Error("Supabase staff task persistence is not configured.");
+  }
+
+  const rows = await supabaseRequest<SupabaseStaffTaskRow[]>(
+    "staff_tasks",
+    new URLSearchParams({
+      select: staffTaskSelectColumns,
+    }),
+    {
+      body: buildStaffTaskInsertPayload(input, locationId),
+      headers: {
+        Prefer: "return=representation",
+      },
+      method: "POST",
+    },
+  );
+
+  return rows?.[0] ? mapSupabaseStaffTask(rows[0]) : undefined;
+}
+
+export async function updateStaffTaskStatusInSupabase(taskId: string, status: StaffTaskStatus) {
+  if (!isSupabaseConfigured()) {
+    throw new Error("Supabase staff task persistence is not configured.");
+  }
+
+  await supabaseRequest("staff_tasks", new URLSearchParams({ id: `eq.${taskId}` }), {
+    body: {
+      completed_at: status === "done" || status === "dismissed" ? new Date().toISOString() : null,
+      status,
+    },
+    method: "PATCH",
+  });
 }
 
 export async function fetchPhoneNumbersFromSupabase(
@@ -1102,6 +1203,25 @@ export function buildOrderDeliveryAttemptPayload(input: CreateOrderDeliveryAttem
   };
 }
 
+export function buildStaffTaskInsertPayload(input: CreateStaffTaskInput, locationId: string) {
+  const status = normalizeStaffTaskStatus(input.status);
+
+  return {
+    assigned_to: input.assignedTo?.trim() || null,
+    body: input.body?.trim() || null,
+    call_id: input.callId ?? null,
+    completed_at: status === "done" || status === "dismissed" ? new Date().toISOString() : null,
+    due_at: input.dueAt ?? null,
+    location_id: locationId,
+    order_id: input.orderId ?? null,
+    priority: normalizeStaffTaskPriority(input.priority),
+    reservation_id: input.reservationId ?? null,
+    status,
+    task_type: normalizeStaffTaskType(input.type),
+    title: input.title.trim(),
+  };
+}
+
 export function mapSupabaseAgentConfig(
   row: SupabaseAgentConfigRow,
   fallbackConfig: RestaurantAgentConfig,
@@ -1352,6 +1472,24 @@ export function mapSupabaseStaffAlertEvent(row: SupabaseStaffAlertEventRow): Sta
     smsRecipientCount,
     status: normalizeStaffAlertEventStatus(row.status),
     summary: row.summary ?? "",
+  };
+}
+
+export function mapSupabaseStaffTask(row: SupabaseStaffTaskRow): StaffTask {
+  return {
+    assignedTo: row.assigned_to?.trim() || undefined,
+    body: row.body?.trim() || undefined,
+    callId: row.call_id ?? undefined,
+    completedAt: row.completed_at ?? undefined,
+    createdAt: row.created_at ?? "",
+    dueAt: row.due_at ?? undefined,
+    id: row.id,
+    orderId: row.order_id ?? undefined,
+    priority: normalizeStaffTaskPriority(row.priority),
+    reservationId: row.reservation_id ?? undefined,
+    status: normalizeStaffTaskStatus(row.status),
+    title: row.title?.trim() || "Staff follow-up",
+    type: normalizeStaffTaskType(row.task_type),
   };
 }
 
@@ -1641,3 +1779,6 @@ const ingestionJobSelectColumns =
 
 const staffAlertEventSelectColumns =
   "id,call_id,kind,severity,status,summary,message,caller_phone,recipients,channels,route_snapshot,error_message,sent_at,created_at";
+
+const staffTaskSelectColumns =
+  "id,call_id,order_id,reservation_id,title,body,status,task_type,priority,assigned_to,due_at,completed_at,created_at";

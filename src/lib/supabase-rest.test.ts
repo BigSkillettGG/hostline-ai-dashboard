@@ -10,6 +10,7 @@ import {
   buildMenuSourceInsertPayload,
   buildOnboardingProfilePayload,
   buildOrderDeliveryAttemptPayload,
+  buildStaffTaskInsertPayload,
   buildReservationInsertPayload,
   calculateForwardingStatus,
   mapSupabaseCalls,
@@ -21,6 +22,7 @@ import {
   mapSupabasePhoneNumber,
   mapSupabaseReservations,
   mapSupabaseStaffAlertEvent,
+  mapSupabaseStaffTask,
 } from "./supabase-rest";
 import { defaultAlertRoutingConfig } from "@/domain/alert-routing";
 
@@ -233,6 +235,65 @@ describe("Supabase staff alert event mapping", () => {
       status: "sent",
     });
     expect(event.recipients[0]).toMatchObject({ channel: "both", name: "GM" });
+  });
+});
+
+describe("Supabase staff task mapping", () => {
+  it("maps persisted staff tasks into dashboard records", () => {
+    const task = mapSupabaseStaffTask({
+      assigned_to: "Maria",
+      body: "Printer did not acknowledge the order.",
+      call_id: "call_1",
+      completed_at: null,
+      created_at: "2026-05-06T14:00:00.000Z",
+      due_at: "2026-05-06T14:15:00.000Z",
+      id: "task_1",
+      order_id: "order_1",
+      priority: "urgent",
+      reservation_id: null,
+      status: "in_progress",
+      task_type: "delivery_issue",
+      title: "Fix failed printer alert",
+    });
+
+    expect(task).toEqual({
+      assignedTo: "Maria",
+      body: "Printer did not acknowledge the order.",
+      callId: "call_1",
+      completedAt: undefined,
+      createdAt: "2026-05-06T14:00:00.000Z",
+      dueAt: "2026-05-06T14:15:00.000Z",
+      id: "task_1",
+      orderId: "order_1",
+      priority: "urgent",
+      reservationId: undefined,
+      status: "in_progress",
+      title: "Fix failed printer alert",
+      type: "delivery_issue",
+    });
+  });
+
+  it("builds staff task insert payloads", () => {
+    const payload = buildStaffTaskInsertPayload(
+      {
+        body: " Guest wants a manager callback. ",
+        callId: "call_1",
+        priority: "high",
+        title: " Call guest ",
+        type: "manager_callback",
+      },
+      "location_1",
+    );
+
+    expect(payload).toMatchObject({
+      body: "Guest wants a manager callback.",
+      call_id: "call_1",
+      location_id: "location_1",
+      priority: "high",
+      status: "open",
+      task_type: "manager_callback",
+      title: "Call guest",
+    });
   });
 });
 
