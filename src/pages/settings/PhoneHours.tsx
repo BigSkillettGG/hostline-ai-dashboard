@@ -18,6 +18,7 @@ const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 const samplePhoneNumbers: PhoneNumberRecord[] = [
   {
     forwardingMode: "forward_unanswered",
+    forwardingVerification: {},
     forwardingStatus: "pending_verification",
     id: "sample",
     phoneNumber: restaurant.aiHostNumber,
@@ -136,7 +137,8 @@ function formatStatus(status: string) {
 
 function statusClass(status: string) {
   if (status === "verified") return "border-success/30 bg-success/10 text-success";
-  if (status === "pending_verification") return "border-warning/30 bg-warning/10 text-warning";
+  if (status === "needs_attention") return "border-destructive/30 bg-destructive/10 text-destructive";
+  if (status === "pending_verification" || status === "partial") return "border-warning/30 bg-warning/10 text-warning";
   return "border-muted-foreground/30 bg-muted text-muted-foreground";
 }
 

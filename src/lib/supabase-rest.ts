@@ -130,6 +130,7 @@ interface SupabasePhoneNumberRow {
   forwarding_status: string | null;
   status: string | null;
   voice_webhook_url: string | null;
+  verification_results: unknown;
   last_verified_at: string | null;
   updated_at: string | null;
 }
@@ -202,6 +203,7 @@ interface SupabaseCallReservationLinkRow {
 export interface PhoneNumberRecord {
   forwardingMode: string;
   forwardingStatus: string;
+  forwardingVerification: ForwardingVerification;
   id: string;
   lastVerifiedAt?: string;
   phoneNumber: string;
@@ -211,6 +213,16 @@ export interface PhoneNumberRecord {
   status: string;
   updatedAt?: string;
   voiceWebhookUrl?: string;
+}
+
+export type ForwardingTestStatus = "pending" | "passed" | "failed" | "not_applicable";
+
+export interface ForwardingVerification {
+  busyForwarding?: ForwardingTestStatus;
+  directCall?: ForwardingTestStatus;
+  noAnswerForwarding?: ForwardingTestStatus;
+  notes?: string;
+  updatedAt?: string;
 }
 
 export interface MenuCategoryRecord {
@@ -485,11 +497,44 @@ export async function fetchPhoneNumbersFromSupabase(
       location_id: `eq.${locationId}`,
       order: "created_at.desc",
       select:
-        "id,phone_number,provider,provider_sid,restaurant_main_line,forwarding_mode,forwarding_status,status,voice_webhook_url,last_verified_at,updated_at",
+        "id,phone_number,provider,provider_sid,restaurant_main_line,forwarding_mode,forwarding_status,status,voice_webhook_url,verification_results,last_verified_at,updated_at",
     }),
   );
 
   return rows.map(mapSupabasePhoneNumber);
+}
+
+export async function savePhoneNumberVerificationToSupabase(
+  phoneNumberId: string,
+  verification: ForwardingVerification,
+): Promise<PhoneNumberRecord | undefined> {
+  if (!isSupabaseConfigured()) {
+    throw new Error("Supabase phone-number persistence is not configured.");
+  }
+
+  const forwardingStatus = calculateForwardingStatus(verification);
+  const rows = await supabaseRequest<SupabasePhoneNumberRow[]>(
+    "phone_numbers",
+    new URLSearchParams({
+      id: `eq.${phoneNumberId}`,
+      select:
+        "id,phone_number,provider,provider_sid,restaurant_main_line,forwarding_mode,forwarding_status,status,voice_webhook_url,verification_results,last_verified_at,updated_at",
+    }),
+    {
+      body: {
+        forwarding_status: forwardingStatus,
+        last_verified_at: forwardingStatus === "verified" ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString(),
+        verification_results: verification,
+      },
+      headers: {
+        Prefer: "return=representation",
+      },
+      method: "PATCH",
+    },
+  );
+
+  return rows?.[0] ? mapSupabasePhoneNumber(rows[0]) : undefined;
 }
 
 export async function fetchMenuFromSupabase(locationId = supabaseDemoLocationId): Promise<MenuCategoryRecord[]> {
@@ -787,6 +832,7 @@ export function mapSupabasePhoneNumber(row: SupabasePhoneNumberRow): PhoneNumber
   return {
     forwardingMode: row.forwarding_mode ?? "forward_unanswered",
     forwardingStatus: row.forwarding_status ?? "not_verified",
+    forwardingVerification: normalizeForwardingVerification(row.verification_results),
     id: row.id,
     lastVerifiedAt: row.last_verified_at ?? undefined,
     phoneNumber: row.phone_number,
@@ -797,6 +843,28 @@ export function mapSupabasePhoneNumber(row: SupabasePhoneNumberRow): PhoneNumber
     updatedAt: row.updated_at ?? undefined,
     voiceWebhookUrl: row.voice_webhook_url ?? undefined,
   };
+}
+
+export function calculateForwardingStatus(verification: ForwardingVerification) {
+  const requiredStatuses = [
+    verification.directCall,
+    verification.noAnswerForwarding,
+    verification.busyForwarding,
+  ];
+
+  if (requiredStatuses.every((status) => status === "passed" || status === "not_applicable")) {
+    return "verified";
+  }
+
+  if (requiredStatuses.some((status) => status === "failed")) {
+    return "needs_attention";
+  }
+
+  if (requiredStatuses.some((status) => status === "passed")) {
+    return "partial";
+  }
+
+  return "not_verified";
 }
 
 export function buildAgentConfigPayload(config: RestaurantAgentConfig, locationId: string) {
@@ -1181,6 +1249,26 @@ function normalizeStringArrayWithFallback<T extends string>(value: unknown, fall
 
 function normalizeStringField<T extends string>(value: string | null | undefined, fallback: T): T {
   return value?.trim() ? (value.trim() as T) : fallback;
+}
+
+function normalizeForwardingVerification(value: unknown): ForwardingVerification {
+  if (!isObjectRecord(value)) return {};
+
+  return {
+    busyForwarding: normalizeForwardingTestStatus(value.busyForwarding),
+    directCall: normalizeForwardingTestStatus(value.directCall),
+    noAnswerForwarding: normalizeForwardingTestStatus(value.noAnswerForwarding),
+    notes: typeof value.notes === "string" ? value.notes : undefined,
+    updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : undefined,
+  };
+}
+
+function normalizeForwardingTestStatus(value: unknown): ForwardingTestStatus | undefined {
+  if (value === "pending" || value === "passed" || value === "failed" || value === "not_applicable") {
+    return value;
+  }
+
+  return undefined;
 }
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {

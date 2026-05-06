@@ -83,6 +83,7 @@ The onboarding interview must create enough structured context for a restaurant 
 
 - Restaurant main line, current carrier, phone provider admin access.
 - Assigned Twilio number, forwarding mode, no-answer timing, after-hours routing.
+- Verification status for direct AI number, no-answer forwarding, and busy-line forwarding.
 - Test call checklist: FAQ, menu, order, reservation, handoff, dashboard review.
 - Go-live status, rollback number, support contact.
 

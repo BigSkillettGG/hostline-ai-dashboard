@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
+  AlertTriangle,
   Bot,
   CalendarDays,
   CheckCircle2,
@@ -43,8 +44,13 @@ import {
 import { loadOnboardingDraft, saveOnboardingDraft } from "@/lib/onboarding-draft";
 import {
   fetchOnboardingProfileFromSupabase,
+  fetchPhoneNumbersFromSupabase,
+  type ForwardingTestStatus,
+  type ForwardingVerification,
   isOnboardingPersistenceConfigured,
+  type PhoneNumberRecord,
   saveOnboardingProfileToSupabase,
+  savePhoneNumberVerificationToSupabase,
 } from "@/lib/supabase-rest";
 import {
   searchAvailableVoicePhoneNumbers,
@@ -75,6 +81,28 @@ const launchChecklist = [
   "Review the call transcript, order, and staff alert behavior.",
 ];
 
+const forwardingVerificationChecks: Array<{
+  description: string;
+  key: keyof Pick<ForwardingVerification, "busyForwarding" | "directCall" | "noAnswerForwarding">;
+  label: string;
+}> = [
+  {
+    description: "Call the assigned HostLine number directly and confirm the AI answers.",
+    key: "directCall",
+    label: "Direct AI number",
+  },
+  {
+    description: "Let the restaurant main line ring unanswered and confirm the call reaches HostLine.",
+    key: "noAnswerForwarding",
+    label: "No-answer forwarding",
+  },
+  {
+    description: "Keep the restaurant line busy, place a second call, and confirm it reaches HostLine instead of busy/call-waiting/voicemail.",
+    key: "busyForwarding",
+    label: "Busy-line forwarding",
+  },
+];
+
 export default function Onboarding() {
   const [activeSectionId, setActiveSectionId] = useState<OnboardingStepId>("basics");
   const [draft, setDraft] = useState<OnboardingDraft>(() => loadOnboardingDraft());
@@ -88,13 +116,18 @@ export default function Onboarding() {
   const [availableNumbers, setAvailableNumbers] = useState<AvailableVoicePhoneNumber[]>([]);
   const [phoneSearchAreaCode, setPhoneSearchAreaCode] = useState(() => inferAreaCode(String(loadOnboardingDraft().mainPhone ?? "")));
   const [phoneSearchError, setPhoneSearchError] = useState<string | null>(null);
+  const [phoneNumberRecord, setPhoneNumberRecord] = useState<PhoneNumberRecord | null>(null);
+  const [localForwardingVerification, setLocalForwardingVerification] = useState<ForwardingVerification>({});
   const [provisioningNumber, setProvisioningNumber] = useState<string | null>(null);
+  const [savingVerificationKey, setSavingVerificationKey] = useState<string | null>(null);
   const [searchingNumbers, setSearchingNumbers] = useState(false);
   const progress = useMemo(() => calculateOnboardingProgress(draft), [draft]);
   const activeSection = onboardingSections.find((section) => section.id === activeSectionId) ?? onboardingSections[0];
   const ActiveIcon = sectionIcons[activeSection.id];
   const assignedNumber = String(draft.assignedHostLineNumber || assignedDemoPhoneNumber);
   const assignedNumberIsDemo = assignedNumber === assignedDemoPhoneNumber;
+  const forwardingVerification = phoneNumberRecord?.forwardingVerification ?? localForwardingVerification;
+  const forwardingVerificationStatus = buildVerificationStatus(forwardingVerification);
 
   useEffect(() => {
     if (!isOnboardingPersistenceConfigured()) return;
@@ -127,6 +160,28 @@ export default function Onboarding() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!isOnboardingPersistenceConfigured()) return;
+
+    let active = true;
+
+    fetchPhoneNumbersFromSupabase()
+      .then((phoneNumbers) => {
+        if (!active) return;
+        const matchedNumber =
+          phoneNumbers.find((phoneNumber) => phoneNumber.phoneNumber === assignedNumber) ?? phoneNumbers[0] ?? null;
+        setPhoneNumberRecord(matchedNumber);
+      })
+      .catch(() => {
+        if (!active) return;
+        setPhoneNumberRecord(null);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [assignedNumber]);
 
   const updateField = (fieldId: string, value: string | boolean) => {
     setDraft((current) => ({ ...current, [fieldId]: value }));
@@ -213,6 +268,33 @@ export default function Onboarding() {
       toast.error(message);
     } finally {
       setProvisioningNumber(null);
+    }
+  };
+
+  const updateForwardingVerification = async (
+    key: keyof Pick<ForwardingVerification, "busyForwarding" | "directCall" | "noAnswerForwarding">,
+    status: ForwardingTestStatus,
+  ) => {
+    const nextVerification: ForwardingVerification = {
+      ...forwardingVerification,
+      [key]: status,
+      updatedAt: new Date().toISOString(),
+    };
+
+    setLocalForwardingVerification(nextVerification);
+    setSavingVerificationKey(`${key}-${status}`);
+
+    try {
+      if (phoneNumberRecord) {
+        const updatedRecord = await savePhoneNumberVerificationToSupabase(phoneNumberRecord.id, nextVerification);
+        if (updatedRecord) setPhoneNumberRecord(updatedRecord);
+      }
+
+      toast.success(status === "passed" ? "Forwarding check marked passed" : "Forwarding check marked failed");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save forwarding verification.");
+    } finally {
+      setSavingVerificationKey(null);
     }
   };
 
@@ -511,6 +593,77 @@ export default function Onboarding() {
                   </div>
                 </div>
 
+                <div className="rounded-md border border-border p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-medium">No-busy-signal verification</div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        Verify the phone setup before promising overflow coverage.
+                      </div>
+                    </div>
+                    <Badge variant="outline" className={verificationBadgeClass(forwardingVerificationStatus)}>
+                      {verificationStatusLabel(forwardingVerificationStatus)}
+                    </Badge>
+                  </div>
+
+                  <div className="mt-3 space-y-2">
+                    {forwardingVerificationChecks.map((check) => {
+                      const status = forwardingVerification[check.key] ?? "pending";
+
+                      return (
+                        <div key={check.key} className="rounded-md border border-border bg-muted/20 p-3">
+                          <div className="flex items-start gap-2">
+                            {status === "passed" ? (
+                              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                            ) : status === "failed" ? (
+                              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                            ) : (
+                              <Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <div className="text-sm font-medium">{check.label}</div>
+                              <div className="mt-0.5 text-xs text-muted-foreground">{check.description}</div>
+                            </div>
+                            <Badge variant="secondary" className="capitalize">
+                              {status.replace("_", " ")}
+                            </Badge>
+                          </div>
+                          <div className="mt-3 flex justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => updateForwardingVerification(check.key, "failed")}
+                              disabled={Boolean(savingVerificationKey)}
+                            >
+                              {savingVerificationKey === `${check.key}-failed` ? (
+                                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                              ) : null}
+                              Failed
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => updateForwardingVerification(check.key, "passed")}
+                              disabled={Boolean(savingVerificationKey)}
+                            >
+                              {savingVerificationKey === `${check.key}-passed` ? (
+                                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                              ) : null}
+                              Passed
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {forwardingVerificationStatus !== "verified" && (
+                    <div className="mt-3 rounded-md border border-warning/30 bg-warning/10 p-3 text-xs text-muted-foreground">
+                      Until busy-line and no-answer forwarding both pass, position this setup as missed-call coverage,
+                      not guaranteed no-busy-signal coverage.
+                    </div>
+                  )}
+                </div>
+
                 <div className="space-y-2">
                   {launchChecklist.map((item, index) => (
                     <div key={item} className="flex gap-3 rounded-md border border-border p-3 text-sm">
@@ -676,4 +829,27 @@ function buildForwardingInstruction(forwardingMode: string, assignedNumber: stri
   }
 
   return `Forward unanswered calls to ${assignedNumber} after the restaurant line rings 3 to 4 times.`;
+}
+
+function buildVerificationStatus(verification: ForwardingVerification) {
+  const statuses = [verification.directCall, verification.noAnswerForwarding, verification.busyForwarding];
+
+  if (statuses.every((status) => status === "passed" || status === "not_applicable")) return "verified";
+  if (statuses.some((status) => status === "failed")) return "needs_attention";
+  if (statuses.some((status) => status === "passed")) return "partial";
+  return "not_verified";
+}
+
+function verificationStatusLabel(status: ReturnType<typeof buildVerificationStatus>) {
+  if (status === "verified") return "No-busy verified";
+  if (status === "needs_attention") return "Needs attention";
+  if (status === "partial") return "Partially verified";
+  return "Not verified";
+}
+
+function verificationBadgeClass(status: ReturnType<typeof buildVerificationStatus>) {
+  if (status === "verified") return "border-success/30 bg-success/10 text-success";
+  if (status === "needs_attention") return "border-destructive/30 bg-destructive/10 text-destructive";
+  if (status === "partial") return "border-warning/30 bg-warning/10 text-warning";
+  return "bg-muted text-muted-foreground";
 }

@@ -9,6 +9,7 @@ import {
   buildMenuSourceInsertPayload,
   buildOnboardingProfilePayload,
   buildReservationInsertPayload,
+  calculateForwardingStatus,
   mapSupabaseCalls,
   mapSupabaseAgentConfig,
   mapSupabaseIngestionJob,
@@ -280,14 +281,27 @@ describe("Supabase phone number mapping", () => {
       provider: "twilio",
       provider_sid: "PN123",
       restaurant_main_line: "+14155550148",
-      status: "in-use",
-      updated_at: "2026-05-05T14:00:00.000Z",
-      voice_webhook_url: "https://voice.hostline.test/twilio/voice",
-    });
+        status: "in-use",
+        updated_at: "2026-05-05T14:00:00.000Z",
+        verification_results: {
+          busyForwarding: "failed",
+          directCall: "passed",
+          noAnswerForwarding: "passed",
+          updatedAt: "2026-05-05T14:01:00.000Z",
+        },
+        voice_webhook_url: "https://voice.hostline.test/twilio/voice",
+      });
 
     expect(phoneNumber).toEqual({
       forwardingMode: "forward_unanswered",
       forwardingStatus: "pending_verification",
+      forwardingVerification: {
+        busyForwarding: "failed",
+        directCall: "passed",
+        noAnswerForwarding: "passed",
+        notes: undefined,
+        updatedAt: "2026-05-05T14:01:00.000Z",
+      },
       id: "pn_1",
       lastVerifiedAt: undefined,
       phoneNumber: "+14155550199",
@@ -298,6 +312,19 @@ describe("Supabase phone number mapping", () => {
       updatedAt: "2026-05-05T14:00:00.000Z",
       voiceWebhookUrl: "https://voice.hostline.test/twilio/voice",
     });
+  });
+
+  it("calculates forwarding verification status", () => {
+    expect(
+      calculateForwardingStatus({
+        busyForwarding: "passed",
+        directCall: "passed",
+        noAnswerForwarding: "passed",
+      }),
+    ).toBe("verified");
+    expect(calculateForwardingStatus({ directCall: "passed" })).toBe("partial");
+    expect(calculateForwardingStatus({ busyForwarding: "failed", directCall: "passed" })).toBe("needs_attention");
+    expect(calculateForwardingStatus({})).toBe("not_verified");
   });
 });
 

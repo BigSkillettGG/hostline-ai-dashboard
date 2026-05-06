@@ -97,6 +97,7 @@ create table phone_numbers (
   status text not null default 'provisioned',
   voice_webhook_url text,
   capabilities jsonb not null default '{}'::jsonb,
+  verification_results jsonb not null default '{}'::jsonb,
   last_verified_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),

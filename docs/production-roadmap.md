@@ -45,6 +45,7 @@ There are 12 production workstreams:
 - Onboarding scope, guided setup UI, and Supabase onboarding profile persistence are now part of the app.
 - The live voice service can load onboarded restaurant context from Supabase for call greetings and replies.
 - The voice backend has internal Twilio number search/provisioning endpoints, and the dashboard can read persisted phone-number forwarding status.
+- The onboarding phone launch flow tracks direct-call, no-answer forwarding, and busy-line forwarding verification before no-busy-signal coverage is treated as ready.
 - The live voice service includes Supabase FAQs and knowledge sections in model instructions and deterministic fallback replies.
 
 ## Key Product Standard
