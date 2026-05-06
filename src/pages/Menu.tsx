@@ -38,6 +38,7 @@ import {
   type MenuCategoryRecord,
 } from "@/lib/supabase-rest";
 import type { IngestionJob, MenuSource, SyncFrequency } from "@/types/sources";
+import { isVoiceServiceConfigured, runNextMenuIngestionJob } from "@/lib/voice-service";
 
 type MenuMode = "loading" | "live" | "sample" | "local-preview";
 
@@ -163,6 +164,7 @@ export default function MenuPage() {
         });
         setSources([source, ...sources]);
         if (job) setIngestionJobs([job, ...ingestionJobs]);
+        if (job) void runQueuedIngestionJob(job, source);
       } else {
         setSources([
           ...sources,
@@ -197,6 +199,7 @@ export default function MenuPage() {
           setSources(sources.map((item) => (item.id === updatedSource.id ? updatedSource : item)));
         }
         if (job) setIngestionJobs([job, ...ingestionJobs]);
+        if (job) void runQueuedIngestionJob(job, updatedSource ?? source);
       } else {
         setSources(sources.map((item) => (item.id === source.id ? { ...item, lastSyncedAt: "Queued", status: "pending" } : item)));
       }
@@ -220,6 +223,62 @@ export default function MenuPage() {
       toast.success("Source removed.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not remove source.");
+    }
+  };
+
+  const runQueuedIngestionJob = async (job: IngestionJob, source?: MenuSource) => {
+    if (!isVoiceServiceConfigured()) return;
+
+    try {
+      const result = await runNextMenuIngestionJob({ jobId: job.id });
+
+      if (!result.processed) {
+        toast(result.reason ?? "No ingestion job was processed.");
+        return;
+      }
+
+      const completedAt = new Date().toISOString();
+      setIngestionJobs((currentJobs) =>
+        currentJobs.map((currentJob) =>
+          currentJob.id === job.id
+            ? {
+                ...currentJob,
+                completedAt,
+                errorMessage: result.errorMessage,
+                status: result.status ?? currentJob.status,
+                summary: result.summary,
+              }
+            : currentJob,
+        ),
+      );
+
+      if (source && result.status) {
+        setSources((currentSources) =>
+          currentSources.map((currentSource) =>
+            currentSource.id === source.id
+              ? {
+                  ...currentSource,
+                  lastError: result.errorMessage,
+                  lastSyncedAt: result.status === "completed" ? completedAt : currentSource.lastSyncedAt,
+                  status: result.status === "completed" ? "synced" : "error",
+                }
+              : currentSource,
+          ),
+        );
+      }
+
+      if (result.status === "completed") {
+        if (isMenuPersistenceConfigured()) {
+          const liveMenu = await fetchMenuFromSupabase();
+          setCategories(liveMenu);
+          setMenuMode("live");
+        }
+        toast.success(result.summary ?? "Menu source imported.");
+      } else {
+        toast.error(result.errorMessage ?? "Menu ingestion failed.");
+      }
+    } catch {
+      toast("Source queued. Start the voice service worker to process it.");
     }
   };
 

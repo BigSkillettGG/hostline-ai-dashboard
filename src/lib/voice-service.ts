@@ -3,6 +3,7 @@ export interface VoiceServiceHealth {
   service: string;
   openaiConfigured: boolean;
   elevenLabsConfigured: boolean;
+  menuIngestionConfigured?: boolean;
   onboardedContextConfigured?: boolean;
   staffAlertsConfigured?: boolean;
   supabaseConfigured: boolean;
@@ -24,6 +25,17 @@ export interface ProvisionedVoicePhoneNumber {
   providerSid: string;
   status: string;
   voiceWebhookUrl?: string;
+}
+
+export interface RunMenuIngestionResult {
+  categoryCount?: number;
+  errorMessage?: string;
+  itemCount?: number;
+  jobId?: string;
+  processed: boolean;
+  reason?: string;
+  status?: "completed" | "failed";
+  summary?: string;
 }
 
 export const voiceServiceBaseUrl = (import.meta.env.VITE_VOICE_SERVICE_URL ?? "").replace(/\/$/, "");
@@ -120,6 +132,28 @@ export async function provisionVoicePhoneNumber(input: {
   }
 
   return (await response.json()) as { phoneNumber: ProvisionedVoicePhoneNumber };
+}
+
+export async function runNextMenuIngestionJob(input: { jobId?: string; locationId?: string } = {}) {
+  if (!voiceServiceBaseUrl) {
+    throw new Error("VITE_VOICE_SERVICE_URL is not configured.");
+  }
+
+  const response = await fetch(`${voiceServiceBaseUrl}/ingestion/run-next`, {
+    body: JSON.stringify(input),
+    headers: {
+      "Content-Type": "application/json",
+      ...buildInternalHeaders(),
+    },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(body || `Menu ingestion failed with ${response.status}.`);
+  }
+
+  return (await response.json()) as RunMenuIngestionResult;
 }
 
 function buildInternalHeaders() {

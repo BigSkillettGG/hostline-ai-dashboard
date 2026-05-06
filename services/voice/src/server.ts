@@ -5,6 +5,7 @@ import { createCallStore } from "./call-store";
 import { createConversationRelayHandler } from "./conversation-relay";
 import { createElevenLabsPreview } from "./elevenlabs";
 import { loadEnv, type VoiceServiceEnv } from "./env";
+import { createMenuIngestionService } from "./menu-ingestion-service";
 import { createStaffNotificationService } from "./notification-service";
 import { createPhoneNumberStore } from "./phone-number-store";
 import { createRestaurantContextStore } from "./restaurant-context-store";
@@ -20,6 +21,7 @@ const phoneNumberStore = createPhoneNumberStore(env);
 const restaurantContextStore = createRestaurantContextStore(env);
 const telephonyService = createTelephonyService(env);
 const staffNotificationService = createStaffNotificationService(env);
+const menuIngestionService = createMenuIngestionService(env);
 const server = createServer((req, res) => {
   void handleRequest(req, res, env);
 });
@@ -81,10 +83,30 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
           currentEnv.SUPABASE_SECRET_KEY &&
           currentEnv.SUPABASE_DEMO_LOCATION_ID,
       ),
+      menuIngestionConfigured: menuIngestionService.configured,
       twilioProvisioningConfigured: telephonyService.configured,
       staffAlertsConfigured: staffNotificationService.configured,
       twilioSignatureRequired: currentEnv.REQUIRE_TWILIO_SIGNATURE,
     });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/ingestion/run-next") {
+    if (!isAuthorizedInternalRequest(req, currentEnv)) {
+      sendJson(res, 401, { error: "Unauthorized" });
+      return;
+    }
+
+    try {
+      const body = parseJsonBody(await readRequestBody(req)) as { jobId?: string; locationId?: string };
+      const result = await menuIngestionService.runNext({
+        jobId: body.jobId,
+        locationId: body.locationId ?? currentEnv.SUPABASE_DEMO_LOCATION_ID,
+      });
+      sendJson(res, 200, result);
+    } catch (error) {
+      sendJson(res, 500, { error: error instanceof Error ? error.message : "Menu ingestion failed" });
+    }
     return;
   }
 
@@ -256,6 +278,11 @@ async function readRequestBody(req: IncomingMessage) {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
   }
   return Buffer.concat(chunks).toString("utf8");
+}
+
+function parseJsonBody(body: string) {
+  if (!body.trim()) return {};
+  return JSON.parse(body);
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown) {

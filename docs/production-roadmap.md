@@ -25,7 +25,7 @@ There are 12 production workstreams:
 2. Persist onboarding profile to Supabase tables.
 3. Use the onboarded location profile in the live voice service.
 4. Twilio number provisioning and forwarding status.
-5. Add extraction workers for uploaded PDFs, images, CSVs, and menu URLs.
+5. Add extraction workers for uploaded PDFs, images, and CSV menu files.
 6. Add production auth, RLS, and organization/location switching.
 
 ## Current Product State
@@ -41,6 +41,7 @@ There are 12 production workstreams:
 - The voice service can create staff-confirmed reservation requests from multi-turn calls.
 - The Menu page can parse pasted menu text and replace a location's structured Supabase menu rows.
 - The Menu page can persist menu URL sources and queue ingestion jobs for later extraction workers.
+- The voice backend can process queued menu URL/text ingestion jobs into structured Supabase menu rows.
 - Onboarding scope, guided setup UI, and Supabase onboarding profile persistence are now part of the app.
 - The live voice service can load onboarded restaurant context from Supabase for call greetings and replies.
 - The voice backend has internal Twilio number search/provisioning endpoints, and the dashboard can read persisted phone-number forwarding status.

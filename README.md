@@ -59,9 +59,10 @@ It exposes:
 - `wss://.../twilio/conversation-relay` for Twilio ConversationRelay.
 - `POST /voice/preview` for ElevenLabs voice previews.
 - `GET /telephony/available-numbers` and `POST /telephony/provision-number` for Twilio number launch.
+- `POST /ingestion/run-next` for protected menu URL/text ingestion jobs.
 - `POST /debug/reply` in non-production for testing restaurant replies.
 
-It also includes Supabase FAQs and knowledge sections in live call replies, creates staff-review pickup orders from clear order language when menu items are recognized, and creates staff-confirmed reservation requests when date, time, party size, and guest details are captured. Orders are pay-at-pickup and are not auto-sent to the kitchen or POS.
+It also processes queued menu URL/text ingestion into structured menu rows, includes Supabase FAQs and knowledge sections in live call replies, creates staff-review pickup orders from clear order language when menu items are recognized, and creates staff-confirmed reservation requests when date, time, party size, and guest details are captured. Orders are pay-at-pickup and are not auto-sent to the kitchen or POS.
 Staff alerts can be sent by Twilio SMS or webhook for captured orders, reservation requests, complaints, and human handoffs.
 
 See `services/voice/README.md` for provider setup.
@@ -83,7 +84,7 @@ See:
 
 ## Next Engineering Milestones
 
-1. Add extraction workers for uploaded PDFs, images, CSVs, and menu URLs.
+1. Add extraction workers for uploaded PDFs, images, and CSV menu files.
 2. Add Toast as the first POS integration.
 3. Add OpenTable as the first live reservation API integration.
 4. Add production auth, RLS, and organization/location switching.

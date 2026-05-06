@@ -621,6 +621,11 @@ export default function VoiceAgent() {
                   state={serviceHealth?.onboardedContextConfigured ? "ready" : "pending"}
                 />
                 <ServiceStatusRow
+                  label="Menu ingestion"
+                  value={serviceHealth?.menuIngestionConfigured ? "Worker connected" : "Not connected"}
+                  state={serviceHealth?.menuIngestionConfigured ? "ready" : "pending"}
+                />
+                <ServiceStatusRow
                   label="Twilio signatures"
                   value={serviceHealth?.twilioSignatureRequired ? "Required" : "Relaxed for local dev"}
                   state={serviceHealth?.twilioSignatureRequired ? "ready" : "pending"}

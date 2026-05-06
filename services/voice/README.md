@@ -7,6 +7,7 @@ This service is the production path for inbound restaurant phone calls.
 - Serves Twilio Voice webhook TwiML at `POST /twilio/voice`.
 - Connects calls to Twilio ConversationRelay over `wss://.../twilio/conversation-relay`.
 - Searches and provisions Twilio numbers through internal telephony endpoints when Twilio credentials are configured.
+- Processes queued menu URL/text ingestion jobs through `POST /ingestion/run-next`.
 - Configures ConversationRelay to use ElevenLabs TTS by default.
 - Receives ConversationRelay setup, prompt, DTMF, interrupt, and error messages.
 - Generates restaurant-host replies with OpenAI Responses API when `OPENAI_API_KEY` is set.
@@ -65,8 +66,9 @@ When Supabase is configured, Twilio requests can include `locationId` in the web
 
 - `GET /telephony/available-numbers?areaCode=415&limit=5` searches Twilio local numbers with voice and SMS enabled.
 - `POST /telephony/provision-number` purchases a selected number, sets its voice webhook to `/twilio/voice?locationId=...`, writes `phone_numbers`, and updates `locations.ai_host_phone`.
+- `POST /ingestion/run-next` processes one queued menu ingestion job, fetches URL/text content, parses menu items, replaces `menu_categories` and `menu_items`, and updates `ingestion_jobs` plus `menu_sources`.
 
-When `HOSTLINE_INTERNAL_API_KEY` is set, callers must send `x-hostline-api-key`. In production, provisioning is rejected unless this key is configured.
+When `HOSTLINE_INTERNAL_API_KEY` is set, callers must send `x-hostline-api-key`. In production, provisioning and ingestion worker endpoints are rejected unless this key is configured.
 
 ## Important Safety Defaults
 
