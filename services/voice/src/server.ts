@@ -98,6 +98,17 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
     return;
   }
 
+  if (req.method === "GET" && url.pathname === "/ready") {
+    const readiness = getVoiceServiceReadiness(currentEnv);
+    sendJson(res, readiness.productionReady ? 200 : 503, {
+      ok: readiness.productionReady,
+      productionReady: readiness.productionReady,
+      readinessChecks: readiness.checks,
+      service: "hostline-voice",
+    });
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/ingestion/run-next") {
     if (!isAuthorizedInternalRequest(req, currentEnv)) {
       sendJson(res, 401, { error: "Unauthorized" });

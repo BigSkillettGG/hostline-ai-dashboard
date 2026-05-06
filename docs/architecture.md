@@ -42,6 +42,7 @@ The first implementation is in `services/voice`:
 - Human handoff, complaint, and low-confidence special-handling prompts create staff task rows so managers have a follow-up queue even when the SMS alert succeeds.
 - If SMS confirmations are enabled for the location and Twilio SMS is configured, captured phone orders and reservation requests send concise confirmations to the caller.
 - `GET /health` returns production readiness checks for public URLs, CORS, internal API key, Supabase, OpenAI, ElevenLabs, Twilio credentials, and Twilio signature enforcement.
+- `GET /ready` returns `200` only when required production checks pass; container hosts can use `/health` for liveness and `/ready` for pre-call readiness.
 
 ### Integration Workers
 

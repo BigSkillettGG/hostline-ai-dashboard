@@ -58,6 +58,7 @@ There are 12 production workstreams:
 - Restaurant memberships now distinguish owner, admin, manager, and staff access in the dashboard, with a demo workspace that is separate from production roles.
 - Team invitations now have a dashboard flow, local demo fallback, Supabase REST hooks, and RLS-backed `team_invitations` schema.
 - The voice service health response now includes production readiness checks for deployment URLs, secrets, Supabase, OpenAI, ElevenLabs, Twilio, CORS, and signature enforcement.
+- The voice service now has a bundled production build, Dockerfile, `/ready` endpoint, and deployment-check script for the first live call bring-up.
 
 ## Key Product Standard
 

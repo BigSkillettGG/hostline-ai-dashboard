@@ -83,11 +83,11 @@ export function mapTwilioAvailableNumbers(response: TwilioAvailableNumberRespons
 class NotConfiguredTelephonyService implements TelephonyService {
   configured = false;
 
-  async searchAvailableNumbers() {
+  async searchAvailableNumbers(): Promise<AvailableTwilioNumber[]> {
     throw new Error("Twilio provisioning is not configured.");
   }
 
-  async provisionPhoneNumber() {
+  async provisionPhoneNumber(): Promise<ProvisionedPhoneNumber> {
     throw new Error("Twilio provisioning is not configured.");
   }
 }

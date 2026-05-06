@@ -45,9 +45,31 @@ ELEVENLABS_VOICE_ID=UgBBYS2sOqTuMpoF3BR0
 ELEVENLABS_MODEL_ID=eleven_flash_v2_5
 ```
 
+## Voice Service Build
+
+Local production build:
+
+```bash
+npm run build:voice
+npm run start:voice
+```
+
+Container build:
+
+```bash
+docker build -f services/voice/Dockerfile -t hostline-voice .
+docker run --env-file .env.production -p 8787:8787 hostline-voice
+```
+
+Deployment hosts should run the image command:
+
+```bash
+node dist-voice/server.mjs
+```
+
 ## Required Checks
 
-The voice service `/health` response includes `productionReady` and `readinessChecks`. The super admin Overview page displays these checks when `VITE_VOICE_SERVICE_URL` is set.
+The voice service `/health` response includes `productionReady` and `readinessChecks`. The `/ready` endpoint returns `200` only when required checks pass and `503` otherwise. The super admin Overview page displays these checks when `VITE_VOICE_SERVICE_URL` is set.
 
 Required production checks:
 
@@ -72,3 +94,17 @@ Optional checks:
 4. Point Twilio voice webhooks to `https://voice.your-domain.com/twilio/voice`.
 5. Deploy the dashboard with `VITE_AUTH_MODE=supabase`.
 6. Open the super admin Overview and confirm production readiness.
+7. Run `npm run check:voice -- https://voice.your-domain.com`.
+
+## First Live Call Checklist
+
+Before assigning a customer-facing number:
+
+- `/health` returns JSON with `ok: true`.
+- `/ready` returns `200` and `productionReady: true`.
+- Twilio number Voice webhook is `POST https://voice.your-domain.com/twilio/voice?locationId=<location-id>`.
+- `PUBLIC_HTTP_BASE_URL` exactly matches the public HTTPS origin Twilio calls.
+- `PUBLIC_WS_BASE_URL` is the same host with `wss://`.
+- `REQUIRE_TWILIO_SIGNATURE=true`.
+- The location has onboarding profile, agent config, FAQs, knowledge sections, and menu rows in Supabase.
+- Super admin Overview shows all required readiness checks passing.

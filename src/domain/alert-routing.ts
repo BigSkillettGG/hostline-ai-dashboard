@@ -217,7 +217,7 @@ function normalizeRouteRule(value: unknown, fallback: AlertRouteRule): AlertRout
     quietHoursEnabled:
       typeof value.quietHoursEnabled === "boolean" ? value.quietHoursEnabled : fallback.quietHoursEnabled,
     recipients: Array.isArray(value.recipients)
-      ? value.recipients.map(normalizeRecipient).filter(Boolean)
+      ? value.recipients.map(normalizeRecipient).filter(isAlertRecipient)
       : fallback.recipients,
     severityThreshold: normalizeSeverity(value.severityThreshold, fallback.severityThreshold),
   };
@@ -233,6 +233,10 @@ function normalizeRecipient(value: unknown): AlertRecipient | undefined {
     name: typeof value.name === "string" ? value.name : "",
     phone: typeof value.phone === "string" ? value.phone : "",
   };
+}
+
+function isAlertRecipient(value: AlertRecipient | undefined): value is AlertRecipient {
+  return Boolean(value);
 }
 
 function normalizeChannel(value: unknown): AlertChannel {

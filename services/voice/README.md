@@ -29,6 +29,31 @@ cp .env.example .env.local
 npm run dev:voice
 ```
 
+## Production Build
+
+```sh
+npm run build:voice
+npm run start:voice
+```
+
+The production build bundles the TypeScript service to `dist-voice/server.mjs` and runs it with plain Node. The Docker image uses the same build output.
+
+```sh
+docker build -f services/voice/Dockerfile -t hostline-voice .
+docker run --env-file .env.production -p 8787:8787 hostline-voice
+```
+
+Health endpoints:
+
+- `GET /health`: liveness plus readiness details. This should stay `200` so the host knows the process is alive.
+- `GET /ready`: returns `200` only when required production secrets, public URLs, CORS, and Twilio signature checks are ready.
+
+After deployment:
+
+```sh
+npm run check:voice -- https://voice.your-domain.com
+```
+
 For local Twilio testing, expose the service with a tunnel such as ngrok and set:
 
 ```sh
