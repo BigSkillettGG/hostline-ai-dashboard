@@ -55,4 +55,29 @@ describe("restaurant phone playbook", () => {
       staffAlertKind: "handoff",
     });
   });
+
+  it("uses onboarding-backed policies for playbook scenarios when configured", () => {
+    const context = {
+      ...demoRestaurantContext,
+      policies: {
+        ...demoRestaurantContext.policies,
+        delivery_drivers: "Drivers go to the side pickup window and give the app name.",
+        lost_and_found: "Collect the item, visit time, table area, and callback number.",
+        sales: "Collect company, caller name, reason, phone, and email for the owner.",
+      },
+    };
+
+    expect(matchPhonePlaybookReply("DoorDash driver pickup for Marco", context)).toMatchObject({
+      scenario: "delivery_driver",
+      text: expect.stringContaining("side pickup window"),
+    });
+    expect(matchPhonePlaybookReply("I left my jacket there", context)).toMatchObject({
+      scenario: "lost_and_found",
+      text: expect.stringContaining("table area"),
+    });
+    expect(matchPhonePlaybookReply("I'm a beer rep calling about samples", context)).toMatchObject({
+      scenario: "vendor_sales",
+      text: expect.stringContaining("company"),
+    });
+  });
 });

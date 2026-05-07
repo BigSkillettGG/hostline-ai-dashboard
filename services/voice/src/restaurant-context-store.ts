@@ -109,6 +109,9 @@ export function buildRestaurantContext({
     ...mapKnowledgeSections(knowledgeSections),
     ...buildDraftKnowledgeSections(draft),
   ];
+  const locationPolicy =
+    location?.address?.trim() ?? stringValue(draft.primaryLocation) ?? "The restaurant address has not been configured yet.";
+  const parkingPolicy = stringValue(draft.parking) ?? demoRestaurantContext.policies.parking;
 
   return {
     defaultPickupEtaMinutes: parseMinutes(stringValue(draft.defaultPickupEta)),
@@ -120,14 +123,41 @@ export function buildRestaurantContext({
     menuItems: menu,
     policies: {
       allergies: stringValue(draft.allergyPolicy) ?? demoRestaurantContext.policies.allergies,
-      delivery: stringValue(draft.deliveryPolicy) ?? "Direct delivery policy has not been configured yet.",
+      complaints: buildComplaintPolicy(draft),
+      delivery: buildDeliveryPolicy(draft),
+      delivery_drivers:
+        stringValue(draft.deliveryDriverPolicy) ??
+        "Delivery drivers should check in at the host stand or pickup counter with the guest name.",
+      delivery_issues: buildDeliveryIssuePolicy(draft),
+      directions: buildDirectionsPolicy(locationPolicy, parkingPolicy),
+      donations_press: stringValue(draft.donationPressPolicy) ?? "",
+      dress_code: stringValue(draft.feesAndRules) ?? "",
       escalations: buildEscalationPolicy(draft, agentConfig),
+      employment: stringValue(draft.hiringPolicy) ?? "Hiring inquiries should be sent to staff for follow-up.",
+      human_handoff: buildHumanHandoffPolicy(draft, agentConfig),
       hours: buildHoursPolicy(draft),
-      location: location?.address?.trim() ?? stringValue(draft.primaryLocation) ?? "The restaurant address has not been configured yet.",
+      location: locationPolicy,
+      lost_and_found:
+        stringValue(draft.lostAndFoundPolicy) ??
+        "Collect the item description, visit timing, caller name, and callback number for staff follow-up.",
       menu: buildMenuPolicy(draft, categoryNames),
-      parking: stringValue(draft.parking) ?? demoRestaurantContext.policies.parking,
+      order_changes:
+        stringValue(draft.orderChangePolicy) ??
+        "Order changes and cancellations need staff confirmation before they are promised.",
+      parking: parkingPolicy,
+      payment: stringValue(draft.paymentPolicy) ?? "Payment is pay at pickup. Do not collect card numbers over the phone.",
       pickup: buildPickupPolicy(draft),
+      private_events:
+        stringValue(draft.privateEvents) ??
+        "Private event, catering, and buyout inquiries should be collected for staff follow-up.",
+      reservation_changes:
+        stringValue(draft.reservationChangePolicy) ??
+        "Reservation changes and cancellations need staff confirmation before they are promised.",
       reservations: buildReservationPolicy(draft, agentConfig),
+      sales: buildVendorPolicy(draft),
+      waitlist:
+        stringValue(draft.waitlistPolicy) ??
+        "Live wait times can change quickly, so staff should confirm the wait when the guest arrives.",
     },
     restaurantName,
     smsConfirmationsEnabled: agentConfig?.sms_confirmations_enabled ?? true,
@@ -249,11 +279,59 @@ function buildPickupPolicy(draft: OnboardingDraft) {
     .join(" ");
 }
 
+function buildDeliveryPolicy(draft: OnboardingDraft) {
+  return stringValue(draft.deliveryPolicy) ?? "Direct delivery policy has not been configured yet.";
+}
+
+function buildDeliveryIssuePolicy(draft: OnboardingDraft) {
+  const deliveryPolicy = stringValue(draft.deliveryPolicy);
+  return [
+    deliveryPolicy ?? "For third-party delivery app issues, the fastest refund path is usually through the app.",
+    "Collect the guest name, app, order details, issue, and callback number if staff review is needed.",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 function buildReservationPolicy(draft: OnboardingDraft, agentConfig?: SupabaseAgentConfigRow | null) {
   const provider = stringValue(draft.reservationProvider) ?? agentConfig?.reservation_provider ?? "manual requests";
   const partyRules = stringValue(draft.partyRules) ?? demoRestaurantContext.policies.reservations;
   const specialReservationDays = stringValue(draft.specialReservationDays);
   return [`Provider or mode: ${provider}.`, partyRules, specialReservationDays && `Special reservation days: ${specialReservationDays}`]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function buildComplaintPolicy(draft: OnboardingDraft) {
+  const complaintPolicy = stringValue(draft.complaintPolicy);
+  return (
+    complaintPolicy ??
+    "Apologize, collect the caller name, callback number, order or visit details, and send to a manager without guaranteeing a refund."
+  );
+}
+
+function buildHumanHandoffPolicy(draft: OnboardingDraft, agentConfig?: SupabaseAgentConfigRow | null) {
+  const handoffPolicy = stringValue(draft.humanHandoffPolicy);
+  const escalationPhone =
+    stringValue(draft.escalationPhone) ??
+    stringValue(draft.complaintsManagerPhone) ??
+    agentConfig?.escalation_phone_number?.trim();
+  return [
+    handoffPolicy ?? "Collect the caller name, callback number, reason, and urgency for staff follow-up.",
+    escalationPhone && `Default escalation phone is ${escalationPhone}.`,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function buildVendorPolicy(draft: OnboardingDraft) {
+  const vendorCallPolicy = stringValue(draft.vendorCallPolicy);
+  const salesEmail = stringValue(draft.salesManagerEmail);
+  return [
+    vendorCallPolicy ??
+      "Collect company, caller name, reason for calling, phone, and email without interrupting service.",
+    salesEmail && `Vendor summaries route to ${salesEmail}.`,
+  ]
     .filter(Boolean)
     .join(" ");
 }
@@ -267,9 +345,18 @@ function buildEscalationPolicy(draft: OnboardingDraft, agentConfig?: SupabaseAge
   return [
     complaintsPhone && `Complaints or upset callers go to ${complaintsPhone}.`,
     salesEmail && `Sales or vendor inquiries should be summarized to ${salesEmail}.`,
+    stringValue(draft.complaintPolicy) && `Complaint policy: ${stringValue(draft.complaintPolicy)}.`,
+    stringValue(draft.vendorCallPolicy) && `Vendor policy: ${stringValue(draft.vendorCallPolicy)}.`,
+    stringValue(draft.humanHandoffPolicy) && `Human handoff policy: ${stringValue(draft.humanHandoffPolicy)}.`,
     draft.offerComplaintCallback === true && "Offer a manager callback for complaints.",
     draft.askSalesIntent === true && "Ask vendor callers to identify the sales intent before taking a message.",
   ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function buildDirectionsPolicy(locationPolicy: string, parkingPolicy: string) {
+  return [locationPolicy && `Address: ${locationPolicy}.`, parkingPolicy && `Parking: ${parkingPolicy}`]
     .filter(Boolean)
     .join(" ");
 }
@@ -324,6 +411,17 @@ function buildDraftKnowledgeSections(draft: OnboardingDraft): RestaurantKnowledg
   const sections: RestaurantKnowledgeSection[] = [];
 
   addDraftSection(sections, "Private events and catering", stringValue(draft.privateEvents));
+  addDraftSection(sections, "Order changes and cancellations", stringValue(draft.orderChangePolicy));
+  addDraftSection(sections, "Reservation changes and cancellations", stringValue(draft.reservationChangePolicy));
+  addDraftSection(sections, "Waitlist and walk-ins", stringValue(draft.waitlistPolicy));
+  addDraftSection(sections, "Delivery drivers", stringValue(draft.deliveryDriverPolicy));
+  addDraftSection(sections, "Delivery and third-party apps", stringValue(draft.deliveryPolicy));
+  addDraftSection(sections, "Complaint and refund handling", stringValue(draft.complaintPolicy));
+  addDraftSection(sections, "Lost and found", stringValue(draft.lostAndFoundPolicy));
+  addDraftSection(sections, "Jobs and hiring", stringValue(draft.hiringPolicy));
+  addDraftSection(sections, "Vendor and sales calls", stringValue(draft.vendorCallPolicy));
+  addDraftSection(sections, "Human handoff rules", stringValue(draft.humanHandoffPolicy));
+  addDraftSection(sections, "Donations, press, and partnerships", stringValue(draft.donationPressPolicy));
   addDraftSection(sections, "Fees and house rules", stringValue(draft.feesAndRules));
   addDraftSection(sections, "Common FAQs", stringValue(draft.customFaqs));
 

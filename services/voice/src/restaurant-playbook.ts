@@ -9,13 +9,25 @@ export interface PhonePlaybookReply {
 
 type PolicyKey =
   | "allergies"
+  | "complaints"
+  | "delivery_drivers"
+  | "delivery_issues"
   | "directions"
+  | "donations_press"
   | "dress_code"
+  | "employment"
+  | "human_handoff"
   | "hours"
+  | "lost_and_found"
+  | "order_changes"
   | "parking"
   | "payment"
   | "pickup"
-  | "reservations";
+  | "private_events"
+  | "reservation_changes"
+  | "reservations"
+  | "sales"
+  | "waitlist";
 
 export function matchPhonePlaybookReply(
   utterance: string,
@@ -31,7 +43,13 @@ export function matchPhonePlaybookReply(
   if (/\b(refund|wrong order|incorrect order|bad service|complaint|complain|food was cold|missing item|charged twice)\b/.test(normalized)) {
     return reply(
       "complaint",
-      "I am sorry about that. I can flag this for a manager to review; what name and best callback number should I include?",
+      policyBackedReply(
+        context,
+        "complaints",
+        "I am sorry about that. I can flag this for a manager to review; what name and best callback number should I include?",
+        "I am sorry about that. I will follow the restaurant's complaint process:",
+        "What name and callback number should I include?",
+      ),
       "complaint",
     );
   }
@@ -39,7 +57,13 @@ export function matchPhonePlaybookReply(
   if (/\b(human|real person|staff|owner|manager|someone|call me back|callback|call back)\b/.test(normalized)) {
     return reply(
       "human_handoff",
-      "I can flag this for staff follow-up. What name and best callback number should I include?",
+      policyBackedReply(
+        context,
+        "human_handoff",
+        "I can flag this for staff follow-up. What name and best callback number should I include?",
+        "I can get that to staff. The handoff process is:",
+        "What name, callback number, and reason should I include?",
+      ),
       "handoff",
     );
   }
@@ -47,15 +71,41 @@ export function matchPhonePlaybookReply(
   if (/\b(sales|vendor|supplier|wholesale|marketing|advertising|seo|linen|produce|distributor|beer rep|wine rep)\b/.test(normalized)) {
     return reply(
       "vendor_sales",
-      "Thanks. I can pass along the message; staff usually cannot take vendor or sales calls during service. What company and callback info should I include?",
+      policyBackedReply(
+        context,
+        "sales",
+        "Thanks. I can pass along the message; staff usually cannot take vendor or sales calls during service. What company and callback info should I include?",
+        "Thanks. Staff's vendor call process is:",
+        "What company and callback info should I include?",
+      ),
       "sales",
+    );
+  }
+
+  if (/\b(donation|sponsorship|press|media|partnership|partner with|collaboration)\b/.test(normalized)) {
+    return reply(
+      "donations_press",
+      policyBackedReply(
+        context,
+        "donations_press",
+        "I can pass that along for staff review. What organization, request, deadline, and callback info should I include?",
+        "I can pass that along. The restaurant's process is:",
+        "What organization, request, deadline, and callback info should I include?",
+      ),
+      "handoff",
     );
   }
 
   if (/\b(lost|left|forgot).{0,40}\b(wallet|phone|bag|purse|jacket|coat|keys|credit card|item)\b/.test(normalized)) {
     return reply(
       "lost_and_found",
-      "I can flag that for staff. What item was lost, when were you in, and what number should they use if they find it?",
+      policyBackedReply(
+        context,
+        "lost_and_found",
+        "I can flag that for staff. What item was lost, when were you in, and what number should they use if they find it?",
+        "I can flag that for staff. The lost-and-found process is:",
+        "What item and callback number should I include?",
+      ),
       "handoff",
     );
   }
@@ -63,7 +113,13 @@ export function matchPhonePlaybookReply(
   if (/\b(job|jobs|hiring|apply|application|resume|work there|employment)\b/.test(normalized)) {
     return reply(
       "employment",
-      "For hiring, it is best to contact the restaurant outside peak service hours. I can also pass along your name, role of interest, and callback number.",
+      policyBackedReply(
+        context,
+        "employment",
+        "For hiring, it is best to contact the restaurant outside peak service hours. I can also pass along your name, role of interest, and callback number.",
+        "For hiring, the restaurant's process is:",
+        "What role and callback number should I include?",
+      ),
       "handoff",
     );
   }
@@ -71,22 +127,38 @@ export function matchPhonePlaybookReply(
   if (/\b(delivery driver|doordash driver|uber eats driver|grubhub driver|pickup for)\b/.test(normalized)) {
     return reply(
       "delivery_driver",
-      "If you are a delivery driver, please check in at the host stand or pickup counter when you arrive with the guest name.",
+      policy(context, "delivery_drivers") ??
+        "If you are a delivery driver, please check in at the host stand or pickup counter when you arrive with the guest name.",
     );
   }
 
   if (/\b(doordash|uber eats|grubhub|delivery app).{0,60}\b(missing|wrong|late|never arrived|never delivered|not delivered|refund)\b/.test(normalized)) {
     return reply(
       "delivery_issue",
-      "I am sorry about that. For third-party delivery app issues, the fastest refund path is through the app, and I can flag the issue for staff review too.",
+      policyBackedReply(
+        context,
+        "delivery_issues",
+        "I am sorry about that. For third-party delivery app issues, the fastest refund path is through the app, and I can flag the issue for staff review too.",
+        "I am sorry about that. The delivery issue process is:",
+        "What app, order name, issue, and callback number should I include?",
+      ),
       "delivery_failure",
     );
   }
 
   if (/\b(cancel|change|modify|update|move|reschedule).{0,40}\b(order|reservation|table|booking)\b/.test(normalized)) {
+    const isReservationChange = /\b(reservation|table|booking)\b/.test(normalized);
     return reply(
       "change_or_cancel",
-      "I can flag that for staff because changes and cancellations need confirmation. What name is it under, and what should be changed?",
+      policyBackedReply(
+        context,
+        isReservationChange ? "reservation_changes" : "order_changes",
+        "I can flag that for staff because changes and cancellations need confirmation. What name is it under, and what should be changed?",
+        isReservationChange
+          ? "I can help get that reservation change to staff. The process is:"
+          : "I can help get that order change to staff. The process is:",
+        "What name is it under, and what should be changed?",
+      ),
       "handoff",
     );
   }
@@ -103,7 +175,13 @@ export function matchPhonePlaybookReply(
   if (/\b(cater|catering|private event|buyout|wedding|corporate event|banquet)\b/.test(normalized)) {
     return reply(
       "private_event",
-      "I can send that to the events team. What date, party size, event type, and callback information should I include?",
+      policyBackedReply(
+        context,
+        "private_events",
+        "I can send that to the events team. What date, party size, event type, and callback information should I include?",
+        "I can send that to the events team. The event inquiry process is:",
+        "What date, party size, event type, and callback information should I include?",
+      ),
       "low_confidence",
     );
   }
@@ -111,7 +189,13 @@ export function matchPhonePlaybookReply(
   if (/\b(large party|party of (?:[8-9]|[1-9][0-9])|group of (?:[8-9]|[1-9][0-9]))\b/.test(normalized)) {
     return reply(
       "large_party",
-      "Large parties need staff confirmation. What date, time, party size, name, and callback number should I send over?",
+      policyBackedReply(
+        context,
+        "private_events",
+        "Large parties need staff confirmation. What date, time, party size, name, and callback number should I send over?",
+        "Large parties need staff confirmation. The restaurant's group process is:",
+        "What date, party size, name, and callback number should I send over?",
+      ),
       "reservation",
     );
   }
@@ -127,21 +211,34 @@ export function matchPhonePlaybookReply(
   if (/\b(wait time|how long is the wait|waitlist|walk in|walk-in)\b/.test(normalized)) {
     return reply(
       "wait_time",
-      "I do not have a live waitlist view yet. Walk-in wait times can change quickly, so staff can confirm when you arrive.",
+      policy(context, "waitlist") ??
+        "I do not have a live waitlist view yet. Walk-in wait times can change quickly, so staff can confirm when you arrive.",
     );
   }
 
   if (/\b(reservation|reserve|book a table|table for)\b/.test(normalized)) {
     return reply(
       "reservation",
-      "I can help with a reservation request. What date, time, party size, and name should I send to the staff?",
+      policyBackedReply(
+        context,
+        "reservations",
+        "I can help with a reservation request. What date, time, party size, and name should I send to the staff?",
+        "I can help with a reservation request. The restaurant's reservation process is:",
+        "What date, time, party size, and name should I send to staff?",
+      ),
     );
   }
 
   if (/\b(order status|is my order ready|how much longer|pickup ready)\b/.test(normalized)) {
     return reply(
       "order_status",
-      "I do not have live kitchen status yet. I can flag staff to check; what name is the order under?",
+      policyBackedReply(
+        context,
+        "order_changes",
+        "I do not have live kitchen status yet. I can flag staff to check; what name is the order under?",
+        "I can help get staff the order-status details. The process is:",
+        "What name is the order under?",
+      ),
       "handoff",
     );
   }
@@ -187,6 +284,17 @@ function reply(scenario: string, text: string, staffAlertKind?: StaffAlertKind):
 function policy(context: RestaurantVoiceContext, key: PolicyKey) {
   const value = context.policies[key];
   return value?.trim() ? value.trim() : null;
+}
+
+function policyBackedReply(
+  context: RestaurantVoiceContext,
+  key: PolicyKey,
+  fallback: string,
+  prefix: string,
+  suffix: string,
+) {
+  const value = policy(context, key);
+  return value ? `${prefix} ${value} ${suffix}` : fallback;
 }
 
 function normalize(value: string) {

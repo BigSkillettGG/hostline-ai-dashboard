@@ -66,17 +66,28 @@ describe("restaurant context store", () => {
       onboardingProfile: {
         draft: {
           allergyPolicy: "Nut allergies require staff confirmation.",
+          complaintPolicy: "Collect the issue, apology notes, name, callback number, and manager review request.",
           defaultPickupEta: "20 minutes",
+          deliveryDriverPolicy: "Drivers use the side pickup window and give the app name.",
+          deliveryPolicy: "DoorDash issues start in DoorDash, then staff can review with the order number.",
+          donationPressPolicy: "Collect organization, deadline, and media contact.",
           greeting: "Hello from {restaurant_name}, {host_name} speaking.",
+          hiringPolicy: "Applicants should email jobs@saffron.example.",
           holidayExceptions: "Closed July 4.",
           hostName: "Nina",
+          humanHandoffPolicy: "Take the caller name, phone, topic, and urgency for callback.",
+          lostAndFoundPolicy: "Collect item, visit time, seating area, and callback number.",
+          orderChangePolicy: "Pickup order changes require the order name, phone, and requested update.",
           parking: "Parking behind the building.",
           paymentPolicy: "Pay at pickup.",
           privateEvents: "Collect event date, guest count, and phone number for the events manager.",
           regularHours: "Daily 11 AM to 9 PM.",
+          reservationChangePolicy: "Reservation changes need name, date, time, and requested update.",
           reservationProvider: "Manual requests only",
           restaurantName: "Saffron Table",
           timezone: "America/New_York",
+          vendorCallPolicy: "Vendors should leave company, reason, phone, and email for the owner.",
+          waitlistPolicy: "Walk-ins are welcome, but quoted waits are confirmed at the door.",
         },
       },
     });
@@ -97,6 +108,16 @@ describe("restaurant context store", () => {
     expect(context.policies.hours).toContain("Closed July 4");
     expect(context.policies.pickup).toContain("20 minutes");
     expect(context.policies.parking).toBe("Parking behind the building.");
+    expect(context.policies.complaints).toContain("manager review");
+    expect(context.policies.delivery_drivers).toContain("side pickup window");
+    expect(context.policies.delivery_issues).toContain("DoorDash issues");
+    expect(context.policies.employment).toContain("jobs@saffron.example");
+    expect(context.policies.human_handoff).toContain("topic, and urgency");
+    expect(context.policies.lost_and_found).toContain("seating area");
+    expect(context.policies.order_changes).toContain("Pickup order changes");
+    expect(context.policies.reservation_changes).toContain("Reservation changes");
+    expect(context.policies.sales).toContain("Vendors should leave");
+    expect(context.policies.waitlist).toContain("quoted waits");
     expect(context.faqs).toEqual([
       {
         answer: "Gift cards are sold at the host stand.",
@@ -112,6 +133,18 @@ describe("restaurant context store", () => {
         {
           body: "Collect event date, guest count, and phone number for the events manager.",
           title: "Private events and catering",
+        },
+        {
+          body: "Collect item, visit time, seating area, and callback number.",
+          title: "Lost and found",
+        },
+        {
+          body: "Drivers use the side pickup window and give the app name.",
+          title: "Delivery drivers",
+        },
+        {
+          body: "Vendors should leave company, reason, phone, and email for the owner.",
+          title: "Vendor and sales calls",
         },
       ]),
     );

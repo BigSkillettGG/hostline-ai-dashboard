@@ -71,6 +71,20 @@ The onboarding interview must create enough structured context for a restaurant 
 - Staff notification channels: SMS, email, dashboard task, phone transfer, or future POS/KDS alert.
 - Callback expectations: immediate transfer, manager callback, next-day follow-up, or message only.
 
+### Fast Phone Playbook Policies
+
+These policies should be collected during onboarding and stored in the knowledge base so common calls can be answered or routed quickly without waiting on a general model response.
+
+- Complaints, refund requests, wrong orders, missing items, charged-twice issues, and bad experiences: what to say, what details to collect, what staff task to create, and whether a callback is promised.
+- Lost and found: item description, visit date/time, seating area, caller name, callback number, and staff review expectations.
+- Delivery drivers: pickup entrance, shelf or counter, app name, guest name, parking/entrance rules, and whether staff should be interrupted.
+- Third-party delivery issues: DoorDash, Uber Eats, Grubhub, missing/wrong/late orders, app refund path, and what details staff need for review.
+- Vendor and sales calls: company, caller name, reason, phone, email, owner or manager route, and during-service interruption rules.
+- Human handoff requests: when to offer a callback, what urgency details to collect, and whether live transfer is allowed.
+- Order changes, cancellations, and status checks: order name, phone, requested change, kitchen/POS confirmation rule, and what the AI must not promise.
+- Reservation changes, cancellations, waitlist, and walk-ins: reservation name, date/time, party size, requested change, deposit/no-show implications, and live-wait limitations.
+- Jobs, hiring, donations, press, partnerships, private events, catering, and large parties: destination contact, required intake fields, and follow-up expectations.
+
 ### Voice And Behavior
 
 - Host name, tone, accent preference, greeting, disclosure preference.

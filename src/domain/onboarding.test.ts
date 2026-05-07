@@ -25,6 +25,26 @@ describe("restaurant onboarding scope", () => {
     expect(productionWorkstreams).toHaveLength(12);
   });
 
+  it("asks for restaurant-specific policies behind common phone playbook scenarios", () => {
+    const fieldIds = onboardingSections.flatMap((section) => section.fields.map((field) => field.id));
+
+    expect(fieldIds).toEqual(
+      expect.arrayContaining([
+        "complaintPolicy",
+        "deliveryDriverPolicy",
+        "deliveryPolicy",
+        "donationPressPolicy",
+        "hiringPolicy",
+        "humanHandoffPolicy",
+        "lostAndFoundPolicy",
+        "orderChangePolicy",
+        "reservationChangePolicy",
+        "vendorCallPolicy",
+        "waitlistPolicy",
+      ]),
+    );
+  });
+
   it("calculates launch-readiness progress from required fields", () => {
     const progress = calculateOnboardingProgress(sampleOnboardingDraft);
 
