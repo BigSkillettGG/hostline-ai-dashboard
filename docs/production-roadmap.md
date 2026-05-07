@@ -63,6 +63,7 @@ There are 12 production workstreams:
 - The live voice runtime now includes first-call hardening for unclear audio, rude callers, multi-turn order capture, OpenAI response timeouts, prompt failure recovery, and structured turn-latency logs.
 - Dashboard-to-voice admin calls now use Supabase bearer-token authorization for platform admins and restaurant owners/admins instead of a browser-exposed internal API key.
 - The Telephony page now has a first-call readiness checklist that combines voice-service health, provider secrets, restaurant context, webhook URLs, TwiML preview, and manual Twilio setup prompts.
+- The voice service now caps request body sizes, returns clean 400/413 errors for malformed or oversized requests, and rate-limits expensive admin/preview endpoints.
 
 ## Key Product Standard
 

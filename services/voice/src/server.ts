@@ -8,6 +8,13 @@ import { createElevenLabsPreview } from "./elevenlabs";
 import { createGuestConfirmationService } from "./guest-confirmation-service";
 import { getVoiceServiceReadiness, loadEnv, type VoiceServiceEnv } from "./env";
 import { buildLiveCallConfig } from "./live-call";
+import {
+  checkRateLimit,
+  getRequestIp,
+  HttpRequestError,
+  parseJsonRequestBody,
+  readLimitedRequestBody,
+} from "./http-safety";
 import { createMenuIngestionService } from "./menu-ingestion-service";
 import { createStaffNotificationService } from "./notification-service";
 import { createPhoneNumberStore } from "./phone-number-store";
@@ -26,6 +33,10 @@ const telephonyService = createTelephonyService(env);
 const staffNotificationService = createStaffNotificationService(env);
 const guestConfirmationService = createGuestConfirmationService(env);
 const menuIngestionService = createMenuIngestionService(env);
+const ADMIN_BODY_LIMIT_BYTES = 16 * 1024;
+const PREVIEW_BODY_LIMIT_BYTES = 4 * 1024;
+const TWILIO_BODY_LIMIT_BYTES = 16 * 1024;
+const RATE_LIMIT_WINDOW_MS = 60_000;
 const server = createServer((req, res) => {
   void handleRequest(req, res, env);
 });
@@ -158,8 +169,13 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
   }
 
   if (req.method === "POST" && url.pathname === "/ingestion/run-next") {
+    if (!allowRateLimitedRequest(req, res, "ingestion", 20)) return;
+
     try {
-      const body = parseJsonBody(await readRequestBody(req)) as { jobId?: string; locationId?: string };
+      const body = parseJsonRequestBody(await readLimitedRequestBody(req, ADMIN_BODY_LIMIT_BYTES)) as {
+        jobId?: string;
+        locationId?: string;
+      };
       const authorization = await authorizeVoiceAdminRequest({
         currentEnv,
         locationId: body.locationId ?? currentEnv.SUPABASE_DEMO_LOCATION_ID,
@@ -176,12 +192,14 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       });
       sendJson(res, 200, result);
     } catch (error) {
-      sendJson(res, 500, { error: error instanceof Error ? error.message : "Menu ingestion failed" });
+      sendCaughtError(res, error, "Menu ingestion failed");
     }
     return;
   }
 
   if (req.method === "GET" && url.pathname === "/telephony/available-numbers") {
+    if (!allowRateLimitedRequest(req, res, "number-search", 45)) return;
+
     const authorization = await authorizeVoiceAdminRequest({
       currentEnv,
       locationId: url.searchParams.get("locationId") ?? currentEnv.SUPABASE_DEMO_LOCATION_ID,
@@ -207,8 +225,10 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
   }
 
   if (req.method === "POST" && url.pathname === "/telephony/provision-number") {
+    if (!allowRateLimitedRequest(req, res, "number-provision", 10)) return;
+
     try {
-      const body = JSON.parse(await readRequestBody(req)) as {
+      const body = parseJsonRequestBody(await readLimitedRequestBody(req, ADMIN_BODY_LIMIT_BYTES)) as {
         forwardingMode?: string;
         locationId?: string;
         phoneNumber?: string;
@@ -239,46 +259,55 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       await phoneNumberStore.saveProvisionedNumber(input, provisioned);
       sendJson(res, 200, { phoneNumber: provisioned });
     } catch (error) {
-      sendJson(res, 500, { error: error instanceof Error ? error.message : "Twilio number provisioning failed" });
+      sendCaughtError(res, error, "Twilio number provisioning failed");
     }
     return;
   }
 
   if (req.method === "POST" && url.pathname === "/twilio/voice") {
-    const rawBody = await readRequestBody(req);
-    const params = Object.fromEntries(new URLSearchParams(rawBody));
+    try {
+      const rawBody = await readLimitedRequestBody(req, TWILIO_BODY_LIMIT_BYTES);
+      const params = Object.fromEntries(new URLSearchParams(rawBody));
 
-    if (!isValidTwilioWebhook(req, currentEnv, params)) {
-      sendText(res, 401, "Invalid Twilio signature");
-      return;
+      if (!isValidTwilioWebhook(req, currentEnv, params)) {
+        sendText(res, 401, "Invalid Twilio signature");
+        return;
+      }
+
+      if (!currentEnv.PUBLIC_WS_BASE_URL) {
+        sendXml(res, 503, buildUnavailableTwiML());
+        return;
+      }
+
+      const locationId =
+        params.locationId ??
+        url.searchParams.get("locationId") ??
+        currentEnv.SUPABASE_DEMO_LOCATION_ID ??
+        "demo-location";
+      const restaurantContext = await restaurantContextStore.getContext(locationId);
+      const liveCallConfig = buildLiveCallConfig(currentEnv, locationId);
+      const twiml = buildConversationRelayTwiML({
+        actionUrl: liveCallConfig.actionUrl,
+        customParameters: {
+          locationId,
+        },
+        language: currentEnv.TWILIO_LANGUAGE,
+        transcriptionProvider: currentEnv.TWILIO_TRANSCRIPTION_PROVIDER,
+        ttsProvider: currentEnv.TWILIO_TTS_PROVIDER,
+        ttsVoice: currentEnv.TWILIO_TTS_VOICE,
+        websocketUrl: liveCallConfig.conversationRelayUrl ?? `${currentEnv.PUBLIC_WS_BASE_URL}/twilio/conversation-relay`,
+        welcomeGreeting: restaurantContext.greeting,
+      });
+
+      sendXml(res, 200, twiml);
+    } catch (error) {
+      if (error instanceof HttpRequestError) {
+        sendText(res, error.statusCode, error.message);
+      } else {
+        console.error("[voice-service] Twilio voice webhook failed", error);
+        sendXml(res, 500, buildUnavailableTwiML("HostLine AI hit a setup issue. Please try again soon."));
+      }
     }
-
-    if (!currentEnv.PUBLIC_WS_BASE_URL) {
-      sendXml(res, 503, buildUnavailableTwiML());
-      return;
-    }
-
-    const locationId =
-      params.locationId ??
-      url.searchParams.get("locationId") ??
-      currentEnv.SUPABASE_DEMO_LOCATION_ID ??
-      "demo-location";
-    const restaurantContext = await restaurantContextStore.getContext(locationId);
-    const liveCallConfig = buildLiveCallConfig(currentEnv, locationId);
-    const twiml = buildConversationRelayTwiML({
-      actionUrl: liveCallConfig.actionUrl,
-      customParameters: {
-        locationId,
-      },
-      language: currentEnv.TWILIO_LANGUAGE,
-      transcriptionProvider: currentEnv.TWILIO_TRANSCRIPTION_PROVIDER,
-      ttsProvider: currentEnv.TWILIO_TTS_PROVIDER,
-      ttsVoice: currentEnv.TWILIO_TTS_VOICE,
-      websocketUrl: liveCallConfig.conversationRelayUrl ?? `${currentEnv.PUBLIC_WS_BASE_URL}/twilio/conversation-relay`,
-      welcomeGreeting: restaurantContext.greeting,
-    });
-
-    sendXml(res, 200, twiml);
     return;
   }
 
@@ -288,6 +317,8 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
   }
 
   if (req.method === "POST" && url.pathname === "/voice/preview") {
+    if (!allowRateLimitedRequest(req, res, "voice-preview", 20)) return;
+
     try {
       const authorization = await authorizeVoiceAdminRequest({
         currentEnv,
@@ -299,7 +330,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
         return;
       }
 
-      const body = JSON.parse(await readRequestBody(req)) as { text?: string };
+      const body = parseJsonRequestBody(await readLimitedRequestBody(req, PREVIEW_BODY_LIMIT_BYTES)) as { text?: string };
       const text = body.text?.trim() || demoRestaurantContext.greeting;
       const preview = await createElevenLabsPreview({ env: currentEnv, text });
 
@@ -309,23 +340,30 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       });
       res.end(preview.audio);
     } catch (error) {
-      sendJson(res, 500, {
-        error: error instanceof Error ? error.message : "Voice preview failed",
-      });
+      sendCaughtError(res, error, "Voice preview failed");
     }
     return;
   }
 
   if (req.method === "POST" && url.pathname === "/debug/reply" && currentEnv.NODE_ENV !== "production") {
-    const body = JSON.parse(await readRequestBody(req)) as { locationId?: string; prompt?: string };
-    const restaurantContext = await restaurantContextStore.getContext(body.locationId);
-    const reply = await generateRestaurantReply({
-      callerUtterance: body.prompt ?? "",
-      context: restaurantContext,
-      env: currentEnv,
-      transcript: [],
-    });
-    sendJson(res, 200, { reply });
+    if (!allowRateLimitedRequest(req, res, "debug-reply", 30)) return;
+
+    try {
+      const body = parseJsonRequestBody(await readLimitedRequestBody(req, ADMIN_BODY_LIMIT_BYTES)) as {
+        locationId?: string;
+        prompt?: string;
+      };
+      const restaurantContext = await restaurantContextStore.getContext(body.locationId);
+      const reply = await generateRestaurantReply({
+        callerUtterance: body.prompt ?? "",
+        context: restaurantContext,
+        env: currentEnv,
+        transcript: [],
+      });
+      sendJson(res, 200, { reply });
+    } catch (error) {
+      sendCaughtError(res, error, "Debug reply failed");
+    }
     return;
   }
 
@@ -355,19 +393,6 @@ function isValidTwilioUpgrade(req: IncomingMessage, currentEnv: VoiceServiceEnv)
   });
 }
 
-async function readRequestBody(req: IncomingMessage) {
-  const chunks: Buffer[] = [];
-  for await (const chunk of req) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  }
-  return Buffer.concat(chunks).toString("utf8");
-}
-
-function parseJsonBody(body: string) {
-  if (!body.trim()) return {};
-  return JSON.parse(body);
-}
-
 function sendJson(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, { "Content-Type": "application/json" });
   res.end(JSON.stringify(body));
@@ -381,6 +406,33 @@ function sendXml(res: ServerResponse, status: number, body: string) {
 function sendText(res: ServerResponse, status: number, body: string) {
   res.writeHead(status, { "Content-Type": "text/plain" });
   res.end(body);
+}
+
+function allowRateLimitedRequest(req: IncomingMessage, res: ServerResponse, action: string, limit: number) {
+  const result = checkRateLimit({
+    key: `${action}:${getRequestIp(req)}`,
+    limit,
+    windowMs: RATE_LIMIT_WINDOW_MS,
+  });
+
+  if (result.allowed) return true;
+
+  res.setHeader("Retry-After", String(result.retryAfterSeconds));
+  sendJson(res, 429, {
+    error: "Too many requests. Please wait a moment and try again.",
+    retryAfterSeconds: result.retryAfterSeconds,
+  });
+  return false;
+}
+
+function sendCaughtError(res: ServerResponse, error: unknown, fallbackMessage: string) {
+  if (error instanceof HttpRequestError) {
+    sendJson(res, error.statusCode, { error: error.message });
+    return;
+  }
+
+  console.error("[voice-service] request failed", error);
+  sendJson(res, 500, { error: fallbackMessage });
 }
 
 function applyCors(req: IncomingMessage, res: ServerResponse, currentEnv: VoiceServiceEnv) {

@@ -24,6 +24,7 @@ This service is the production path for inbound restaurant phone calls.
 - Writes staff alert delivery audit rows to `staff_alert_events` for sent, skipped, and failed alerts.
 - Provides a direct ElevenLabs preview endpoint at `POST /voice/preview`.
 - Validates Twilio signatures when `REQUIRE_TWILIO_SIGNATURE=true`.
+- Caps request body sizes and rate-limits expensive admin/preview endpoints to protect provider spend and service stability.
 
 ## Local Run
 
