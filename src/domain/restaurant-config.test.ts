@@ -22,4 +22,8 @@ describe("restaurant agent configuration", () => {
   it("uses staff confirmation for manual reservation fallback", () => {
     expect(defaultRestaurantAgentConfig.reservations.requireStaffConfirmationWithoutIntegration).toBe(true);
   });
+
+  it("defaults the V1 host voice to Eve", () => {
+    expect(defaultRestaurantAgentConfig.voiceGender).toBe("female");
+  });
 });

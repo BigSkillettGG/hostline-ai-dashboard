@@ -1,6 +1,9 @@
+import type { HostlineVoiceGender } from "../../../src/domain/voice-selection";
+
 export interface RestaurantVoiceContext {
   restaurantName: string;
   hostName: string;
+  voiceGender: HostlineVoiceGender;
   timezone: string;
   greeting: string;
   defaultPickupEtaMinutes?: number;
@@ -32,6 +35,7 @@ export interface RestaurantMenuItem {
 export const demoRestaurantContext: RestaurantVoiceContext = {
   restaurantName: "Olive & Ember",
   hostName: "Vera",
+  voiceGender: "female",
   timezone: "America/Los_Angeles",
   greeting: "Thanks for calling Olive & Ember, this is Vera, the restaurant's virtual host. How can I help?",
   smsConfirmationsEnabled: true,

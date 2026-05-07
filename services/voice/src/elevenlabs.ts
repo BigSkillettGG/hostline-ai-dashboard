@@ -1,17 +1,28 @@
 import type { VoiceServiceEnv } from "./env";
+import { resolvePreviewElevenLabsVoiceId } from "./voice-selection";
 
 export async function createElevenLabsPreview({
   env,
   text,
+  voiceGender,
 }: {
-  env: Pick<VoiceServiceEnv, "ELEVENLABS_API_KEY" | "ELEVENLABS_MODEL_ID" | "ELEVENLABS_OUTPUT_FORMAT" | "ELEVENLABS_VOICE_ID">;
+  env: Pick<
+    VoiceServiceEnv,
+    | "ELEVENLABS_API_KEY"
+    | "ELEVENLABS_EVE_VOICE_ID"
+    | "ELEVENLABS_MICHAEL_VOICE_ID"
+    | "ELEVENLABS_MODEL_ID"
+    | "ELEVENLABS_OUTPUT_FORMAT"
+  >;
   text: string;
+  voiceGender?: unknown;
 }) {
   if (!env.ELEVENLABS_API_KEY) {
     throw new Error("ELEVENLABS_API_KEY is required for voice previews.");
   }
 
-  const url = new URL(`https://api.elevenlabs.io/v1/text-to-speech/${env.ELEVENLABS_VOICE_ID}`);
+  const voiceId = resolvePreviewElevenLabsVoiceId(env, voiceGender);
+  const url = new URL(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`);
   url.searchParams.set("output_format", env.ELEVENLABS_OUTPUT_FORMAT);
 
   const response = await fetch(url, {

@@ -1,4 +1,5 @@
 import { getSupabaseAccessToken } from "@/lib/auth";
+import type { HostlineVoiceGender } from "@/domain/voice-selection";
 
 export interface VoiceServiceHealth {
   ok: boolean;
@@ -120,7 +121,7 @@ export async function fetchTwiMLPreview(locationId?: string) {
   return text;
 }
 
-export async function fetchVoicePreviewAudio(text: string) {
+export async function fetchVoicePreviewAudio(text: string, voiceGender?: HostlineVoiceGender) {
   if (!voiceServiceBaseUrl) {
     throw new Error("VITE_VOICE_SERVICE_URL is not configured.");
   }
@@ -131,7 +132,7 @@ export async function fetchVoicePreviewAudio(text: string) {
       "Content-Type": "application/json",
       ...buildVoiceAdminHeaders(),
     },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, voiceGender }),
   });
 
   if (!response.ok) {

@@ -456,6 +456,14 @@ export const onboardingSections: OnboardingSection[] = [
         options: ["Warm", "Professional", "Bright", "Calm", "Playful"],
       },
       {
+        id: "voiceGender",
+        label: "Voice",
+        prompt: "Which host voice should callers hear?",
+        control: "select",
+        required: true,
+        options: ["Female - Eve", "Male - Michael"],
+      },
+      {
         id: "greeting",
         label: "Greeting",
         prompt: "What should callers hear first?",
@@ -580,6 +588,7 @@ export const sampleOnboardingDraft: OnboardingDraft = {
   timezone: "America/Los_Angeles",
   tone: "Warm",
   vendorCallPolicy: "Collect company, caller name, reason, phone, and email, then route to the owner.",
+  voiceGender: "Female - Eve",
   waitlistPolicy: "Walk-ins are welcome, but live wait times change quickly and are confirmed at the door.",
 };
 

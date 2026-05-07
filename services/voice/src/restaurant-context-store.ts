@@ -1,4 +1,5 @@
 import type { VoiceServiceEnv } from "./env";
+import { normalizeHostlineVoiceGender } from "../../../src/domain/voice-selection";
 import {
   demoRestaurantContext,
   type RestaurantFaq,
@@ -172,6 +173,7 @@ export function buildRestaurantContext({
     restaurantName,
     smsConfirmationsEnabled: agentConfig?.sms_confirmations_enabled ?? true,
     timezone,
+    voiceGender: normalizeHostlineVoiceGender(draft.voiceGender),
   };
 }
 

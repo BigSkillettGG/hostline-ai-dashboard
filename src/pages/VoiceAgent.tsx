@@ -23,6 +23,11 @@ import {
   type ReservationMode,
 } from "@/domain/restaurant-config";
 import {
+  hostlineVoiceProfiles,
+  normalizeHostlineVoiceGender,
+  type HostlineVoiceGender,
+} from "@/domain/voice-selection";
+import {
   AlertTriangle,
   Bot,
   CalendarDays,
@@ -46,11 +51,14 @@ import {
   type VoiceServiceHealth,
 } from "@/lib/voice-service";
 import { loadAgentConfigDraft, saveAgentConfigDraft } from "@/lib/agent-config-storage";
-import { loadOnboardingDraft } from "@/lib/onboarding-draft";
+import { loadOnboardingDraft, saveOnboardingDraft } from "@/lib/onboarding-draft";
 import {
   fetchAgentConfigFromSupabase,
+  fetchOnboardingProfileFromSupabase,
   isAgentConfigPersistenceConfigured,
+  isOnboardingPersistenceConfigured,
   saveAgentConfigToSupabase,
+  saveOnboardingProfileToSupabase,
 } from "@/lib/supabase-rest";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
@@ -136,6 +144,7 @@ export default function VoiceAgent() {
 
   const saveConfig = async () => {
     saveAgentConfigDraft(config);
+    persistVoiceGenderToLocalOnboardingDraft(config.voiceGender);
 
     if (!isAgentConfigPersistenceConfigured()) {
       setConfigSyncState("local");
@@ -148,8 +157,9 @@ export default function VoiceAgent() {
 
     try {
       await saveAgentConfigToSupabase(config);
+      await syncVoiceGenderToOnboardingProfile(config.voiceGender);
       setConfigSyncState("live");
-      setConfigSyncMessage("Synced to Supabase agent_configs");
+      setConfigSyncMessage("Synced to Supabase voice config");
       toast.success("Voice configuration synced");
     } catch (error) {
       setConfigSyncState("error");
@@ -169,7 +179,7 @@ export default function VoiceAgent() {
     setPlayingPreview(true);
 
     try {
-      const audioBlob = await fetchVoicePreviewAudio(config.greetingTemplate);
+      const audioBlob = await fetchVoicePreviewAudio(config.greetingTemplate, config.voiceGender);
       const audioUrl = URL.createObjectURL(audioBlob);
       const audio = new Audio(audioUrl);
       audio.onended = () => URL.revokeObjectURL(audioUrl);
@@ -227,13 +237,33 @@ export default function VoiceAgent() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-3 sm:grid-cols-3">
                   <div className="space-y-1.5">
                     <Label>Host name</Label>
                     <Input
                       value={config.hostName}
                       onChange={(event) => setConfig({ ...config, hostName: event.target.value })}
                     />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Voice</Label>
+                    <Select
+                      value={config.voiceGender}
+                      onValueChange={(voiceGender) =>
+                        setConfig({ ...config, voiceGender: normalizeHostlineVoiceGender(voiceGender) })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {voiceGenderOptions.map((voice) => (
+                          <SelectItem key={voice.value} value={voice.value}>
+                            {voice.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-1.5">
                     <Label>Tone</Label>
@@ -664,15 +694,21 @@ export default function VoiceAgent() {
               <CardContent className="space-y-4">
                 <div className="space-y-1.5">
                   <Label>Voice</Label>
-                  <Select defaultValue="vera">
+                  <Select
+                    value={config.voiceGender}
+                    onValueChange={(voiceGender) =>
+                      setConfig({ ...config, voiceGender: normalizeHostlineVoiceGender(voiceGender) })
+                    }
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="vera">Vera - warm female</SelectItem>
-                      <SelectItem value="leo">Leo - friendly male</SelectItem>
-                      <SelectItem value="ana">Ana - bright female</SelectItem>
-                      <SelectItem value="rio">Rio - calm neutral</SelectItem>
+                      {voiceGenderOptions.map((voice) => (
+                        <SelectItem key={voice.value} value={voice.value}>
+                          {voice.label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -700,6 +736,7 @@ export default function VoiceAgent() {
               </CardHeader>
               <CardContent className="space-y-3">
                 <ReadinessRow icon={PhoneCall} label="Call mode" value={callHandlingLabels[config.callHandlingMode]} />
+                <ReadinessRow icon={Bot} label="Voice" value={hostlineVoiceProfiles[config.voiceGender].shortLabel} />
                 <ReadinessRow icon={ShoppingBag} label="Orders" value={config.orders.enabled ? "Enabled" : "Disabled"} />
                 <ReadinessRow icon={CreditCard} label="Payment" value="Pay at pickup" />
                 <ReadinessRow icon={Printer} label="Order routing" value={`${config.orders.destinations.length} destinations`} />
@@ -727,6 +764,7 @@ function createConfigFromOnboardingDraft(): RestaurantAgentConfig {
     escalationPhoneNumber: String(draft.escalationPhone || defaultRestaurantAgentConfig.escalationPhoneNumber),
     greetingTemplate: String(draft.greeting || defaultRestaurantAgentConfig.greetingTemplate),
     hostName: String(draft.hostName || defaultRestaurantAgentConfig.hostName),
+    voiceGender: normalizeHostlineVoiceGender(draft.voiceGender),
     orders: {
       ...defaultRestaurantAgentConfig.orders,
       defaultPickupEtaMinutes: parsePickupEta(String(draft.defaultPickupEta ?? "")),
@@ -773,6 +811,32 @@ function mapVoiceTone(value: string): RestaurantAgentConfig["tone"] {
 function parsePickupEta(value: string) {
   const minutes = Number.parseInt(value, 10);
   return Number.isFinite(minutes) && minutes > 0 ? minutes : defaultRestaurantAgentConfig.orders.defaultPickupEtaMinutes;
+}
+
+const voiceGenderOptions: Array<{ label: string; value: HostlineVoiceGender }> = [
+  { label: hostlineVoiceProfiles.female.label, value: "female" },
+  { label: hostlineVoiceProfiles.male.label, value: "male" },
+];
+
+function persistVoiceGenderToLocalOnboardingDraft(voiceGender: HostlineVoiceGender) {
+  const draft = {
+    ...loadOnboardingDraft(),
+    voiceGender: hostlineVoiceProfiles[voiceGender].label,
+  };
+  saveOnboardingDraft(draft);
+  return draft;
+}
+
+async function syncVoiceGenderToOnboardingProfile(voiceGender: HostlineVoiceGender) {
+  if (!isOnboardingPersistenceConfigured()) return;
+
+  const remoteDraft = await fetchOnboardingProfileFromSupabase().catch(() => null);
+  const draft = {
+    ...(remoteDraft ?? loadOnboardingDraft()),
+    voiceGender: hostlineVoiceProfiles[voiceGender].label,
+  };
+  saveOnboardingDraft(draft);
+  await saveOnboardingProfileToSupabase(draft);
 }
 
 function configSyncLabel(state: "error" | "live" | "loading" | "local") {

@@ -1,4 +1,5 @@
-import type { RestaurantAgentConfig } from "@/domain/restaurant-config";
+import { defaultRestaurantAgentConfig, type RestaurantAgentConfig } from "@/domain/restaurant-config";
+import { normalizeHostlineVoiceGender } from "@/domain/voice-selection";
 
 const storageKey = "hostline:agent-config";
 
@@ -9,7 +10,12 @@ export function loadAgentConfigDraft(): RestaurantAgentConfig | null {
   if (!rawConfig) return null;
 
   try {
-    return JSON.parse(rawConfig) as RestaurantAgentConfig;
+    const parsed = JSON.parse(rawConfig) as Partial<RestaurantAgentConfig>;
+    return {
+      ...defaultRestaurantAgentConfig,
+      ...parsed,
+      voiceGender: normalizeHostlineVoiceGender(parsed.voiceGender ?? defaultRestaurantAgentConfig.voiceGender),
+    };
   } catch {
     return null;
   }

@@ -88,6 +88,7 @@ describe("restaurant context store", () => {
           restaurantName: "Saffron Table",
           timezone: "America/New_York",
           vendorCallPolicy: "Vendors should leave company, reason, phone, and email for the owner.",
+          voiceGender: "Male - Michael",
           waitlistPolicy: "Walk-ins are welcome, but quoted waits are confirmed at the door.",
         },
       },
@@ -95,6 +96,7 @@ describe("restaurant context store", () => {
 
     expect(context.restaurantName).toBe("Saffron Table");
     expect(context.hostName).toBe("Nina");
+    expect(context.voiceGender).toBe("male");
     expect(context.greeting).toBe("Hello from Saffron Table, Nina speaking.");
     expect(context.defaultPickupEtaMinutes).toBe(20);
     expect(context.smsConfirmationsEnabled).toBe(false);

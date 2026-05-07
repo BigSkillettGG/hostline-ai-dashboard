@@ -6,6 +6,8 @@ const baseEnv: VoiceServiceEnv = {
   ELEVENLABS_MODEL_ID: "eleven_flash_v2_5",
   ELEVENLABS_OUTPUT_FORMAT: "mp3_44100_128",
   ELEVENLABS_VOICE_ID: "voice_1",
+  ELEVENLABS_EVE_VOICE_ID: "eve",
+  ELEVENLABS_MICHAEL_VOICE_ID: "michael",
   NODE_ENV: "production",
   OPENAI_MODEL: "gpt-5-mini",
   OPENAI_REPLY_TIMEOUT_MS: 4500,
@@ -17,6 +19,10 @@ const baseEnv: VoiceServiceEnv = {
   TWILIO_TRANSCRIPTION_PROVIDER: "Deepgram",
   TWILIO_TTS_PROVIDER: "ElevenLabs",
   TWILIO_TTS_VOICE: "voice",
+  TWILIO_ELEVENLABS_MODEL_ID: "flash_v2_5",
+  TWILIO_ELEVENLABS_SIMILARITY_BOOST: "0.8",
+  TWILIO_ELEVENLABS_SPEED: "1.0",
+  TWILIO_ELEVENLABS_STABILITY: "0.5",
   VOICE_SERVICE_ALLOWED_ORIGIN: "https://app.hostline.ai",
 };
 

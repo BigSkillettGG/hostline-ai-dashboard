@@ -24,6 +24,7 @@ import { demoRestaurantContext } from "./restaurant-context";
 import { generateRestaurantReply } from "./restaurant-agent";
 import { validateTwilioSignature } from "./twilio-signature";
 import { buildConversationRelayTwiML, buildUnavailableTwiML } from "./twiml";
+import { resolveConversationRelayTtsVoice } from "./voice-selection";
 
 const env = loadEnv();
 const callStore = createCallStore(env);
@@ -163,13 +164,14 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
     }
 
     const restaurantContext = await restaurantContextStore.getContext(locationId);
+    const ttsVoice = resolveConversationRelayTtsVoice(currentEnv, restaurantContext);
     const twiml = buildConversationRelayTwiML({
       actionUrl: liveCallConfig.actionUrl,
       customParameters: { locationId },
       language: currentEnv.TWILIO_LANGUAGE,
       transcriptionProvider: currentEnv.TWILIO_TRANSCRIPTION_PROVIDER,
       ttsProvider: currentEnv.TWILIO_TTS_PROVIDER,
-      ttsVoice: currentEnv.TWILIO_TTS_VOICE,
+      ttsVoice,
       websocketUrl: liveCallConfig.conversationRelayUrl,
       welcomeGreeting: restaurantContext.greeting,
     });
@@ -296,6 +298,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
         "demo-location";
       const restaurantContext = await restaurantContextStore.getContext(locationId);
       const liveCallConfig = buildLiveCallConfig(currentEnv, locationId);
+      const ttsVoice = resolveConversationRelayTtsVoice(currentEnv, restaurantContext);
       const twiml = buildConversationRelayTwiML({
         actionUrl: liveCallConfig.actionUrl,
         customParameters: {
@@ -304,7 +307,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
         language: currentEnv.TWILIO_LANGUAGE,
         transcriptionProvider: currentEnv.TWILIO_TRANSCRIPTION_PROVIDER,
         ttsProvider: currentEnv.TWILIO_TTS_PROVIDER,
-        ttsVoice: currentEnv.TWILIO_TTS_VOICE,
+        ttsVoice,
         websocketUrl: liveCallConfig.conversationRelayUrl ?? `${currentEnv.PUBLIC_WS_BASE_URL}/twilio/conversation-relay`,
         welcomeGreeting: restaurantContext.greeting,
       });
@@ -340,9 +343,12 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
         return;
       }
 
-      const body = parseJsonRequestBody(await readLimitedRequestBody(req, PREVIEW_BODY_LIMIT_BYTES)) as { text?: string };
+      const body = parseJsonRequestBody(await readLimitedRequestBody(req, PREVIEW_BODY_LIMIT_BYTES)) as {
+        text?: string;
+        voiceGender?: string;
+      };
       const text = body.text?.trim() || demoRestaurantContext.greeting;
-      const preview = await createElevenLabsPreview({ env: currentEnv, text });
+      const preview = await createElevenLabsPreview({ env: currentEnv, text, voiceGender: body.voiceGender });
 
       res.writeHead(200, {
         "Content-Type": preview.contentType,

@@ -1,3 +1,5 @@
+import type { HostlineVoiceGender } from "./voice-selection";
+
 export type CallHandlingMode =
   | "answer_immediately"
   | "answer_after_rings"
@@ -27,6 +29,7 @@ export type PaymentMode = "pay_at_pickup";
 
 export interface RestaurantAgentConfig {
   hostName: string;
+  voiceGender: HostlineVoiceGender;
   tone: VoiceTone;
   greetingTemplate: string;
   disclosureEnabled: boolean;
@@ -85,6 +88,7 @@ export const reservationModeLabels: Record<ReservationMode, string> = {
 
 export const defaultRestaurantAgentConfig: RestaurantAgentConfig = {
   hostName: "Vera",
+  voiceGender: "female",
   tone: "warm",
   greetingTemplate:
     "Thanks for calling {restaurant_name}, this is Vera, the restaurant's virtual host. How can I help?",
