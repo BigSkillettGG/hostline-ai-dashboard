@@ -4,6 +4,7 @@ import {
   buildConversationInput,
   buildRestaurantInstructions,
   fallbackRestaurantReply,
+  generateCallSummary,
   generateRestaurantReply,
 } from "./restaurant-agent";
 
@@ -113,5 +114,95 @@ describe("restaurant fallback replies", () => {
     const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
     expect(body.max_output_tokens).toBe(220);
     expect(body.input).toEqual([{ content: "Can you tell me about the patio?", role: "user" }]);
+  });
+
+  it("executes one Responses API function-call round before returning the final reply", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            output: [
+              {
+                arguments: "{\"topic\":\"parking\"}",
+                call_id: "call_1",
+                name: "lookup_policy",
+                type: "function_call",
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ output_text: "There is metered parking nearby." }), { status: 200 }),
+      );
+
+    const reply = await generateRestaurantReply({
+      callerUtterance: "Can you help me with arrival details?",
+      context: demoRestaurantContext,
+      env: {
+        OPENAI_API_KEY: "sk-test",
+        OPENAI_MODEL: "gpt-5-mini",
+        OPENAI_REPLY_TIMEOUT_MS: 4500,
+      },
+      handleToolCall: async (toolCall) => ({
+        policy: `${toolCall.arguments.topic}: metered parking nearby`,
+      }),
+      tools: [
+        {
+          description: "Lookup policy.",
+          name: "lookup_policy",
+          parameters: { type: "object" },
+          type: "function",
+        },
+      ],
+      transcript: [],
+    });
+
+    expect(reply).toBe("There is metered parking nearby.");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const secondBody = JSON.parse(String(fetchMock.mock.calls[1][1]?.body));
+    expect(secondBody.input).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          call_id: "call_1",
+          output: "{\"policy\":\"parking: metered parking nearby\"}",
+          type: "function_call_output",
+        }),
+      ]),
+    );
+  });
+
+  it("can generate an LLM-assisted staff call summary", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ output_text: "Caller placed a pickup order and asked for staff confirmation." }), {
+        status: 200,
+      }),
+    );
+
+    const summary = await generateCallSummary({
+      context: demoRestaurantContext,
+      env: {
+        OPENAI_API_KEY: "sk-test",
+        OPENAI_MODEL: "gpt-5-mini",
+        OPENAI_REPLY_TIMEOUT_MS: 4500,
+      },
+      structuredSummary: "Pickup order submitted.",
+      transcript: [
+        {
+          at: "2026-05-06T20:00:00.000Z",
+          role: "caller",
+          text: "I want two pizzas for pickup.",
+        },
+        {
+          at: "2026-05-06T20:00:02.000Z",
+          role: "agent",
+          text: "I sent that to staff.",
+        },
+      ],
+    });
+
+    expect(summary).toBe("Caller placed a pickup order and asked for staff confirmation.");
   });
 });

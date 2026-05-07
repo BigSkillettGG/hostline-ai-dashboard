@@ -8,10 +8,33 @@ export interface ResponseInputMessage {
   role: "assistant" | "user";
 }
 
+export interface RestaurantResponseTool {
+  description: string;
+  name: string;
+  parameters: Record<string, unknown>;
+  strict?: boolean;
+  type: "function";
+}
+
+export interface RestaurantToolCall {
+  arguments: Record<string, unknown>;
+  callId: string;
+  name: string;
+}
+
 export interface GenerateRestaurantReplyInput {
   callerUtterance: string;
   context: RestaurantVoiceContext;
   env: Pick<VoiceServiceEnv, "OPENAI_API_KEY" | "OPENAI_MODEL" | "OPENAI_REPLY_TIMEOUT_MS">;
+  handleToolCall?: (toolCall: RestaurantToolCall) => Promise<unknown>;
+  tools?: RestaurantResponseTool[];
+  transcript: TranscriptTurn[];
+}
+
+export interface GenerateCallSummaryInput {
+  context: RestaurantVoiceContext;
+  env: Pick<VoiceServiceEnv, "OPENAI_API_KEY" | "OPENAI_MODEL" | "OPENAI_REPLY_TIMEOUT_MS">;
+  structuredSummary: string;
   transcript: TranscriptTurn[];
 }
 
@@ -33,28 +56,15 @@ export async function generateRestaurantReply(input: GenerateRestaurantReplyInpu
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), input.env.OPENAI_REPLY_TIMEOUT_MS);
   try {
-    const response = await fetch("https://api.openai.com/v1/responses", {
-      signal: controller.signal,
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${input.env.OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: input.env.OPENAI_MODEL,
-        instructions: buildRestaurantInstructions(input.context),
-        input: buildConversationInput(input.callerUtterance, input.transcript),
-        max_output_tokens: 220,
-        store: false,
-      }),
+    const data = await createResponseWithOptionalTools({
+      controller,
+      env: input.env,
+      handleToolCall: input.handleToolCall,
+      instructions: buildRestaurantInstructions(input.context),
+      input: buildConversationInput(input.callerUtterance, input.transcript),
+      maxOutputTokens: 220,
+      tools: input.tools,
     });
-
-    if (!response.ok) {
-      const body = await response.text();
-      throw new Error(`OpenAI response failed: ${response.status} ${body}`);
-    }
-
-    const data = (await response.json()) as { output_text?: string; output?: unknown[] };
     const reply = extractOutputText(data) ?? fallbackRestaurantReply(input.callerUtterance, input.context);
     console.info("[voice-agent] OpenAI reply generated", {
       latencyMs: Date.now() - startedAt,
@@ -69,6 +79,52 @@ export async function generateRestaurantReply(input: GenerateRestaurantReplyInpu
       model: input.env.OPENAI_MODEL,
     });
     return fallbackRestaurantReply(input.callerUtterance, input.context);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export async function generateCallSummary(input: GenerateCallSummaryInput) {
+  if (!input.env.OPENAI_API_KEY || input.transcript.length < 2) {
+    return input.structuredSummary;
+  }
+
+  const startedAt = Date.now();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Math.max(2500, input.env.OPENAI_REPLY_TIMEOUT_MS));
+
+  try {
+    const data = await createResponseWithOptionalTools({
+      controller,
+      env: input.env,
+      instructions: [
+        `Summarize this ${input.context.restaurantName} phone call for restaurant staff.`,
+        "Use one compact paragraph. Include captured orders, reservation requests, complaints, handoffs, caller needs, and any missing follow-up details.",
+        "Do not invent facts. If the structured summary already captures the important outcome, preserve it.",
+      ].join("\n"),
+      input: [
+        {
+          content: `Structured summary: ${input.structuredSummary}`,
+          role: "user",
+        },
+        ...buildConversationInput("Summarize the call for staff.", input.transcript),
+      ],
+      maxOutputTokens: 180,
+    });
+    const summary = extractOutputText(data);
+    console.info("[voice-agent] OpenAI call summary generated", {
+      latencyMs: Date.now() - startedAt,
+      model: input.env.OPENAI_MODEL,
+      summaryLength: summary?.length ?? 0,
+    });
+    return summary ? compactSummary(summary) : input.structuredSummary;
+  } catch (error) {
+    console.error("[voice-agent] Falling back after OpenAI summary error", {
+      error,
+      latencyMs: Date.now() - startedAt,
+      model: input.env.OPENAI_MODEL,
+    });
+    return input.structuredSummary;
   } finally {
     clearTimeout(timeout);
   }
@@ -90,6 +146,8 @@ export function buildRestaurantInstructions(context: RestaurantVoiceContext) {
     "Expect callers with accents, noisy phone audio, fragments, and corrections. Ask one short clarifying question when needed.",
     "Keep replies under two short sentences unless confirming an order.",
     "For multi-item orders, acknowledge captured items briefly and ask what else until the caller says they are done.",
+    "Use available tools when you need to look up restaurant policy, capture an order item, submit an order, create a reservation request, or escalate to staff.",
+    "When a tool captures or submits something, make your final spoken reply coherent with the tool result. Do not repeat yourself.",
     "If a caller is rude, stay calm and helpful. Do not argue, shame, or mirror profanity.",
     "For wrong numbers, delivery drivers, vendor calls, lost items, order changes, complaints, and human requests, be brief and collect only the details staff need for follow-up.",
     "Never collect raw credit card numbers. Payment is pay at pickup unless a POS payment flow is explicitly connected.",
@@ -105,6 +163,123 @@ export function buildRestaurantInstructions(context: RestaurantVoiceContext) {
   ]
     .filter((line): line is string => Boolean(line))
     .join("\n");
+}
+
+async function createResponseWithOptionalTools({
+  controller,
+  env,
+  handleToolCall,
+  input,
+  instructions,
+  maxOutputTokens,
+  tools,
+}: {
+  controller: AbortController;
+  env: Pick<VoiceServiceEnv, "OPENAI_API_KEY" | "OPENAI_MODEL">;
+  handleToolCall?: (toolCall: RestaurantToolCall) => Promise<unknown>;
+  input: unknown[];
+  instructions: string;
+  maxOutputTokens: number;
+  tools?: RestaurantResponseTool[];
+}) {
+  const first = await createOpenAIResponse({
+    controller,
+    env,
+    input,
+    instructions,
+    maxOutputTokens,
+    tools,
+  });
+
+  const toolCalls = extractToolCalls(first);
+  if (!toolCalls.length || !handleToolCall || !tools?.length) return first;
+
+  const toolOutputs = [];
+  for (const toolCall of toolCalls) {
+    toolOutputs.push({
+      call_id: toolCall.callId,
+      output: JSON.stringify(await handleToolCall(toolCall)),
+      type: "function_call_output",
+    });
+  }
+
+  return createOpenAIResponse({
+    controller,
+    env,
+    input: [...input, ...(Array.isArray(first.output) ? first.output : []), ...toolOutputs],
+    instructions,
+    maxOutputTokens,
+    tools,
+  });
+}
+
+async function createOpenAIResponse({
+  controller,
+  env,
+  input,
+  instructions,
+  maxOutputTokens,
+  tools,
+}: {
+  controller: AbortController;
+  env: Pick<VoiceServiceEnv, "OPENAI_API_KEY" | "OPENAI_MODEL">;
+  input: unknown[];
+  instructions: string;
+  maxOutputTokens: number;
+  tools?: RestaurantResponseTool[];
+}) {
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    signal: controller.signal,
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: env.OPENAI_MODEL,
+      instructions,
+      input,
+      max_output_tokens: maxOutputTokens,
+      max_tool_calls: tools?.length ? 3 : undefined,
+      store: false,
+      tools: tools?.length ? tools : undefined,
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`OpenAI response failed: ${response.status} ${body}`);
+  }
+
+  return (await response.json()) as { output_text?: string; output?: unknown[] };
+}
+
+function extractToolCalls(data: { output?: unknown[] }): RestaurantToolCall[] {
+  return (data.output ?? [])
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const candidate = item as { arguments?: unknown; call_id?: unknown; name?: unknown; type?: unknown };
+      if (candidate.type !== "function_call" || typeof candidate.name !== "string" || typeof candidate.call_id !== "string") {
+        return null;
+      }
+
+      return {
+        arguments: parseToolArguments(candidate.arguments),
+        callId: candidate.call_id,
+        name: candidate.name,
+      };
+    })
+    .filter((toolCall): toolCall is RestaurantToolCall => Boolean(toolCall));
+}
+
+function parseToolArguments(value: unknown): Record<string, unknown> {
+  if (typeof value !== "string") return {};
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
 }
 
 export function fallbackRestaurantReply(callerUtterance: string, context: RestaurantVoiceContext) {
@@ -279,4 +454,9 @@ function extractOutputText(data: { output_text?: string; output?: unknown[] }) {
 
 function normalizeComparableText(value: string) {
   return value.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function compactSummary(value: string) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized.length <= 700 ? normalized : `${normalized.slice(0, 697)}...`;
 }

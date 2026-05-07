@@ -25,7 +25,12 @@ import { captureReservationRequest, hasReservationIntent, type CapturedReservati
 import { matchPhonePlaybookReply } from "./restaurant-playbook";
 import type { RestaurantContextStore } from "./restaurant-context-store";
 import { demoRestaurantContext, type RestaurantVoiceContext } from "./restaurant-context";
-import { generateRestaurantReply } from "./restaurant-agent";
+import {
+  generateCallSummary,
+  generateRestaurantReply,
+  type RestaurantResponseTool,
+  type RestaurantToolCall,
+} from "./restaurant-agent";
 import type {
   ConversationRelayInboundMessage,
   ConversationRelayPromptMessage,
@@ -56,12 +61,112 @@ interface RelaySession {
   transcript: TranscriptTurn[];
 }
 
+const RESTAURANT_RESPONSE_TOOLS: RestaurantResponseTool[] = [
+  {
+    description: "Look up restaurant-specific policies, FAQs, menu guidance, or knowledge base details before answering.",
+    name: "lookup_policy",
+    parameters: {
+      additionalProperties: false,
+      properties: {
+        topic: {
+          description: "Short topic to look up, such as parking, allergies, delivery drivers, waitlist, or dress code.",
+          type: "string",
+        },
+      },
+      required: ["topic"],
+      type: "object",
+    },
+    type: "function",
+  },
+  {
+    description: "Capture pickup order items mentioned by the caller when deterministic matching missed them.",
+    name: "capture_order_items",
+    parameters: {
+      additionalProperties: false,
+      properties: {
+        customer_name: { type: "string" },
+        items: {
+          items: {
+            additionalProperties: false,
+            properties: {
+              modifiers: {
+                items: { type: "string" },
+                type: "array",
+              },
+              name: { type: "string" },
+              quantity: { minimum: 1, type: "integer" },
+            },
+            required: ["name", "quantity"],
+            type: "object",
+          },
+          type: "array",
+        },
+      },
+      required: ["items"],
+      type: "object",
+    },
+    type: "function",
+  },
+  {
+    description: "Submit the current pickup order draft to the staff review queue when the caller is done ordering.",
+    name: "submit_pickup_order",
+    parameters: {
+      additionalProperties: false,
+      properties: {
+        customer_name: { type: "string" },
+        notes: { type: "string" },
+      },
+      required: [],
+      type: "object",
+    },
+    type: "function",
+  },
+  {
+    description: "Create a manual reservation request for staff confirmation.",
+    name: "create_reservation_request",
+    parameters: {
+      additionalProperties: false,
+      properties: {
+        date: { description: "Reservation date in YYYY-MM-DD format.", type: "string" },
+        guest_name: { type: "string" },
+        notes: { type: "string" },
+        party_size: { minimum: 1, type: "integer" },
+        time: { description: "Reservation time in HH:MM 24-hour format.", type: "string" },
+      },
+      required: ["date", "party_size", "time"],
+      type: "object",
+    },
+    type: "function",
+  },
+  {
+    description: "Create a staff follow-up task or alert for complaints, handoffs, delivery failures, sales calls, or low-confidence topics.",
+    name: "escalate_to_staff",
+    parameters: {
+      additionalProperties: false,
+      properties: {
+        details: { type: "string" },
+        kind: {
+          enum: ["complaint", "delivery_failure", "handoff", "low_confidence", "sales"],
+          type: "string",
+        },
+        summary: { type: "string" },
+      },
+      required: ["kind", "summary"],
+      type: "object",
+    },
+    type: "function",
+  },
+];
+
 export function createConversationRelayHandler(
   env: VoiceServiceEnv,
   callStore: CallStore,
   contextStore: RestaurantContextStore,
   staffNotifications: StaffNotificationService,
   guestConfirmations: GuestConfirmationService,
+  lifecycle: {
+    onSessionCompletion?: (completion: Promise<void>) => void;
+  } = {},
 ) {
   const sessions = new WeakMap<WebSocket, RelaySession>();
 
@@ -160,12 +265,14 @@ export function createConversationRelayHandler(
 
     ws.on("close", () => {
       const durationSeconds = getSessionOffsetSeconds(session);
-      void callStore.completeCall({
-        callId: session.callRecordId,
+      const completion = completeSessionCall({
+        callStore,
         durationSeconds,
-        status: session.needsStaffReview || !session.transcript.length ? "needs_review" : "resolved",
-        summary: summarizeSessionForStaff(session),
+        env,
+        session,
       }).catch((error) => console.error("[conversation-relay] call close persistence failed", error));
+      lifecycle.onSessionCompletion?.(completion);
+      void completion;
 
       console.info("[conversation-relay] closed", {
         callSid: session.callSid,
@@ -268,6 +375,16 @@ async function handlePromptMessage({
       callerUtterance: utterance,
       context: session.context,
       env,
+      handleToolCall: (toolCall) =>
+        executeRestaurantTool({
+          callStore,
+          guestConfirmations,
+          session,
+          staffNotifications,
+          toolCall,
+          utterance,
+        }),
+      tools: RESTAURANT_RESPONSE_TOOLS,
       transcript: session.transcript,
     });
   }
@@ -442,6 +559,33 @@ function summarizeSessionForStaff(session: RelaySession) {
   return summarizeCallForStaff(session);
 }
 
+async function completeSessionCall({
+  callStore,
+  durationSeconds,
+  env,
+  session,
+}: {
+  callStore: CallStore;
+  durationSeconds: number;
+  env: VoiceServiceEnv;
+  session: RelaySession;
+}) {
+  const structuredSummary = summarizeSessionForStaff(session);
+  const summary = await generateCallSummary({
+    context: session.context,
+    env,
+    structuredSummary,
+    transcript: session.transcript,
+  });
+
+  await callStore.completeCall({
+    callId: session.callRecordId,
+    durationSeconds,
+    status: session.needsStaffReview || !session.transcript.length ? "needs_review" : "resolved",
+    summary,
+  });
+}
+
 function buildActionReply({
   createdReservationId,
   guestConfirmations,
@@ -474,12 +618,372 @@ function buildActionReply({
   return replies.length ? replies.join(" ") : null;
 }
 
+async function executeRestaurantTool({
+  callStore,
+  guestConfirmations,
+  session,
+  staffNotifications,
+  toolCall,
+  utterance,
+}: {
+  callStore: CallStore;
+  guestConfirmations: GuestConfirmationService;
+  session: RelaySession;
+  staffNotifications: StaffNotificationService;
+  toolCall: RestaurantToolCall;
+  utterance: string;
+}) {
+  if (toolCall.name === "lookup_policy") {
+    return lookupPolicyForTool(session.context, stringArg(toolCall.arguments, "topic") ?? utterance);
+  }
+
+  if (toolCall.name === "capture_order_items") {
+    return captureOrderItemsFromTool(session, toolCall.arguments);
+  }
+
+  if (toolCall.name === "submit_pickup_order") {
+    const customerName = stringArg(toolCall.arguments, "customer_name");
+    if (customerName) session.orderCustomerName = customerName;
+    return submitPickupOrderFromTool({
+      callStore,
+      guestConfirmations,
+      notes: stringArg(toolCall.arguments, "notes"),
+      session,
+      staffNotifications,
+    });
+  }
+
+  if (toolCall.name === "create_reservation_request") {
+    return createReservationFromTool({
+      callStore,
+      guestConfirmations,
+      session,
+      staffNotifications,
+      toolCall,
+    });
+  }
+
+  if (toolCall.name === "escalate_to_staff") {
+    const kind = staffAlertKindArg(toolCall.arguments, "kind") ?? "handoff";
+    const summary = stringArg(toolCall.arguments, "summary") ?? staffAlertSummaryFor(kind);
+    const details = stringArg(toolCall.arguments, "details");
+    await maybeSendEscalationAlert({
+      kind,
+      session,
+      staffNotifications,
+      utterance: [summary, details].filter(Boolean).join(" "),
+    });
+    await maybeCreateStaffFollowUpTask({
+      callStore,
+      kind,
+      session,
+      utterance: [summary, details].filter(Boolean).join(" "),
+    });
+    return {
+      kind,
+      status: "escalated",
+      summary,
+    };
+  }
+
+  return {
+    error: `Unknown tool: ${toolCall.name}`,
+    status: "ignored",
+  };
+}
+
+function lookupPolicyForTool(context: RestaurantVoiceContext, topic: string) {
+  const normalizedTopic = normalizeToolText(topic);
+  const policyMatches = Object.entries(context.policies)
+    .filter(([key, value]) => value.trim() && scoreToolText(normalizedTopic, `${key} ${value}`) > 0)
+    .map(([key, value]) => ({
+      answer: value,
+      score: scoreToolText(normalizedTopic, `${key} ${value}`),
+      title: `Policy: ${key}`,
+    }));
+  const faqMatches = context.faqs
+    .filter((faq) => scoreToolText(normalizedTopic, `${faq.question} ${faq.answer}`) > 0)
+    .map((faq) => ({
+      answer: faq.answer,
+      score: scoreToolText(normalizedTopic, `${faq.question} ${faq.answer}`),
+      title: `FAQ: ${faq.question}`,
+    }));
+  const knowledgeMatches = context.knowledgeSections
+    .filter((section) => scoreToolText(normalizedTopic, `${section.title} ${section.body}`) > 0)
+    .map((section) => ({
+      answer: section.body,
+      score: scoreToolText(normalizedTopic, `${section.title} ${section.body}`),
+      title: section.title,
+    }));
+  const matches = [...policyMatches, ...faqMatches, ...knowledgeMatches]
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 3)
+    .map(({ answer, title }) => ({ answer, title }));
+
+  return {
+    matches,
+    status: matches.length ? "found" : "not_found",
+    topic,
+  };
+}
+
+function captureOrderItemsFromTool(session: RelaySession, args: Record<string, unknown>) {
+  const rawItems = Array.isArray(args.items) ? args.items : [];
+  const capturedItems: CapturedOrderItem[] = [];
+  const rejectedItems: string[] = [];
+  const customerName = stringArg(args, "customer_name");
+  if (customerName) session.orderCustomerName = customerName;
+
+  for (const rawItem of rawItems) {
+    if (!rawItem || typeof rawItem !== "object") continue;
+    const item = rawItem as Record<string, unknown>;
+    const requestedName = stringArg(item, "name");
+    if (!requestedName) continue;
+    const capturedOrder = capturePickupOrder(requestedName, session.context, { requireIntent: false });
+    const capturedItem = capturedOrder?.items[0];
+    if (!capturedItem) {
+      rejectedItems.push(requestedName);
+      continue;
+    }
+
+    capturedItems.push({
+      ...capturedItem,
+      modifiers: stringArrayArg(item, "modifiers") ?? capturedItem.modifiers,
+      quantity: Math.min(Math.max(numberArg(item, "quantity") ?? capturedItem.quantity, 1), 20),
+    });
+  }
+
+  if (capturedItems.length) {
+    session.orderIntentSeen = true;
+    session.orderDraftItems = mergeCapturedOrderItems(session.orderDraftItems, capturedItems);
+  }
+
+  return {
+    capturedItems,
+    draftItems: session.orderDraftItems,
+    estimatedSubtotal: formatCapturedOrderTotal(session.orderDraftItems),
+    rejectedItems,
+    status: capturedItems.length ? "captured" : "no_menu_match",
+  };
+}
+
+async function submitPickupOrderFromTool({
+  callStore,
+  guestConfirmations,
+  notes,
+  session,
+  staffNotifications,
+}: {
+  callStore: CallStore;
+  guestConfirmations: GuestConfirmationService;
+  notes?: string;
+  session: RelaySession;
+  staffNotifications: StaffNotificationService;
+}) {
+  if (session.orderCreatedId) {
+    return {
+      orderId: session.orderCreatedId,
+      status: "already_submitted",
+    };
+  }
+
+  if (!session.orderDraftItems.length) {
+    return {
+      message: "No order items have been captured yet.",
+      status: "missing_items",
+    };
+  }
+
+  try {
+    const result = await callStore.createStaffReviewOrder({
+      callId: session.callRecordId,
+      customerName: session.orderCustomerName,
+      customerPhone: session.callerPhone,
+      etaMinutes: session.context.defaultPickupEtaMinutes ?? 25,
+      items: session.orderDraftItems,
+      locationId: session.locationId,
+      notes: [
+        notes,
+        "AI-created staff-review pickup order from model tool call. Staff should confirm before kitchen production.",
+      ].filter(Boolean).join(" "),
+    });
+    session.orderCreatedId = result.orderId;
+    void maybeSendOrderConfirmation({
+      capturedOrder: {
+        confidence: 70,
+        customerName: session.orderCustomerName,
+        items: session.orderDraftItems,
+        notes: "AI-created staff-review pickup order from model tool call.",
+      },
+      guestConfirmations,
+      session,
+    }).catch((error) => console.error("[conversation-relay] guest order confirmation failed", error));
+    void staffNotifications.sendStaffAlert({
+      callId: session.callRecordId,
+      callerPhone: session.callerPhone,
+      details: [
+        `Items: ${session.orderDraftItems.map((item) => `${item.quantity} ${item.name}`).join(", ")}`,
+        `Estimated subtotal: ${formatCapturedOrderTotal(session.orderDraftItems)}`,
+        `ETA: ${session.context.defaultPickupEtaMinutes ?? 25} min`,
+        "Payment: pay at pickup",
+      ],
+      kind: "order",
+      locationId: session.locationId,
+      restaurantName: session.context.restaurantName,
+      summary: `Staff-review pickup order created${session.orderCustomerName ? ` for ${session.orderCustomerName}` : ""}.`,
+    }).catch((error) => console.error("[conversation-relay] order staff alert failed", error));
+
+    return {
+      estimatedSubtotal: formatCapturedOrderTotal(session.orderDraftItems),
+      etaMinutes: session.context.defaultPickupEtaMinutes ?? 25,
+      orderId: result.orderId,
+      paymentMode: "pay_at_pickup",
+      status: "submitted",
+    };
+  } catch (error) {
+    console.error("[conversation-relay] tool order submit failed", error);
+    return {
+      error: error instanceof Error ? error.message : "Order submit failed",
+      status: "failed",
+    };
+  }
+}
+
+async function createReservationFromTool({
+  callStore,
+  guestConfirmations,
+  session,
+  staffNotifications,
+  toolCall,
+}: {
+  callStore: CallStore;
+  guestConfirmations: GuestConfirmationService;
+  session: RelaySession;
+  staffNotifications: StaffNotificationService;
+  toolCall: RestaurantToolCall;
+}) {
+  if (session.reservationCreatedId) {
+    return {
+      reservationId: session.reservationCreatedId,
+      status: "already_submitted",
+    };
+  }
+
+  const partySize = numberArg(toolCall.arguments, "party_size");
+  const date = stringArg(toolCall.arguments, "date");
+  const time = stringArg(toolCall.arguments, "time");
+  if (!partySize || !date || !time) {
+    return {
+      message: "Reservation requests need date, time, and party size.",
+      status: "missing_details",
+    };
+  }
+
+  const capturedReservation: CapturedReservationRequest = {
+    confidence: 70,
+    date,
+    guestName: stringArg(toolCall.arguments, "guest_name"),
+    notes: stringArg(toolCall.arguments, "notes"),
+    partySize,
+    time,
+  };
+  session.reservationIntentSeen = true;
+  session.reservationRequest = capturedReservation;
+
+  try {
+    const result = await callStore.createStaffReviewReservation({
+      ...capturedReservation,
+      callId: session.callRecordId,
+      callerPhone: session.callerPhone,
+      locationId: session.locationId,
+    });
+    session.reservationCreatedId = result.reservationId;
+    void maybeSendReservationConfirmation({
+      capturedReservation,
+      guestConfirmations,
+      session,
+    }).catch((error) => console.error("[conversation-relay] guest reservation confirmation failed", error));
+    void staffNotifications.sendStaffAlert({
+      callId: session.callRecordId,
+      callerPhone: session.callerPhone,
+      details: [
+        `Party: ${capturedReservation.partySize}`,
+        `When: ${capturedReservation.date} at ${capturedReservation.time}`,
+        capturedReservation.guestName ? `Name: ${capturedReservation.guestName}` : "Name: not captured",
+        capturedReservation.notes ? `Notes: ${capturedReservation.notes}` : "Status: needs staff confirmation",
+      ],
+      kind: "reservation",
+      locationId: session.locationId,
+      restaurantName: session.context.restaurantName,
+      summary: "Staff-confirmed reservation request captured.",
+    }).catch((error) => console.error("[conversation-relay] reservation staff alert failed", error));
+
+    return {
+      reservationId: result.reservationId,
+      status: "submitted",
+    };
+  } catch (error) {
+    console.error("[conversation-relay] tool reservation submit failed", error);
+    return {
+      error: error instanceof Error ? error.message : "Reservation submit failed",
+      status: "failed",
+    };
+  }
+}
+
 function formatStaffAlertKind(kind: StaffAlertKind) {
   return kind.replaceAll("_", " ");
 }
 
 function truncateSummary(value: string) {
   return value.length <= 700 ? value : `${value.slice(0, 697)}...`;
+}
+
+function stringArg(args: Record<string, unknown>, key: string) {
+  const value = args[key];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function numberArg(args: Record<string, unknown>, key: string) {
+  const value = args[key];
+  if (typeof value === "number" && Number.isFinite(value)) return Math.round(value);
+  if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Math.round(Number(value));
+  return undefined;
+}
+
+function stringArrayArg(args: Record<string, unknown>, key: string) {
+  const value = args[key];
+  if (!Array.isArray(value)) return undefined;
+  const strings = value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+  return strings.length ? strings.map((item) => item.trim()) : undefined;
+}
+
+function staffAlertKindArg(args: Record<string, unknown>, key: string): StaffAlertKind | undefined {
+  const value = stringArg(args, key);
+  if (
+    value === "complaint" ||
+    value === "delivery_failure" ||
+    value === "handoff" ||
+    value === "low_confidence" ||
+    value === "sales"
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
+function normalizeToolText(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function scoreToolText(topic: string, candidate: string) {
+  const topicTokens = new Set(normalizeToolText(topic).split(/\s+/).filter((token) => token.length > 1));
+  const candidateTokens = new Set(normalizeToolText(candidate).split(/\s+/).filter((token) => token.length > 1));
+  let score = 0;
+  for (const token of topicTokens) {
+    if (candidateTokens.has(token)) score += 1;
+  }
+  return score;
 }
 
 async function maybeAdvanceStaffReviewOrder({

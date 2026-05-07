@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { URL } from "node:url";
-import { WebSocketServer } from "ws";
+import { WebSocketServer, type WebSocket } from "ws";
 import { authorizeVoiceAdminRequest } from "./admin-auth";
 import { createCallStore } from "./call-store";
 import { createConversationRelayHandler } from "./conversation-relay";
@@ -42,12 +42,17 @@ const server = createServer((req, res) => {
 });
 
 const wss = new WebSocketServer({ noServer: true });
+const activeRelaySockets = new Set<WebSocket>();
+const activeRelayCompletions = new Set<Promise<void>>();
 const handleConversationRelayConnection = createConversationRelayHandler(
   env,
   callStore,
   restaurantContextStore,
   staffNotificationService,
   guestConfirmationService,
+  {
+    onSessionCompletion: trackRelayCompletion,
+  },
 );
 
 server.on("upgrade", (req, socket, head) => {
@@ -65,6 +70,8 @@ server.on("upgrade", (req, socket, head) => {
   }
 
   wss.handleUpgrade(req, socket, head, (ws) => {
+    activeRelaySockets.add(ws);
+    ws.once("close", () => activeRelaySockets.delete(ws));
     handleConversationRelayConnection(ws, req);
   });
 });
@@ -72,6 +79,9 @@ server.on("upgrade", (req, socket, head) => {
 server.listen(env.PORT, () => {
   console.info(`[voice-service] listening on http://localhost:${env.PORT}`);
 });
+
+process.once("SIGTERM", () => void shutdownGracefully("SIGTERM"));
+process.once("SIGINT", () => void shutdownGracefully("SIGINT"));
 
 async function handleRequest(req: IncomingMessage, res: ServerResponse, currentEnv: VoiceServiceEnv) {
   const url = new URL(req.url ?? "/", "http://localhost");
@@ -448,4 +458,65 @@ function applyCors(req: IncomingMessage, res: ServerResponse, currentEnv: VoiceS
 
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, x-hostline-api-key");
+}
+
+async function shutdownGracefully(signal: "SIGINT" | "SIGTERM") {
+  console.info("[voice-service] graceful shutdown requested", {
+    activeRelayConnections: activeRelaySockets.size,
+    signal,
+  });
+
+  server.close((error) => {
+    if (error) {
+      console.error("[voice-service] server close failed", error);
+      process.exitCode = 1;
+    }
+  });
+
+  for (const ws of activeRelaySockets) {
+    try {
+      ws.close(1001, "HostLine voice service is restarting.");
+    } catch (error) {
+      console.warn("[voice-service] websocket close failed", error);
+    }
+  }
+
+  await waitForRelaySocketsToClose(4500);
+  await waitForRelayCompletions(4500);
+  wss.close();
+
+  for (const ws of activeRelaySockets) {
+    try {
+      ws.terminate();
+    } catch (error) {
+      console.warn("[voice-service] websocket terminate failed", error);
+    }
+  }
+}
+
+function trackRelayCompletion(completion: Promise<void>) {
+  const tracked = completion.finally(() => activeRelayCompletions.delete(tracked));
+  activeRelayCompletions.add(tracked);
+}
+
+function waitForRelaySocketsToClose(timeoutMs: number) {
+  const startedAt = Date.now();
+
+  return new Promise<void>((resolve) => {
+    const timer = setInterval(() => {
+      if (!activeRelaySockets.size || Date.now() - startedAt >= timeoutMs) {
+        clearInterval(timer);
+        resolve();
+      }
+    }, 100);
+  });
+}
+
+async function waitForRelayCompletions(timeoutMs: number) {
+  if (!activeRelayCompletions.size) return;
+
+  await Promise.race([
+    Promise.allSettled(Array.from(activeRelayCompletions)),
+    new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+  ]);
 }
