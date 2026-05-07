@@ -13,6 +13,7 @@ import type { StaffAlertKind, StaffNotificationService } from "./notification-se
 import {
   captureCustomerName,
   capturePickupOrder,
+  formatCapturedOrderTotal,
   hasOrderIntent,
   hasOrderSubmitIntent,
   mergeCapturedOrderItems,
@@ -23,7 +24,7 @@ import {
 import { captureReservationRequest, hasReservationIntent, type CapturedReservationRequest } from "./reservation-intake";
 import { matchPhonePlaybookReply } from "./restaurant-playbook";
 import type { RestaurantContextStore } from "./restaurant-context-store";
-import { demoRestaurantContext } from "./restaurant-context";
+import { demoRestaurantContext, type RestaurantVoiceContext } from "./restaurant-context";
 import { generateRestaurantReply } from "./restaurant-agent";
 import type {
   ConversationRelayInboundMessage,
@@ -38,7 +39,7 @@ interface RelaySession {
   callRecordId?: string;
   callSid?: string;
   callerPhone?: string;
-  context: typeof demoRestaurantContext;
+  context: RestaurantVoiceContext;
   locationId?: string;
   orderCustomerName?: string;
   orderCreatedId?: string;
@@ -47,6 +48,7 @@ interface RelaySession {
   unclearPromptCount: number;
   reservationCreatedId?: string;
   reservationIntentSeen: boolean;
+  reservationRequest?: CapturedReservationRequest;
   staffAlertIntents: Set<StaffAlertKind>;
   staffTaskIntents: Set<StaffAlertKind>;
   startedAt: number;
@@ -162,7 +164,7 @@ export function createConversationRelayHandler(
         callId: session.callRecordId,
         durationSeconds,
         status: session.needsStaffReview || !session.transcript.length ? "needs_review" : "resolved",
-        summary: summarizeTranscript(session.transcript),
+        summary: summarizeSessionForStaff(session),
       }).catch((error) => console.error("[conversation-relay] call close persistence failed", error));
 
       console.info("[conversation-relay] closed", {
@@ -225,13 +227,7 @@ async function handlePromptMessage({
 
   session.unclearPromptCount = 0;
 
-  let reply = await generateRestaurantReply({
-    callerUtterance: utterance,
-    context: session.context,
-    env,
-    transcript: session.transcript,
-  });
-  const escalationKind = classifyEscalationIntent(utterance);
+  const escalationKind = classifyEscalationIntent(utterance, session.context);
   void maybeSendEscalationAlert({
     kind: escalationKind,
     session,
@@ -252,13 +248,6 @@ async function handlePromptMessage({
     staffNotifications,
     utterance,
   });
-
-  if (orderOutcome.status === "created") {
-    reply = `${reply} I have sent that pickup order to the staff review queue. It will be pay at pickup.${confirmationReplySuffix(session, guestConfirmations)}`;
-  } else if (orderOutcome.status === "draft") {
-    reply = `Got it. I have ${summarizeCapturedOrderItems(session.orderDraftItems)}. What else can I get for you?`;
-  }
-
   const createdReservationId = await maybeCreateStaffReviewReservation({
     callStore,
     guestConfirmations,
@@ -267,8 +256,20 @@ async function handlePromptMessage({
     utterance,
   });
 
-  if (createdReservationId) {
-    reply = `${reply} I have sent that reservation request to staff. It is not confirmed until the restaurant confirms it.${confirmationReplySuffix(session, guestConfirmations)}`;
+  let reply = buildActionReply({
+    createdReservationId,
+    guestConfirmations,
+    orderOutcome,
+    session,
+  });
+
+  if (!reply) {
+    reply = await generateRestaurantReply({
+      callerUtterance: utterance,
+      context: session.context,
+      env,
+      transcript: session.transcript,
+    });
   }
 
   persistAgentTurn({ callStore, reply, session });
@@ -383,11 +384,102 @@ function getSessionOffsetSeconds(session: RelaySession) {
   return (Date.now() - session.startedAt) / 1000;
 }
 
-function summarizeTranscript(transcript: TranscriptTurn[]) {
-  const callerTurns = transcript.filter((turn) => turn.role === "caller");
-  const lastCallerTurn = callerTurns.at(-1);
-  if (!lastCallerTurn) return "Call ended before a caller prompt was captured.";
-  return `Caller asked: ${lastCallerTurn.text.slice(0, 220)}`;
+interface StaffCallSummaryInput {
+  needsStaffReview?: boolean;
+  orderCreatedId?: string;
+  orderCustomerName?: string;
+  orderDraftItems?: CapturedOrderItem[];
+  orderIntentSeen?: boolean;
+  reservationCreatedId?: string;
+  reservationIntentSeen?: boolean;
+  reservationRequest?: CapturedReservationRequest;
+  staffAlertIntents?: Iterable<StaffAlertKind>;
+  staffTaskIntents?: Iterable<StaffAlertKind>;
+  transcript: TranscriptTurn[];
+}
+
+export function summarizeCallForStaff(input: StaffCallSummaryInput) {
+  const parts: string[] = [];
+  const orderItems = input.orderDraftItems ?? [];
+
+  if (input.orderCreatedId && orderItems.length) {
+    parts.push(
+      `Pickup order submitted${input.orderCustomerName ? ` for ${input.orderCustomerName}` : ""}: ${summarizeCapturedOrderItems(orderItems)}; estimated subtotal ${formatCapturedOrderTotal(orderItems)}.`,
+    );
+  } else if (orderItems.length) {
+    parts.push(`Pickup order draft: ${summarizeCapturedOrderItems(orderItems)}; estimated subtotal ${formatCapturedOrderTotal(orderItems)}.`);
+  } else if (input.orderIntentSeen) {
+    parts.push("Pickup order discussed, but no menu items were captured.");
+  }
+
+  if (input.reservationRequest) {
+    parts.push(
+      `${input.reservationCreatedId ? "Reservation request submitted" : "Reservation details captured"}: party of ${input.reservationRequest.partySize} on ${input.reservationRequest.date} at ${input.reservationRequest.time}${input.reservationRequest.guestName ? ` for ${input.reservationRequest.guestName}` : ""}.`,
+    );
+  } else if (input.reservationIntentSeen) {
+    parts.push("Reservation discussed, but required details were incomplete.");
+  }
+
+  const followUpKinds = Array.from(
+    new Set([...(input.staffTaskIntents ?? []), ...(input.staffAlertIntents ?? [])]),
+  );
+  if (followUpKinds.length) {
+    parts.push(`Staff follow-up flagged: ${followUpKinds.map(formatStaffAlertKind).join(", ")}.`);
+  } else if (input.needsStaffReview) {
+    parts.push("Call marked for staff review.");
+  }
+
+  const callerTurns = input.transcript.filter((turn) => turn.role === "caller").map((turn) => turn.text);
+  if (callerTurns.length) {
+    parts.push(`Caller context: ${callerTurns.slice(-3).join(" / ").slice(0, 260)}.`);
+  }
+
+  if (!parts.length) return "Call ended before a caller prompt was captured.";
+  return truncateSummary(parts.join(" "));
+}
+
+function summarizeSessionForStaff(session: RelaySession) {
+  return summarizeCallForStaff(session);
+}
+
+function buildActionReply({
+  createdReservationId,
+  guestConfirmations,
+  orderOutcome,
+  session,
+}: {
+  createdReservationId: string | null;
+  guestConfirmations: GuestConfirmationService;
+  orderOutcome: { status: "created" | "draft" | "none"; orderId?: string };
+  session: RelaySession;
+}) {
+  const replies: string[] = [];
+
+  if (orderOutcome.status === "created") {
+    replies.push(
+      `I have sent that pickup order to the staff review queue. Estimated subtotal is ${formatCapturedOrderTotal(session.orderDraftItems)} before tax. It will be pay at pickup.${confirmationReplySuffix(session, guestConfirmations)}`,
+    );
+  } else if (orderOutcome.status === "draft") {
+    replies.push(
+      `Got it. I have ${summarizeCapturedOrderItems(session.orderDraftItems)}. Estimated subtotal is ${formatCapturedOrderTotal(session.orderDraftItems)} before tax. What else can I get for you?`,
+    );
+  }
+
+  if (createdReservationId) {
+    replies.push(
+      `I have sent that reservation request to staff. It is not confirmed until the restaurant confirms it.${confirmationReplySuffix(session, guestConfirmations)}`,
+    );
+  }
+
+  return replies.length ? replies.join(" ") : null;
+}
+
+function formatStaffAlertKind(kind: StaffAlertKind) {
+  return kind.replaceAll("_", " ");
+}
+
+function truncateSummary(value: string) {
+  return value.length <= 700 ? value : `${value.slice(0, 697)}...`;
 }
 
 async function maybeAdvanceStaffReviewOrder({
@@ -499,6 +591,7 @@ async function maybeCreateStaffReviewReservation({
     requireIntent: !session.reservationIntentSeen,
   });
   if (!capturedReservation) return null;
+  session.reservationRequest = capturedReservation;
 
   try {
     const result = await callStore.createStaffReviewReservation({
@@ -662,7 +755,10 @@ async function maybeCreateSystemFailureTask({
   });
 }
 
-export function classifyEscalationIntent(utterance: string): StaffAlertKind | null {
+export function classifyEscalationIntent(
+  utterance: string,
+  context: RestaurantVoiceContext = demoRestaurantContext,
+): StaffAlertKind | null {
   const normalized = utterance.toLowerCase();
 
   if (/\b(refund|complain|complaint|wrong order|incorrect|bad service|terrible|upset|angry|fuck|shit|bullshit|asshole|useless)\b/.test(normalized)) {
@@ -687,7 +783,7 @@ export function classifyEscalationIntent(utterance: string): StaffAlertKind | nu
     return "handoff";
   }
 
-  const playbookMatch = matchPhonePlaybookReply(utterance, demoRestaurantContext);
+  const playbookMatch = matchPhonePlaybookReply(utterance, context);
   if (playbookMatch?.staffAlertKind) return playbookMatch.staffAlertKind;
 
   return null;

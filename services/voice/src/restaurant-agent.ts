@@ -3,6 +3,11 @@ import { matchPhonePlaybookReply } from "./restaurant-playbook";
 import type { RestaurantVoiceContext } from "./restaurant-context";
 import type { TranscriptTurn } from "./types";
 
+export interface ResponseInputMessage {
+  content: string;
+  role: "assistant" | "user";
+}
+
 export interface GenerateRestaurantReplyInput {
   callerUtterance: string;
   context: RestaurantVoiceContext;
@@ -39,7 +44,7 @@ export async function generateRestaurantReply(input: GenerateRestaurantReplyInpu
         model: input.env.OPENAI_MODEL,
         instructions: buildRestaurantInstructions(input.context),
         input: buildConversationInput(input.callerUtterance, input.transcript),
-        max_output_tokens: 120,
+        max_output_tokens: 220,
         store: false,
       }),
     });
@@ -230,13 +235,24 @@ function tokenize(value: string) {
   );
 }
 
-function buildConversationInput(callerUtterance: string, transcript: TranscriptTurn[]) {
-  const recentTurns = transcript
-    .slice(-8)
-    .map((turn) => `${turn.role === "caller" ? "Caller" : "Host"}: ${turn.text}`)
-    .join("\n");
+export function buildConversationInput(callerUtterance: string, transcript: TranscriptTurn[]): ResponseInputMessage[] {
+  const recentTurns = transcript.slice(-8);
+  const messages = recentTurns.map((turn) => ({
+    content: turn.text,
+    role: turn.role === "caller" ? "user" as const : "assistant" as const,
+  }));
+  const lastTurn = recentTurns.at(-1);
+  const currentCallerAlreadyIncluded =
+    lastTurn?.role === "caller" && normalizeComparableText(lastTurn.text) === normalizeComparableText(callerUtterance);
 
-  return `${recentTurns ? `${recentTurns}\n` : ""}Caller: ${callerUtterance}\nHost:`;
+  if (!currentCallerAlreadyIncluded) {
+    messages.push({
+      content: callerUtterance,
+      role: "user",
+    });
+  }
+
+  return messages;
 }
 
 function extractOutputText(data: { output_text?: string; output?: unknown[] }) {
@@ -259,4 +275,8 @@ function extractOutputText(data: { output_text?: string; output?: unknown[] }) {
   }
 
   return null;
+}
+
+function normalizeComparableText(value: string) {
+  return value.toLowerCase().replace(/\s+/g, " ").trim();
 }

@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { demoRestaurantContext } from "./restaurant-context";
-import { buildRestaurantInstructions, fallbackRestaurantReply, generateRestaurantReply } from "./restaurant-agent";
+import {
+  buildConversationInput,
+  buildRestaurantInstructions,
+  fallbackRestaurantReply,
+  generateRestaurantReply,
+} from "./restaurant-agent";
 
 describe("restaurant fallback replies", () => {
   afterEach(() => {
@@ -39,6 +44,39 @@ describe("restaurant fallback replies", () => {
     expect(instructions).toContain("If a caller is rude");
   });
 
+  it("passes structured conversation turns to the Responses API", () => {
+    const input = buildConversationInput("Do you have patio seating?", [
+      {
+        at: "2026-05-06T20:00:00.000Z",
+        role: "caller",
+        text: "Hi",
+      },
+      {
+        at: "2026-05-06T20:00:01.000Z",
+        role: "agent",
+        text: "Thanks for calling Olive & Ember. How can I help?",
+      },
+    ]);
+
+    expect(input).toEqual([
+      { content: "Hi", role: "user" },
+      { content: "Thanks for calling Olive & Ember. How can I help?", role: "assistant" },
+      { content: "Do you have patio seating?", role: "user" },
+    ]);
+  });
+
+  it("does not duplicate the current caller turn when it is already persisted", () => {
+    const input = buildConversationInput("Do you have patio seating?", [
+      {
+        at: "2026-05-06T20:00:00.000Z",
+        role: "caller",
+        text: "Do you have patio seating?",
+      },
+    ]);
+
+    expect(input).toEqual([{ content: "Do you have patio seating?", role: "user" }]);
+  });
+
   it("uses the fast playbook before calling OpenAI", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
     const reply = await generateRestaurantReply({
@@ -54,5 +92,26 @@ describe("restaurant fallback replies", () => {
 
     expect(reply).toContain("What item was lost");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("uses a larger reply budget for longer confirmations", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ output_text: "Sure, I can help with that." }), { status: 200 }),
+    );
+
+    await generateRestaurantReply({
+      callerUtterance: "Can you tell me about the patio?",
+      context: demoRestaurantContext,
+      env: {
+        OPENAI_API_KEY: "sk-test",
+        OPENAI_MODEL: "gpt-5-mini",
+        OPENAI_REPLY_TIMEOUT_MS: 4500,
+      },
+      transcript: [],
+    });
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(body.max_output_tokens).toBe(220);
+    expect(body.input).toEqual([{ content: "Can you tell me about the patio?", role: "user" }]);
   });
 });

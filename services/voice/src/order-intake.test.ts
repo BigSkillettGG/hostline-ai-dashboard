@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  calculateCapturedOrderTotalCents,
   captureCustomerName,
   capturePickupOrder,
+  formatCapturedOrderTotal,
   hasOrderSubmitIntent,
   mergeCapturedOrderItems,
   summarizeCapturedOrderItems,
@@ -38,6 +40,18 @@ describe("pickup order intake", () => {
     ]);
   });
 
+  it("fuzzy matches likely transcription drift on menu items", () => {
+    const order = capturePickupOrder(
+      "I'd like two margarita pizzas and one casar salad for pickup",
+      demoRestaurantContext,
+    );
+
+    expect(order?.items).toEqual([
+      { modifiers: undefined, name: "Margherita Pizza", priceCents: 1800, quantity: 2 },
+      { modifiers: undefined, name: "Caesar Salad", priceCents: 1400, quantity: 1 },
+    ]);
+  });
+
   it("captures lowercase spoken names from STT", () => {
     expect(captureCustomerName("that is all under tim chen")).toBe("Tim Chen");
     expect(captureCustomerName("name is sarah")).toBe("Sarah");
@@ -58,5 +72,15 @@ describe("pickup order intake", () => {
       { modifiers: ["Light cheese"], name: "Margherita Pizza", priceCents: 1800, quantity: 3 },
     ]);
     expect(summarizeCapturedOrderItems(items)).toBe("3 Margherita Pizza");
+  });
+
+  it("calculates an estimated pickup order subtotal", () => {
+    const items = [
+      { name: "Margherita Pizza", priceCents: 1800, quantity: 2 },
+      { name: "Caesar Salad", priceCents: 1400, quantity: 1 },
+    ];
+
+    expect(calculateCapturedOrderTotalCents(items)).toBe(5000);
+    expect(formatCapturedOrderTotal(items)).toBe("$50.00");
   });
 });

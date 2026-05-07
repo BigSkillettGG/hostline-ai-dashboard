@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyEscalationIntent } from "./conversation-relay";
+import { classifyEscalationIntent, summarizeCallForStaff } from "./conversation-relay";
 
 describe("conversation relay staff-review triggers", () => {
   it("classifies complaint and refund language as a complaint", () => {
@@ -29,5 +29,35 @@ describe("conversation relay staff-review triggers", () => {
   it("ignores ordinary restaurant questions", () => {
     expect(classifyEscalationIntent("What time do you close tonight?")).toBeNull();
     expect(classifyEscalationIntent("Can I order a margherita pizza for pickup?")).toBeNull();
+  });
+
+  it("summarizes structured call outcomes for staff review", () => {
+    const summary = summarizeCallForStaff({
+      needsStaffReview: true,
+      orderCreatedId: "order_1",
+      orderCustomerName: "Priya Shah",
+      orderDraftItems: [
+        { name: "Margherita Pizza", priceCents: 1800, quantity: 2 },
+        { name: "Caesar Salad", priceCents: 1400, quantity: 1 },
+      ],
+      staffTaskIntents: ["complaint"],
+      transcript: [
+        {
+          at: "2026-05-06T20:00:00.000Z",
+          role: "caller",
+          text: "I need two margherita pizzas and a caesar salad for pickup.",
+        },
+        {
+          at: "2026-05-06T20:00:05.000Z",
+          role: "caller",
+          text: "Name is Priya Shah.",
+        },
+      ],
+    });
+
+    expect(summary).toContain("Pickup order submitted for Priya Shah");
+    expect(summary).toContain("2 Margherita Pizza, 1 Caesar Salad");
+    expect(summary).toContain("$50.00");
+    expect(summary).toContain("Staff follow-up flagged: complaint");
   });
 });

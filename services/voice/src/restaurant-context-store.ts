@@ -10,6 +10,7 @@ import { buildSupabaseServiceHeaders } from "./supabase-headers";
 
 type OnboardingDraftValue = string | boolean | undefined;
 type OnboardingDraft = Record<string, OnboardingDraftValue>;
+const RESTAURANT_CONTEXT_CACHE_TTL_MS = 5 * 60 * 1000;
 
 export interface RestaurantContextStore {
   getContext(locationId?: string): Promise<RestaurantVoiceContext>;
@@ -75,14 +76,23 @@ export interface BuildRestaurantContextInput {
 
 export function createRestaurantContextStore(env: VoiceServiceEnv): RestaurantContextStore {
   if (env.SUPABASE_URL && env.SUPABASE_SECRET_KEY && env.SUPABASE_DEMO_LOCATION_ID) {
-    return new SupabaseRestaurantContextStore({
-      defaultLocationId: env.SUPABASE_DEMO_LOCATION_ID,
-      key: env.SUPABASE_SECRET_KEY,
-      url: env.SUPABASE_URL,
-    });
+    return createCachedRestaurantContextStore(
+      new SupabaseRestaurantContextStore({
+        defaultLocationId: env.SUPABASE_DEMO_LOCATION_ID,
+        key: env.SUPABASE_SECRET_KEY,
+        url: env.SUPABASE_URL,
+      }),
+    );
   }
 
   return new DemoRestaurantContextStore();
+}
+
+export function createCachedRestaurantContextStore(
+  inner: RestaurantContextStore,
+  ttlMs = RESTAURANT_CONTEXT_CACHE_TTL_MS,
+): RestaurantContextStore {
+  return new CachedRestaurantContextStore(inner, ttlMs);
 }
 
 export function buildRestaurantContext({
@@ -168,6 +178,51 @@ export function buildRestaurantContext({
 class DemoRestaurantContextStore implements RestaurantContextStore {
   async getContext() {
     return demoRestaurantContext;
+  }
+}
+
+interface CachedRestaurantContextEntry {
+  expiresAt: number;
+  promise?: Promise<RestaurantVoiceContext>;
+  value?: RestaurantVoiceContext;
+}
+
+class CachedRestaurantContextStore implements RestaurantContextStore {
+  private readonly cache = new Map<string, CachedRestaurantContextEntry>();
+
+  constructor(
+    private readonly inner: RestaurantContextStore,
+    private readonly ttlMs: number,
+  ) {}
+
+  async getContext(locationId?: string) {
+    const key = normalizeLocationId(locationId) ?? "__default__";
+    const now = Date.now();
+    const cached = this.cache.get(key);
+
+    if (cached?.value && cached.expiresAt > now) return cached.value;
+    if (cached?.promise) return cached.promise;
+
+    const promise = this.inner.getContext(locationId).then(
+      (value) => {
+        this.cache.set(key, {
+          expiresAt: Date.now() + this.ttlMs,
+          value,
+        });
+        return value;
+      },
+      (error) => {
+        this.cache.delete(key);
+        throw error;
+      },
+    );
+
+    this.cache.set(key, {
+      expiresAt: now + this.ttlMs,
+      promise,
+    });
+
+    return promise;
   }
 }
 

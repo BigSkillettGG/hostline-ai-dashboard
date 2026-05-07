@@ -71,6 +71,14 @@ export function summarizeCapturedOrderItems(items: CapturedOrderItem[]) {
   return items.map((item) => `${item.quantity} ${item.name}`).join(", ");
 }
 
+export function calculateCapturedOrderTotalCents(items: CapturedOrderItem[]) {
+  return items.reduce((total, item) => total + item.priceCents * item.quantity, 0);
+}
+
+export function formatCapturedOrderTotal(items: CapturedOrderItem[]) {
+  return formatUsd(calculateCapturedOrderTotalCents(items));
+}
+
 export function mergeCapturedOrderItems(
   existingItems: CapturedOrderItem[],
   newItems: CapturedOrderItem[],
@@ -100,24 +108,64 @@ function captureMenuItems(utterance: string, menuItems: RestaurantMenuItem[]) {
 
   for (const menuItem of menuItems) {
     const aliases = [menuItem.name, ...(menuItem.aliases ?? [])].map(normalize);
-    const matchedAlias = aliases.find((alias) => normalizedUtterance.includes(alias));
+    const matchedAlias = findMenuItemMatch(normalizedUtterance, aliases);
     if (!matchedAlias) continue;
 
     capturedItems.push({
       modifiers: captureModifiers(normalizedUtterance, menuItem),
       name: menuItem.name,
       priceCents: menuItem.priceCents,
-      quantity: captureQuantityBeforeAlias(normalizedUtterance, matchedAlias),
+      quantity: captureQuantityBeforeIndex(normalizedUtterance, matchedAlias.index),
     });
   }
 
   return capturedItems;
 }
 
-function captureQuantityBeforeAlias(normalizedUtterance: string, alias: string) {
-  const aliasIndex = normalizedUtterance.indexOf(alias);
+interface MenuItemMatch {
+  index: number;
+}
+
+function findMenuItemMatch(normalizedUtterance: string, aliases: string[]): MenuItemMatch | null {
+  for (const alias of aliases) {
+    const index = normalizedUtterance.indexOf(alias);
+    if (index >= 0) return { index };
+  }
+
+  return aliases
+    .map((alias) => findFuzzyAliasMatch(normalizedUtterance, alias))
+    .filter((match): match is MenuItemMatch => Boolean(match))
+    .sort((left, right) => left.index - right.index)[0] ?? null;
+}
+
+function findFuzzyAliasMatch(normalizedUtterance: string, alias: string): MenuItemMatch | null {
+  const aliasWords = alias.split(/\s+/).filter(Boolean);
+  if (alias.length < 6 || !aliasWords.length) return null;
+
+  const utteranceWords = normalizedUtterance.split(/\s+/).filter(Boolean);
+  const windowSizes = Array.from(new Set([aliasWords.length, aliasWords.length + 1])).filter(
+    (size) => size <= utteranceWords.length,
+  );
+  const maxDistance = Math.max(1, Math.floor(alias.length * 0.24));
+
+  for (const size of windowSizes) {
+    for (let start = 0; start <= utteranceWords.length - size; start += 1) {
+      const candidate = utteranceWords.slice(start, start + size).join(" ");
+      if (Math.abs(candidate.length - alias.length) > maxDistance + 2) continue;
+      if (levenshteinDistance(candidate, alias) <= maxDistance) {
+        return {
+          index: wordIndex(normalizedUtterance, start),
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+function captureQuantityBeforeIndex(normalizedUtterance: string, aliasIndex: number) {
   const prefix = normalizedUtterance.slice(0, aliasIndex).trim();
-  const words = prefix.split(/\s+/).filter(Boolean).slice(-4);
+  const words = prefix.split(/\s+/).filter(Boolean).slice(-6);
 
   for (let i = words.length - 1; i >= 0; i -= 1) {
     const word = words[i].replace(/[^a-z0-9]/g, "");
@@ -157,4 +205,49 @@ function titleCaseName(value: string) {
     .split(/\s+/)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
     .join(" ");
+}
+
+function formatUsd(cents: number) {
+  return new Intl.NumberFormat("en-US", {
+    currency: "USD",
+    style: "currency",
+  }).format(cents / 100);
+}
+
+function levenshteinDistance(left: string, right: string) {
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  const current = Array.from({ length: right.length + 1 }, () => 0);
+
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    current[0] = leftIndex;
+
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      const substitutionCost = left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1;
+      current[rightIndex] = Math.min(
+        current[rightIndex - 1] + 1,
+        previous[rightIndex] + 1,
+        previous[rightIndex - 1] + substitutionCost,
+      );
+    }
+
+    for (let index = 0; index < previous.length; index += 1) {
+      previous[index] = current[index];
+    }
+  }
+
+  return previous[right.length];
+}
+
+function wordIndex(value: string, wordOffset: number) {
+  if (wordOffset <= 0) return 0;
+
+  let seenWords = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const startsWord = value[index] !== " " && (index === 0 || value[index - 1] === " ");
+    if (!startsWord) continue;
+    if (seenWords === wordOffset) return index;
+    seenWords += 1;
+  }
+
+  return value.length;
 }

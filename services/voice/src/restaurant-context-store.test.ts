@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildRestaurantContext } from "./restaurant-context-store";
+import { demoRestaurantContext } from "./restaurant-context";
+import { buildRestaurantContext, createCachedRestaurantContextStore } from "./restaurant-context-store";
 
 describe("restaurant context store", () => {
   it("builds a voice context from onboarding, location, agent, and menu rows", () => {
@@ -168,5 +169,26 @@ describe("restaurant context store", () => {
     expect(context.smsConfirmationsEnabled).toBe(true);
     expect(context.menuHighlights).toEqual(["Bakery", "coffee"]);
     expect(context.policies.location).toBe("55 Market St");
+  });
+
+  it("caches restaurant context lookups by location for the TTL window", async () => {
+    let lookupCount = 0;
+    const store = createCachedRestaurantContextStore(
+      {
+        async getContext() {
+          lookupCount += 1;
+          return {
+            ...demoRestaurantContext,
+            restaurantName: `Cached ${lookupCount}`,
+          };
+        },
+      },
+      60_000,
+    );
+
+    await expect(store.getContext("loc_1")).resolves.toMatchObject({ restaurantName: "Cached 1" });
+    await expect(store.getContext("loc_1")).resolves.toMatchObject({ restaurantName: "Cached 1" });
+    await expect(store.getContext("loc_2")).resolves.toMatchObject({ restaurantName: "Cached 2" });
+    expect(lookupCount).toBe(2);
   });
 });
