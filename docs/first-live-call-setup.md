@@ -12,7 +12,6 @@ VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 VITE_SUPABASE_DEMO_LOCATION_ID=<locations.id>
 VITE_VOICE_SERVICE_URL=https://voice.your-domain.com
-VITE_HOSTLINE_INTERNAL_API_KEY=<same-as-voice-service-for-private-test-only>
 ```
 
 Voice service:
@@ -23,9 +22,10 @@ PORT=8787
 PUBLIC_HTTP_BASE_URL=https://voice.your-domain.com
 PUBLIC_WS_BASE_URL=wss://voice.your-domain.com
 VOICE_SERVICE_ALLOWED_ORIGIN=https://app.your-domain.com
-HOSTLINE_INTERNAL_API_KEY=<random-strong-secret>
+HOSTLINE_INTERNAL_API_KEY=<optional-server-side-check-key>
 
 SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 SUPABASE_SECRET_KEY=<sb_secret_... or legacy service_role JWT>
 SUPABASE_DEMO_LOCATION_ID=<locations.id>
 
@@ -50,7 +50,7 @@ ELEVENLABS_MODEL_ID=eleven_flash_v2_5
 
 Do not commit any real secret values. Put them in the deployment provider's environment variable UI. For local-only testing, put them in `.env.local`, which is gitignored.
 
-`VITE_HOSTLINE_INTERNAL_API_KEY` is bundled into the browser, so use it only for the private first-call test while the dashboard is not public. Before a public launch, replace this shared browser key with a server-side gateway or Supabase-authenticated voice-service admin endpoints.
+Dashboard-to-voice admin requests use the signed-in Supabase user's bearer token. Do not create a `VITE_HOSTLINE_INTERNAL_API_KEY`; browser-exposed internal keys are not a production-safe control.
 
 ## Supabase
 
@@ -83,7 +83,7 @@ npm run start:voice
 After deploy:
 
 ```bash
-HOSTLINE_INTERNAL_API_KEY=<same-secret> npm run check:voice -- https://voice.your-domain.com <locations.id>
+HOSTLINE_INTERNAL_API_KEY=<optional-server-side-check-key> npm run check:voice -- https://voice.your-domain.com <locations.id>
 ```
 
 The check should show:

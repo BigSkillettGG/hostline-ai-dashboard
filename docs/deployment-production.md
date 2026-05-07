@@ -13,7 +13,6 @@ VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 VITE_SUPABASE_DEMO_LOCATION_ID=<temporary-active-location-id>
 VITE_VOICE_SERVICE_URL=https://voice.your-domain.com
-VITE_HOSTLINE_INTERNAL_API_KEY=<same-value-as-voice-service>
 ```
 
 Keep the Supabase service-role key out of the dashboard. Browser requests should use the publishable key plus the signed-in user's access token so RLS applies.
@@ -26,9 +25,10 @@ PORT=8787
 PUBLIC_HTTP_BASE_URL=https://voice.your-domain.com
 PUBLIC_WS_BASE_URL=wss://voice.your-domain.com
 VOICE_SERVICE_ALLOWED_ORIGIN=https://app.your-domain.com
-HOSTLINE_INTERNAL_API_KEY=<random-strong-secret>
+HOSTLINE_INTERNAL_API_KEY=<optional-server-side-check-key>
 
 SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 SUPABASE_SECRET_KEY=<service-role-secret>
 SUPABASE_DEMO_LOCATION_ID=<temporary-active-location-id>
 
@@ -75,7 +75,7 @@ Required production checks:
 
 - Public HTTP and WebSocket URLs are set.
 - Dashboard origin is locked down; `VOICE_SERVICE_ALLOWED_ORIGIN=*` is not production-ready.
-- Internal API key is set on both dashboard and voice service.
+- Dashboard-to-voice admin requests are protected by Supabase user sessions.
 - Supabase service-role access is configured for the voice service.
 - OpenAI and ElevenLabs keys are present.
 - Twilio account SID/auth token are present.
@@ -96,7 +96,7 @@ Optional checks:
 6. Open the super admin Overview and confirm production readiness.
 7. Run `npm run check:voice -- https://voice.your-domain.com`.
 
-Set `HOSTLINE_INTERNAL_API_KEY` in the shell before running the check command to include live-call URL and TwiML preview checks.
+Set `HOSTLINE_INTERNAL_API_KEY` only in the voice-service environment, or in the shell before running the check command, if you want server-side deployment checks to include live-call URL and TwiML preview checks. Do not expose it as a dashboard `VITE_` variable.
 
 ## First Live Call Checklist
 

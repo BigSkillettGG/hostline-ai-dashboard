@@ -27,7 +27,7 @@ describe("voice service readiness", () => {
     expect(readiness.checks.filter((check) => check.required && !check.ready).map((check) => check.id)).toEqual([
       "public_http_base_url",
       "public_ws_base_url",
-      "internal_api_key",
+      "dashboard_admin_auth",
       "supabase_service_role",
       "openai",
       "elevenlabs",
@@ -40,7 +40,6 @@ describe("voice service readiness", () => {
     const readiness = getVoiceServiceReadiness({
       ...baseEnv,
       ELEVENLABS_API_KEY: "elevenlabs",
-      HOSTLINE_INTERNAL_API_KEY: "internal",
       OPENAI_API_KEY: "openai",
       PUBLIC_HTTP_BASE_URL: "https://voice.hostline.ai",
       PUBLIC_WS_BASE_URL: "wss://voice.hostline.ai",
@@ -58,7 +57,6 @@ describe("voice service readiness", () => {
     const readiness = getVoiceServiceReadiness({
       ...baseEnv,
       ELEVENLABS_API_KEY: "elevenlabs",
-      HOSTLINE_INTERNAL_API_KEY: "internal",
       OPENAI_API_KEY: "openai",
       PUBLIC_HTTP_BASE_URL: "https://voice.hostline.ai",
       PUBLIC_WS_BASE_URL: "wss://voice.hostline.ai",

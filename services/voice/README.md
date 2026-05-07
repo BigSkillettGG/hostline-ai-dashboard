@@ -50,8 +50,8 @@ Health endpoints:
 
 - `GET /health`: liveness plus readiness details. This should stay `200` so the host knows the process is alive.
 - `GET /ready`: returns `200` only when required production secrets, public URLs, CORS, and Twilio signature checks are ready.
-- `GET /twilio/live-call-config`: internal endpoint that returns the exact Twilio Voice webhook, ConversationRelay websocket, and callback URLs for a location.
-- `GET /twilio/twiml-preview`: internal endpoint that renders the TwiML Twilio will receive for the first live call.
+- `GET /twilio/live-call-config`: Supabase-authenticated admin endpoint that returns the exact Twilio Voice webhook, ConversationRelay websocket, and callback URLs for a location.
+- `GET /twilio/twiml-preview`: Supabase-authenticated admin endpoint that renders the TwiML Twilio will receive for the first live call.
 
 After deployment:
 
@@ -67,12 +67,6 @@ PUBLIC_WS_BASE_URL=wss://your-tunnel.ngrok.app
 VITE_VOICE_SERVICE_URL=https://your-tunnel.ngrok.app
 ```
 
-If you enable `HOSTLINE_INTERNAL_API_KEY` while testing the dashboard provisioning UI, set the matching dashboard env var only in trusted local or admin builds:
-
-```sh
-VITE_HOSTLINE_INTERNAL_API_KEY=dev-only-key
-```
-
 Set your Twilio phone number Voice webhook to:
 
 ```text
@@ -84,12 +78,14 @@ POST https://your-tunnel.ngrok.app/twilio/voice
 - Twilio account with ConversationRelay enabled and Predictive/Generative AI terms accepted.
 - Twilio phone number pointed at `/twilio/voice`.
 - `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN` for number search/provisioning.
-- `HOSTLINE_INTERNAL_API_KEY` for protecting internal provisioning endpoints in production.
+- Supabase Auth plus `SUPABASE_SECRET_KEY` for protecting dashboard admin endpoints in production.
+- Optional `HOSTLINE_INTERNAL_API_KEY` for server-side deployment checks such as `scripts/check-voice-deployment.mjs`. Do not expose it as a dashboard `VITE_` variable.
 - OpenAI API key for real LLM replies.
 - ElevenLabs voice ID for branded voice.
 - `TWILIO_SMS_FROM_NUMBER` or `TWILIO_MESSAGING_SERVICE_SID` for direct SMS staff alerts. `STAFF_ALERT_SMS_TO` remains the fallback recipient when no Supabase route is configured.
 - `STAFF_ALERT_WEBHOOK_URL` for webhook alerts. Email recipients configured in the dashboard are included in the webhook payload for your email/helpdesk/Zapier layer.
 - Supabase project with `docs/supabase-schema.sql` applied.
+- `SUPABASE_PUBLISHABLE_KEY` for validating Supabase user sessions.
 - `SUPABASE_SECRET_KEY` or legacy service role key stored only on the voice-service backend.
 - `SUPABASE_DEMO_LOCATION_ID` set to a real `locations.id` value.
 
@@ -105,7 +101,7 @@ When Supabase is configured, Twilio requests can include `locationId` in the web
 - Staff alert routing is loaded from `alert_routing_configs` per location when Supabase is configured. If no route exists, the service falls back to `STAFF_ALERT_SMS_TO`.
 - Staff alert outcomes are logged to `staff_alert_events` when Supabase is configured. Logging failures are warned but do not block the live call.
 
-When `HOSTLINE_INTERNAL_API_KEY` is set, callers must send `x-hostline-api-key`. In production, provisioning and ingestion worker endpoints are rejected unless this key is configured.
+In production, provisioning, menu ingestion, TwiML preview, live-call config, and hosted voice preview requests require a Supabase bearer token for a platform admin or a restaurant owner/admin. `HOSTLINE_INTERNAL_API_KEY` remains a server-side-only legacy path for deployment checks.
 
 ## Important Safety Defaults
 

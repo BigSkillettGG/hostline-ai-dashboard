@@ -10,6 +10,7 @@ const envSchema = z.object({
   VOICE_SERVICE_ALLOWED_ORIGIN: z.string().default("*"),
   HOSTLINE_INTERNAL_API_KEY: z.string().optional(),
   SUPABASE_URL: z.string().url().optional(),
+  SUPABASE_PUBLISHABLE_KEY: z.string().optional(),
   SUPABASE_SECRET_KEY: z.string().optional(),
   SUPABASE_DEMO_LOCATION_ID: z.string().uuid().optional(),
   TWILIO_ACCOUNT_SID: z.string().optional(),
@@ -82,10 +83,10 @@ export function getVoiceServiceReadiness(env: VoiceServiceEnv): VoiceServiceRead
       required: true,
     },
     {
-      detail: "Protects internal menu ingestion and Twilio provisioning endpoints.",
-      id: "internal_api_key",
-      label: "Internal API key",
-      ready: Boolean(env.HOSTLINE_INTERNAL_API_KEY),
+      detail: "Protects dashboard-to-voice admin endpoints with Supabase user sessions.",
+      id: "dashboard_admin_auth",
+      label: "Dashboard admin auth",
+      ready: Boolean(env.SUPABASE_URL && env.SUPABASE_SECRET_KEY),
       required: true,
     },
     {

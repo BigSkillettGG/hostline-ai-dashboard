@@ -1,3 +1,5 @@
+import { getSupabaseAccessToken } from "@/lib/auth";
+
 export interface VoiceServiceHealth {
   ok: boolean;
   service: string;
@@ -60,7 +62,6 @@ export interface LiveCallConfig {
 }
 
 export const voiceServiceBaseUrl = (import.meta.env.VITE_VOICE_SERVICE_URL ?? "").replace(/\/$/, "");
-const internalApiKey = import.meta.env.VITE_HOSTLINE_INTERNAL_API_KEY ?? "";
 
 export function isVoiceServiceConfigured() {
   return Boolean(voiceServiceBaseUrl);
@@ -88,7 +89,7 @@ export async function fetchLiveCallConfig(locationId?: string) {
   if (locationId?.trim()) params.set("locationId", locationId.trim());
   const query = params.toString() ? `?${params.toString()}` : "";
   const response = await fetch(`${voiceServiceBaseUrl}/twilio/live-call-config${query}`, {
-    headers: buildInternalHeaders(),
+    headers: buildVoiceAdminHeaders(),
   });
 
   if (!response.ok && response.status !== 503) {
@@ -108,7 +109,7 @@ export async function fetchTwiMLPreview(locationId?: string) {
   if (locationId?.trim()) params.set("locationId", locationId.trim());
   const query = params.toString() ? `?${params.toString()}` : "";
   const response = await fetch(`${voiceServiceBaseUrl}/twilio/twiml-preview${query}`, {
-    headers: buildInternalHeaders(),
+    headers: buildVoiceAdminHeaders(),
   });
 
   const text = await response.text();
@@ -128,6 +129,7 @@ export async function fetchVoicePreviewAudio(text: string) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      ...buildVoiceAdminHeaders(),
     },
     body: JSON.stringify({ text }),
   });
@@ -157,7 +159,7 @@ export async function searchAvailableVoicePhoneNumbers(input: {
   if (input.limit) params.set("limit", String(input.limit));
 
   const response = await fetch(`${voiceServiceBaseUrl}/telephony/available-numbers?${params.toString()}`, {
-    headers: buildInternalHeaders(),
+    headers: buildVoiceAdminHeaders(),
   });
 
   if (!response.ok) {
@@ -182,7 +184,7 @@ export async function provisionVoicePhoneNumber(input: {
     body: JSON.stringify(input),
     headers: {
       "Content-Type": "application/json",
-      ...buildInternalHeaders(),
+      ...buildVoiceAdminHeaders(),
     },
     method: "POST",
   });
@@ -204,7 +206,7 @@ export async function runNextMenuIngestionJob(input: { jobId?: string; locationI
     body: JSON.stringify(input),
     headers: {
       "Content-Type": "application/json",
-      ...buildInternalHeaders(),
+      ...buildVoiceAdminHeaders(),
     },
     method: "POST",
   });
@@ -217,6 +219,7 @@ export async function runNextMenuIngestionJob(input: { jobId?: string; locationI
   return (await response.json()) as RunMenuIngestionResult;
 }
 
-function buildInternalHeaders() {
-  return internalApiKey ? { "x-hostline-api-key": internalApiKey } : {};
+function buildVoiceAdminHeaders() {
+  const token = getSupabaseAccessToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }

@@ -76,7 +76,7 @@ When `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, and `VITE_SUPABASE_DE
 
 The Voice Agent settings page also persists locally and syncs to `agent_configs` when Supabase is configured. The voice service reads that table while building live restaurant call context.
 
-The onboarding Phone launch card can search and assign Twilio numbers through the voice service, then track direct-call, no-answer forwarding, and busy-line forwarding verification before promising no-busy-signal coverage. In local development the endpoints work without an internal key; for deployed environments, protect provisioning behind `HOSTLINE_INTERNAL_API_KEY` on the voice service and only expose a dashboard-side key from trusted admin/staging builds.
+The onboarding Phone launch card can search and assign Twilio numbers through the voice service, then track direct-call, no-answer forwarding, and busy-line forwarding verification before promising no-busy-signal coverage. In local development the endpoints work without Supabase admin auth; in production, dashboard-to-voice admin calls use the signed-in Supabase user's bearer token and require platform admin or restaurant owner/admin access.
 
 See:
 

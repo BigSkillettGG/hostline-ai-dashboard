@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { URL } from "node:url";
 import { WebSocketServer } from "ws";
+import { authorizeVoiceAdminRequest } from "./admin-auth";
 import { createCallStore } from "./call-store";
 import { createConversationRelayHandler } from "./conversation-relay";
 import { createElevenLabsPreview } from "./elevenlabs";
@@ -111,8 +112,13 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
   }
 
   if (req.method === "GET" && url.pathname === "/twilio/live-call-config") {
-    if (!isAuthorizedInternalRequest(req, currentEnv)) {
-      sendJson(res, 401, { error: "Unauthorized" });
+    const authorization = await authorizeVoiceAdminRequest({
+      currentEnv,
+      locationId: url.searchParams.get("locationId") ?? currentEnv.SUPABASE_DEMO_LOCATION_ID,
+      req,
+    });
+    if (!authorization.authorized) {
+      sendJson(res, authorization.status, { error: authorization.reason ?? "Unauthorized" });
       return;
     }
 
@@ -122,12 +128,13 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
   }
 
   if (req.method === "GET" && url.pathname === "/twilio/twiml-preview") {
-    if (!isAuthorizedInternalRequest(req, currentEnv)) {
-      sendText(res, 401, "Unauthorized");
+    const locationId = url.searchParams.get("locationId") ?? currentEnv.SUPABASE_DEMO_LOCATION_ID ?? "demo-location";
+    const authorization = await authorizeVoiceAdminRequest({ currentEnv, locationId, req });
+    if (!authorization.authorized) {
+      sendText(res, authorization.status, authorization.reason ?? "Unauthorized");
       return;
     }
 
-    const locationId = url.searchParams.get("locationId") ?? currentEnv.SUPABASE_DEMO_LOCATION_ID ?? "demo-location";
     const liveCallConfig = buildLiveCallConfig(currentEnv, locationId);
     if (!liveCallConfig.conversationRelayUrl) {
       sendXml(res, 503, buildUnavailableTwiML("HostLine AI needs PUBLIC_WS_BASE_URL before live calls."));
@@ -151,13 +158,18 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
   }
 
   if (req.method === "POST" && url.pathname === "/ingestion/run-next") {
-    if (!isAuthorizedInternalRequest(req, currentEnv)) {
-      sendJson(res, 401, { error: "Unauthorized" });
-      return;
-    }
-
     try {
       const body = parseJsonBody(await readRequestBody(req)) as { jobId?: string; locationId?: string };
+      const authorization = await authorizeVoiceAdminRequest({
+        currentEnv,
+        locationId: body.locationId ?? currentEnv.SUPABASE_DEMO_LOCATION_ID,
+        req,
+      });
+      if (!authorization.authorized) {
+        sendJson(res, authorization.status, { error: authorization.reason ?? "Unauthorized" });
+        return;
+      }
+
       const result = await menuIngestionService.runNext({
         jobId: body.jobId,
         locationId: body.locationId ?? currentEnv.SUPABASE_DEMO_LOCATION_ID,
@@ -170,8 +182,13 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
   }
 
   if (req.method === "GET" && url.pathname === "/telephony/available-numbers") {
-    if (!isAuthorizedInternalRequest(req, currentEnv)) {
-      sendJson(res, 401, { error: "Unauthorized" });
+    const authorization = await authorizeVoiceAdminRequest({
+      currentEnv,
+      locationId: url.searchParams.get("locationId") ?? currentEnv.SUPABASE_DEMO_LOCATION_ID,
+      req,
+    });
+    if (!authorization.authorized) {
+      sendJson(res, authorization.status, { error: authorization.reason ?? "Unauthorized" });
       return;
     }
 
@@ -190,11 +207,6 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
   }
 
   if (req.method === "POST" && url.pathname === "/telephony/provision-number") {
-    if (!isAuthorizedInternalRequest(req, currentEnv)) {
-      sendJson(res, 401, { error: "Unauthorized" });
-      return;
-    }
-
     try {
       const body = JSON.parse(await readRequestBody(req)) as {
         forwardingMode?: string;
@@ -204,6 +216,16 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       };
       if (!body.phoneNumber?.trim()) {
         sendJson(res, 400, { error: "phoneNumber is required" });
+        return;
+      }
+
+      const authorization = await authorizeVoiceAdminRequest({
+        currentEnv,
+        locationId: body.locationId ?? currentEnv.SUPABASE_DEMO_LOCATION_ID,
+        req,
+      });
+      if (!authorization.authorized) {
+        sendJson(res, authorization.status, { error: authorization.reason ?? "Unauthorized" });
         return;
       }
 
@@ -267,6 +289,16 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
 
   if (req.method === "POST" && url.pathname === "/voice/preview") {
     try {
+      const authorization = await authorizeVoiceAdminRequest({
+        currentEnv,
+        locationId: currentEnv.SUPABASE_DEMO_LOCATION_ID,
+        req,
+      });
+      if (!authorization.authorized) {
+        sendJson(res, authorization.status, { error: authorization.reason ?? "Unauthorized" });
+        return;
+      }
+
       const body = JSON.parse(await readRequestBody(req)) as { text?: string };
       const text = body.text?.trim() || demoRestaurantContext.greeting;
       const preview = await createElevenLabsPreview({ env: currentEnv, text });
@@ -323,14 +355,6 @@ function isValidTwilioUpgrade(req: IncomingMessage, currentEnv: VoiceServiceEnv)
   });
 }
 
-function isAuthorizedInternalRequest(req: IncomingMessage, currentEnv: VoiceServiceEnv) {
-  if (!currentEnv.HOSTLINE_INTERNAL_API_KEY) {
-    return currentEnv.NODE_ENV !== "production";
-  }
-
-  return req.headers["x-hostline-api-key"] === currentEnv.HOSTLINE_INTERNAL_API_KEY;
-}
-
 async function readRequestBody(req: IncomingMessage) {
   const chunks: Buffer[] = [];
   for await (const chunk of req) {
@@ -371,5 +395,5 @@ function applyCors(req: IncomingMessage, res: ServerResponse, currentEnv: VoiceS
   }
 
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-hostline-api-key");
+  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, x-hostline-api-key");
 }
