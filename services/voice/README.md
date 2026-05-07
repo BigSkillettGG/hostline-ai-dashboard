@@ -12,6 +12,7 @@ This service is the production path for inbound restaurant phone calls.
 - Receives ConversationRelay setup, prompt, DTMF, interrupt, and error messages.
 - Generates restaurant-host replies with OpenAI Responses API when `OPENAI_API_KEY` is set.
 - Falls back to deterministic restaurant-safe replies when OpenAI is not configured.
+- Uses a fast phone-host playbook before OpenAI for routine and high-risk calls such as complaints, vendor calls, lost items, delivery drivers, order changes, allergies, payment safety, and wrong numbers.
 - Times out slow OpenAI replies using `OPENAI_REPLY_TIMEOUT_MS` and falls back safely instead of leaving dead air.
 - Handles unclear audio, bad connections, and rude callers with short recovery replies and staff-review tasks when needed.
 - Persists calls and transcript turns to Supabase when the server has a secret key and location ID.

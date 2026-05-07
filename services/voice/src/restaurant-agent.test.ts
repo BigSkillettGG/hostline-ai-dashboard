@@ -1,8 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { demoRestaurantContext } from "./restaurant-context";
-import { buildRestaurantInstructions, fallbackRestaurantReply } from "./restaurant-agent";
+import { buildRestaurantInstructions, fallbackRestaurantReply, generateRestaurantReply } from "./restaurant-agent";
 
 describe("restaurant fallback replies", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("answers hours without an OpenAI key", () => {
     const reply = fallbackRestaurantReply("What time do you close?", demoRestaurantContext);
     expect(reply).toContain("Tuesday");
@@ -33,5 +37,22 @@ describe("restaurant fallback replies", () => {
     const instructions = buildRestaurantInstructions(demoRestaurantContext);
     expect(instructions).toContain("noisy phone audio");
     expect(instructions).toContain("If a caller is rude");
+  });
+
+  it("uses the fast playbook before calling OpenAI", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    const reply = await generateRestaurantReply({
+      callerUtterance: "I left my wallet there last night",
+      context: demoRestaurantContext,
+      env: {
+        OPENAI_API_KEY: "sk-test",
+        OPENAI_MODEL: "gpt-5-mini",
+        OPENAI_REPLY_TIMEOUT_MS: 4500,
+      },
+      transcript: [],
+    });
+
+    expect(reply).toContain("What item was lost");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

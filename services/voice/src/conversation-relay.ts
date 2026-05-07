@@ -21,6 +21,7 @@ import {
   type CapturedOrderItem,
 } from "./order-intake";
 import { captureReservationRequest, hasReservationIntent, type CapturedReservationRequest } from "./reservation-intake";
+import { matchPhonePlaybookReply } from "./restaurant-playbook";
 import type { RestaurantContextStore } from "./restaurant-context-store";
 import { demoRestaurantContext } from "./restaurant-context";
 import { generateRestaurantReply } from "./restaurant-agent";
@@ -668,46 +669,66 @@ export function classifyEscalationIntent(utterance: string): StaffAlertKind | nu
     return "complaint";
   }
 
+  if (/\b(doordash|uber eats|grubhub|delivery app).{0,60}\b(missing|wrong|late|never arrived|never delivered|not delivered|refund)\b/.test(normalized)) {
+    return "delivery_failure";
+  }
+
+  if (/\b(sales|vendor|supplier|wholesale|marketing|advertising|seo|linen|produce|distributor|beer rep|wine rep)\b/.test(normalized)) {
+    return "sales";
+  }
+
   if (
     /\b(cater|catering|private event|buyout|large party|wedding|corporate|banquet|alcohol|liquor|wine|cocktail|allergen|allergy|allergic|gluten|celiac|dairy|nut|peanut|shellfish)\b/.test(normalized)
   ) {
     return "low_confidence";
   }
 
-  if (/\b(human|person|someone|staff|owner|manager|call me back|callback|call back)\b/.test(normalized)) {
+  if (/\b(human|person|someone|staff|owner|manager|call me back|callback|call back|lost and found|lost my|left my|forgot my|job|hiring|application|resume|cancel|change|modify|reschedule)\b/.test(normalized)) {
     return "handoff";
   }
+
+  const playbookMatch = matchPhonePlaybookReply(utterance, demoRestaurantContext);
+  if (playbookMatch?.staffAlertKind) return playbookMatch.staffAlertKind;
 
   return null;
 }
 
 function staffAlertSummaryFor(kind: StaffAlertKind) {
   if (kind === "complaint") return "Complaint or refund risk detected.";
+  if (kind === "delivery_failure") return "Delivery app or order handoff issue detected.";
   if (kind === "low_confidence") return "Caller asked about a topic that needs staff review.";
+  if (kind === "sales") return "Vendor or sales call captured.";
   return "Caller asked for a human handoff.";
 }
 
 function staffTaskTitleFor(kind: StaffAlertKind) {
   if (kind === "complaint") return "Call back complaint guest";
+  if (kind === "delivery_failure") return "Review delivery issue";
   if (kind === "low_confidence") return "Review low-confidence call";
+  if (kind === "sales") return "Review vendor message";
   return "Follow up with caller";
 }
 
 function staffTaskTypeFor(kind: StaffAlertKind): StaffTaskType {
   if (kind === "complaint" || kind === "handoff") return "manager_callback";
+  if (kind === "delivery_failure") return "delivery_issue";
   if (kind === "low_confidence") return "low_confidence_review";
   return "general";
 }
 
 function staffTaskPriorityFor(kind: StaffAlertKind): StaffTaskPriority {
   if (kind === "complaint") return "urgent";
+  if (kind === "delivery_failure") return "high";
   if (kind === "handoff") return "high";
+  if (kind === "sales") return "low";
   return "normal";
 }
 
 function staffTaskDueMinutesFor(kind: StaffAlertKind) {
   if (kind === "complaint") return 10;
+  if (kind === "delivery_failure") return 15;
   if (kind === "handoff") return 15;
+  if (kind === "sales") return 240;
   return 45;
 }
 

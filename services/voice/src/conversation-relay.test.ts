@@ -20,6 +20,12 @@ describe("conversation relay staff-review triggers", () => {
     expect(classifyEscalationIntent("Can I bring wine for a large party?")).toBe("low_confidence");
   });
 
+  it("classifies sales, delivery app, and lost-item calls", () => {
+    expect(classifyEscalationIntent("I'm a linen vendor calling about your account")).toBe("sales");
+    expect(classifyEscalationIntent("My DoorDash order was never delivered")).toBe("delivery_failure");
+    expect(classifyEscalationIntent("I left my wallet there last night")).toBe("handoff");
+  });
+
   it("ignores ordinary restaurant questions", () => {
     expect(classifyEscalationIntent("What time do you close tonight?")).toBeNull();
     expect(classifyEscalationIntent("Can I order a margherita pizza for pickup?")).toBeNull();

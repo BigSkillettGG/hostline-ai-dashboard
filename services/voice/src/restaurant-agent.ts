@@ -1,4 +1,5 @@
 import type { VoiceServiceEnv } from "./env";
+import { matchPhonePlaybookReply } from "./restaurant-playbook";
 import type { RestaurantVoiceContext } from "./restaurant-context";
 import type { TranscriptTurn } from "./types";
 
@@ -10,6 +11,15 @@ export interface GenerateRestaurantReplyInput {
 }
 
 export async function generateRestaurantReply(input: GenerateRestaurantReplyInput) {
+  const playbookReply = matchPhonePlaybookReply(input.callerUtterance, input.context);
+  if (playbookReply) {
+    console.info("[voice-agent] playbook reply generated", {
+      replyLength: playbookReply.text.length,
+      scenario: playbookReply.scenario,
+    });
+    return playbookReply.text;
+  }
+
   if (!input.env.OPENAI_API_KEY) {
     return fallbackRestaurantReply(input.callerUtterance, input.context);
   }
@@ -76,6 +86,7 @@ export function buildRestaurantInstructions(context: RestaurantVoiceContext) {
     "Keep replies under two short sentences unless confirming an order.",
     "For multi-item orders, acknowledge captured items briefly and ask what else until the caller says they are done.",
     "If a caller is rude, stay calm and helpful. Do not argue, shame, or mirror profanity.",
+    "For wrong numbers, delivery drivers, vendor calls, lost items, order changes, complaints, and human requests, be brief and collect only the details staff need for follow-up.",
     "Never collect raw credit card numbers. Payment is pay at pickup unless a POS payment flow is explicitly connected.",
     "Never guarantee allergen safety. Severe allergies require staff confirmation.",
     "If a caller asks for refunds, complaints, catering, private events, alcohol policy, or a human, escalate.",
@@ -92,6 +103,9 @@ export function buildRestaurantInstructions(context: RestaurantVoiceContext) {
 }
 
 export function fallbackRestaurantReply(callerUtterance: string, context: RestaurantVoiceContext) {
+  const playbookReply = matchPhonePlaybookReply(callerUtterance, context);
+  if (playbookReply) return playbookReply.text;
+
   const utterance = callerUtterance.toLowerCase();
 
   if (utterance.includes("hour") || utterance.includes("open") || utterance.includes("close")) {
