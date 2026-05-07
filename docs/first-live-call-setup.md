@@ -86,6 +86,8 @@ After deploy:
 HOSTLINE_INTERNAL_API_KEY=<optional-server-side-check-key> npm run check:voice -- https://voice.your-domain.com <locations.id>
 ```
 
+The super admin Telephony page shows the same first-call readiness path in the dashboard. Use it as the no-terminal checklist once Lovable and the voice-service deploy have their environment variables set.
+
 The check should show:
 
 - Health: ok

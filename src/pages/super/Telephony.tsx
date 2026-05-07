@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { CheckCircle2, Copy, PhoneCall, RefreshCw, ServerCog, Webhook, Wifi, XCircle } from "lucide-react";
+import { CheckCircle2, CircleDashed, ClipboardCheck, Copy, PhoneCall, RefreshCw, ServerCog, Webhook, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader, PageBody } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { tenants } from "@/data/tenants";
+import { buildFirstCallReadiness, type FirstCallReadinessStep } from "@/domain/first-call-readiness";
 import {
   fetchLiveCallConfig,
   fetchTwiMLPreview,
@@ -51,6 +52,13 @@ export default function Telephony() {
   const config = liveCallQuery.data;
   const readyCount = healthQuery.data?.readinessChecks?.filter((check) => check.ready).length ?? 0;
   const totalChecks = healthQuery.data?.readinessChecks?.length ?? 0;
+  const firstCallReadiness = buildFirstCallReadiness({
+    health: healthQuery.data,
+    liveCallConfig: config,
+    locationId,
+    twimlPreview: twimlQuery.data,
+    voiceConfigured,
+  });
 
   return (
     <>
@@ -168,16 +176,44 @@ export default function Telephony() {
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-base">
-                  <Wifi className="h-4 w-4 text-primary" />
-                  Live call checklist
+                  <ClipboardCheck className="h-4 w-4 text-primary" />
+                  First-call readiness
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2">
-                <ChecklistRow ready={Boolean(config?.voiceWebhookUrl)} label="Webhook URL generated" />
-                <ChecklistRow ready={Boolean(config?.conversationRelayUrl)} label="Websocket URL generated" />
-                <ChecklistRow ready={Boolean(twimlQuery.data?.includes("<ConversationRelay"))} label="ConversationRelay TwiML renders" />
-                <ChecklistRow ready={Boolean(healthQuery.data?.productionReady)} label="Required service checks pass" />
-                <ChecklistRow ready={Boolean(config?.twilioSignatureRequired)} label="Twilio signatures enforced" />
+              <CardContent className="space-y-3">
+                <div className="flex items-center justify-between gap-3 rounded-md border border-border p-3">
+                  <div>
+                    <div className="text-sm font-medium">
+                      {firstCallReadiness.readyCount}/{firstCallReadiness.totalCount} automatic checks
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">{firstCallReadiness.nextAction}</div>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={
+                      firstCallReadiness.autoReady
+                        ? "border-success/30 bg-success/10 text-success"
+                        : "border-warning/30 bg-warning/10 text-warning"
+                    }
+                  >
+                    {firstCallReadiness.autoReady ? "Ready for Twilio" : `${firstCallReadiness.missingCount} missing`}
+                  </Badge>
+                </div>
+
+                <div className="space-y-2">
+                  {firstCallReadiness.steps.map((step) => (
+                    <ReadinessRow key={step.id} step={step} />
+                  ))}
+                </div>
+
+                <div className="border-t border-border pt-3">
+                  <div className="mb-2 text-xs font-medium uppercase text-muted-foreground">Manual setup</div>
+                  <div className="space-y-2">
+                    {firstCallReadiness.manualSteps.map((step) => (
+                      <ReadinessRow key={step.id} step={step} />
+                    ))}
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -221,11 +257,20 @@ function StatusRow({ label, ready, value }: { label: string; ready: boolean; val
   );
 }
 
-function ChecklistRow({ label, ready }: { label: string; ready: boolean }) {
+function ReadinessRow({ step }: { step: FirstCallReadinessStep }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
-      <div className="text-sm">{label}</div>
-      {ready ? <CheckCircle2 className="h-4 w-4 text-success" /> : <XCircle className="h-4 w-4 text-muted-foreground" />}
+    <div className="flex items-start justify-between gap-3 rounded-md border border-border px-3 py-2">
+      <div className="min-w-0">
+        <div className="text-sm font-medium">{step.label}</div>
+        <div className="mt-0.5 break-words text-xs text-muted-foreground">{step.detail}</div>
+      </div>
+      {step.status === "ready" ? (
+        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+      ) : step.status === "manual" ? (
+        <CircleDashed className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+      ) : (
+        <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+      )}
     </div>
   );
 }
