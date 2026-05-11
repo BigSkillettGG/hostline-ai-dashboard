@@ -46,6 +46,7 @@ interface RelaySession {
   callSid?: string;
   callerPhone?: string;
   context: RestaurantVoiceContext;
+  greetingSent: boolean;
   locationId?: string;
   orderCustomerName?: string;
   orderCreatedId?: string;
@@ -185,6 +186,7 @@ export function createConversationRelayHandler(
   return function handleConversationRelayConnection(ws: WebSocket, req: IncomingMessage) {
     let session: RelaySession = {
       context: demoRestaurantContext,
+      greetingSent: false,
       orderDraftItems: [],
       orderIntentSeen: false,
       unclearPromptCount: 0,
@@ -243,9 +245,11 @@ export function createConversationRelayHandler(
           callSid: session.callSid,
           callSessionKey: session.callSessionKey,
           from: session.callerPhone,
+          greetingSent: session.greetingSent,
           parentCallSid: session.parentCallSid,
           sessionId: session.id,
         });
+        maybeSendOpeningGreeting({ callStore, session, ws });
         return;
       }
 
@@ -543,6 +547,23 @@ function applySetupMessage(session: RelaySession, message: ConversationRelaySetu
 
 function getCallSessionKey(session: RelaySession) {
   return session.callSessionKey ?? session.parentCallSid?.trim() ?? session.callSid;
+}
+
+function maybeSendOpeningGreeting({
+  callStore,
+  session,
+  ws,
+}: {
+  callStore: CallStore;
+  session: RelaySession;
+  ws: WebSocket;
+}) {
+  if (session.greetingSent) return;
+
+  session.greetingSent = true;
+  const reply = session.context.greeting;
+  persistAgentTurn({ callStore, reply, session });
+  sendText(ws, reply);
 }
 
 function persistCallerTurn({

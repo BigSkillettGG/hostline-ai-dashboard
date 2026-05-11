@@ -7,6 +7,7 @@ describe("ConversationRelay TwiML", () => {
       actionUrl: "https://voice.hostline.test/twilio/conversation-ended",
       customParameters: { locationId: "loc_123" },
       language: "en-US",
+      speechTimeoutMs: 1800,
       transcriptionProvider: "Deepgram",
       ttsProvider: "ElevenLabs",
       ttsVoice: "voice123-flash_v2_5-1.0_0.5_0.8",
@@ -17,6 +18,7 @@ describe("ConversationRelay TwiML", () => {
     expect(xml).toContain('<ConversationRelay url="wss://voice.hostline.test/twilio/conversation-relay"');
     expect(xml).toContain('ttsProvider="ElevenLabs"');
     expect(xml).toContain('voice="voice123-flash_v2_5-1.0_0.5_0.8"');
+    expect(xml).toContain('speechTimeout="1800"');
     expect(xml).toContain('elevenlabsTextNormalization="on"');
     expect(xml).toContain('<Parameter name="locationId" value="loc_123" />');
   });
@@ -30,6 +32,7 @@ describe("ConversationRelay TwiML", () => {
       actionUrl: "https://voice.hostline.test/twilio/conversation-ended?locationId=loc_123&reconnectAttempt=1",
       customParameters: { locationId: "loc_123" },
       language: "en-US",
+      speechTimeoutMs: 1800,
       transcriptionProvider: "Deepgram",
       ttsProvider: "ElevenLabs",
       ttsVoice: "voice123-flash_v2_5-0.95_0.35_0.85",
@@ -37,6 +40,7 @@ describe("ConversationRelay TwiML", () => {
     });
 
     expect(xml).toContain("<ConversationRelay");
+    expect(xml).toContain('speechTimeout="1800"');
     expect(xml).not.toContain("welcomeGreeting=");
     expect(xml).not.toContain("welcomeGreetingInterruptible=");
   });

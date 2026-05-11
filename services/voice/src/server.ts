@@ -165,16 +165,16 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
 
     const restaurantContext = await restaurantContextStore.getContext(locationId);
     const ttsVoice = resolveConversationRelayTtsVoice(currentEnv, restaurantContext);
-    const twiml = buildConversationRelayTwiML({
-      actionUrl: liveCallConfig.actionUrl,
-      customParameters: { locationId },
-      language: currentEnv.TWILIO_LANGUAGE,
-      transcriptionProvider: currentEnv.TWILIO_TRANSCRIPTION_PROVIDER,
-      ttsProvider: currentEnv.TWILIO_TTS_PROVIDER,
-      ttsVoice,
-      websocketUrl: liveCallConfig.conversationRelayUrl,
-      welcomeGreeting: restaurantContext.greeting,
-    });
+      const twiml = buildConversationRelayTwiML({
+        actionUrl: liveCallConfig.actionUrl,
+        customParameters: { locationId },
+        language: currentEnv.TWILIO_LANGUAGE,
+        speechTimeoutMs: currentEnv.TWILIO_SPEECH_TIMEOUT_MS,
+        transcriptionProvider: currentEnv.TWILIO_TRANSCRIPTION_PROVIDER,
+        ttsProvider: currentEnv.TWILIO_TTS_PROVIDER,
+        ttsVoice,
+        websocketUrl: liveCallConfig.conversationRelayUrl,
+      });
 
     sendXml(res, 200, twiml);
     return;
@@ -305,11 +305,11 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
           locationId,
         },
         language: currentEnv.TWILIO_LANGUAGE,
+        speechTimeoutMs: currentEnv.TWILIO_SPEECH_TIMEOUT_MS,
         transcriptionProvider: currentEnv.TWILIO_TRANSCRIPTION_PROVIDER,
         ttsProvider: currentEnv.TWILIO_TTS_PROVIDER,
         ttsVoice,
         websocketUrl: liveCallConfig.conversationRelayUrl ?? `${currentEnv.PUBLIC_WS_BASE_URL}/twilio/conversation-relay`,
-        welcomeGreeting: restaurantContext.greeting,
       });
 
       sendXml(res, 200, twiml);
@@ -367,6 +367,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
           locationId,
         },
         language: currentEnv.TWILIO_LANGUAGE,
+        speechTimeoutMs: currentEnv.TWILIO_SPEECH_TIMEOUT_MS,
         transcriptionProvider: currentEnv.TWILIO_TRANSCRIPTION_PROVIDER,
         ttsProvider: currentEnv.TWILIO_TTS_PROVIDER,
         ttsVoice,

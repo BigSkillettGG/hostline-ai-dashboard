@@ -15,6 +15,7 @@ const baseEnv: VoiceServiceEnv = {
   TWILIO_API_BASE_URL: "https://api.twilio.com",
   TWILIO_DEFAULT_COUNTRY: "US",
   TWILIO_LANGUAGE: "en-US",
+  TWILIO_SPEECH_TIMEOUT_MS: 1800,
   TWILIO_TRANSCRIPTION_PROVIDER: "Deepgram",
   TWILIO_TTS_PROVIDER: "ElevenLabs",
   TWILIO_TTS_VOICE: "voice",

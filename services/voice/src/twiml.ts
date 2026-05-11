@@ -6,6 +6,7 @@ export interface ConversationRelayTwiMLConfig {
   ttsProvider: "Google" | "Amazon" | "ElevenLabs";
   ttsVoice: string;
   transcriptionProvider: "Google" | "Deepgram";
+  speechTimeoutMs?: number;
   customParameters?: Record<string, string | undefined>;
 }
 
@@ -22,6 +23,7 @@ export function buildConversationRelayTwiML(config: ConversationRelayTwiMLConfig
     ttsProvider: config.ttsProvider,
     voice: config.ttsVoice,
     transcriptionProvider: config.transcriptionProvider,
+    speechTimeout: config.speechTimeoutMs ? String(config.speechTimeoutMs) : undefined,
     interruptible: "speech",
     preemptible: "true",
     elevenlabsTextNormalization: config.ttsProvider === "ElevenLabs" ? "on" : undefined,
