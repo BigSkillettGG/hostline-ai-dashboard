@@ -5,12 +5,14 @@ import {
   buildOpenAIRealtimeAcceptPayload,
   buildOpenAIRealtimeInstructions,
   buildOpenAIRealtimeLiveCallConfig,
+  buildOpeningGreetingInstructions,
   buildOpenAIRealtimePreflight,
   buildRestaurantLocalTimeContext,
   extractOpenAIRealtimeCallId,
   extractOpenAIRealtimeCallerPhone,
   extractOpenAIRealtimeToolCalls,
   lookupRestaurantContext,
+  resolveOpenAIRealtimeSpeed,
   sendOpenAIRealtimeGuestConfirmation,
   verifyOpenAIWebhookSignature,
 } from "./openai-realtime-sip";
@@ -62,7 +64,10 @@ describe("OpenAI Realtime SIP", () => {
       type: "semantic_vad",
     });
     expect(payload.audio.output.voice).toBe("marin");
+    expect(payload.audio.output.speed).toBe(1.02);
     expect(payload.instructions).toContain("Never restart the opening greeting");
+    expect(payload.instructions).toContain("smiling restaurant host");
+    expect(payload.instructions).toContain("Avoid IVR cadence");
     expect(payload.tools[0].name).toBe("lookup_restaurant_context");
     expect(payload.tools.map((tool) => tool.name)).toContain("send_guest_confirmation");
   });
@@ -127,7 +132,23 @@ describe("OpenAI Realtime SIP", () => {
 
     expect(instructions).toContain("one continuous live phone call");
     expect(instructions).toContain("Say the opening greeting only once");
+    expect(instructions).toContain("Greeting energy");
     expect(instructions).toContain("Handle interruptions gracefully");
+  });
+
+  it("builds a warm opening greeting prompt without forcing robotic exactness", () => {
+    const instructions = buildOpeningGreetingInstructions(demoRestaurantContext);
+
+    expect(instructions).toContain("Warmly greet the caller once");
+    expect(instructions).toContain("smile in your voice");
+    expect(instructions).toContain(demoRestaurantContext.greeting);
+    expect(instructions).not.toContain("Say exactly");
+  });
+
+  it("clamps realtime playback speed to a safe phone range", () => {
+    expect(resolveOpenAIRealtimeSpeed({ ...baseEnv, OPENAI_REALTIME_SPEED: "1.08" })).toBe(1.08);
+    expect(resolveOpenAIRealtimeSpeed({ ...baseEnv, OPENAI_REALTIME_SPEED: "2" })).toBe(1.12);
+    expect(resolveOpenAIRealtimeSpeed({ ...baseEnv, OPENAI_REALTIME_SPEED: "fast" })).toBe(1.02);
   });
 
   it("extracts the call id from supported incoming webhook shapes", () => {

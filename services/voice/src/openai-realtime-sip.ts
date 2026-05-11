@@ -21,6 +21,7 @@ type OpenAIRealtimeEnv = Pick<
   | "OPENAI_REALTIME_FEMALE_VOICE"
   | "OPENAI_REALTIME_MALE_VOICE"
   | "OPENAI_REALTIME_MODEL"
+  | "OPENAI_REALTIME_SPEED"
   | "OPENAI_REALTIME_VOICE"
   | "OPENAI_WEBHOOK_SECRET"
   | "PUBLIC_HTTP_BASE_URL"
@@ -377,7 +378,7 @@ export function buildOpenAIRealtimeAcceptPayload({
         },
       },
       output: {
-        speed: 1,
+        speed: resolveOpenAIRealtimeSpeed(env),
         voice,
       },
     },
@@ -406,8 +407,11 @@ export function buildOpenAIRealtimeInstructions(
     callerPhoneContext,
     "Realtime phone behavior:",
     "This is one continuous live phone call. Never restart the opening greeting in the middle of the call.",
-    "Say the opening greeting only once, when the call begins.",
-    "Use natural restaurant-host pacing. Short acknowledgements like 'Sure', 'Absolutely', 'One moment', and 'Let me check that' are okay when they fit.",
+    "Say the opening greeting only once, when the call begins. Make it sound welcoming and lightly upbeat, like a smiling restaurant host answering the phone.",
+    "Voice style: warm, polished, friendly, and conversational. Avoid IVR cadence, monotone delivery, robotic precision, or over-enunciating the restaurant name.",
+    "Greeting energy: the first line should feel a little brighter than the rest of the call, but still natural and not theatrical.",
+    "Pacing: speak briskly enough for a phone call, with varied intonation and short sentence chunks. Do not drag out 'Olive and Ember'.",
+    "Use natural restaurant-host acknowledgements like 'Sure', 'Absolutely', 'Of course', 'One moment', and 'Let me check that' when they fit.",
     "If the caller pauses, wait naturally. If silence continues, ask a gentle continuation question such as 'Take your time. What else can I help you with?'",
     "Handle interruptions gracefully. If the caller cuts you off, stop and answer their latest request.",
     "Use the lookup_restaurant_context tool for specials, hours, parking, directions, menu, reservation policy, pickup timing, payment, allergies, delivery drivers, lost items, complaints, or anything policy-like.",
@@ -603,7 +607,7 @@ function startSidebandSocket({
     });
     sendRealtimeEvent(socket, {
       response: {
-        instructions: `Say exactly this once, then wait for the caller: ${context.greeting}`,
+        instructions: buildOpeningGreetingInstructions(context),
       },
       type: "response.create",
     });
@@ -643,6 +647,16 @@ function startSidebandSocket({
     activeSockets.delete(callId);
     console.error("[openai-realtime] sideband failed", { callId, error });
   });
+}
+
+export function buildOpeningGreetingInstructions(context: RestaurantVoiceContext) {
+  return [
+    "Warmly greet the caller once, then stop and listen.",
+    "Sound like a friendly, capable restaurant host with a smile in your voice.",
+    "Use this greeting content, but deliver it naturally rather than like a script:",
+    context.greeting,
+    "Keep the greeting concise and lightly energetic. Do not add extra menu, hours, or reservation information.",
+  ].join(" ");
 }
 
 async function handleOpenAIRealtimeToolCalls({
@@ -989,6 +1003,12 @@ export function buildRestaurantLocalTimeContext(context: RestaurantVoiceContext,
 
 function resolveOpenAIRealtimeModel(env: OpenAIRealtimeEnv) {
   return env.OPENAI_REALTIME_MODEL?.trim() || OPENAI_REALTIME_DEFAULT_MODEL;
+}
+
+export function resolveOpenAIRealtimeSpeed(env: OpenAIRealtimeEnv) {
+  const speed = Number.parseFloat(env.OPENAI_REALTIME_SPEED ?? "1.02");
+  if (!Number.isFinite(speed)) return 1.02;
+  return Math.min(1.12, Math.max(0.9, speed));
 }
 
 function resolveOpenAIRealtimeVoice(env: OpenAIRealtimeEnv, context: RestaurantVoiceContext) {
