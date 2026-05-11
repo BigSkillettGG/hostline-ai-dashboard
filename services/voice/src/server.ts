@@ -18,6 +18,7 @@ import {
 import { createMenuIngestionService } from "./menu-ingestion-service";
 import { createStaffNotificationService } from "./notification-service";
 import { createOpenAIRealtimeSipService } from "./openai-realtime-sip";
+import { createPlatformIntegrationRegistry } from "./platform-integrations";
 import { createPhoneNumberStore } from "./phone-number-store";
 import { createRestaurantContextStore } from "./restaurant-context-store";
 import { createTelephonyService } from "./telephony";
@@ -35,6 +36,7 @@ const telephonyService = createTelephonyService(env);
 const staffNotificationService = createStaffNotificationService(env);
 const guestConfirmationService = createGuestConfirmationService(env);
 const menuIngestionService = createMenuIngestionService(env);
+const platformIntegrationRegistry = createPlatformIntegrationRegistry(env);
 const openAIRealtimeSipService = createOpenAIRealtimeSipService(env, restaurantContextStore, {
   guestConfirmationService,
 });
@@ -120,6 +122,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       ),
       menuIngestionConfigured: menuIngestionService.configured,
       openAIRealtimeSipConfigured: openAIRealtimeSipService.configured,
+      platformIntegrations: platformIntegrationRegistry.summary,
       twilioProvisioningConfigured: telephonyService.configured,
       staffAlertsConfigured: staffNotificationService.configured,
       guestConfirmationsConfigured: guestConfirmationService.configured,
@@ -136,6 +139,18 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       readinessChecks: readiness.checks,
       service: "hostline-voice",
     });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/integrations/platforms") {
+    const locationId = url.searchParams.get("locationId") ?? currentEnv.SUPABASE_DEMO_LOCATION_ID;
+    const authorization = await authorizeVoiceAdminRequest({ currentEnv, locationId, req });
+    if (!authorization.authorized) {
+      sendJson(res, authorization.status, { error: authorization.reason ?? "Unauthorized" });
+      return;
+    }
+
+    sendJson(res, 200, createPlatformIntegrationRegistry(currentEnv));
     return;
   }
 

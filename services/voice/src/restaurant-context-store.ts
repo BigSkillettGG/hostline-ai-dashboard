@@ -121,18 +121,19 @@ export function buildRestaurantContext({
     ...mapKnowledgeSections(knowledgeSections),
     ...buildDraftKnowledgeSections(draft),
   ];
+  const mappedFaqs = mapFaqs(faqs);
   const locationPolicy =
     location?.address?.trim() ?? stringValue(draft.primaryLocation) ?? "The restaurant address has not been configured yet.";
   const parkingPolicy = stringValue(draft.parking) ?? demoRestaurantContext.policies.parking;
 
   return {
-    defaultPickupEtaMinutes: parseMinutes(stringValue(draft.defaultPickupEta)),
-    faqs: mapFaqs(faqs),
+    defaultPickupEtaMinutes: parseMinutes(stringValue(draft.defaultPickupEta)) ?? demoRestaurantContext.defaultPickupEtaMinutes,
+    faqs: mappedFaqs.length ? mappedFaqs : demoRestaurantContext.faqs,
     greeting: renderTemplate(greetingTemplate, { hostName, restaurantName }),
     hostName,
-    knowledgeSections: mappedKnowledgeSections,
+    knowledgeSections: mappedKnowledgeSections.length ? mappedKnowledgeSections : demoRestaurantContext.knowledgeSections,
     menuHighlights: menuHighlights.length ? menuHighlights : demoRestaurantContext.menuHighlights,
-    menuItems: menu,
+    menuItems: menu.length ? menu : demoRestaurantContext.menuItems,
     policies: {
       allergies: stringValue(draft.allergyPolicy) ?? demoRestaurantContext.policies.allergies,
       complaints: buildComplaintPolicy(draft),

@@ -20,6 +20,9 @@ export default function Integrations() {
     (acc[i.category] ||= [] as any).push(i);
     return acc;
   }, {});
+  const openRequiredEnv = open && "requiredEnv" in open ? open.requiredEnv : [];
+  const openStatus = open ? statusMap[open.status] : null;
+  const OpenStatusIcon = openStatus?.icon;
 
   return (
     <>
@@ -72,7 +75,7 @@ export default function Integrations() {
           </DialogHeader>
           <div className="space-y-4">
             <ol className="space-y-3">
-              {["Authorize", "Map data", "Test", "Done"].map((step, i) => (
+              {["Add credentials", "Map fields", "Run test", "Enable live sync"].map((step, i) => (
                 <li key={step} className="flex items-center gap-3">
                   <div className={cn(
                     "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
@@ -82,10 +85,30 @@ export default function Integrations() {
                 </li>
               ))}
             </ol>
-            <p className="text-xs text-muted-foreground">This integration is a UI placeholder for now.</p>
+            {openStatus && (
+              <div className="rounded-md border bg-muted/30 p-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Current status</div>
+                <div className="mt-1 flex items-center gap-2 text-sm">
+                  <Badge variant="outline" className={cn("gap-1", openStatus.cls)}>
+                    {OpenStatusIcon && <OpenStatusIcon className="h-3 w-3" />}{openStatus.label}
+                  </Badge>
+                  <span className="text-muted-foreground">{open?.desc}</span>
+                </div>
+              </div>
+            )}
+            {openRequiredEnv.length > 0 && (
+              <div className="rounded-md border p-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Credential keys</div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {openRequiredEnv.map((key) => (
+                    <Badge key={key} variant="secondary" className="font-mono text-[11px]">{key}</Badge>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => setOpen(null)}>Cancel</Button>
-              <Button onClick={() => setOpen(null)}>Continue</Button>
+              <Button onClick={() => setOpen(null)}><Plus className="mr-2 h-4 w-4" />Continue</Button>
             </div>
           </div>
         </DialogContent>

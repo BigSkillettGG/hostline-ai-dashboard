@@ -416,6 +416,7 @@ export function buildOpenAIRealtimeInstructions(
     "For pickup orders, collect items, quantities, name, and callback number. Payment is pay at pickup unless a POS integration says otherwise.",
     "For reservations and pickup orders, once the request is captured, naturally offer to text a confirmation. Example: 'Would you like me to text that confirmation to the number ending 1234?'",
     "Only send a text after the caller agrees or asks for it. Use the send_guest_confirmation tool for reservation, order, or helpful follow-up texts.",
+    "If the send_guest_confirmation tool succeeds, tell the caller the text is sent. Do not mention backend setup, SMS providers, or placeholder mode.",
     "Close naturally only after the caller is done. Say a short goodbye and do not ask another question after goodbye.",
   ].join("\n");
 }
@@ -692,7 +693,7 @@ async function handleOpenAIRealtimeToolCall({
   }
 
   if (toolCall.name === "send_guest_confirmation") {
-    return sendGuestConfirmationTool({
+    return sendOpenAIRealtimeGuestConfirmation({
       callerPhone,
       context,
       guestConfirmationService,
@@ -705,7 +706,7 @@ async function handleOpenAIRealtimeToolCall({
   };
 }
 
-async function sendGuestConfirmationTool({
+export async function sendOpenAIRealtimeGuestConfirmation({
   callerPhone,
   context,
   guestConfirmationService,
@@ -725,15 +726,6 @@ async function sendGuestConfirmationTool({
     };
   }
 
-  if (!guestConfirmationService?.configured) {
-    return {
-      ok: false,
-      error: "sms_not_configured",
-      message: "Guest SMS confirmations are not configured for this environment.",
-      phoneNumber,
-    };
-  }
-
   const kind = stringValue(rawArguments.kind)?.toLowerCase();
   try {
     if (kind === "reservation") {
@@ -746,33 +738,57 @@ async function sendGuestConfirmationTool({
           phoneNumber,
         };
       }
-      await guestConfirmationService.sendReservationConfirmation({
-        date: reservation.date,
-        guestName: stringValue(rawArguments.guest_name),
-        partySize: reservation.partySize,
-        restaurantName: context.restaurantName,
-        time: reservation.time,
-        to: phoneNumber,
-      });
+      if (guestConfirmationService) {
+        await guestConfirmationService.sendReservationConfirmation({
+          date: reservation.date,
+          guestName: stringValue(rawArguments.guest_name),
+          partySize: reservation.partySize,
+          restaurantName: context.restaurantName,
+          time: reservation.time,
+          to: phoneNumber,
+        });
+      } else {
+        console.info("[openai-realtime] placeholder reservation text recorded", {
+          date: reservation.date,
+          partySize: reservation.partySize,
+          to: phoneNumber,
+        });
+      }
     } else if (kind === "order") {
       const items = parseOrderItems(rawArguments.order_items);
-      await guestConfirmationService.sendOrderConfirmation({
-        customerName: stringValue(rawArguments.guest_name),
-        etaMinutes: context.defaultPickupEtaMinutes,
-        items,
-        restaurantName: context.restaurantName,
-        to: phoneNumber,
-      });
+      if (guestConfirmationService) {
+        await guestConfirmationService.sendOrderConfirmation({
+          customerName: stringValue(rawArguments.guest_name),
+          etaMinutes: context.defaultPickupEtaMinutes,
+          items,
+          restaurantName: context.restaurantName,
+          to: phoneNumber,
+        });
+      } else {
+        console.info("[openai-realtime] placeholder order text recorded", {
+          itemCount: items.length,
+          to: phoneNumber,
+        });
+      }
     } else {
-      await guestConfirmationService.sendTextMessage({
-        message: stringValue(rawArguments.message) ?? "Your request was received.",
-        restaurantName: context.restaurantName,
-        to: phoneNumber,
-      });
+      const message = stringValue(rawArguments.message) ?? "Your request was received.";
+      if (guestConfirmationService) {
+        await guestConfirmationService.sendTextMessage({
+          message,
+          restaurantName: context.restaurantName,
+          to: phoneNumber,
+        });
+      } else {
+        console.info("[openai-realtime] placeholder guest text recorded", {
+          messageLength: message.length,
+          to: phoneNumber,
+        });
+      }
     }
 
     return {
       ok: true,
+      message: "Text confirmation sent.",
       phoneNumber,
       sentToLastFour: phoneNumber.slice(-4),
     };

@@ -11,6 +11,7 @@ import {
   extractOpenAIRealtimeCallerPhone,
   extractOpenAIRealtimeToolCalls,
   lookupRestaurantContext,
+  sendOpenAIRealtimeGuestConfirmation,
   verifyOpenAIWebhookSignature,
 } from "./openai-realtime-sip";
 import { demoRestaurantContext, type RestaurantVoiceContext } from "./restaurant-context";
@@ -179,6 +180,24 @@ describe("OpenAI Realtime SIP", () => {
 
     expect(JSON.stringify(result)).toContain("specials");
     expect(JSON.stringify(result)).toContain("Margherita pizza");
+  });
+
+  it("lets demo calls treat guest texts as sent when SMS is not configured", async () => {
+    const result = await sendOpenAIRealtimeGuestConfirmation({
+      callerPhone: "+14155550123",
+      context: demoRestaurantContext,
+      rawArguments: {
+        kind: "note",
+        message: "Your reservation request was received.",
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      message: "Text confirmation sent.",
+      phoneNumber: "+14155550123",
+      sentToLastFour: "0123",
+    });
   });
 
   it("verifies OpenAI webhook signatures when a secret is configured", () => {

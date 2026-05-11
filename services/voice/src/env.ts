@@ -49,6 +49,25 @@ const envSchema = z.object({
   ELEVENLABS_MICHAEL_VOICE_ID: z.string().default("ljX1ZrXuDIIRVcmiVSyR"),
   ELEVENLABS_MODEL_ID: z.string().default("eleven_flash_v2_5"),
   ELEVENLABS_OUTPUT_FORMAT: z.string().default("mp3_44100_128"),
+  TOAST_CLIENT_ID: z.string().optional(),
+  TOAST_CLIENT_SECRET: z.string().optional(),
+  TOAST_RESTAURANT_GUID: z.string().optional(),
+  SQUARE_ACCESS_TOKEN: z.string().optional(),
+  SQUARE_LOCATION_ID: z.string().optional(),
+  CLOVER_ACCESS_TOKEN: z.string().optional(),
+  CLOVER_MERCHANT_ID: z.string().optional(),
+  OPENTABLE_CLIENT_ID: z.string().optional(),
+  OPENTABLE_CLIENT_SECRET: z.string().optional(),
+  OPENTABLE_RESTAURANT_ID: z.string().optional(),
+  RESY_API_KEY: z.string().optional(),
+  RESY_VENUE_ID: z.string().optional(),
+  SEVENROOMS_CLIENT_ID: z.string().optional(),
+  SEVENROOMS_CLIENT_SECRET: z.string().optional(),
+  SEVENROOMS_VENUE_ID: z.string().optional(),
+  TOCK_API_KEY: z.string().optional(),
+  TOCK_BUSINESS_ID: z.string().optional(),
+  YELP_GUEST_MANAGER_API_KEY: z.string().optional(),
+  YELP_BUSINESS_ID: z.string().optional(),
 });
 
 export type VoiceServiceEnv = z.infer<typeof envSchema>;
@@ -156,6 +175,30 @@ export function getVoiceServiceReadiness(env: VoiceServiceEnv): VoiceServiceRead
       id: "staff_alerts",
       label: "Staff alert destination",
       ready: Boolean(env.STAFF_ALERT_SMS_TO || env.STAFF_ALERT_WEBHOOK_URL),
+      required: false,
+    },
+    {
+      detail: "Connects captured pickup orders to a restaurant order platform such as Toast, Square, or Clover.",
+      id: "ordering_platform",
+      label: "Ordering platform integration",
+      ready: Boolean(
+        (env.TOAST_CLIENT_ID && env.TOAST_CLIENT_SECRET && env.TOAST_RESTAURANT_GUID) ||
+          (env.SQUARE_ACCESS_TOKEN && env.SQUARE_LOCATION_ID) ||
+          (env.CLOVER_ACCESS_TOKEN && env.CLOVER_MERCHANT_ID),
+      ),
+      required: false,
+    },
+    {
+      detail: "Connects reservation requests to a restaurant booking platform such as OpenTable, Resy, SevenRooms, Tock, or Yelp Guest Manager.",
+      id: "reservation_platform",
+      label: "Reservation platform integration",
+      ready: Boolean(
+        (env.OPENTABLE_CLIENT_ID && env.OPENTABLE_CLIENT_SECRET && env.OPENTABLE_RESTAURANT_ID) ||
+          (env.RESY_API_KEY && env.RESY_VENUE_ID) ||
+          (env.SEVENROOMS_CLIENT_ID && env.SEVENROOMS_CLIENT_SECRET && env.SEVENROOMS_VENUE_ID) ||
+          (env.TOCK_API_KEY && env.TOCK_BUSINESS_ID) ||
+          (env.YELP_GUEST_MANAGER_API_KEY && env.YELP_BUSINESS_ID),
+      ),
       required: false,
     },
   ];

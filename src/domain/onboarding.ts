@@ -558,7 +558,11 @@ export const sampleOnboardingDraft: OnboardingDraft = {
   deliveryDriverPolicy: "Delivery drivers check in at the pickup shelf with the guest name and app name.",
   deliveryPolicy: "Direct pickup only. DoorDash and Uber Eats issues should start in the app, then staff can review the details.",
   donationPressPolicy: "Collect the organization, request, deadline, and contact info for owner review.",
+  drinkRules:
+    "Cocktails are dine-in only except sealed wine bottles where allowed. Non-alcoholic spritzes and espresso drinks are available. Last call is 30 minutes before close.",
   escalationPhone: "+1 (415) 555-0148",
+  feesAndRules:
+    "Corkage is $25 per bottle with a two-bottle limit. Cake plating is $2 per guest. Service animals only. Smart casual dress. Wheelchair accessible entrance and restroom.",
   firstTestCall: "Ask hours, place a pickup order, ask about Mother's Day reservations, then check dashboard.",
   forwardingMode: "Forward only unanswered calls",
   hiringPolicy: "Applicants can email a resume or stop by Tuesday through Thursday between 2 and 4 PM.",
@@ -569,27 +573,42 @@ export const sampleOnboardingDraft: OnboardingDraft = {
   lostAndFoundPolicy: "Collect item description, visit date and time, where they sat, name, and callback number.",
   mainPhone: "+1 (415) 555-0148",
   menuCategories: "Starters, wood-fired pizza, pasta, dessert, cocktails, wine, beer, and NA drinks.",
+  menuUploadNotes: "Dinner menu PDF, brunch photo menu, cocktail list spreadsheet, and current specials sheet.",
   menuUrl: "https://oliveandember.example/menu",
   modifiers: "Gluten-free crust +$4, light cheese, no anchovy, add chicken +$6.",
   orderChangePolicy: "Collect the order name, phone number, requested change, and send staff for confirmation.",
   orderDestination: "Staff review queue",
+  orderingCutoffs: "Kitchen stops new pickup orders 30 minutes before close. Pizza and pasta are unavailable after the kitchen closes.",
   parking: "Metered street parking on Valencia. Paid lot at 17th and Valencia.",
   partyRules: "Auto-confirm up to 6 with availability. Parties 8 or more need manager confirmation.",
   paymentPolicy: "Pay at pickup. No card numbers over the phone.",
   primaryLocation: "182 Valencia St, San Francisco, CA 94103",
+  privateEvents: "Collect event date, guest count, budget range, dining style, contact name, phone, email, and preferred follow-up time.",
   regularHours: "Mon closed, Tue-Thu 5-10 PM, Fri 5-11 PM, Sat noon-11 PM, Sun noon-9 PM.",
   reservationChangePolicy: "Collect reservation name, date, time, party size, requested change, and send to staff.",
   reservationProvider: "OpenTable",
   restaurantName: "Olive & Ember",
   salesManagerEmail: "owner@oliveandember.example",
+  servicePeriods:
+    "Dinner Tue-Fri 5 PM to close. Saturday and Sunday brunch noon to 2 PM. Saturday dinner 5 PM to close. Bar opens at 4 PM Tue-Fri.",
+  smsConfirmations: true,
+  specialsSchedule:
+    "Tonight's specials rotate daily. Happy hour Tue-Fri 4-6 PM. Live jazz Thu 7-9 PM. Acoustic guitar Sun 5-7 PM.",
   specialReservationDays: "Mother's Day brunch uses a special prix fixe menu and requires staff confirmation.",
   takeOrders: true,
   takeReservations: true,
+  timedPricing:
+    "Happy hour Tue-Fri 4-6 PM at the bar and patio: $9 spritzes, $8 house wine, $6 beer, and $10 margherita pizzettes. Brunch-only items are Sat-Sun noon-2 PM.",
   timezone: "America/Los_Angeles",
   tone: "Warm",
+  upsellRules:
+    "Suggest tiramisu or affogato with pasta orders, sparkling water with larger pickup orders, and no more than one upsell after the caller declines.",
   vendorCallPolicy: "Collect company, caller name, reason, phone, and email, then route to the owner.",
   voiceGender: "Female - Eve",
   waitlistPolicy: "Walk-ins are welcome, but live wait times change quickly and are confirmed at the door.",
+  offerComplaintCallback: true,
+  customFaqs:
+    "Do you have live music? Do you have patio seating? What are tonight's specials? Do you sell gift cards? Can I bring a cake? Do you have vegan options? Where should delivery drivers go?",
 };
 
 export function calculateOnboardingProgress(
