@@ -12,6 +12,10 @@ describe("restaurant phone playbook", () => {
       scenario: "parking",
       text: expect.stringContaining("Metered"),
     });
+    expect(matchPhonePlaybookReply("Are there any specials tonight?", demoRestaurantContext)).toMatchObject({
+      scenario: "specials",
+      text: expect.stringContaining("specials"),
+    });
   });
 
   it("keeps allergy and payment handling conservative", () => {

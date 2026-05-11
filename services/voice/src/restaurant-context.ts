@@ -78,5 +78,6 @@ export const demoRestaurantContext: RestaurantVoiceContext = {
     reservations: "Reservations can be requested by phone. Large parties need staff confirmation.",
     allergies: "Severe allergies require staff confirmation because cross-contact is possible.",
     parking: "Metered street parking is available nearby, with a paid lot at 17th and Valencia.",
+    specials: "Tonight's specials are not configured yet. Staff can confirm current specials during service.",
   },
 };

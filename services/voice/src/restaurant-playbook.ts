@@ -27,6 +27,7 @@ type PolicyKey =
   | "reservation_changes"
   | "reservations"
   | "sales"
+  | "specials"
   | "waitlist";
 
 export function matchPhonePlaybookReply(
@@ -216,6 +217,14 @@ export function matchPhonePlaybookReply(
     );
   }
 
+  if (/\b(special|specials|special menu|daily special|tonight's special|tonights special|happy hour|prix fixe|featured dish|features tonight)\b/.test(normalized)) {
+    return reply(
+      "specials",
+      policy(context, "specials") ??
+        "I do not have tonight's specials in front of me yet. I can help with the regular menu, or staff can confirm current specials when you arrive.",
+    );
+  }
+
   if (/\b(reservation|reserve|book a table|table for)\b/.test(normalized)) {
     return reply(
       "reservation",
@@ -243,7 +252,7 @@ export function matchPhonePlaybookReply(
     );
   }
 
-  if (/\b(hour|open|close|closing|tonight|today)\b/.test(normalized)) {
+  if (/\b(hour|hours|open|opened|close|closed|closing)\b/.test(normalized)) {
     const hours = policy(context, "hours");
     if (hours) return reply("hours", hours);
   }

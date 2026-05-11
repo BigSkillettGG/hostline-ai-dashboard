@@ -86,6 +86,7 @@ describe("restaurant context store", () => {
           reservationChangePolicy: "Reservation changes need name, date, time, and requested update.",
           reservationProvider: "Manual requests only",
           restaurantName: "Saffron Table",
+          specialsSchedule: "Chef's curry special is available Friday dinner only.",
           timezone: "America/New_York",
           vendorCallPolicy: "Vendors should leave company, reason, phone, and email for the owner.",
           voiceGender: "Male - Michael",
@@ -120,6 +121,7 @@ describe("restaurant context store", () => {
     expect(context.policies.order_changes).toContain("Pickup order changes");
     expect(context.policies.reservation_changes).toContain("Reservation changes");
     expect(context.policies.sales).toContain("Vendors should leave");
+    expect(context.policies.specials).toContain("Chef's curry special");
     expect(context.policies.waitlist).toContain("quoted waits");
     expect(context.faqs).toEqual([
       {

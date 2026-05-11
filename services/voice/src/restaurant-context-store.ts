@@ -166,6 +166,7 @@ export function buildRestaurantContext({
         "Reservation changes and cancellations need staff confirmation before they are promised.",
       reservations: buildReservationPolicy(draft, agentConfig),
       sales: buildVendorPolicy(draft),
+      specials: buildSpecialsPolicy(draft),
       waitlist:
         stringValue(draft.waitlistPolicy) ??
         "Live wait times can change quickly, so staff should confirm the wait when the guest arrives.",
@@ -431,6 +432,16 @@ function buildMenuPolicy(draft: OnboardingDraft, categoryNames: string) {
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+function buildSpecialsPolicy(draft: OnboardingDraft) {
+  return [
+    stringValue(draft.specialsSchedule),
+    stringValue(draft.timedPricing) && `Timed pricing: ${stringValue(draft.timedPricing)}.`,
+    stringValue(draft.holidayExceptions) && `Special days: ${stringValue(draft.holidayExceptions)}.`,
+  ]
+    .filter(Boolean)
+    .join(" ") || demoRestaurantContext.policies.specials;
 }
 
 function mapMenuItems(rows: SupabaseMenuItemRow[]): RestaurantMenuItem[] {
