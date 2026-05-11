@@ -20,10 +20,17 @@ export interface GuestReservationConfirmationInput {
   to?: string;
 }
 
+export interface GuestTextMessageInput {
+  message: string;
+  restaurantName: string;
+  to?: string;
+}
+
 export interface GuestConfirmationService {
   configured: boolean;
   sendOrderConfirmation(input: GuestOrderConfirmationInput): Promise<void>;
   sendReservationConfirmation(input: GuestReservationConfirmationInput): Promise<void>;
+  sendTextMessage(input: GuestTextMessageInput): Promise<void>;
 }
 
 export function createGuestConfirmationService(env: VoiceServiceEnv): GuestConfirmationService {
@@ -63,6 +70,11 @@ export function formatGuestReservationConfirmation(input: GuestReservationConfir
   return truncateSms(parts.join(" "));
 }
 
+export function formatGuestTextMessage(input: GuestTextMessageInput) {
+  const message = input.message.trim().replace(/\s+/g, " ");
+  return truncateSms(`${input.restaurantName}: ${message} Reply STOP to opt out.`);
+}
+
 class NoopGuestConfirmationService implements GuestConfirmationService {
   configured = false;
 
@@ -77,6 +89,13 @@ class NoopGuestConfirmationService implements GuestConfirmationService {
     console.info("[guest-confirmations] not configured; reservation confirmation not sent", {
       date: input.date,
       partySize: input.partySize,
+      to: input.to,
+    });
+  }
+
+  async sendTextMessage(input: GuestTextMessageInput) {
+    console.info("[guest-confirmations] not configured; text message not sent", {
+      messageLength: input.message.length,
       to: input.to,
     });
   }
@@ -104,6 +123,10 @@ class TwilioGuestConfirmationService implements GuestConfirmationService {
 
   async sendReservationConfirmation(input: GuestReservationConfirmationInput) {
     await this.sendSms(input.to, formatGuestReservationConfirmation(input));
+  }
+
+  async sendTextMessage(input: GuestTextMessageInput) {
+    await this.sendSms(input.to, formatGuestTextMessage(input));
   }
 
   private async sendSms(to: string | undefined, message: string) {

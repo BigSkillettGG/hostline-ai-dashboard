@@ -2,6 +2,8 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import type { IncomingHttpHeaders } from "node:http";
 import WebSocket, { type RawData } from "ws";
 import type { VoiceServiceEnv } from "./env";
+import type { GuestConfirmationService } from "./guest-confirmation-service";
+import type { CapturedOrderItem } from "./order-intake";
 import { buildRestaurantInstructions } from "./restaurant-agent";
 import type { RestaurantVoiceContext } from "./restaurant-context";
 import type { RestaurantContextStore } from "./restaurant-context-store";
@@ -27,6 +29,7 @@ type OpenAIRealtimeEnv = Pick<
 
 interface OpenAIRealtimeSipServiceOptions {
   fetchImpl?: typeof fetch;
+  guestConfirmationService?: GuestConfirmationService;
   websocketFactory?: (url: string, options: { headers: Record<string, string> }) => RealtimeSocket;
 }
 
@@ -77,8 +80,12 @@ interface OpenAIRealtimeIncomingEvent {
       id?: unknown;
     };
     call_id?: unknown;
+    caller_id?: unknown;
+    from?: unknown;
     location_id?: unknown;
     metadata?: {
+      callerPhone?: unknown;
+      caller_phone?: unknown;
       locationId?: unknown;
       location_id?: unknown;
     };
@@ -96,8 +103,10 @@ interface OpenAIRealtimeToolCall {
 }
 
 interface BuildOpenAIRealtimeAcceptPayloadInput {
+  callerPhone?: string;
   context: RestaurantVoiceContext;
   env: OpenAIRealtimeEnv;
+  now?: Date;
 }
 
 interface OpenAIRealtimeAcceptPayload {
@@ -141,6 +150,7 @@ export function createOpenAIRealtimeSipService(
   options: OpenAIRealtimeSipServiceOptions = {},
 ) {
   const fetchImpl = options.fetchImpl ?? fetch;
+  const guestConfirmationService = options.guestConfirmationService;
   const websocketFactory =
     options.websocketFactory ??
     ((url: string, socketOptions: { headers: Record<string, string> }) => new WebSocket(url, socketOptions));
@@ -208,7 +218,8 @@ export function createOpenAIRealtimeSipService(
         env.SUPABASE_DEMO_LOCATION_ID ??
         "demo-location";
       const context = await restaurantContextStore.getContext(resolvedLocationId);
-      const payload = buildOpenAIRealtimeAcceptPayload({ context, env });
+      const callerPhone = extractOpenAIRealtimeCallerPhone(event);
+      const payload = buildOpenAIRealtimeAcceptPayload({ callerPhone, context, env });
 
       await acceptOpenAIRealtimeCall({
         callId,
@@ -220,8 +231,10 @@ export function createOpenAIRealtimeSipService(
       startSidebandSocket({
         activeSockets,
         callId,
+        callerPhone,
         context,
         env,
+        guestConfirmationService,
         locationId: resolvedLocationId,
         websocketFactory,
       });
@@ -233,6 +246,7 @@ export function createOpenAIRealtimeSipService(
           locationId: resolvedLocationId,
           model: payload.model,
           voice: payload.audio.output.voice,
+          callerPhone,
         },
         status: 200,
       };
@@ -335,8 +349,10 @@ export function buildOpenAIRealtimeLiveCallConfig(env: OpenAIRealtimeEnv, locati
 }
 
 export function buildOpenAIRealtimeAcceptPayload({
+  callerPhone,
   context,
   env,
+  now,
 }: BuildOpenAIRealtimeAcceptPayloadInput): OpenAIRealtimeAcceptPayload {
   const voice = resolveOpenAIRealtimeVoice(env, context);
 
@@ -365,7 +381,7 @@ export function buildOpenAIRealtimeAcceptPayload({
         voice,
       },
     },
-    instructions: buildOpenAIRealtimeInstructions(context),
+    instructions: buildOpenAIRealtimeInstructions(context, { callerPhone, now }),
     max_output_tokens: 280,
     model: resolveOpenAIRealtimeModel(env),
     output_modalities: ["audio"],
@@ -375,9 +391,19 @@ export function buildOpenAIRealtimeAcceptPayload({
   };
 }
 
-export function buildOpenAIRealtimeInstructions(context: RestaurantVoiceContext) {
+export function buildOpenAIRealtimeInstructions(
+  context: RestaurantVoiceContext,
+  callContext: { callerPhone?: string; now?: Date } = {},
+) {
+  const localTimeContext = buildRestaurantLocalTimeContext(context, callContext.now);
+  const callerPhoneContext = callContext.callerPhone
+    ? `Caller phone number from SIP caller ID: ${callContext.callerPhone}. If the caller asks for a text or agrees to a confirmation, you may text this number. If offering a text, say the last four digits, not the full number.`
+    : "Caller phone number is not available from SIP caller ID. Ask for the best mobile number before offering to text confirmations.";
+
   return [
     buildRestaurantInstructions(context),
+    `Current restaurant local time: ${localTimeContext}. Use this for today, tonight, tomorrow, open-now, specials-today, and reservation-date questions.`,
+    callerPhoneContext,
     "Realtime phone behavior:",
     "This is one continuous live phone call. Never restart the opening greeting in the middle of the call.",
     "Say the opening greeting only once, when the call begins.",
@@ -388,12 +414,24 @@ export function buildOpenAIRealtimeInstructions(context: RestaurantVoiceContext)
     "When a tool returns information, answer in one warm sentence and then ask a natural next question only if the call is not clearly over.",
     "For reservation requests, acknowledge any date, time, or party size already spoken, then ask only for missing details.",
     "For pickup orders, collect items, quantities, name, and callback number. Payment is pay at pickup unless a POS integration says otherwise.",
+    "For reservations and pickup orders, once the request is captured, naturally offer to text a confirmation. Example: 'Would you like me to text that confirmation to the number ending 1234?'",
+    "Only send a text after the caller agrees or asks for it. Use the send_guest_confirmation tool for reservation, order, or helpful follow-up texts.",
     "Close naturally only after the caller is done. Say a short goodbye and do not ask another question after goodbye.",
   ].join("\n");
 }
 
 export function extractOpenAIRealtimeCallId(event: OpenAIRealtimeIncomingEvent) {
   return stringValue(event.data?.call_id) ?? stringValue(event.data?.call?.id);
+}
+
+export function extractOpenAIRealtimeCallerPhone(event: OpenAIRealtimeIncomingEvent) {
+  return normalizeCallerPhone(
+    stringValue(event.data?.caller_id) ??
+      stringValue(event.data?.from) ??
+      stringValue(event.data?.metadata?.callerPhone) ??
+      stringValue(event.data?.metadata?.caller_phone) ??
+      extractCallerPhoneFromSipHeaders(event.data?.sip_headers),
+  );
 }
 
 export function extractOpenAIRealtimeToolCalls(event: unknown): OpenAIRealtimeToolCall[] {
@@ -445,12 +483,14 @@ export function lookupRestaurantContext(context: RestaurantVoiceContext, rawTopi
         price: formatPrice(item.priceCents),
       })),
       policies: pickPolicies(context, ["menu", "specials", "pickup", "payment", "allergies"]),
+      currentRestaurantTime: buildRestaurantLocalTimeContext(context),
       restaurantName: context.restaurantName,
       topic,
     };
   }
 
   return {
+    currentRestaurantTime: buildRestaurantLocalTimeContext(context),
     faqs: faqMatches,
     knowledgeSections: knowledgeMatches,
     policies: policyMatches.length ? Object.fromEntries(policyMatches) : context.policies,
@@ -523,15 +563,19 @@ async function acceptOpenAIRealtimeCall({
 function startSidebandSocket({
   activeSockets,
   callId,
+  callerPhone,
   context,
   env,
+  guestConfirmationService,
   locationId,
   websocketFactory,
 }: {
   activeSockets: Map<string, RealtimeSocket>;
   callId: string;
+  callerPhone?: string;
   context: RestaurantVoiceContext;
   env: OpenAIRealtimeEnv;
+  guestConfirmationService?: GuestConfirmationService;
   locationId: string;
   websocketFactory: (url: string, options: { headers: Record<string, string> }) => RealtimeSocket;
 }) {
@@ -549,7 +593,7 @@ function startSidebandSocket({
     console.info("[openai-realtime] sideband connected", { callId, locationId });
     sendRealtimeEvent(socket, {
       session: {
-        instructions: buildOpenAIRealtimeInstructions(context),
+        instructions: buildOpenAIRealtimeInstructions(context, { callerPhone }),
         tool_choice: "auto",
         tools: buildOpenAIRealtimeTools(),
         type: "realtime",
@@ -576,19 +620,13 @@ function startSidebandSocket({
 
     const toolCalls = extractOpenAIRealtimeToolCalls(event);
     if (!toolCalls.length) return;
-
-    for (const toolCall of toolCalls) {
-      const output = handleOpenAIRealtimeToolCall(context, toolCall);
-      sendRealtimeEvent(socket, {
-        item: {
-          call_id: toolCall.callId,
-          output: JSON.stringify(output),
-          type: "function_call_output",
-        },
-        type: "conversation.item.create",
-      });
-    }
-    sendRealtimeEvent(socket, { type: "response.create" });
+    void handleOpenAIRealtimeToolCalls({
+      callerPhone,
+      context,
+      guestConfirmationService,
+      socket,
+      toolCalls,
+    });
   });
 
   socket.on("close", (code, reason) => {
@@ -606,14 +644,146 @@ function startSidebandSocket({
   });
 }
 
-function handleOpenAIRealtimeToolCall(context: RestaurantVoiceContext, toolCall: OpenAIRealtimeToolCall) {
+async function handleOpenAIRealtimeToolCalls({
+  callerPhone,
+  context,
+  guestConfirmationService,
+  socket,
+  toolCalls,
+}: {
+  callerPhone?: string;
+  context: RestaurantVoiceContext;
+  guestConfirmationService?: GuestConfirmationService;
+  socket: RealtimeSocket;
+  toolCalls: OpenAIRealtimeToolCall[];
+}) {
+  for (const toolCall of toolCalls) {
+    const output = await handleOpenAIRealtimeToolCall({
+      callerPhone,
+      context,
+      guestConfirmationService,
+      toolCall,
+    });
+    sendRealtimeEvent(socket, {
+      item: {
+        call_id: toolCall.callId,
+        output: JSON.stringify(output),
+        type: "function_call_output",
+      },
+      type: "conversation.item.create",
+    });
+  }
+  sendRealtimeEvent(socket, { type: "response.create" });
+}
+
+async function handleOpenAIRealtimeToolCall({
+  callerPhone,
+  context,
+  guestConfirmationService,
+  toolCall,
+}: {
+  callerPhone?: string;
+  context: RestaurantVoiceContext;
+  guestConfirmationService?: GuestConfirmationService;
+  toolCall: OpenAIRealtimeToolCall;
+}) {
   if (toolCall.name === "lookup_restaurant_context") {
     return lookupRestaurantContext(context, toolCall.arguments.topic);
+  }
+
+  if (toolCall.name === "send_guest_confirmation") {
+    return sendGuestConfirmationTool({
+      callerPhone,
+      context,
+      guestConfirmationService,
+      rawArguments: toolCall.arguments,
+    });
   }
 
   return {
     error: `Unknown tool: ${toolCall.name}`,
   };
+}
+
+async function sendGuestConfirmationTool({
+  callerPhone,
+  context,
+  guestConfirmationService,
+  rawArguments,
+}: {
+  callerPhone?: string;
+  context: RestaurantVoiceContext;
+  guestConfirmationService?: GuestConfirmationService;
+  rawArguments: Record<string, unknown>;
+}) {
+  const phoneNumber = normalizeCallerPhone(stringValue(rawArguments.phone_number) ?? callerPhone);
+  if (!phoneNumber) {
+    return {
+      ok: false,
+      error: "missing_phone_number",
+      message: "Ask the caller for the best mobile number before offering to text this.",
+    };
+  }
+
+  if (!guestConfirmationService?.configured) {
+    return {
+      ok: false,
+      error: "sms_not_configured",
+      message: "Guest SMS confirmations are not configured for this environment.",
+      phoneNumber,
+    };
+  }
+
+  const kind = stringValue(rawArguments.kind)?.toLowerCase();
+  try {
+    if (kind === "reservation") {
+      const reservation = parseReservationConfirmationArguments(rawArguments);
+      if (!reservation) {
+        return {
+          ok: false,
+          error: "missing_reservation_details",
+          message: "Reservation texts need date, time, and party size.",
+          phoneNumber,
+        };
+      }
+      await guestConfirmationService.sendReservationConfirmation({
+        date: reservation.date,
+        guestName: stringValue(rawArguments.guest_name),
+        partySize: reservation.partySize,
+        restaurantName: context.restaurantName,
+        time: reservation.time,
+        to: phoneNumber,
+      });
+    } else if (kind === "order") {
+      const items = parseOrderItems(rawArguments.order_items);
+      await guestConfirmationService.sendOrderConfirmation({
+        customerName: stringValue(rawArguments.guest_name),
+        etaMinutes: context.defaultPickupEtaMinutes,
+        items,
+        restaurantName: context.restaurantName,
+        to: phoneNumber,
+      });
+    } else {
+      await guestConfirmationService.sendTextMessage({
+        message: stringValue(rawArguments.message) ?? "Your request was received.",
+        restaurantName: context.restaurantName,
+        to: phoneNumber,
+      });
+    }
+
+    return {
+      ok: true,
+      phoneNumber,
+      sentToLastFour: phoneNumber.slice(-4),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: "send_failed",
+      message: error instanceof Error ? error.message : "Text confirmation failed.",
+      phoneNumber,
+    };
+  }
 }
 
 async function checkOpenAIRealtimeModel({
@@ -681,6 +851,62 @@ function buildOpenAIRealtimeTools() {
       },
       type: "function" as const,
     },
+    {
+      description:
+        "Send a caller-approved SMS confirmation or helpful follow-up text. Use only after the caller agrees to receive a text or explicitly asks for one.",
+      name: "send_guest_confirmation",
+      parameters: {
+        additionalProperties: false,
+        properties: {
+          guest_name: {
+            description: "Guest or order name, if known.",
+            type: "string",
+          },
+          kind: {
+            description: "The type of text to send.",
+            enum: ["reservation", "order", "note"],
+            type: "string",
+          },
+          message: {
+            description: "Short helpful message for note texts. Do not include sensitive information.",
+            type: "string",
+          },
+          order_items: {
+            description: "Pickup order items when sending an order confirmation.",
+            items: {
+              additionalProperties: false,
+              properties: {
+                name: { type: "string" },
+                price_cents: { type: "number" },
+                quantity: { type: "number" },
+              },
+              required: ["name", "quantity"],
+              type: "object",
+            },
+            type: "array",
+          },
+          party_size: {
+            description: "Party size for reservation texts.",
+            type: "number",
+          },
+          phone_number: {
+            description: "Caller mobile number. Omit this to use SIP caller ID when available.",
+            type: "string",
+          },
+          reservation_date: {
+            description: "Reservation date in the restaurant's local context, preferably YYYY-MM-DD.",
+            type: "string",
+          },
+          reservation_time: {
+            description: "Reservation time, such as 6 PM or 18:00.",
+            type: "string",
+          },
+        },
+        required: ["kind"],
+        type: "object",
+      },
+      type: "function" as const,
+    },
   ];
 }
 
@@ -722,6 +948,29 @@ function extractLocationId(event: OpenAIRealtimeIncomingEvent) {
     stringValue(event.data?.metadata?.location_id);
 }
 
+export function buildRestaurantLocalTimeContext(context: RestaurantVoiceContext, now = new Date()) {
+  const options: Intl.DateTimeFormatOptions = {
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    month: "long",
+    timeZone: context.timezone,
+    timeZoneName: "short",
+    weekday: "long",
+    year: "numeric",
+  };
+
+  try {
+    return new Intl.DateTimeFormat("en-US", options).format(now);
+  } catch {
+    return new Intl.DateTimeFormat("en-US", {
+      ...options,
+      timeZone: undefined,
+      timeZoneName: "short",
+    }).format(now);
+  }
+}
+
 function resolveOpenAIRealtimeModel(env: OpenAIRealtimeEnv) {
   return env.OPENAI_REALTIME_MODEL?.trim() || OPENAI_REALTIME_DEFAULT_MODEL;
 }
@@ -753,6 +1002,60 @@ function parseObjectArguments(value: unknown): Record<string, unknown> {
 
 function pickPolicies(context: RestaurantVoiceContext, keys: string[]) {
   return Object.fromEntries(keys.map((key) => [key, context.policies[key]]).filter(([, value]) => Boolean(value)));
+}
+
+function extractCallerPhoneFromSipHeaders(headers: Array<{ name?: unknown; value?: unknown }> | undefined) {
+  const priority = ["p-asserted-identity", "remote-party-id", "from", "x-twilio-from", "contact"];
+  for (const name of priority) {
+    const match = headers?.find((header) => String(header.name ?? "").toLowerCase() === name);
+    const value = stringValue(match?.value);
+    if (value) return value;
+  }
+  return undefined;
+}
+
+function normalizeCallerPhone(value?: string) {
+  if (!value) return undefined;
+  const match = value.match(/\+?[1-9][\d\s().-]{6,}\d/);
+  if (!match) return undefined;
+
+  const raw = match[0].trim();
+  const digits = raw.replace(/\D/g, "");
+  if (raw.startsWith("+")) return `+${digits}`;
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length > 10 && digits.length <= 15) return `+${digits}`;
+  return undefined;
+}
+
+function parseReservationConfirmationArguments(args: Record<string, unknown>) {
+  const date = stringValue(args.reservation_date);
+  const time = stringValue(args.reservation_time);
+  const partySize = numberValue(args.party_size);
+  if (!date || !time || !partySize) return null;
+  return { date, partySize, time };
+}
+
+function parseOrderItems(value: unknown): CapturedOrderItem[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const candidate = item as Record<string, unknown>;
+      const name = stringValue(candidate.name);
+      const quantity = numberValue(candidate.quantity);
+      if (!name || !quantity) return null;
+      return {
+        name,
+        priceCents: numberValue(candidate.price_cents) ?? 0,
+        quantity,
+      };
+    })
+    .filter((item): item is CapturedOrderItem => Boolean(item));
+}
+
+function numberValue(value: unknown) {
+  const numeric = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(numeric) && numeric > 0 ? Math.round(numeric) : undefined;
 }
 
 function textMatchesTopic(text: string, topic: string) {

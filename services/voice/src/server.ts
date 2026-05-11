@@ -35,7 +35,9 @@ const telephonyService = createTelephonyService(env);
 const staffNotificationService = createStaffNotificationService(env);
 const guestConfirmationService = createGuestConfirmationService(env);
 const menuIngestionService = createMenuIngestionService(env);
-const openAIRealtimeSipService = createOpenAIRealtimeSipService(env, restaurantContextStore);
+const openAIRealtimeSipService = createOpenAIRealtimeSipService(env, restaurantContextStore, {
+  guestConfirmationService,
+});
 const ADMIN_BODY_LIMIT_BYTES = 16 * 1024;
 const OPENAI_WEBHOOK_BODY_LIMIT_BYTES = 32 * 1024;
 const PREVIEW_BODY_LIMIT_BYTES = 4 * 1024;

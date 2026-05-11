@@ -3,6 +3,7 @@ import {
   createGuestConfirmationService,
   formatGuestOrderConfirmation,
   formatGuestReservationConfirmation,
+  formatGuestTextMessage,
 } from "./guest-confirmation-service";
 import type { VoiceServiceEnv } from "./env";
 
@@ -70,6 +71,15 @@ describe("guest confirmation service", () => {
     ).toContain("Staff will confirm shortly");
   });
 
+  it("formats generic caller text messages", () => {
+    expect(
+      formatGuestTextMessage({
+        message: "Tonight's specials are mushroom risotto and tiramisu.",
+        restaurantName: "Olive & Ember",
+      }),
+    ).toBe("Olive & Ember: Tonight's specials are mushroom risotto and tiramisu. Reply STOP to opt out.");
+  });
+
   it("sends Twilio order confirmations to the caller", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -105,5 +115,25 @@ describe("guest confirmation service", () => {
     });
 
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("sends generic Twilio text messages to the caller", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response("{}", { status: 201 }));
+    const service = createGuestConfirmationService(env);
+
+    await service.sendTextMessage({
+      message: "Your reservation request was received.",
+      restaurantName: "Olive & Ember",
+      to: "+15551234567",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.twilio.com/2010-04-01/Accounts/AC123/Messages.json",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain("To=%2B15551234567");
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain("Your+reservation+request+was+received");
   });
 });

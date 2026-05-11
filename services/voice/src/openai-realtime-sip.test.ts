@@ -6,7 +6,9 @@ import {
   buildOpenAIRealtimeInstructions,
   buildOpenAIRealtimeLiveCallConfig,
   buildOpenAIRealtimePreflight,
+  buildRestaurantLocalTimeContext,
   extractOpenAIRealtimeCallId,
+  extractOpenAIRealtimeCallerPhone,
   extractOpenAIRealtimeToolCalls,
   lookupRestaurantContext,
   verifyOpenAIWebhookSignature,
@@ -61,6 +63,26 @@ describe("OpenAI Realtime SIP", () => {
     expect(payload.audio.output.voice).toBe("marin");
     expect(payload.instructions).toContain("Never restart the opening greeting");
     expect(payload.tools[0].name).toBe("lookup_restaurant_context");
+    expect(payload.tools.map((tool) => tool.name)).toContain("send_guest_confirmation");
+  });
+
+  it("adds restaurant-local time and caller phone context to realtime instructions", () => {
+    const instructions = buildOpenAIRealtimeInstructions(demoRestaurantContext, {
+      callerPhone: "+14155550123",
+      now: new Date("2026-05-12T01:30:00.000Z"),
+    });
+
+    expect(instructions).toContain("Current restaurant local time");
+    expect(instructions).toContain("Monday, May 11, 2026");
+    expect(instructions).toContain("6:30 PM");
+    expect(instructions).toContain("Caller phone number from SIP caller ID: +14155550123");
+    expect(instructions).toContain("send_guest_confirmation");
+  });
+
+  it("formats restaurant-local time in the restaurant timezone", () => {
+    expect(buildRestaurantLocalTimeContext(demoRestaurantContext, new Date("2026-05-12T01:30:00.000Z"))).toContain(
+      "Monday, May 11, 2026",
+    );
   });
 
   it("preflights the realtime model and restaurant context before SIP testing", async () => {
@@ -110,6 +132,22 @@ describe("OpenAI Realtime SIP", () => {
   it("extracts the call id from supported incoming webhook shapes", () => {
     expect(extractOpenAIRealtimeCallId({ data: { call_id: "call_123" } })).toBe("call_123");
     expect(extractOpenAIRealtimeCallId({ data: { call: { id: "call_456" } } })).toBe("call_456");
+  });
+
+  it("extracts caller phone from direct fields and SIP headers", () => {
+    expect(extractOpenAIRealtimeCallerPhone({ data: { caller_id: "(415) 555-0123" } })).toBe("+14155550123");
+    expect(
+      extractOpenAIRealtimeCallerPhone({
+        data: {
+          sip_headers: [
+            {
+              name: "From",
+              value: "\"Tim\" <sip:+14155550124@twilio.com>",
+            },
+          ],
+        },
+      }),
+    ).toBe("+14155550124");
   });
 
   it("extracts completed realtime tool calls", () => {
