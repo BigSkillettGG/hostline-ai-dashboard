@@ -21,7 +21,14 @@ import {
   type CapturedOrder,
   type CapturedOrderItem,
 } from "./order-intake";
-import { captureReservationRequest, hasReservationIntent, type CapturedReservationRequest } from "./reservation-intake";
+import {
+  captureReservationDetails,
+  completeReservationRequestFromDetails,
+  hasReservationIntent,
+  mergeReservationDetails,
+  type CapturedReservationDetails,
+  type CapturedReservationRequest,
+} from "./reservation-intake";
 import { matchPhonePlaybookReply } from "./restaurant-playbook";
 import type { RestaurantContextStore } from "./restaurant-context-store";
 import { demoRestaurantContext, type RestaurantVoiceContext } from "./restaurant-context";
@@ -53,6 +60,7 @@ interface RelaySession {
   orderDraftItems: CapturedOrderItem[];
   orderIntentSeen: boolean;
   unclearPromptCount: number;
+  reservationDraft?: CapturedReservationDetails;
   reservationCreatedId?: string;
   reservationIntentSeen: boolean;
   reservationRequest?: CapturedReservationRequest;
@@ -1235,16 +1243,22 @@ async function maybeCreateStaffReviewReservation({
   staffNotifications: StaffNotificationService;
   utterance: string;
 }) {
-  if (session.reservationCreatedId || !session.callRecordId) return null;
+  if (session.reservationCreatedId) return null;
 
+  const wasAlreadyCollectingReservation = session.reservationIntentSeen || Boolean(session.reservationDraft);
   const intentInUtterance = hasReservationIntent(utterance);
   if (intentInUtterance) {
     session.reservationIntentSeen = true;
   }
 
-  const capturedReservation = captureReservationRequest(utterance, {
+  const capturedDetails = captureReservationDetails(utterance, {
+    allowBarePartySize: wasAlreadyCollectingReservation || session.reservationIntentSeen,
     requireIntent: !session.reservationIntentSeen,
   });
+
+  session.reservationDraft = mergeReservationDetails(session.reservationDraft, capturedDetails);
+
+  const capturedReservation = completeReservationRequestFromDetails(session.reservationDraft);
   if (!capturedReservation) return null;
   session.reservationRequest = capturedReservation;
 
@@ -1256,7 +1270,7 @@ async function maybeCreateStaffReviewReservation({
       locationId: session.locationId,
     });
 
-    session.reservationCreatedId = result.reservationId;
+    session.reservationCreatedId = result.reservationId ?? `local_reservation_${Date.now()}`;
     void maybeSendReservationConfirmation({
       capturedReservation,
       guestConfirmations,

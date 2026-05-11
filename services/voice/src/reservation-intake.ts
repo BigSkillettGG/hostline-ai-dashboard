@@ -7,7 +7,16 @@ export interface CapturedReservationRequest {
   time: string;
 }
 
+export interface CapturedReservationDetails {
+  date?: string;
+  guestName?: string;
+  notes?: string;
+  partySize?: number;
+  time?: string;
+}
+
 export interface ReservationCaptureOptions {
+  allowBarePartySize?: boolean;
   now?: Date;
   requireIntent?: boolean;
 }
@@ -65,31 +74,74 @@ export function captureReservationRequest(
   utterance: string,
   options: ReservationCaptureOptions = {},
 ): CapturedReservationRequest | null {
+  const details = captureReservationDetails(utterance, options);
+  if (!details?.partySize || !details.date || !details.time) return null;
+
+  const detailCount = [details.partySize, details.date, details.time, details.guestName, details.notes].filter(Boolean).length;
+
+  return {
+    confidence: Math.min(95, 45 + detailCount * 10),
+    date: details.date,
+    guestName: details.guestName,
+    notes: details.notes,
+    partySize: details.partySize,
+    time: details.time,
+  };
+}
+
+export function captureReservationDetails(
+  utterance: string,
+  options: ReservationCaptureOptions = {},
+): CapturedReservationDetails | null {
   const requireIntent = options.requireIntent ?? true;
   if (requireIntent && !hasReservationIntent(utterance)) return null;
 
   const now = options.now ?? new Date();
-  const partySize = capturePartySize(utterance);
-  const date = captureDate(utterance, now);
-  const time = captureTime(utterance);
+  const details: CapturedReservationDetails = {
+    date: captureDate(utterance, now),
+    guestName: captureGuestName(utterance),
+    notes: captureNotes(utterance),
+    partySize: capturePartySize(utterance, options.allowBarePartySize),
+    time: captureTime(utterance),
+  };
 
-  if (!partySize || !date || !time) return null;
+  return hasAnyReservationDetail(details) ? details : null;
+}
 
-  const guestName = captureGuestName(utterance);
-  const notes = captureNotes(utterance);
-  const detailCount = [partySize, date, time, guestName, notes].filter(Boolean).length;
-
+export function mergeReservationDetails(
+  current: CapturedReservationDetails | undefined,
+  update: CapturedReservationDetails | null,
+): CapturedReservationDetails | undefined {
+  if (!update) return current;
   return {
-    confidence: Math.min(95, 45 + detailCount * 10),
-    date,
-    guestName,
-    notes,
-    partySize,
-    time,
+    ...current,
+    ...removeUndefinedValues(update),
   };
 }
 
-function capturePartySize(utterance: string) {
+export function completeReservationRequestFromDetails(
+  details: CapturedReservationDetails | undefined,
+): CapturedReservationRequest | null {
+  if (!details?.partySize || !details.date || !details.time) return null;
+
+  const detailCount = [details.partySize, details.date, details.time, details.guestName, details.notes].filter(Boolean).length;
+  return {
+    confidence: Math.min(95, 45 + detailCount * 10),
+    date: details.date,
+    guestName: details.guestName,
+    notes: details.notes,
+    partySize: details.partySize,
+    time: details.time,
+  };
+}
+
+function capturePartySize(utterance: string, allowBarePartySize = false) {
+  if (allowBarePartySize) {
+    const bareCount = utterance.match(/^\s*(?:just\s+)?(\d{1,2}|[a-z]+)(?:\s*(?:people|guests|persons|tops?))?\s*\.?\s*$/i);
+    const value = bareCount?.[1] ? parseCount(bareCount[1]) : undefined;
+    if (value && value <= 50) return value;
+  }
+
   const patterns = [
     /\bparty\s+of\s+(\d{1,2}|[a-z]+)\b/i,
     /\btable\s+for\s+(\d{1,2}|[a-z]+)\b/i,
@@ -235,4 +287,12 @@ function formatTime(hour: number, minute: number) {
 
 function pad(value: number) {
   return value.toString().padStart(2, "0");
+}
+
+function hasAnyReservationDetail(details: CapturedReservationDetails) {
+  return Boolean(details.date || details.guestName || details.notes || details.partySize || details.time);
+}
+
+function removeUndefinedValues(details: CapturedReservationDetails) {
+  return Object.fromEntries(Object.entries(details).filter(([, value]) => value !== undefined)) as CapturedReservationDetails;
 }

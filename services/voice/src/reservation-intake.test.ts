@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { captureReservationRequest, hasReservationIntent } from "./reservation-intake";
+import {
+  captureReservationDetails,
+  captureReservationRequest,
+  completeReservationRequestFromDetails,
+  hasReservationIntent,
+  mergeReservationDetails,
+} from "./reservation-intake";
 
 const now = new Date(2026, 4, 5, 12, 0, 0);
 
@@ -58,6 +64,29 @@ describe("reservation intake", () => {
   it("returns null when required details are missing", () => {
     expect(captureReservationRequest("I'd like a reservation.", { now })).toBeNull();
     expect(captureReservationRequest("Friday at 7 for four.", { now })).toBeNull();
+  });
+
+  it("captures partial details so follow-up turns can complete a reservation naturally", () => {
+    const firstTurn = captureReservationDetails("Do you have availability for a reservation at 6pm tonight?", { now });
+    const secondTurn = captureReservationDetails("Two", {
+      allowBarePartySize: true,
+      now,
+      requireIntent: false,
+    });
+    const request = completeReservationRequestFromDetails(mergeReservationDetails(firstTurn ?? undefined, secondTurn));
+
+    expect(firstTurn).toMatchObject({
+      date: "2026-05-05",
+      time: "18:00",
+    });
+    expect(secondTurn).toMatchObject({
+      partySize: 2,
+    });
+    expect(request).toMatchObject({
+      date: "2026-05-05",
+      partySize: 2,
+      time: "18:00",
+    });
   });
 
   it("detects reservation intent", () => {

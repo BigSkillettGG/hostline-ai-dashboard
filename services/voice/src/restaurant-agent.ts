@@ -1,6 +1,13 @@
 import type { VoiceServiceEnv } from "./env";
 import { matchPhonePlaybookReply } from "./restaurant-playbook";
 import type { RestaurantVoiceContext } from "./restaurant-context";
+import {
+  captureReservationDetails,
+  completeReservationRequestFromDetails,
+  hasReservationIntent,
+  mergeReservationDetails,
+  type CapturedReservationDetails,
+} from "./reservation-intake";
 import type { TranscriptTurn } from "./types";
 
 export interface ResponseInputMessage {
@@ -51,6 +58,14 @@ export async function generateRestaurantReply(input: GenerateRestaurantReplyInpu
     console.info("[voice-agent] model handling context-sensitive playbook scenario", {
       scenario: playbookReply.scenario,
     });
+  }
+
+  const reservationClarifyingReply = buildReservationClarifyingReply(input.callerUtterance, input.transcript);
+  if (reservationClarifyingReply) {
+    console.info("[voice-agent] reservation clarification generated", {
+      replyLength: reservationClarifyingReply.length,
+    });
+    return reservationClarifyingReply;
   }
 
   if (!input.env.OPENAI_API_KEY) {
@@ -150,13 +165,14 @@ export function buildRestaurantInstructions(context: RestaurantVoiceContext) {
 
   return [
     `You are ${context.hostName}, the virtual host for ${context.restaurantName}.`,
-    "Sound warm, concise, and natural on the phone.",
+    "Sound warm, concise, and natural on the phone, like an attentive restaurant host rather than an IVR menu.",
     "Do not repeat the opening greeting after the first turn; continue the same call and answer the new question directly.",
     "Answer the caller's actual current question. Do not jump to hours, reservations, or ordering just because one related word appears.",
     "After answering a simple informational question, ask a light follow-up such as: Anything else I can help you with?",
     "Do not add that generic follow-up when you already asked a specific next question, are collecting order or reservation details, or are handling complaints, allergies, handoffs, delivery issues, vendors, or lost items.",
     "Use the full restaurant context before deciding intent; specials, happy hour, today's menu, and featured dishes are not hours questions unless the caller asks when the restaurant opens or closes.",
     "Expect callers with accents, noisy phone audio, fragments, and corrections. Ask one short clarifying question when needed.",
+    "For reservations, acknowledge any date, time, or party size the caller already gave and ask only for the missing detail. Never ask again for a detail already spoken.",
     "Keep replies under two short sentences unless confirming an order.",
     "For multi-item orders, acknowledge captured items briefly and ask what else until the caller says they are done.",
     "Use available tools when you need to look up restaurant policy, capture an order item, submit an order, create a reservation request, or escalate to staff.",
@@ -341,6 +357,9 @@ function parseToolArguments(value: unknown): Record<string, unknown> {
 }
 
 export function fallbackRestaurantReply(callerUtterance: string, context: RestaurantVoiceContext) {
+  const reservationClarifyingReply = buildReservationClarifyingReply(callerUtterance, []);
+  if (reservationClarifyingReply) return reservationClarifyingReply;
+
   const playbookReply = matchPhonePlaybookReply(callerUtterance, context);
   if (playbookReply) return playbookReply.text;
 
@@ -373,6 +392,140 @@ export function fallbackRestaurantReply(callerUtterance: string, context: Restau
   if (knowledgeAnswer) return knowledgeAnswer;
 
   return `Thanks for calling ${context.restaurantName}. I can help with hours, menu questions, pickup orders, or reservation requests.`;
+}
+
+export function buildReservationClarifyingReply(callerUtterance: string, transcript: TranscriptTurn[] = []) {
+  const activeContext = hasRecentReservationContext(transcript) || isReservationCollectionIntent(callerUtterance);
+  const currentDetails = captureReservationDetails(callerUtterance, {
+    allowBarePartySize: activeContext,
+    requireIntent: false,
+  });
+
+  if (!isReservationCollectionIntent(callerUtterance) && !(activeContext && currentDetails)) return null;
+
+  const details = collectReservationDetails(callerUtterance, transcript, activeContext);
+  if (completeReservationRequestFromDetails(details)) return null;
+
+  return buildMissingReservationDetailsReply(details, callerUtterance, transcript);
+}
+
+function collectReservationDetails(
+  callerUtterance: string,
+  transcript: TranscriptTurn[],
+  initialActiveContext: boolean,
+) {
+  let details: CapturedReservationDetails | undefined;
+  let activeContext = initialActiveContext;
+  const callerTexts = transcript
+    .slice(-8)
+    .filter((turn) => turn.role === "caller")
+    .map((turn) => turn.text);
+
+  if (callerTexts.at(-1)?.toLowerCase().trim() !== callerUtterance.toLowerCase().trim()) {
+    callerTexts.push(callerUtterance);
+  }
+
+  for (const text of callerTexts) {
+    if (isReservationCollectionIntent(text) || hasReservationIntent(text)) activeContext = true;
+    if (!activeContext) continue;
+    details = mergeReservationDetails(
+      details,
+      captureReservationDetails(text, {
+        allowBarePartySize: activeContext,
+        requireIntent: false,
+      }),
+    );
+  }
+
+  return details;
+}
+
+function buildMissingReservationDetailsReply(
+  details: CapturedReservationDetails | undefined,
+  callerUtterance: string,
+  transcript: TranscriptTurn[],
+) {
+  const knownPrefix = formatKnownReservationDetails(details, `${transcript.map((turn) => turn.text).join(" ")} ${callerUtterance}`);
+  const missing = {
+    date: !details?.date,
+    partySize: !details?.partySize,
+    time: !details?.time,
+  };
+
+  if (missing.date && missing.time && missing.partySize) {
+    return "Sure, what day and time are you looking for, and how many people?";
+  }
+
+  const ask = reservationMissingQuestion(missing);
+  return knownPrefix ? `${knownPrefix} ${ask}` : ask;
+}
+
+function reservationMissingQuestion(missing: { date: boolean; partySize: boolean; time: boolean }) {
+  if (missing.partySize && !missing.date && !missing.time) return "How many people should I check for?";
+  if (missing.date && !missing.partySize && !missing.time) return "What night should I check?";
+  if (missing.time && !missing.date && !missing.partySize) return "What time are you hoping for?";
+  if (missing.partySize && missing.time && !missing.date) return "What time are you hoping for, and how many people?";
+  if (missing.partySize && missing.date && !missing.time) return "What night should I check, and how many people?";
+  if (missing.date && missing.time && !missing.partySize) return "What day and time are you looking for?";
+  return "What else should I add to that reservation request?";
+}
+
+function formatKnownReservationDetails(details: CapturedReservationDetails | undefined, sourceText: string) {
+  if (!details) return "";
+
+  const date = details.date ? formatReservationDate(details.date, sourceText) : undefined;
+  const time = details.time ? formatReservationTime(details.time) : undefined;
+  const party = details.partySize ? `${details.partySize} ${details.partySize === 1 ? "person" : "people"}` : undefined;
+
+  if (date && time && party) return `For ${party} at ${time} ${date}, sure.`;
+  if (date && time) return `For ${time} ${date}, sure.`;
+  if (date && party) return `For ${party} ${date}, sure.`;
+  if (time && party) return `For ${party} at ${time}, sure.`;
+  if (date) return `For ${date}, sure.`;
+  if (time) return `For ${time}, sure.`;
+  if (party) return `For ${party}, sure.`;
+  return "";
+}
+
+function formatReservationDate(date: string, sourceText: string) {
+  if (/\b(today|tonight)\b/i.test(sourceText)) return "tonight";
+  if (/\btomorrow\b/i.test(sourceText)) return "tomorrow";
+
+  const [year, month, day] = date.split("-").map(Number);
+  if (!year || !month || !day) return date;
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    weekday: "long",
+  }).format(new Date(year, month - 1, day));
+}
+
+function formatReservationTime(time: string) {
+  const [hourText, minuteText] = time.split(":");
+  const hour24 = Number(hourText);
+  const minute = Number(minuteText);
+  if (!Number.isFinite(hour24) || !Number.isFinite(minute)) return time;
+  const hour12 = hour24 % 12 || 12;
+  return minute ? `${hour12}:${minute.toString().padStart(2, "0")}` : `${hour12}`;
+}
+
+function hasRecentReservationContext(transcript: TranscriptTurn[]) {
+  return transcript.slice(-6).some((turn) => {
+    if (turn.role === "caller") return isReservationCollectionIntent(turn.text) || hasReservationIntent(turn.text);
+    return /\b(what day and time|how many people|party size|reservation request|what night|what time)\b/i.test(turn.text);
+  });
+}
+
+function isReservationCollectionIntent(utterance: string) {
+  if (!hasReservationIntent(utterance) && !/\b(availability|available|seat us|fit us in)\b/i.test(utterance)) {
+    return false;
+  }
+
+  if (/\b(do you take|do you accept|do you have reservations|reservation policy)\b/i.test(utterance)) {
+    return false;
+  }
+
+  return /\b(make|book|reserve|get|need|want|looking for|availability|available|table for|party of|at \d{1,2})\b/i.test(utterance);
 }
 
 const STOP_WORDS = new Set([

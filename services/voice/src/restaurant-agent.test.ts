@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { demoRestaurantContext } from "./restaurant-context";
 import {
   buildConversationInput,
+  buildReservationClarifyingReply,
   buildRestaurantInstructions,
   fallbackRestaurantReply,
   generateCallSummary,
@@ -116,6 +117,40 @@ describe("restaurant fallback replies", () => {
 
     expect(reply).toBe("Tonight's special is the mushroom risotto. Anything else I can help you with?");
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks only for the missing reservation detail when the caller already gave a time", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    const reply = await generateRestaurantReply({
+      callerUtterance: "Do you have availability for a reservation at 6pm tonight?",
+      context: demoRestaurantContext,
+      env: {
+        OPENAI_API_KEY: "sk-test",
+        OPENAI_MODEL: "gpt-5-mini",
+        OPENAI_REPLY_TIMEOUT_MS: 4500,
+      },
+      transcript: [],
+    });
+
+    expect(reply).toBe("For 6 tonight, sure. How many people should I check for?");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps reservation context across short follow-up turns", () => {
+    const reply = buildReservationClarifyingReply("Two", [
+      {
+        at: "2026-05-06T20:00:00.000Z",
+        role: "caller",
+        text: "Do you have availability for a reservation at 6pm tonight?",
+      },
+      {
+        at: "2026-05-06T20:00:01.000Z",
+        role: "agent",
+        text: "For 6 tonight, sure. How many people should I check for?",
+      },
+    ]);
+
+    expect(reply).toBeNull();
   });
 
   it("adds a light follow-up after simple informational answers", () => {
