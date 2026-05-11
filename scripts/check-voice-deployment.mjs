@@ -29,6 +29,10 @@ if (internalApiKey) {
     allowFailure: true,
     headers: { "x-hostline-api-key": internalApiKey },
   });
+  const openAIRealtimePreflight = await readJson(`${baseUrl}/openai/realtime/preflight${query}`, {
+    allowFailure: true,
+    headers: { "x-hostline-api-key": internalApiKey },
+  });
   const twiml = await readText(`${baseUrl}/twilio/twiml-preview${query}`, {
     allowFailure: true,
     headers: { "x-hostline-api-key": internalApiKey },
@@ -39,6 +43,11 @@ if (internalApiKey) {
   console.log(`ConversationRelay: ${liveCallConfig.conversationRelayUrl ?? "unavailable"}`);
   console.log(`OpenAI Realtime webhook: ${openAIRealtimeConfig.webhookUrl ?? "unavailable"}`);
   console.log(`OpenAI Realtime SIP URI: ${openAIRealtimeConfig.sipUri ?? "use the OpenAI dashboard/project SIP URI"}`);
+  console.log(`OpenAI Realtime preflight: ${openAIRealtimePreflight.ready ? "ready" : "not ready"}`);
+  for (const check of openAIRealtimePreflight.checks ?? []) {
+    const marker = check.ready ? "OK" : check.required ? "MISSING" : "OPTIONAL";
+    console.log(`${marker.padEnd(8)} ${check.label}`);
+  }
   console.log(`TwiML preview: ${twiml.includes("<ConversationRelay") ? "ok" : "missing ConversationRelay"}`);
 } else {
   console.log("");

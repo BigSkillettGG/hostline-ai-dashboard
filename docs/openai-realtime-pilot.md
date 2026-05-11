@@ -36,6 +36,12 @@ Admin config endpoint:
 https://hostline-voice.onrender.com/openai/realtime/live-call-config?locationId=YOUR_LOCATION_ID
 ```
 
+Admin preflight endpoint:
+
+```text
+https://hostline-voice.onrender.com/openai/realtime/preflight?locationId=YOUR_LOCATION_ID
+```
+
 OpenAI webhook endpoint:
 
 ```text
@@ -56,6 +62,17 @@ https://hostline-voice.onrender.com/openai/realtime/webhook?locationId=YOUR_LOCA
 
 4. Use the SIP URI that OpenAI shows in the dashboard when routing a test number or SIP trunk.
 5. Leave the existing Twilio phone number alone until this pilot route sounds better.
+
+## Before The First Pilot Call
+
+After Render deploys this code, the preflight endpoint should report:
+
+- Public voice URL: OK
+- OpenAI API key: OK
+- OpenAI realtime model: OK
+- Restaurant context: OK
+
+The OpenAI project ID and webhook secret can be optional during the first test. Add `OPENAI_PROJECT_ID` when you want the service to print the exact SIP URI. Add `OPENAI_WEBHOOK_SECRET` only after the unsigned test works and the webhook secret from OpenAI has been copied into Render.
 
 ## Test Script
 

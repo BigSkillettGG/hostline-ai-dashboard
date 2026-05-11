@@ -5,6 +5,7 @@ import {
   buildOpenAIRealtimeAcceptPayload,
   buildOpenAIRealtimeInstructions,
   buildOpenAIRealtimeLiveCallConfig,
+  buildOpenAIRealtimePreflight,
   extractOpenAIRealtimeCallId,
   extractOpenAIRealtimeToolCalls,
   lookupRestaurantContext,
@@ -60,6 +61,28 @@ describe("OpenAI Realtime SIP", () => {
     expect(payload.audio.output.voice).toBe("marin");
     expect(payload.instructions).toContain("Never restart the opening greeting");
     expect(payload.tools[0].name).toBe("lookup_restaurant_context");
+  });
+
+  it("preflights the realtime model and restaurant context before SIP testing", async () => {
+    const fetchMock = async () => new Response(JSON.stringify({ id: "gpt-realtime" }), { status: 200 });
+    const preflight = await buildOpenAIRealtimePreflight({
+      env: {
+        ...baseEnv,
+        OPENAI_PROJECT_ID: "proj_123",
+      },
+      fetchImpl: fetchMock as typeof fetch,
+      locationId: "loc_123",
+      restaurantContextStore: {
+        async getContext() {
+          return demoRestaurantContext;
+        },
+      },
+    });
+
+    expect(preflight.ready).toBe(true);
+    expect(preflight.config.webhookUrl).toBe("https://voice.hostline.ai/openai/realtime/webhook?locationId=loc_123");
+    expect(preflight.checks.find((check) => check.id === "openai_realtime_model")).toMatchObject({ ready: true });
+    expect(preflight.restaurantName).toBe("Olive & Ember");
   });
 
   it("uses the male OpenAI voice for male configured hosts", () => {

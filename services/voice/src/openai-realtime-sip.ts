@@ -55,6 +55,22 @@ export interface OpenAIRealtimeWebhookResult {
   status: number;
 }
 
+export interface OpenAIRealtimePreflightCheck {
+  detail: string;
+  id: string;
+  label: string;
+  ready: boolean;
+  required: boolean;
+}
+
+export interface OpenAIRealtimePreflight {
+  checks: OpenAIRealtimePreflightCheck[];
+  config: OpenAIRealtimeLiveCallConfig;
+  locationId: string;
+  ready: boolean;
+  restaurantName?: string;
+}
+
 interface OpenAIRealtimeIncomingEvent {
   data?: {
     call?: {
@@ -150,6 +166,15 @@ export function createOpenAIRealtimeSipService(
       return buildOpenAIRealtimeLiveCallConfig(env, locationId);
     },
 
+    async getPreflight(locationId?: string): Promise<OpenAIRealtimePreflight> {
+      return buildOpenAIRealtimePreflight({
+        env,
+        fetchImpl,
+        locationId,
+        restaurantContextStore,
+      });
+    },
+
     async handleIncomingWebhook({
       headers,
       locationId,
@@ -212,6 +237,82 @@ export function createOpenAIRealtimeSipService(
         status: 200,
       };
     },
+  };
+}
+
+export async function buildOpenAIRealtimePreflight({
+  env,
+  fetchImpl = fetch,
+  locationId,
+  restaurantContextStore,
+}: {
+  env: OpenAIRealtimeEnv;
+  fetchImpl?: typeof fetch;
+  locationId?: string;
+  restaurantContextStore: RestaurantContextStore;
+}): Promise<OpenAIRealtimePreflight> {
+  const resolvedLocationId = locationId?.trim() || env.SUPABASE_DEMO_LOCATION_ID || "demo-location";
+  const config = buildOpenAIRealtimeLiveCallConfig(env, resolvedLocationId);
+  const checks: OpenAIRealtimePreflightCheck[] = [
+    {
+      detail: "Needed so OpenAI can send incoming-call webhooks to the voice service.",
+      id: "public_http_base_url",
+      label: "Public voice URL",
+      ready: Boolean(env.PUBLIC_HTTP_BASE_URL),
+      required: true,
+    },
+    {
+      detail: "Needed so the voice service can accept the SIP call and open the sideband WebSocket.",
+      id: "openai_api_key",
+      label: "OpenAI API key",
+      ready: Boolean(env.OPENAI_API_KEY),
+      required: true,
+    },
+    {
+      detail: "Used when pointing a Twilio SIP trunk or other SIP carrier at OpenAI.",
+      id: "openai_project_id",
+      label: "OpenAI project ID",
+      ready: Boolean(env.OPENAI_PROJECT_ID),
+      required: false,
+    },
+    {
+      detail: "Recommended after the first unsigned pilot call works. Leave unset until then.",
+      id: "openai_webhook_secret",
+      label: "OpenAI webhook secret",
+      ready: Boolean(env.OPENAI_WEBHOOK_SECRET),
+      required: false,
+    },
+  ];
+
+  checks.push(await checkOpenAIRealtimeModel({ env, fetchImpl }));
+
+  let restaurantName: string | undefined;
+  try {
+    const context = await restaurantContextStore.getContext(resolvedLocationId);
+    restaurantName = context.restaurantName;
+    checks.push({
+      detail: `Loaded voice context for ${context.restaurantName}.`,
+      id: "restaurant_context",
+      label: "Restaurant context",
+      ready: true,
+      required: true,
+    });
+  } catch (error) {
+    checks.push({
+      detail: error instanceof Error ? error.message : "Could not load restaurant context.",
+      id: "restaurant_context",
+      label: "Restaurant context",
+      ready: false,
+      required: true,
+    });
+  }
+
+  return {
+    checks,
+    config,
+    locationId: resolvedLocationId,
+    ready: checks.filter((check) => check.required).every((check) => check.ready),
+    restaurantName,
   };
 }
 
@@ -451,6 +552,7 @@ function startSidebandSocket({
         instructions: buildOpenAIRealtimeInstructions(context),
         tool_choice: "auto",
         tools: buildOpenAIRealtimeTools(),
+        type: "realtime",
       },
       type: "session.update",
     });
@@ -512,6 +614,51 @@ function handleOpenAIRealtimeToolCall(context: RestaurantVoiceContext, toolCall:
   return {
     error: `Unknown tool: ${toolCall.name}`,
   };
+}
+
+async function checkOpenAIRealtimeModel({
+  env,
+  fetchImpl,
+}: {
+  env: OpenAIRealtimeEnv;
+  fetchImpl: typeof fetch;
+}): Promise<OpenAIRealtimePreflightCheck> {
+  const model = resolveOpenAIRealtimeModel(env);
+  if (!env.OPENAI_API_KEY) {
+    return {
+      detail: `Cannot verify ${model} until OPENAI_API_KEY is configured.`,
+      id: "openai_realtime_model",
+      label: "OpenAI realtime model",
+      ready: false,
+      required: true,
+    };
+  }
+
+  try {
+    const response = await fetchImpl(`https://api.openai.com/v1/models/${encodeURIComponent(model)}`, {
+      headers: {
+        Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+      },
+    });
+
+    return {
+      detail: response.ok
+        ? `${model} is reachable with the configured OpenAI key.`
+        : `${model} check returned ${response.status}. Confirm the model name and API key project access.`,
+      id: "openai_realtime_model",
+      label: "OpenAI realtime model",
+      ready: response.ok,
+      required: true,
+    };
+  } catch (error) {
+    return {
+      detail: error instanceof Error ? error.message : `Could not verify ${model}.`,
+      id: "openai_realtime_model",
+      label: "OpenAI realtime model",
+      ready: false,
+      required: true,
+    };
+  }
 }
 
 function buildOpenAIRealtimeTools() {

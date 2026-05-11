@@ -150,6 +150,19 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
     return;
   }
 
+  if (req.method === "GET" && url.pathname === "/openai/realtime/preflight") {
+    const locationId = url.searchParams.get("locationId") ?? currentEnv.SUPABASE_DEMO_LOCATION_ID;
+    const authorization = await authorizeVoiceAdminRequest({ currentEnv, locationId, req });
+    if (!authorization.authorized) {
+      sendJson(res, authorization.status, { error: authorization.reason ?? "Unauthorized" });
+      return;
+    }
+
+    const preflight = await openAIRealtimeSipService.getPreflight(locationId ?? undefined);
+    sendJson(res, preflight.ready ? 200 : 503, preflight);
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/openai/realtime/webhook") {
     try {
       const result = await openAIRealtimeSipService.handleIncomingWebhook({
