@@ -91,7 +91,7 @@ export const defaultRestaurantAgentConfig: RestaurantAgentConfig = {
   voiceGender: "female",
   tone: "warm",
   greetingTemplate:
-    "Thanks for calling {restaurant_name}, this is Vera, the restaurant's virtual host. How can I help you?",
+    "Thanks for calling {restaurant_name}. This is Vera, the restaurant's virtual host. How can I help you?",
   disclosureEnabled: true,
   callHandlingMode: "answer_after_rings",
   answerAfterRings: 3,

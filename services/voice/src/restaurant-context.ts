@@ -37,7 +37,7 @@ export const demoRestaurantContext: RestaurantVoiceContext = {
   hostName: "Vera",
   voiceGender: "female",
   timezone: "America/Los_Angeles",
-  greeting: "Thanks for calling Olive & Ember, this is Vera, the restaurant's virtual host. How can I help you?",
+  greeting: "Thanks for calling Olive and Ember. This is Vera, the restaurant's virtual host. How can I help you?",
   smsConfirmationsEnabled: true,
   faqs: [
     {
@@ -81,3 +81,11 @@ export const demoRestaurantContext: RestaurantVoiceContext = {
     specials: "Tonight's specials are not configured yet. Staff can confirm current specials during service.",
   },
 };
+
+export function toSpokenRestaurantName(restaurantName: string) {
+  return restaurantName
+    .replace(/\s*&\s*/g, " and ")
+    .replace(/\s*\+\s*/g, " and ")
+    .replace(/\s+/g, " ")
+    .trim();
+}

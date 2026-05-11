@@ -140,7 +140,7 @@ describe("conversation relay staff-review triggers", () => {
           },
         ],
       }),
-    ).toBe("Of course. Thanks for calling Olive & Ember. Have a great night.");
+    ).toBe("Of course. Thanks for calling Olive and Ember. Have a great night.");
   });
 
   it("can ask Twilio to end a ConversationRelay session after goodbye", () => {

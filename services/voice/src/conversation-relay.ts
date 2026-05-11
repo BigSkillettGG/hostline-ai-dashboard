@@ -31,7 +31,7 @@ import {
 } from "./reservation-intake";
 import { matchPhonePlaybookReply } from "./restaurant-playbook";
 import type { RestaurantContextStore } from "./restaurant-context-store";
-import { demoRestaurantContext, type RestaurantVoiceContext } from "./restaurant-context";
+import { demoRestaurantContext, toSpokenRestaurantName, type RestaurantVoiceContext } from "./restaurant-context";
 import {
   generateCallSummary,
   generateRestaurantReply,
@@ -576,7 +576,7 @@ export function sendEndSession(ws: WebSocket, handoffData?: Record<string, strin
 
 export function buildNaturalGoodbyeReply(utterance: string, session: Pick<RelaySession, "context" | "transcript">) {
   if (!isNaturalGoodbyeIntent(utterance, session.transcript)) return null;
-  return `Of course. Thanks for calling ${session.context.restaurantName}. Have a great night.`;
+  return `Of course. Thanks for calling ${toSpokenRestaurantName(session.context.restaurantName)}. Have a great night.`;
 }
 
 export function isNaturalGoodbyeIntent(utterance: string, transcript: TranscriptTurn[] = []) {

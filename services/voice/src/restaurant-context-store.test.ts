@@ -175,6 +175,30 @@ describe("restaurant context store", () => {
     expect(context.policies.location).toBe("55 Market St");
   });
 
+  it("uses a spoken restaurant name in greeting templates without changing the stored name", () => {
+    const context = buildRestaurantContext({
+      agentConfig: {
+        escalation_phone_number: null,
+        greeting_template: "Thanks for calling {restaurant_name}. This is {host_name}. How can I help you?",
+        host_name: "Vera",
+        reservation_provider: null,
+        sms_confirmations_enabled: true,
+      },
+      location: {
+        address: null,
+        ai_host_phone: null,
+        cuisine: null,
+        id: "location_3",
+        name: "Olive & Ember",
+        phone: null,
+        timezone: "America/Los_Angeles",
+      },
+    });
+
+    expect(context.restaurantName).toBe("Olive & Ember");
+    expect(context.greeting).toBe("Thanks for calling Olive and Ember. This is Vera. How can I help you?");
+  });
+
   it("caches restaurant context lookups by location for the TTL window", async () => {
     let lookupCount = 0;
     const store = createCachedRestaurantContextStore(

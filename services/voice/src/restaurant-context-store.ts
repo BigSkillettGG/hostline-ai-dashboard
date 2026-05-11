@@ -2,6 +2,7 @@ import type { VoiceServiceEnv } from "./env";
 import { normalizeHostlineVoiceGender } from "../../../src/domain/voice-selection";
 import {
   demoRestaurantContext,
+  toSpokenRestaurantName,
   type RestaurantFaq,
   type RestaurantKnowledgeSection,
   type RestaurantMenuItem,
@@ -520,9 +521,12 @@ function parseMinutes(value?: string) {
 }
 
 function renderTemplate(template: string, values: { hostName: string; restaurantName: string }) {
+  const spokenRestaurantName = toSpokenRestaurantName(values.restaurantName);
   return template
-    .replaceAll("{restaurant_name}", values.restaurantName)
-    .replaceAll("{host_name}", values.hostName);
+    .replaceAll("{restaurant_name}", spokenRestaurantName)
+    .replaceAll("{restaurantName}", spokenRestaurantName)
+    .replaceAll("{host_name}", values.hostName)
+    .replaceAll("{hostName}", values.hostName);
 }
 
 function normalizeLocationId(locationId?: string) {
