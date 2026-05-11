@@ -17,6 +17,7 @@ import {
 } from "./http-safety";
 import { createMenuIngestionService } from "./menu-ingestion-service";
 import { createStaffNotificationService } from "./notification-service";
+import { createOpenAIRealtimeSipService } from "./openai-realtime-sip";
 import { createPhoneNumberStore } from "./phone-number-store";
 import { createRestaurantContextStore } from "./restaurant-context-store";
 import { createTelephonyService } from "./telephony";
@@ -34,7 +35,9 @@ const telephonyService = createTelephonyService(env);
 const staffNotificationService = createStaffNotificationService(env);
 const guestConfirmationService = createGuestConfirmationService(env);
 const menuIngestionService = createMenuIngestionService(env);
+const openAIRealtimeSipService = createOpenAIRealtimeSipService(env, restaurantContextStore);
 const ADMIN_BODY_LIMIT_BYTES = 16 * 1024;
+const OPENAI_WEBHOOK_BODY_LIMIT_BYTES = 32 * 1024;
 const PREVIEW_BODY_LIMIT_BYTES = 4 * 1024;
 const TWILIO_BODY_LIMIT_BYTES = 16 * 1024;
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -114,6 +117,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
           currentEnv.SUPABASE_DEMO_LOCATION_ID,
       ),
       menuIngestionConfigured: menuIngestionService.configured,
+      openAIRealtimeSipConfigured: openAIRealtimeSipService.configured,
       twilioProvisioningConfigured: telephonyService.configured,
       staffAlertsConfigured: staffNotificationService.configured,
       guestConfirmationsConfigured: guestConfirmationService.configured,
@@ -130,6 +134,34 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       readinessChecks: readiness.checks,
       service: "hostline-voice",
     });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/openai/realtime/live-call-config") {
+    const locationId = url.searchParams.get("locationId") ?? currentEnv.SUPABASE_DEMO_LOCATION_ID;
+    const authorization = await authorizeVoiceAdminRequest({ currentEnv, locationId, req });
+    if (!authorization.authorized) {
+      sendJson(res, authorization.status, { error: authorization.reason ?? "Unauthorized" });
+      return;
+    }
+
+    const config = openAIRealtimeSipService.getLiveCallConfig(locationId ?? undefined);
+    sendJson(res, config.ready ? 200 : 503, config);
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/openai/realtime/webhook") {
+    try {
+      const result = await openAIRealtimeSipService.handleIncomingWebhook({
+        headers: req.headers,
+        locationId: url.searchParams.get("locationId") ?? undefined,
+        rawBody: await readLimitedRequestBody(req, OPENAI_WEBHOOK_BODY_LIMIT_BYTES),
+      });
+      sendJson(res, result.status, result.body);
+    } catch (error) {
+      console.error("[voice-service] OpenAI Realtime webhook failed", error);
+      sendJson(res, 500, { error: "OpenAI Realtime webhook failed" });
+    }
     return;
   }
 
@@ -597,7 +629,7 @@ function applyCors(req: IncomingMessage, res: ServerResponse, currentEnv: VoiceS
   }
 
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, x-hostline-api-key");
+  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, webhook-id, webhook-signature, webhook-timestamp, x-hostline-api-key");
 }
 
 async function shutdownGracefully(signal: "SIGINT" | "SIGTERM") {
@@ -623,6 +655,7 @@ async function shutdownGracefully(signal: "SIGINT" | "SIGTERM") {
 
   await waitForRelaySocketsToClose(4500);
   await waitForRelayCompletions(4500);
+  openAIRealtimeSipService.closeAll();
   wss.close();
 
   for (const ws of activeRelaySockets) {
