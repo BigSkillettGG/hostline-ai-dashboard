@@ -60,3 +60,8 @@ export interface ConversationRelayTextMessage {
   preemptible?: boolean;
   lang?: string;
 }
+
+export interface ConversationRelayEndMessage {
+  type: "end";
+  handoffData?: string;
+}

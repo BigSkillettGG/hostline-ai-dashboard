@@ -40,6 +40,7 @@ import {
 } from "./restaurant-agent";
 import type {
   ConversationRelayInboundMessage,
+  ConversationRelayEndMessage,
   ConversationRelayPromptMessage,
   ConversationRelaySetupMessage,
   ConversationRelayTextMessage,
@@ -69,6 +70,7 @@ interface RelaySession {
   staffTaskIntents: Set<StaffAlertKind>;
   startedAt: number;
   needsStaffReview: boolean;
+  toPhone?: string;
   transcript: TranscriptTurn[];
 }
 
@@ -177,6 +179,7 @@ const RESTAURANT_RESPONSE_TOOLS: RestaurantResponseTool[] = [
 
 const RELAY_RECONNECT_GRACE_MS = 20_000;
 const LATENCY_FILLER_DELAY_MS = 700;
+const NATURAL_GOODBYE_END_DELAY_MS = 2200;
 
 export function createConversationRelayHandler(
   env: VoiceServiceEnv,
@@ -458,6 +461,18 @@ async function handlePromptMessage({
 
   session.unclearPromptCount = 0;
 
+  const goodbyeReply = buildNaturalGoodbyeReply(utterance, session);
+  if (goodbyeReply) {
+    persistAgentTurn({ callStore, reply: goodbyeReply, session });
+    sendText(ws, goodbyeReply, message.lang);
+    scheduleEndSession(ws, {
+      reason: "Caller indicated the conversation was finished.",
+      reasonCode: "natural_goodbye",
+    });
+    logTurnComplete({ classification, latencyMs: Date.now() - turnStartedAt, reply: goodbyeReply, session, utterance });
+    return;
+  }
+
   const latencyFiller = startLatencyFiller({
     lang: message.lang,
     session,
@@ -550,6 +565,45 @@ export function sendText(
   ws.send(JSON.stringify(message));
 }
 
+export function sendEndSession(ws: WebSocket, handoffData?: Record<string, string>) {
+  const message: ConversationRelayEndMessage = {
+    type: "end",
+    handoffData: handoffData ? JSON.stringify(handoffData) : undefined,
+  };
+
+  ws.send(JSON.stringify(message));
+}
+
+export function buildNaturalGoodbyeReply(utterance: string, session: Pick<RelaySession, "context" | "transcript">) {
+  if (!isNaturalGoodbyeIntent(utterance, session.transcript)) return null;
+  return `Of course. Thanks for calling ${session.context.restaurantName}. Have a great night.`;
+}
+
+export function isNaturalGoodbyeIntent(utterance: string, transcript: TranscriptTurn[] = []) {
+  const normalized = utterance.toLowerCase().replace(/[^a-z0-9\s']/g, " ").replace(/\s+/g, " ").trim();
+  if (!normalized) return false;
+
+  if (/\b(bye|goodbye|hang up|that'?s all|that is all|all set|nothing else|no thanks|no thank you|that'?s it|i'?m good)\b/.test(normalized)) {
+    return true;
+  }
+
+  const lastAgentTurn = transcript.filter((turn) => turn.role === "agent").at(-1)?.text ?? "";
+  const agentAskedAnythingElse = /\b(anything else|something else|what else|can i help you with)\b/i.test(lastAgentTurn);
+  if (!agentAskedAnythingElse) return false;
+
+  return /^(no|nope|nah|thank you|thanks|thank you very much|thanks so much)$/.test(normalized);
+}
+
+function scheduleEndSession(ws: WebSocket, handoffData: Record<string, string>) {
+  setTimeout(() => {
+    try {
+      sendEndSession(ws, handoffData);
+    } catch (error) {
+      console.warn("[conversation-relay] natural goodbye end failed", error);
+    }
+  }, NATURAL_GOODBYE_END_DELAY_MS);
+}
+
 export function buildLatencyFiller(utterance: string) {
   const normalized = utterance.toLowerCase();
 
@@ -618,12 +672,14 @@ function parseConversationRelayMessage(raw: string): ConversationRelayInboundMes
 }
 
 function applySetupMessage(session: RelaySession, message: ConversationRelaySetupMessage) {
+  const customParameters = message.customParameters ?? {};
   session.id = message.sessionId;
   session.callSid = message.callSid;
   session.parentCallSid = message.parentCallSid;
-  session.callSessionKey = message.parentCallSid?.trim() || message.callSid;
-  session.callerPhone = message.from;
+  session.callSessionKey = customParameters.callSessionKey?.trim() || message.parentCallSid?.trim() || message.callSid;
+  session.callerPhone = message.from || customParameters.callerPhone;
   session.locationId = message.customParameters?.locationId;
+  session.toPhone = message.to || customParameters.dialedPhone;
 }
 
 function getCallSessionKey(session: RelaySession) {

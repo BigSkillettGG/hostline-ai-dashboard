@@ -23,7 +23,7 @@ import { createTelephonyService } from "./telephony";
 import { demoRestaurantContext } from "./restaurant-context";
 import { generateRestaurantReply } from "./restaurant-agent";
 import { validateTwilioSignature } from "./twilio-signature";
-import { buildConversationRelayTwiML, buildEmptyTwiML, buildUnavailableTwiML } from "./twiml";
+import { buildConversationRelayTwiML, buildEmptyTwiML, buildHangupTwiML, buildUnavailableTwiML } from "./twiml";
 import { resolveConversationRelayTtsVoice } from "./voice-selection";
 
 const env = loadEnv();
@@ -299,11 +299,13 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       const restaurantContext = await restaurantContextStore.getContext(locationId);
       const liveCallConfig = buildLiveCallConfig(currentEnv, locationId);
       const ttsVoice = resolveConversationRelayTtsVoice(currentEnv, restaurantContext);
+      const callSessionKey = getStableCallSessionKey(params);
+      const actionUrl = liveCallConfig.actionUrl && callSessionKey
+        ? withQueryParam(liveCallConfig.actionUrl, "callSessionKey", callSessionKey)
+        : liveCallConfig.actionUrl;
       const twiml = buildConversationRelayTwiML({
-        actionUrl: liveCallConfig.actionUrl,
-        customParameters: {
-          locationId,
-        },
+        actionUrl,
+        customParameters: buildRelayCustomParameters(params, locationId, callSessionKey),
         language: currentEnv.TWILIO_LANGUAGE,
         speechTimeoutMs: currentEnv.TWILIO_SPEECH_TIMEOUT_MS,
         transcriptionProvider: currentEnv.TWILIO_TRANSCRIPTION_PROVIDER,
@@ -344,6 +346,21 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
         params.locationId ??
         currentEnv.SUPABASE_DEMO_LOCATION_ID ??
         "demo-location";
+      const handoffData = parseConversationRelayHandoffData(params.HandoffData ?? params.handoffData);
+      if (handoffData.reasonCode === "natural_goodbye") {
+        console.info("[voice-service] ending call after natural goodbye", {
+          callSid: params.CallSid ?? params.callSid,
+          locationId,
+        });
+        sendXml(res, 200, buildHangupTwiML());
+        return;
+      }
+
+      if (isCompletedTwilioCall(params)) {
+        sendXml(res, 200, buildEmptyTwiML());
+        return;
+      }
+
       const reconnectAttempt = Number.parseInt(url.searchParams.get("reconnectAttempt") ?? "0", 10);
       if (Number.isFinite(reconnectAttempt) && reconnectAttempt >= 5) {
         console.warn("[voice-service] ConversationRelay reconnect limit reached", {
@@ -358,14 +375,14 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       const restaurantContext = await restaurantContextStore.getContext(locationId);
       const liveCallConfig = buildLiveCallConfig(currentEnv, locationId);
       const ttsVoice = resolveConversationRelayTtsVoice(currentEnv, restaurantContext);
-      const reconnectActionUrl = liveCallConfig.actionUrl
-        ? withQueryParam(liveCallConfig.actionUrl, "reconnectAttempt", String((reconnectAttempt || 0) + 1))
-        : undefined;
+      const callSessionKey = getStableCallSessionKey(params, url.searchParams.get("callSessionKey") ?? undefined);
+      const reconnectActionUrl = withOptionalQueryParams(liveCallConfig.actionUrl, {
+        callSessionKey,
+        reconnectAttempt: String((reconnectAttempt || 0) + 1),
+      });
       const twiml = buildConversationRelayTwiML({
         actionUrl: reconnectActionUrl,
-        customParameters: {
-          locationId,
-        },
+        customParameters: buildRelayCustomParameters(params, locationId, callSessionKey),
         language: currentEnv.TWILIO_LANGUAGE,
         speechTimeoutMs: currentEnv.TWILIO_SPEECH_TIMEOUT_MS,
         transcriptionProvider: currentEnv.TWILIO_TRANSCRIPTION_PROVIDER,
@@ -376,6 +393,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
 
       console.warn("[voice-service] reconnecting ConversationRelay without replaying greeting", {
         callSid: params.CallSid ?? params.callSid,
+        callSessionKey,
         locationId,
         reconnectAttempt: (reconnectAttempt || 0) + 1,
       });
@@ -490,6 +508,54 @@ function withQueryParam(url: string, key: string, value: string) {
   const nextUrl = new URL(url);
   nextUrl.searchParams.set(key, value);
   return nextUrl.toString();
+}
+
+function withOptionalQueryParams(url: string | undefined, params: Record<string, string | undefined>) {
+  if (!url) return undefined;
+
+  let nextUrl = url;
+  for (const [key, value] of Object.entries(params)) {
+    if (value) nextUrl = withQueryParam(nextUrl, key, value);
+  }
+  return nextUrl;
+}
+
+function buildRelayCustomParameters(
+  params: Record<string, string>,
+  locationId: string,
+  callSessionKey = getStableCallSessionKey(params),
+) {
+  return {
+    callSessionKey,
+    callerPhone: firstNonEmpty(params.From, params.from),
+    dialedPhone: firstNonEmpty(params.To, params.to),
+    locationId,
+  };
+}
+
+function getStableCallSessionKey(params: Record<string, string>, fallback?: string) {
+  return firstNonEmpty(params.CallSid, params.callSid, params.ParentCallSid, params.parentCallSid, fallback);
+}
+
+function firstNonEmpty(...values: Array<string | undefined | null>) {
+  return values.find((value) => value?.trim())?.trim();
+}
+
+function parseConversationRelayHandoffData(value?: string) {
+  if (!value) return {} as Record<string, string>;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, string>
+      : {} as Record<string, string>;
+  } catch {
+    return {} as Record<string, string>;
+  }
+}
+
+function isCompletedTwilioCall(params: Record<string, string>) {
+  const callStatus = firstNonEmpty(params.CallStatus, params.callStatus)?.toLowerCase();
+  return callStatus === "completed" || callStatus === "busy" || callStatus === "failed" || callStatus === "no-answer";
 }
 
 function allowRateLimitedRequest(req: IncomingMessage, res: ServerResponse, action: string, limit: number) {

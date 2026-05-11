@@ -2,10 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   appendCompletedActionFollowUp,
   buildLatencyFiller,
+  buildNaturalGoodbyeReply,
   classifyEscalationIntent,
+  isNaturalGoodbyeIntent,
+  sendEndSession,
   sendText,
   summarizeCallForStaff,
 } from "./conversation-relay";
+import { demoRestaurantContext } from "./restaurant-context";
 
 describe("conversation relay staff-review triggers", () => {
   it("classifies complaint and refund language as a complaint", () => {
@@ -106,6 +110,57 @@ describe("conversation relay staff-review triggers", () => {
         preemptible: true,
         token: "Let me check that for you.",
         type: "text",
+      },
+    ]);
+  });
+
+  it("detects natural goodbye turns after Vera asks whether anything else is needed", () => {
+    expect(isNaturalGoodbyeIntent("thanks", [])).toBe(false);
+    expect(
+      isNaturalGoodbyeIntent("no thanks", [
+        {
+          at: "2026-05-06T20:00:01.000Z",
+          role: "agent",
+          text: "Anything else I can help you with?",
+        },
+      ]),
+    ).toBe(true);
+    expect(isNaturalGoodbyeIntent("okay bye")).toBe(true);
+  });
+
+  it("builds a natural closing line", () => {
+    expect(
+      buildNaturalGoodbyeReply("no thanks", {
+        context: demoRestaurantContext,
+        transcript: [
+          {
+            at: "2026-05-06T20:00:01.000Z",
+            role: "agent",
+            text: "Anything else I can help you with?",
+          },
+        ],
+      }),
+    ).toBe("Of course. Thanks for calling Olive & Ember. Have a great night.");
+  });
+
+  it("can ask Twilio to end a ConversationRelay session after goodbye", () => {
+    const sent: unknown[] = [];
+    const ws = {
+      send(raw: string) {
+        sent.push(JSON.parse(raw));
+      },
+    };
+
+    sendEndSession(ws as never, {
+      reason: "Caller indicated the conversation was finished.",
+      reasonCode: "natural_goodbye",
+    });
+
+    expect(sent).toEqual([
+      {
+        handoffData:
+          "{\"reason\":\"Caller indicated the conversation was finished.\",\"reasonCode\":\"natural_goodbye\"}",
+        type: "end",
       },
     ]);
   });

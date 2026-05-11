@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildConversationRelayTwiML, buildEmptyTwiML, escapeXml } from "./twiml";
+import { buildConversationRelayTwiML, buildEmptyTwiML, buildHangupTwiML, escapeXml } from "./twiml";
 
 describe("ConversationRelay TwiML", () => {
   it("builds Twilio ConversationRelay XML with ElevenLabs voice settings", () => {
@@ -30,7 +30,7 @@ describe("ConversationRelay TwiML", () => {
   it("can reconnect ConversationRelay without replaying the welcome greeting", () => {
     const xml = buildConversationRelayTwiML({
       actionUrl: "https://voice.hostline.test/twilio/conversation-ended?locationId=loc_123&reconnectAttempt=1",
-      customParameters: { locationId: "loc_123" },
+      customParameters: { callSessionKey: "CA123", locationId: "loc_123" },
       language: "en-US",
       speechTimeoutMs: 1800,
       transcriptionProvider: "Deepgram",
@@ -40,6 +40,7 @@ describe("ConversationRelay TwiML", () => {
     });
 
     expect(xml).toContain("<ConversationRelay");
+    expect(xml).toContain('<Parameter name="callSessionKey" value="CA123" />');
     expect(xml).toContain('speechTimeout="1800"');
     expect(xml).not.toContain("welcomeGreeting=");
     expect(xml).not.toContain("welcomeGreetingInterruptible=");
@@ -47,5 +48,9 @@ describe("ConversationRelay TwiML", () => {
 
   it("builds an empty TwiML response when reconnecting is unsafe", () => {
     expect(buildEmptyTwiML()).toBe('<?xml version="1.0" encoding="UTF-8"?>\n<Response />');
+  });
+
+  it("builds a hangup response for natural call endings", () => {
+    expect(buildHangupTwiML()).toBe('<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n  <Hangup />\n</Response>');
   });
 });
