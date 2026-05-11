@@ -57,7 +57,7 @@ const scenarios: DemoScenario[] = [
     label: "Hours and parking",
     outcome: "Resolved",
     lines: [
-      { speaker: "vera", text: "Thanks for calling Olive and Ember, this is Vera. How can I help tonight?" },
+      { speaker: "vera", text: "Thanks for calling Olive and Ember, this is Vera. How can I help you tonight?" },
       { speaker: "caller", text: "Hey, what time do you guys close on Sundays?" },
       { speaker: "vera", text: "We're open until 9 PM on Sundays. Kitchen takes last orders at 8:30." },
       { speaker: "caller", text: "And is there parking nearby?" },
@@ -76,7 +76,7 @@ const scenarios: DemoScenario[] = [
     label: "Pickup order",
     outcome: "$54 captured",
     lines: [
-      { speaker: "vera", text: "Thanks for calling Olive and Ember, this is Vera. How can I help?" },
+      { speaker: "vera", text: "Thanks for calling Olive and Ember, this is Vera. How can I help you?" },
       { speaker: "caller", text: "I'd like to place a pickup order. Two margherita pizzas and a Caesar salad." },
       { speaker: "vera", text: "Got it. Two margheritas and one Caesar. Any modifications? We can do gluten-free crust for four dollars more." },
       { speaker: "caller", text: "Gluten-free on one pizza, and no anchovy on the Caesar." },
@@ -94,7 +94,7 @@ const scenarios: DemoScenario[] = [
     label: "Reservation",
     outcome: "Staff review",
     lines: [
-      { speaker: "vera", text: "Thanks for calling Olive and Ember, this is Vera. How can I help?" },
+      { speaker: "vera", text: "Thanks for calling Olive and Ember, this is Vera. How can I help you?" },
       { speaker: "caller", text: "I'd like to book a table for six this Saturday at 7:30." },
       { speaker: "vera", text: "Saturday at 7:30 for six. I'll put in a reservation request for you. Any special occasion?" },
       { speaker: "caller", text: "It's my mom's sixtieth birthday. Could we get a quiet table near the window?" },
@@ -112,7 +112,7 @@ const scenarios: DemoScenario[] = [
     label: "Specials and wine",
     outcome: "Upsell offered",
     lines: [
-      { speaker: "vera", text: "Thanks for calling Olive and Ember, this is Vera. How can I help?" },
+      { speaker: "vera", text: "Thanks for calling Olive and Ember, this is Vera. How can I help you?" },
       { speaker: "caller", text: "What specials do you have tonight?" },
       { speaker: "vera", text: "Tonight's special is a wood-fired branzino with lemon and capers for thirty four dollars. The chef's burrata is also back with heirloom tomatoes." },
       { speaker: "caller", text: "Ooh, nice. Do you have good red wines by the glass?" },
@@ -130,7 +130,7 @@ const scenarios: DemoScenario[] = [
     label: "Dietary and allergy",
     outcome: "Staff-safe answer",
     lines: [
-      { speaker: "vera", text: "Thanks for calling Olive and Ember, this is Vera. How can I help?" },
+      { speaker: "vera", text: "Thanks for calling Olive and Ember, this is Vera. How can I help you?" },
       { speaker: "caller", text: "My daughter has a severe nut allergy. Can you accommodate that?" },
       { speaker: "vera", text: "I want to be upfront. We do use nuts in several dishes, and cross-contact is possible in our kitchen. For severe allergies, I'd recommend speaking with the chef directly." },
       { speaker: "caller", text: "Okay. Do you have gluten-free options?" },
@@ -148,7 +148,7 @@ const scenarios: DemoScenario[] = [
     label: "Complaint",
     outcome: "Escalated",
     lines: [
-      { speaker: "vera", text: "Thanks for calling Olive and Ember, this is Vera. How can I help?" },
+      { speaker: "vera", text: "Thanks for calling Olive and Ember, this is Vera. How can I help you?" },
       { speaker: "caller", text: "I was there last night and my order was completely wrong. I got chicken instead of salmon." },
       { speaker: "vera", text: "I'm really sorry to hear that. That's not the experience we want for you. Let me get the manager involved right away." },
       { speaker: "caller", text: "This is the second time it's happened. I want a refund." },

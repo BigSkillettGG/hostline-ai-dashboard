@@ -37,7 +37,7 @@ export const demoRestaurantContext: RestaurantVoiceContext = {
   hostName: "Vera",
   voiceGender: "female",
   timezone: "America/Los_Angeles",
-  greeting: "Thanks for calling Olive & Ember, this is Vera, the restaurant's virtual host. How can I help?",
+  greeting: "Thanks for calling Olive & Ember, this is Vera, the restaurant's virtual host. How can I help you?",
   smsConfirmationsEnabled: true,
   faqs: [
     {

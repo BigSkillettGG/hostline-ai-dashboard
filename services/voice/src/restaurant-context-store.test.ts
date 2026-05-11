@@ -7,7 +7,7 @@ describe("restaurant context store", () => {
     const context = buildRestaurantContext({
       agentConfig: {
         escalation_phone_number: "+15550101",
-        greeting_template: "Thanks for calling {restaurant_name}, this is {host_name}. How can I help?",
+        greeting_template: "Thanks for calling {restaurant_name}, this is {host_name}. How can I help you?",
         host_name: "Maya",
         reservation_provider: "opentable",
         sms_confirmations_enabled: false,

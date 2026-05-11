@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 type Line = { who: "vera" | "caller"; text: string; dur: string };
 
 const SCRIPT: Line[] = [
-  { who: "vera",   text: "Thanks for calling Trattoria Rinaldi, this is Vera. How can I help?",                  dur: "0:04" },
+  { who: "vera",   text: "Thanks for calling Trattoria Rinaldi, this is Vera. How can I help you?",              dur: "0:04" },
   { who: "caller", text: "Hi, can I order a large margherita and one Caesar salad for pickup at 7?",             dur: "0:10" },
   { who: "vera",   text: "Absolutely. One large margherita and one Caesar salad, ready at 7:00.",                dur: "0:16" },
   { who: "caller", text: "Perfect. Can you also add an order of garlic knots and two tiramisus to that?",        dur: "0:22" },

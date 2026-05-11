@@ -56,13 +56,13 @@ describe("restaurant fallback replies", () => {
       {
         at: "2026-05-06T20:00:01.000Z",
         role: "agent",
-        text: "Thanks for calling Olive & Ember. How can I help?",
+        text: "Thanks for calling Olive & Ember. How can I help you?",
       },
     ]);
 
     expect(input).toEqual([
       { content: "Hi", role: "user" },
-      { content: "Thanks for calling Olive & Ember. How can I help?", role: "assistant" },
+      { content: "Thanks for calling Olive & Ember. How can I help you?", role: "assistant" },
       { content: "Do you have patio seating?", role: "user" },
     ]);
   });
