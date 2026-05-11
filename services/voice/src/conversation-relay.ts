@@ -176,6 +176,7 @@ const RESTAURANT_RESPONSE_TOOLS: RestaurantResponseTool[] = [
 ];
 
 const RELAY_RECONNECT_GRACE_MS = 20_000;
+const LATENCY_FILLER_DELAY_MS = 700;
 
 export function createConversationRelayHandler(
   env: VoiceServiceEnv,
@@ -457,77 +458,149 @@ async function handlePromptMessage({
 
   session.unclearPromptCount = 0;
 
-  const escalationKind = classifyEscalationIntent(utterance, session.context);
-  void maybeSendEscalationAlert({
-    kind: escalationKind,
-    session,
-    staffNotifications,
-    utterance,
-  }).catch((error) => console.error("[conversation-relay] staff escalation alert failed", error));
-  void maybeCreateStaffFollowUpTask({
-    callStore,
-    kind: escalationKind,
+  const latencyFiller = startLatencyFiller({
+    lang: message.lang,
     session,
     utterance,
-  }).catch((error) => console.error("[conversation-relay] staff task persistence failed", error));
-
-  const orderOutcome = await maybeAdvanceStaffReviewOrder({
-    callStore,
-    guestConfirmations,
-    session,
-    staffNotifications,
-    utterance,
-  });
-  const createdReservationId = await maybeCreateStaffReviewReservation({
-    callStore,
-    guestConfirmations,
-    session,
-    staffNotifications,
-    utterance,
+    ws,
   });
 
-  let reply = buildActionReply({
-    createdReservationId,
-    guestConfirmations,
-    orderOutcome,
-    session,
-  });
+  try {
+    const escalationKind = classifyEscalationIntent(utterance, session.context);
+    void maybeSendEscalationAlert({
+      kind: escalationKind,
+      session,
+      staffNotifications,
+      utterance,
+    }).catch((error) => console.error("[conversation-relay] staff escalation alert failed", error));
+    void maybeCreateStaffFollowUpTask({
+      callStore,
+      kind: escalationKind,
+      session,
+      utterance,
+    }).catch((error) => console.error("[conversation-relay] staff task persistence failed", error));
 
-  if (!reply) {
-    reply = await generateRestaurantReply({
-      callerUtterance: utterance,
-      context: session.context,
-      env,
-      handleToolCall: (toolCall) =>
-        executeRestaurantTool({
-          callStore,
-          guestConfirmations,
-          session,
-          staffNotifications,
-          toolCall,
-          utterance,
-        }),
-      tools: RESTAURANT_RESPONSE_TOOLS,
-      transcript: session.transcript,
+    const orderOutcome = await maybeAdvanceStaffReviewOrder({
+      callStore,
+      guestConfirmations,
+      session,
+      staffNotifications,
+      utterance,
     });
-  }
+    const createdReservationId = await maybeCreateStaffReviewReservation({
+      callStore,
+      guestConfirmations,
+      session,
+      staffNotifications,
+      utterance,
+    });
 
-  persistAgentTurn({ callStore, reply, session });
-  sendText(ws, reply, message.lang);
-  logTurnComplete({ classification, latencyMs: Date.now() - turnStartedAt, reply, session, utterance });
+    let reply = buildActionReply({
+      createdReservationId,
+      guestConfirmations,
+      orderOutcome,
+      session,
+    });
+
+    if (!reply) {
+      reply = await generateRestaurantReply({
+        callerUtterance: utterance,
+        context: session.context,
+        env,
+        handleToolCall: (toolCall) =>
+          executeRestaurantTool({
+            callStore,
+            guestConfirmations,
+            session,
+            staffNotifications,
+            toolCall,
+            utterance,
+          }),
+        tools: RESTAURANT_RESPONSE_TOOLS,
+        transcript: session.transcript,
+      });
+    }
+
+    latencyFiller.cancel();
+    persistAgentTurn({ callStore, reply, session });
+    sendText(ws, reply, message.lang);
+    logTurnComplete({ classification, latencyMs: Date.now() - turnStartedAt, reply, session, utterance });
+  } finally {
+    latencyFiller.cancel();
+  }
 }
 
-export function sendText(ws: WebSocket, token: string, lang?: string) {
+export function sendText(
+  ws: WebSocket,
+  token: string,
+  lang?: string,
+  options: {
+    last?: boolean;
+  } = {},
+) {
   const message: ConversationRelayTextMessage = {
     type: "text",
     token,
-    last: true,
+    last: options.last ?? true,
     interruptible: true,
     preemptible: true,
     lang,
   };
 
   ws.send(JSON.stringify(message));
+}
+
+export function buildLatencyFiller(utterance: string) {
+  const normalized = utterance.toLowerCase();
+
+  if (/\b(order|pickup|pizza|salad|pasta|burger|sandwich|takeout|to go)\b/.test(normalized)) {
+    return "Let me pull that up for you.";
+  }
+
+  if (/\b(reservation|reserve|book|table|availability|available)\b/.test(normalized)) {
+    return "Let me check that for you.";
+  }
+
+  if (/\b(special|menu|happy hour|wine|drink|cocktail|beer)\b/.test(normalized)) {
+    return "Let me check the details.";
+  }
+
+  if (/\b(allergy|allergic|gluten|nut|peanut|shellfish|dairy|vegan|vegetarian)\b/.test(normalized)) {
+    return "One moment while I check that carefully.";
+  }
+
+  return "One moment while I check that.";
+}
+
+function startLatencyFiller({
+  lang,
+  session,
+  utterance,
+  ws,
+}: {
+  lang?: string;
+  session: RelaySession;
+  utterance: string;
+  ws: WebSocket;
+}) {
+  let sent = false;
+  const timer = setTimeout(() => {
+    const filler = buildLatencyFiller(utterance);
+    sent = true;
+    console.info("[conversation-relay] latency filler sent", {
+      callSid: session.callSid,
+      sessionId: session.id,
+      text: filler,
+    });
+    sendText(ws, filler, lang, { last: false });
+  }, LATENCY_FILLER_DELAY_MS);
+
+  return {
+    cancel() {
+      clearTimeout(timer);
+      return sent;
+    },
+  };
 }
 
 function parseConversationRelayMessage(raw: string): ConversationRelayInboundMessage | null {

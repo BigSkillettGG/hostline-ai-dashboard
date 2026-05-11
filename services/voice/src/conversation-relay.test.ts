@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { appendCompletedActionFollowUp, classifyEscalationIntent, summarizeCallForStaff } from "./conversation-relay";
+import {
+  appendCompletedActionFollowUp,
+  buildLatencyFiller,
+  classifyEscalationIntent,
+  sendText,
+  summarizeCallForStaff,
+} from "./conversation-relay";
 
 describe("conversation relay staff-review triggers", () => {
   it("classifies complaint and refund language as a complaint", () => {
@@ -70,5 +76,37 @@ describe("conversation relay staff-review triggers", () => {
         "I have sent that pickup order to the staff review queue. Anything else I can help you with?",
       ),
     ).toBe("I have sent that pickup order to the staff review queue. Anything else I can help you with?");
+  });
+
+  it("chooses short human filler phrases for slower live turns", () => {
+    expect(buildLatencyFiller("Do you have availability for a reservation at six?")).toBe(
+      "Let me check that for you.",
+    );
+    expect(buildLatencyFiller("Can I order a pizza for pickup?")).toBe("Let me pull that up for you.");
+    expect(buildLatencyFiller("Do you have anything gluten free?")).toBe(
+      "One moment while I check that carefully.",
+    );
+  });
+
+  it("can stream a filler phrase before the final ConversationRelay answer", () => {
+    const sent: unknown[] = [];
+    const ws = {
+      send(raw: string) {
+        sent.push(JSON.parse(raw));
+      },
+    };
+
+    sendText(ws as never, "Let me check that for you.", "en-US", { last: false });
+
+    expect(sent).toEqual([
+      {
+        interruptible: true,
+        lang: "en-US",
+        last: false,
+        preemptible: true,
+        token: "Let me check that for you.",
+        type: "text",
+      },
+    ]);
   });
 });
