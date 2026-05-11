@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { buildTwilioElevenLabsVoice } from "../../../src/domain/voice-selection";
 import { resolveConversationRelayTtsVoice, resolvePreviewElevenLabsVoiceId } from "./voice-selection";
 
 const env = {
@@ -31,5 +32,11 @@ describe("voice service selection", () => {
     expect(
       resolveConversationRelayTtsVoice({ ...env, TWILIO_TTS_PROVIDER: "Google" }, { voiceGender: "male" }),
     ).toBe("fallback");
+  });
+
+  it("defaults new ElevenLabs live voices to the expressive phone tuning", () => {
+    expect(buildTwilioElevenLabsVoice({ gender: "female" })).toBe(
+      "BZgkqPqms7Kj9ulSkVzn-flash_v2_5-0.95_0.35_0.85",
+    );
   });
 });

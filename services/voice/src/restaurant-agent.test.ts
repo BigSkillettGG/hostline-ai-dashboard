@@ -95,6 +95,26 @@ describe("restaurant fallback replies", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("lets the model handle normal context questions instead of single-keyword playbook replies", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ output_text: "Tonight's special is the mushroom risotto." }), { status: 200 }),
+    );
+
+    const reply = await generateRestaurantReply({
+      callerUtterance: "Do you have any specials tonight?",
+      context: demoRestaurantContext,
+      env: {
+        OPENAI_API_KEY: "sk-test",
+        OPENAI_MODEL: "gpt-5-mini",
+        OPENAI_REPLY_TIMEOUT_MS: 4500,
+      },
+      transcript: [],
+    });
+
+    expect(reply).toBe("Tonight's special is the mushroom risotto.");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("uses a larger reply budget for longer confirmations", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ output_text: "Sure, I can help with that." }), { status: 200 }),

@@ -38,9 +38,9 @@ export function buildTwilioElevenLabsVoice({
   gender,
   modelId = "flash_v2_5",
   overrides,
-  similarityBoost = "0.8",
-  speed = "1.0",
-  stability = "0.5",
+  similarityBoost = "0.85",
+  speed = "0.95",
+  stability = "0.35",
 }: {
   gender: HostlineVoiceGender;
   modelId?: string;

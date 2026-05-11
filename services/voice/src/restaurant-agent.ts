@@ -40,12 +40,17 @@ export interface GenerateCallSummaryInput {
 
 export async function generateRestaurantReply(input: GenerateRestaurantReplyInput) {
   const playbookReply = matchPhonePlaybookReply(input.callerUtterance, input.context);
-  if (playbookReply) {
+  if (playbookReply && shouldAnswerWithPlaybookImmediately(playbookReply.scenario)) {
     console.info("[voice-agent] playbook reply generated", {
       replyLength: playbookReply.text.length,
       scenario: playbookReply.scenario,
     });
     return playbookReply.text;
+  }
+  if (playbookReply) {
+    console.info("[voice-agent] model handling context-sensitive playbook scenario", {
+      scenario: playbookReply.scenario,
+    });
   }
 
   if (!input.env.OPENAI_API_KEY) {
@@ -143,6 +148,8 @@ export function buildRestaurantInstructions(context: RestaurantVoiceContext) {
   return [
     `You are ${context.hostName}, the virtual host for ${context.restaurantName}.`,
     "Sound warm, concise, and natural on the phone.",
+    "Answer the caller's actual current question. Do not jump to hours, reservations, or ordering just because one related word appears.",
+    "Use the full restaurant context before deciding intent; specials, happy hour, today's menu, and featured dishes are not hours questions unless the caller asks when the restaurant opens or closes.",
     "Expect callers with accents, noisy phone audio, fragments, and corrections. Ask one short clarifying question when needed.",
     "Keep replies under two short sentences unless confirming an order.",
     "For multi-item orders, acknowledge captured items briefly and ask what else until the caller says they are done.",
@@ -163,6 +170,28 @@ export function buildRestaurantInstructions(context: RestaurantVoiceContext) {
   ]
     .filter((line): line is string => Boolean(line))
     .join("\n");
+}
+
+const immediatePlaybookScenarios = new Set([
+  "wrong_number",
+  "complaint",
+  "human_handoff",
+  "vendor_sales",
+  "donations_press",
+  "lost_and_found",
+  "employment",
+  "delivery_driver",
+  "delivery_issue",
+  "change_or_cancel",
+  "allergy",
+  "private_event",
+  "large_party",
+  "payment",
+  "order_status",
+]);
+
+function shouldAnswerWithPlaybookImmediately(scenario: string) {
+  return immediatePlaybookScenarios.has(scenario);
 }
 
 async function createResponseWithOptionalTools({

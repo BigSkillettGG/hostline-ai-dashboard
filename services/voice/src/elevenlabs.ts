@@ -13,6 +13,9 @@ export async function createElevenLabsPreview({
     | "ELEVENLABS_MICHAEL_VOICE_ID"
     | "ELEVENLABS_MODEL_ID"
     | "ELEVENLABS_OUTPUT_FORMAT"
+    | "TWILIO_ELEVENLABS_SIMILARITY_BOOST"
+    | "TWILIO_ELEVENLABS_SPEED"
+    | "TWILIO_ELEVENLABS_STABILITY"
   >;
   text: string;
   voiceGender?: unknown;
@@ -34,11 +37,7 @@ export async function createElevenLabsPreview({
     body: JSON.stringify({
       text,
       model_id: env.ELEVENLABS_MODEL_ID,
-      voice_settings: {
-        stability: 0.5,
-        similarity_boost: 0.8,
-        speed: 1,
-      },
+      voice_settings: buildElevenLabsPreviewVoiceSettings(env),
     }),
   });
 
@@ -51,4 +50,24 @@ export async function createElevenLabsPreview({
     audio: Buffer.from(await response.arrayBuffer()),
     contentType: response.headers.get("content-type") ?? "audio/mpeg",
   };
+}
+
+export function buildElevenLabsPreviewVoiceSettings(
+  env: Pick<
+    VoiceServiceEnv,
+    "TWILIO_ELEVENLABS_SIMILARITY_BOOST" | "TWILIO_ELEVENLABS_SPEED" | "TWILIO_ELEVENLABS_STABILITY"
+  >,
+) {
+  return {
+    similarity_boost: parseBoundedNumber(env.TWILIO_ELEVENLABS_SIMILARITY_BOOST, 0.85, 0, 1),
+    speed: parseBoundedNumber(env.TWILIO_ELEVENLABS_SPEED, 0.95, 0.7, 1.2),
+    stability: parseBoundedNumber(env.TWILIO_ELEVENLABS_STABILITY, 0.35, 0, 1),
+  };
+}
+
+function parseBoundedNumber(value: string, fallback: number, min: number, max: number) {
+  if (!value.trim()) return fallback;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
 }
