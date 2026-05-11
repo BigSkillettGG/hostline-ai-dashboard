@@ -118,7 +118,7 @@ export const calls: Call[] = [
     confidence: 96, status: "resolved",
     summary: "Pickup order for 2 pizzas and a salad. ETA 25 minutes. Pay at pickup.",
     transcript: [
-      { speaker: "agent", t: "00:00", text: "Hi, thanks for calling Olive & Ember. This is Vera. How can I help you today?" },
+      { speaker: "agent", t: "00:00", text: "Hi, thank you for calling Olive & Ember. How can I help you?" },
       { speaker: "caller", t: "00:04", text: "Hi, I'd like to place a pickup order." },
       { speaker: "agent", t: "00:07", text: "Of course. What would you like to order?" },
       { speaker: "caller", t: "00:11", text: "A Margherita, a Diavola, and a Caesar salad." },
@@ -134,7 +134,7 @@ export const calls: Call[] = [
     confidence: 92, status: "reviewed",
     summary: "Reservation for 4 on Friday 7:30 PM. Birthday — requested quiet table.",
     transcript: [
-      { speaker: "agent", t: "00:00", text: "Hi, thanks for calling Olive & Ember. This is Vera. How can I help you today?" },
+      { speaker: "agent", t: "00:00", text: "Hi, thank you for calling Olive & Ember. How can I help you?" },
       { speaker: "caller", t: "00:03", text: "I'd like to book a table for four on Friday." },
       { speaker: "agent", t: "00:07", text: "Great — what time works?" },
       { speaker: "caller", t: "00:10", text: "7:30 if possible. It's a birthday so somewhere quieter." },

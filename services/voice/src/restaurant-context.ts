@@ -37,7 +37,7 @@ export const demoRestaurantContext: RestaurantVoiceContext = {
   hostName: "Vera",
   voiceGender: "female",
   timezone: "America/Los_Angeles",
-  greeting: "Hi, thanks for calling Olive and Ember. This is Vera. How can I help you today?",
+  greeting: "Hi, thank you for calling Olive and Ember. How can I help you?",
   defaultPickupEtaMinutes: 25,
   smsConfirmationsEnabled: true,
   faqs: [

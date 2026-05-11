@@ -8,6 +8,7 @@ import {
   buildOpeningGreetingInstructions,
   buildOpenAIRealtimePreflight,
   buildRestaurantLocalTimeContext,
+  buildShortOpeningGreeting,
   extractOpenAIRealtimeCallId,
   extractOpenAIRealtimeCallerPhone,
   extractOpenAIRealtimeToolCalls,
@@ -66,7 +67,8 @@ describe("OpenAI Realtime SIP", () => {
     expect(payload.audio.output.voice).toBe("marin");
     expect(payload.audio.output.speed).toBe(1.02);
     expect(payload.instructions).toContain("Never restart the opening greeting");
-    expect(payload.instructions).toContain("smiling restaurant host");
+    expect(payload.instructions).toContain("Hi, thank you for calling Olive and Ember. How can I help you?");
+    expect(payload.instructions).toContain("do not say you are virtual or AI");
     expect(payload.instructions).toContain("Avoid IVR cadence");
     expect(payload.tools[0].name).toBe("lookup_restaurant_context");
     expect(payload.tools.map((tool) => tool.name)).toContain("send_guest_confirmation");
@@ -131,18 +133,25 @@ describe("OpenAI Realtime SIP", () => {
     const instructions = buildOpenAIRealtimeInstructions(demoRestaurantContext);
 
     expect(instructions).toContain("one continuous live phone call");
-    expect(instructions).toContain("Say the opening greeting only once");
+    expect(instructions).toContain("Say the opening greeting once");
+    expect(instructions).toContain("If the caller says 'hello' before you have greeted them");
     expect(instructions).toContain("Greeting energy");
     expect(instructions).toContain("Handle interruptions gracefully");
   });
 
-  it("builds a warm opening greeting prompt without forcing robotic exactness", () => {
+  it("builds a short opening greeting that does not introduce the host", () => {
+    expect(buildShortOpeningGreeting(demoRestaurantContext)).toBe(
+      "Hi, thank you for calling Olive and Ember. How can I help you?",
+    );
+  });
+
+  it("builds a warm opening greeting prompt using the short greeting", () => {
     const instructions = buildOpeningGreetingInstructions(demoRestaurantContext);
 
-    expect(instructions).toContain("Warmly greet the caller once");
+    expect(instructions).toContain("Say this exact opening greeting once");
+    expect(instructions).toContain("Hi, thank you for calling Olive and Ember. How can I help you?");
     expect(instructions).toContain("smile in your voice");
-    expect(instructions).toContain(demoRestaurantContext.greeting);
-    expect(instructions).not.toContain("Say exactly");
+    expect(instructions).toContain("Do not add your name");
   });
 
   it("clamps realtime playback speed to a safe phone range", () => {

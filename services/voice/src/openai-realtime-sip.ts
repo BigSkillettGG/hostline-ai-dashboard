@@ -5,7 +5,7 @@ import type { VoiceServiceEnv } from "./env";
 import type { GuestConfirmationService } from "./guest-confirmation-service";
 import type { CapturedOrderItem } from "./order-intake";
 import { buildRestaurantInstructions } from "./restaurant-agent";
-import type { RestaurantVoiceContext } from "./restaurant-context";
+import { toSpokenRestaurantName, type RestaurantVoiceContext } from "./restaurant-context";
 import type { RestaurantContextStore } from "./restaurant-context-store";
 
 const OPENAI_REALTIME_DEFAULT_MODEL = "gpt-realtime";
@@ -400,6 +400,7 @@ export function buildOpenAIRealtimeInstructions(
   const callerPhoneContext = callContext.callerPhone
     ? `Caller phone number from SIP caller ID: ${callContext.callerPhone}. If the caller asks for a text or agrees to a confirmation, you may text this number. If offering a text, say the last four digits, not the full number.`
     : "Caller phone number is not available from SIP caller ID. Ask for the best mobile number before offering to text confirmations.";
+  const openingGreeting = buildShortOpeningGreeting(context);
 
   return [
     buildRestaurantInstructions(context),
@@ -407,9 +408,11 @@ export function buildOpenAIRealtimeInstructions(
     callerPhoneContext,
     "Realtime phone behavior:",
     "This is one continuous live phone call. Never restart the opening greeting in the middle of the call.",
-    "Say the opening greeting only once, when the call begins. Make it sound welcoming and lightly upbeat, like a smiling restaurant host answering the phone.",
+    `Opening greeting to use when the call begins: "${openingGreeting}"`,
+    "Say the opening greeting once at the start of the call. Do not introduce yourself by name and do not say you are virtual or AI in the opening.",
+    "If the caller says 'hello' before you have greeted them, immediately give the full opening greeting instead of only saying hello back.",
     "Voice style: warm, polished, friendly, and conversational. Avoid IVR cadence, monotone delivery, robotic precision, or over-enunciating the restaurant name.",
-    "Greeting energy: the first line should feel a little brighter than the rest of the call, but still natural and not theatrical.",
+    "Greeting energy: the opening should be friendly and lightly upbeat, but short and not theatrical.",
     "Pacing: speak briskly enough for a phone call, with varied intonation and short sentence chunks. Do not drag out 'Olive and Ember'.",
     "Use natural restaurant-host acknowledgements like 'Sure', 'Absolutely', 'Of course', 'One moment', and 'Let me check that' when they fit.",
     "If the caller pauses, wait naturally. If silence continues, ask a gentle continuation question such as 'Take your time. What else can I help you with?'",
@@ -650,13 +653,17 @@ function startSidebandSocket({
 }
 
 export function buildOpeningGreetingInstructions(context: RestaurantVoiceContext) {
+  const greeting = buildShortOpeningGreeting(context);
   return [
-    "Warmly greet the caller once, then stop and listen.",
-    "Sound like a friendly, capable restaurant host with a smile in your voice.",
-    "Use this greeting content, but deliver it naturally rather than like a script:",
-    context.greeting,
-    "Keep the greeting concise and lightly energetic. Do not add extra menu, hours, or reservation information.",
+    "Say this exact opening greeting once as soon as the call starts, then stop and listen:",
+    greeting,
+    "Deliver it warmly, like a friendly restaurant host with a smile in your voice.",
+    "Do not add your name, do not say you are virtual or AI, and do not add menu, hours, or reservation information.",
   ].join(" ");
+}
+
+export function buildShortOpeningGreeting(context: RestaurantVoiceContext) {
+  return `Hi, thank you for calling ${toSpokenRestaurantName(context.restaurantName)}. How can I help you?`;
 }
 
 async function handleOpenAIRealtimeToolCalls({
