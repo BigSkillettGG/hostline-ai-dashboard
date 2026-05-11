@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildConversationRelayTwiML, escapeXml } from "./twiml";
+import { buildConversationRelayTwiML, buildEmptyTwiML, escapeXml } from "./twiml";
 
 describe("ConversationRelay TwiML", () => {
   it("builds Twilio ConversationRelay XML with ElevenLabs voice settings", () => {
@@ -23,5 +23,25 @@ describe("ConversationRelay TwiML", () => {
 
   it("escapes XML-sensitive characters", () => {
     expect(escapeXml('Olive & "Ember"')).toBe("Olive &amp; &quot;Ember&quot;");
+  });
+
+  it("can reconnect ConversationRelay without replaying the welcome greeting", () => {
+    const xml = buildConversationRelayTwiML({
+      actionUrl: "https://voice.hostline.test/twilio/conversation-ended?locationId=loc_123&reconnectAttempt=1",
+      customParameters: { locationId: "loc_123" },
+      language: "en-US",
+      transcriptionProvider: "Deepgram",
+      ttsProvider: "ElevenLabs",
+      ttsVoice: "voice123-flash_v2_5-0.95_0.35_0.85",
+      websocketUrl: "wss://voice.hostline.test/twilio/conversation-relay",
+    });
+
+    expect(xml).toContain("<ConversationRelay");
+    expect(xml).not.toContain("welcomeGreeting=");
+    expect(xml).not.toContain("welcomeGreetingInterruptible=");
+  });
+
+  it("builds an empty TwiML response when reconnecting is unsafe", () => {
+    expect(buildEmptyTwiML()).toBe('<?xml version="1.0" encoding="UTF-8"?>\n<Response />');
   });
 });

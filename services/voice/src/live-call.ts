@@ -20,7 +20,7 @@ export function buildLiveCallConfig(env: VoiceServiceEnv, requestedLocationId?: 
     : undefined;
 
   return {
-    actionUrl: publicHttpBaseUrl ? `${publicHttpBaseUrl}/twilio/conversation-ended` : undefined,
+    actionUrl: publicHttpBaseUrl ? appendQuery(`${publicHttpBaseUrl}/twilio/conversation-ended`, { locationId }) : undefined,
     conversationRelayUrl: publicWsBaseUrl ? `${publicWsBaseUrl}/twilio/conversation-relay` : undefined,
     locationId,
     publicHttpBaseUrl,

@@ -23,7 +23,7 @@ import { createTelephonyService } from "./telephony";
 import { demoRestaurantContext } from "./restaurant-context";
 import { generateRestaurantReply } from "./restaurant-agent";
 import { validateTwilioSignature } from "./twilio-signature";
-import { buildConversationRelayTwiML, buildUnavailableTwiML } from "./twiml";
+import { buildConversationRelayTwiML, buildEmptyTwiML, buildUnavailableTwiML } from "./twiml";
 import { resolveConversationRelayTtsVoice } from "./voice-selection";
 
 const env = loadEnv();
@@ -325,7 +325,68 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
   }
 
   if (req.method === "POST" && url.pathname === "/twilio/conversation-ended") {
-    sendJson(res, 200, { ok: true });
+    try {
+      const rawBody = await readLimitedRequestBody(req, TWILIO_BODY_LIMIT_BYTES);
+      const params = Object.fromEntries(new URLSearchParams(rawBody));
+
+      if (!isValidTwilioWebhook(req, currentEnv, params)) {
+        sendText(res, 401, "Invalid Twilio signature");
+        return;
+      }
+
+      if (!currentEnv.PUBLIC_WS_BASE_URL) {
+        sendXml(res, 200, buildEmptyTwiML());
+        return;
+      }
+
+      const locationId =
+        url.searchParams.get("locationId") ??
+        params.locationId ??
+        currentEnv.SUPABASE_DEMO_LOCATION_ID ??
+        "demo-location";
+      const reconnectAttempt = Number.parseInt(url.searchParams.get("reconnectAttempt") ?? "0", 10);
+      if (Number.isFinite(reconnectAttempt) && reconnectAttempt >= 5) {
+        console.warn("[voice-service] ConversationRelay reconnect limit reached", {
+          callSid: params.CallSid ?? params.callSid,
+          locationId,
+          reconnectAttempt,
+        });
+        sendXml(res, 200, buildEmptyTwiML());
+        return;
+      }
+
+      const restaurantContext = await restaurantContextStore.getContext(locationId);
+      const liveCallConfig = buildLiveCallConfig(currentEnv, locationId);
+      const ttsVoice = resolveConversationRelayTtsVoice(currentEnv, restaurantContext);
+      const reconnectActionUrl = liveCallConfig.actionUrl
+        ? withQueryParam(liveCallConfig.actionUrl, "reconnectAttempt", String((reconnectAttempt || 0) + 1))
+        : undefined;
+      const twiml = buildConversationRelayTwiML({
+        actionUrl: reconnectActionUrl,
+        customParameters: {
+          locationId,
+        },
+        language: currentEnv.TWILIO_LANGUAGE,
+        transcriptionProvider: currentEnv.TWILIO_TRANSCRIPTION_PROVIDER,
+        ttsProvider: currentEnv.TWILIO_TTS_PROVIDER,
+        ttsVoice,
+        websocketUrl: liveCallConfig.conversationRelayUrl ?? `${currentEnv.PUBLIC_WS_BASE_URL}/twilio/conversation-relay`,
+      });
+
+      console.warn("[voice-service] reconnecting ConversationRelay without replaying greeting", {
+        callSid: params.CallSid ?? params.callSid,
+        locationId,
+        reconnectAttempt: (reconnectAttempt || 0) + 1,
+      });
+      sendXml(res, 200, twiml);
+    } catch (error) {
+      if (error instanceof HttpRequestError) {
+        sendText(res, error.statusCode, error.message);
+      } else {
+        console.error("[voice-service] ConversationRelay action callback failed", error);
+        sendXml(res, 200, buildEmptyTwiML());
+      }
+    }
     return;
   }
 
@@ -422,6 +483,12 @@ function sendXml(res: ServerResponse, status: number, body: string) {
 function sendText(res: ServerResponse, status: number, body: string) {
   res.writeHead(status, { "Content-Type": "text/plain" });
   res.end(body);
+}
+
+function withQueryParam(url: string, key: string, value: string) {
+  const nextUrl = new URL(url);
+  nextUrl.searchParams.set(key, value);
+  return nextUrl.toString();
 }
 
 function allowRateLimitedRequest(req: IncomingMessage, res: ServerResponse, action: string, limit: number) {

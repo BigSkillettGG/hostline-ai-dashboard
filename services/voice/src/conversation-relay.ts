@@ -41,6 +41,7 @@ import type {
 
 interface RelaySession {
   id?: string;
+  callSessionKey?: string;
   callRecordId?: string;
   callSid?: string;
   callerPhone?: string;
@@ -54,6 +55,7 @@ interface RelaySession {
   reservationCreatedId?: string;
   reservationIntentSeen: boolean;
   reservationRequest?: CapturedReservationRequest;
+  parentCallSid?: string;
   staffAlertIntents: Set<StaffAlertKind>;
   staffTaskIntents: Set<StaffAlertKind>;
   startedAt: number;
@@ -177,7 +179,7 @@ export function createConversationRelayHandler(
   } = {},
 ) {
   const sessions = new WeakMap<WebSocket, RelaySession>();
-  const sessionsByCallSid = new Map<string, RelaySession>();
+  const sessionsByCallKey = new Map<string, RelaySession>();
   const pendingCompletions = new Map<string, PendingSessionCompletion>();
 
   return function handleConversationRelayConnection(ws: WebSocket, req: IncomingMessage) {
@@ -206,7 +208,7 @@ export function createConversationRelayHandler(
         const reconnect = reconnectSessionIfNeeded({
           pendingCompletions,
           session,
-          sessionsByCallSid,
+          sessionsByCallKey,
         });
         session = reconnect.session;
         sessions.set(ws, session);
@@ -214,6 +216,7 @@ export function createConversationRelayHandler(
         if (reconnect.resumed) {
           console.info("[conversation-relay] resumed existing call session", {
             callSid: session.callSid,
+            callSessionKey: session.callSessionKey,
             sessionId: session.id,
             transcriptTurns: session.transcript.length,
           });
@@ -238,7 +241,9 @@ export function createConversationRelayHandler(
 
         console.info("[conversation-relay] setup", {
           callSid: session.callSid,
+          callSessionKey: session.callSessionKey,
           from: session.callerPhone,
+          parentCallSid: session.parentCallSid,
           sessionId: session.id,
         });
         return;
@@ -298,7 +303,7 @@ export function createConversationRelayHandler(
         pendingCompletions,
         durationSeconds,
         env,
-        sessionsByCallSid,
+        sessionsByCallKey,
         session,
       }).catch((error) => console.error("[conversation-relay] call close persistence failed", error));
       lifecycle.onSessionCompletion?.(completion);
@@ -306,6 +311,7 @@ export function createConversationRelayHandler(
 
       console.info("[conversation-relay] closed", {
         callSid: session.callSid,
+        callSessionKey: session.callSessionKey,
         closeCode: code,
         durationSeconds,
         reason,
@@ -318,32 +324,34 @@ export function createConversationRelayHandler(
 function reconnectSessionIfNeeded({
   pendingCompletions,
   session,
-  sessionsByCallSid,
+  sessionsByCallKey,
 }: {
   pendingCompletions: Map<string, PendingSessionCompletion>;
   session: RelaySession;
-  sessionsByCallSid: Map<string, RelaySession>;
+  sessionsByCallKey: Map<string, RelaySession>;
 }) {
-  if (!session.callSid) return { resumed: false, session };
+  const callKey = getCallSessionKey(session);
+  if (!callKey) return { resumed: false, session };
 
-  const pendingCompletion = pendingCompletions.get(session.callSid);
+  const pendingCompletion = pendingCompletions.get(callKey);
   if (pendingCompletion) {
     pendingCompletion.cancelled = true;
     clearTimeout(pendingCompletion.timer);
-    pendingCompletions.delete(session.callSid);
+    pendingCompletions.delete(callKey);
     pendingCompletion.resolve();
   }
 
-  const existingSession = sessionsByCallSid.get(session.callSid);
+  const existingSession = sessionsByCallKey.get(callKey);
   if (!existingSession || existingSession === session) {
-    sessionsByCallSid.set(session.callSid, session);
+    sessionsByCallKey.set(callKey, session);
     return { resumed: false, session };
   }
 
   existingSession.id = session.id;
   existingSession.callerPhone = session.callerPhone ?? existingSession.callerPhone;
   existingSession.locationId = session.locationId ?? existingSession.locationId;
-  sessionsByCallSid.set(session.callSid, existingSession);
+  existingSession.parentCallSid = session.parentCallSid ?? existingSession.parentCallSid;
+  sessionsByCallKey.set(callKey, existingSession);
 
   return { resumed: true, session: existingSession };
 }
@@ -354,21 +362,21 @@ async function scheduleSessionCompletion({
   durationSeconds,
   env,
   session,
-  sessionsByCallSid,
+  sessionsByCallKey,
 }: {
   callStore: CallStore;
   pendingCompletions: Map<string, PendingSessionCompletion>;
   durationSeconds: number;
   env: VoiceServiceEnv;
   session: RelaySession;
-  sessionsByCallSid: Map<string, RelaySession>;
+  sessionsByCallKey: Map<string, RelaySession>;
 }) {
-  if (!session.callSid) {
+  const callKey = getCallSessionKey(session);
+  if (!callKey) {
     await completeSessionCall({ callStore, durationSeconds, env, session });
     return;
   }
 
-  const callSid = session.callSid;
   const pendingCompletion = await new Promise<PendingSessionCompletion>((resolvePendingCompletion) => {
     const pending: PendingSessionCompletion = {
       cancelled: false,
@@ -376,12 +384,12 @@ async function scheduleSessionCompletion({
       timer: setTimeout(() => pending.resolve(), RELAY_RECONNECT_GRACE_MS),
     };
     pending.resolve = () => resolvePendingCompletion(pending);
-    pendingCompletions.set(callSid, pending);
+    pendingCompletions.set(callKey, pending);
   });
 
-  if (pendingCompletion.cancelled || pendingCompletions.get(callSid) !== pendingCompletion) return;
-  pendingCompletions.delete(callSid);
-  sessionsByCallSid.delete(callSid);
+  if (pendingCompletion.cancelled || pendingCompletions.get(callKey) !== pendingCompletion) return;
+  pendingCompletions.delete(callKey);
+  sessionsByCallKey.delete(callKey);
 
   await completeSessionCall({ callStore, durationSeconds, env, session });
 }
@@ -527,8 +535,14 @@ function parseConversationRelayMessage(raw: string): ConversationRelayInboundMes
 function applySetupMessage(session: RelaySession, message: ConversationRelaySetupMessage) {
   session.id = message.sessionId;
   session.callSid = message.callSid;
+  session.parentCallSid = message.parentCallSid;
+  session.callSessionKey = message.parentCallSid?.trim() || message.callSid;
   session.callerPhone = message.from;
   session.locationId = message.customParameters?.locationId;
+}
+
+function getCallSessionKey(session: RelaySession) {
+  return session.callSessionKey ?? session.parentCallSid?.trim() ?? session.callSid;
 }
 
 function persistCallerTurn({

@@ -43,6 +43,7 @@ describe("restaurant fallback replies", () => {
     const instructions = buildRestaurantInstructions(demoRestaurantContext);
     expect(instructions).toContain("noisy phone audio");
     expect(instructions).toContain("If a caller is rude");
+    expect(instructions).toContain("Do not repeat the opening greeting");
   });
 
   it("passes structured conversation turns to the Responses API", () => {

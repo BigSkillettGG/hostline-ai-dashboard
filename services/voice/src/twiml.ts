@@ -1,7 +1,7 @@
 export interface ConversationRelayTwiMLConfig {
   actionUrl?: string;
   websocketUrl: string;
-  welcomeGreeting: string;
+  welcomeGreeting?: string;
   language: string;
   ttsProvider: "Google" | "Amazon" | "ElevenLabs";
   ttsVoice: string;
@@ -17,7 +17,7 @@ export function buildConversationRelayTwiML(config: ConversationRelayTwiMLConfig
   const relayAttributes = serializeAttributes({
     url: config.websocketUrl,
     welcomeGreeting: config.welcomeGreeting,
-    welcomeGreetingInterruptible: "speech",
+    welcomeGreetingInterruptible: config.welcomeGreeting ? "speech" : undefined,
     language: config.language,
     ttsProvider: config.ttsProvider,
     voice: config.ttsVoice,
@@ -42,6 +42,10 @@ export function buildConversationRelayTwiML(config: ConversationRelayTwiMLConfig
     "  </Connect>",
     "</Response>",
   ].join("\n");
+}
+
+export function buildEmptyTwiML() {
+  return ['<?xml version="1.0" encoding="UTF-8"?>', "<Response />"].join("\n");
 }
 
 export function buildUnavailableTwiML(message = "HostLine AI is not configured yet. Please try again soon.") {

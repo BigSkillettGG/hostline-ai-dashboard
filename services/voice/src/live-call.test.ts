@@ -36,11 +36,12 @@ describe("live call config", () => {
     });
 
     expect(config).toMatchObject({
-      actionUrl: "https://voice.hostline.ai/twilio/conversation-ended",
       conversationRelayUrl: "wss://voice.hostline.ai/twilio/conversation-relay",
       locationId: "00000000-0000-0000-0000-000000000001",
       ready: true,
       twilioSignatureRequired: true,
+      actionUrl:
+        "https://voice.hostline.ai/twilio/conversation-ended?locationId=00000000-0000-0000-0000-000000000001",
       voiceWebhookUrl: "https://voice.hostline.ai/twilio/voice?locationId=00000000-0000-0000-0000-000000000001",
     });
   });
@@ -56,6 +57,7 @@ describe("live call config", () => {
     );
 
     expect(config.locationId).toBe("loc_test");
+    expect(config.actionUrl).toBe("https://voice.hostline.ai/twilio/conversation-ended?locationId=loc_test");
     expect(config.voiceWebhookUrl).toBe("https://voice.hostline.ai/twilio/voice?locationId=loc_test");
   });
 
