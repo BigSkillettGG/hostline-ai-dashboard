@@ -54,7 +54,7 @@ export async function generateRestaurantReply(input: GenerateRestaurantReplyInpu
   }
 
   if (!input.env.OPENAI_API_KEY) {
-    return fallbackRestaurantReply(input.callerUtterance, input.context);
+    return withConversationalFollowUp(fallbackRestaurantReply(input.callerUtterance, input.context), input.callerUtterance);
   }
 
   const startedAt = Date.now();
@@ -70,7 +70,10 @@ export async function generateRestaurantReply(input: GenerateRestaurantReplyInpu
       maxOutputTokens: 220,
       tools: input.tools,
     });
-    const reply = extractOutputText(data) ?? fallbackRestaurantReply(input.callerUtterance, input.context);
+    const reply = withConversationalFollowUp(
+      extractOutputText(data) ?? fallbackRestaurantReply(input.callerUtterance, input.context),
+      input.callerUtterance,
+    );
     console.info("[voice-agent] OpenAI reply generated", {
       latencyMs: Date.now() - startedAt,
       model: input.env.OPENAI_MODEL,
@@ -83,7 +86,7 @@ export async function generateRestaurantReply(input: GenerateRestaurantReplyInpu
       latencyMs: Date.now() - startedAt,
       model: input.env.OPENAI_MODEL,
     });
-    return fallbackRestaurantReply(input.callerUtterance, input.context);
+    return withConversationalFollowUp(fallbackRestaurantReply(input.callerUtterance, input.context), input.callerUtterance);
   } finally {
     clearTimeout(timeout);
   }
@@ -150,6 +153,8 @@ export function buildRestaurantInstructions(context: RestaurantVoiceContext) {
     "Sound warm, concise, and natural on the phone.",
     "Do not repeat the opening greeting after the first turn; continue the same call and answer the new question directly.",
     "Answer the caller's actual current question. Do not jump to hours, reservations, or ordering just because one related word appears.",
+    "After answering a simple informational question, ask a light follow-up such as: Anything else I can help you with?",
+    "Do not add that generic follow-up when you already asked a specific next question, are collecting order or reservation details, or are handling complaints, allergies, handoffs, delivery issues, vendors, or lost items.",
     "Use the full restaurant context before deciding intent; specials, happy hour, today's menu, and featured dishes are not hours questions unless the caller asks when the restaurant opens or closes.",
     "Expect callers with accents, noisy phone audio, fragments, and corrections. Ask one short clarifying question when needed.",
     "Keep replies under two short sentences unless confirming an order.",
@@ -193,6 +198,29 @@ const immediatePlaybookScenarios = new Set([
 
 function shouldAnswerWithPlaybookImmediately(scenario: string) {
   return immediatePlaybookScenarios.has(scenario);
+}
+
+export function withConversationalFollowUp(reply: string, callerUtterance: string) {
+  const trimmedReply = reply.trim();
+  if (!trimmedReply) return reply;
+  if (!shouldAddConversationalFollowUp(trimmedReply, callerUtterance)) return reply;
+  return `${trimmedReply} Anything else I can help you with?`;
+}
+
+function shouldAddConversationalFollowUp(reply: string, callerUtterance: string) {
+  if (reply.includes("?")) return false;
+  if (/\b(anything else|something else|what else|can i help you with anything else)\b/i.test(reply)) return false;
+
+  const utterance = callerUtterance.toLowerCase();
+  if (
+    /\b(order|pickup|pick up|takeout|reservation|reserve|book|table for|allergy|allergic|refund|complaint|manager|human|person|staff|call back|callback|lost|left|forgot|vendor|supplier|sales|delivery driver|doordash|uber eats|grubhub|catering|private event|large party|job|hiring|apply)\b/.test(
+      utterance,
+    )
+  ) {
+    return false;
+  }
+
+  return true;
 }
 
 async function createResponseWithOptionalTools({

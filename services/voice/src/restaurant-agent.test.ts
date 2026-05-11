@@ -6,6 +6,7 @@ import {
   fallbackRestaurantReply,
   generateCallSummary,
   generateRestaurantReply,
+  withConversationalFollowUp,
 } from "./restaurant-agent";
 
 describe("restaurant fallback replies", () => {
@@ -44,6 +45,7 @@ describe("restaurant fallback replies", () => {
     expect(instructions).toContain("noisy phone audio");
     expect(instructions).toContain("If a caller is rude");
     expect(instructions).toContain("Do not repeat the opening greeting");
+    expect(instructions).toContain("Anything else I can help you with?");
   });
 
   it("passes structured conversation turns to the Responses API", () => {
@@ -112,8 +114,23 @@ describe("restaurant fallback replies", () => {
       transcript: [],
     });
 
-    expect(reply).toBe("Tonight's special is the mushroom risotto.");
+    expect(reply).toBe("Tonight's special is the mushroom risotto. Anything else I can help you with?");
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("adds a light follow-up after simple informational answers", () => {
+    expect(withConversationalFollowUp("We have metered parking nearby.", "Where can I park?")).toBe(
+      "We have metered parking nearby. Anything else I can help you with?",
+    );
+  });
+
+  it("does not add a generic follow-up when Vera already asked a specific question", () => {
+    expect(
+      withConversationalFollowUp(
+        "I can help with a pickup order. What would you like?",
+        "I want to place an order",
+      ),
+    ).toBe("I can help with a pickup order. What would you like?");
   });
 
   it("uses a larger reply budget for longer confirmations", async () => {
@@ -181,7 +198,7 @@ describe("restaurant fallback replies", () => {
       transcript: [],
     });
 
-    expect(reply).toBe("There is metered parking nearby.");
+    expect(reply).toBe("There is metered parking nearby. Anything else I can help you with?");
     expect(fetchMock).toHaveBeenCalledTimes(2);
     const secondBody = JSON.parse(String(fetchMock.mock.calls[1][1]?.body));
     expect(secondBody.input).toEqual(
