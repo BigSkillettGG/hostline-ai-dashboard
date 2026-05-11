@@ -213,7 +213,7 @@ function shouldAddConversationalFollowUp(reply: string, callerUtterance: string)
 
   const utterance = callerUtterance.toLowerCase();
   if (
-    /\b(order|pickup|pick up|takeout|reservation|reserve|book|table for|allergy|allergic|refund|complaint|manager|human|person|staff|call back|callback|lost|left|forgot|vendor|supplier|sales|delivery driver|doordash|uber eats|grubhub|catering|private event|large party|job|hiring|apply)\b/.test(
+    /\b(allergy|allergic|refund|complaint|manager|human|person|staff|call back|callback|lost|left|forgot|vendor|supplier|sales|delivery driver|doordash|uber eats|grubhub|catering|private event|large party|job|hiring|apply)\b/.test(
       utterance,
     )
   ) {

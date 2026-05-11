@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyEscalationIntent, summarizeCallForStaff } from "./conversation-relay";
+import { appendCompletedActionFollowUp, classifyEscalationIntent, summarizeCallForStaff } from "./conversation-relay";
 
 describe("conversation relay staff-review triggers", () => {
   it("classifies complaint and refund language as a complaint", () => {
@@ -59,5 +59,16 @@ describe("conversation relay staff-review triggers", () => {
     expect(summary).toContain("2 Margherita Pizza, 1 Caesar Salad");
     expect(summary).toContain("$50.00");
     expect(summary).toContain("Staff follow-up flagged: complaint");
+  });
+
+  it("asks what else it can help with after completed action confirmations", () => {
+    expect(appendCompletedActionFollowUp("I have sent that reservation request to staff.")).toBe(
+      "I have sent that reservation request to staff. Anything else I can help you with?",
+    );
+    expect(
+      appendCompletedActionFollowUp(
+        "I have sent that pickup order to the staff review queue. Anything else I can help you with?",
+      ),
+    ).toBe("I have sent that pickup order to the staff review queue. Anything else I can help you with?");
   });
 });

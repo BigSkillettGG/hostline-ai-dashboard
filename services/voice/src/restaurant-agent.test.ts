@@ -133,6 +133,15 @@ describe("restaurant fallback replies", () => {
     ).toBe("I can help with a pickup order. What would you like?");
   });
 
+  it("does add the follow-up after completed reservation or order confirmations", () => {
+    expect(withConversationalFollowUp("I have sent that reservation request to staff.", "Book a table for four.")).toBe(
+      "I have sent that reservation request to staff. Anything else I can help you with?",
+    );
+    expect(withConversationalFollowUp("I have sent that pickup order to staff.", "That's all for my pickup order.")).toBe(
+      "I have sent that pickup order to staff. Anything else I can help you with?",
+    );
+  });
+
   it("uses a larger reply budget for longer confirmations", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ output_text: "Sure, I can help with that." }), { status: 200 }),

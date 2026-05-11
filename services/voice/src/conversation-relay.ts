@@ -715,6 +715,7 @@ function buildActionReply({
   session: RelaySession;
 }) {
   const replies: string[] = [];
+  const completedAction = orderOutcome.status === "created" || Boolean(createdReservationId);
 
   if (orderOutcome.status === "created") {
     replies.push(
@@ -732,7 +733,19 @@ function buildActionReply({
     );
   }
 
-  return replies.length ? replies.join(" ") : null;
+  if (!replies.length) return null;
+
+  const reply = replies.join(" ");
+  return completedAction ? appendCompletedActionFollowUp(reply) : reply;
+}
+
+export function appendCompletedActionFollowUp(reply: string) {
+  const trimmedReply = reply.trim();
+  if (!trimmedReply) return reply;
+  if (/\b(anything else|something else|what else|can i help you with anything else)\b/i.test(trimmedReply)) {
+    return reply;
+  }
+  return `${trimmedReply} Anything else I can help you with?`;
 }
 
 async function executeRestaurantTool({
