@@ -1,69 +1,58 @@
-# Hero polish, honest stats, and add real imagery
+## Goal
 
-Four focused changes across the marketing home + call card.
+Get ElevenLabs, OpenAI, and Twilio credentials wired up in two places:
+1. **Lovable Cloud** — so future in-app features (edge functions) can use them.
+2. **The `services/voice/` Node service** — so the actual phone backend can run end-to-end.
 
-## 1. Fix the jumping caption in the call graphic
+## Step 1 — Link / create connections (Lovable side)
 
-In `src/components/marketing/CallTranscriptCard.tsx`, Marco's 4th line is currently shorter than the others, so the caption block height changes and the whole card shifts.
+I will:
 
-- Replace `"Perfect. And a bottle of the house red, please."` with a longer two-line line, e.g.:
-  `"Perfect. Can you also add an order of garlic knots and two tiramisus?"`
-- Update the AI-extracted footer to match: `Items` becomes `4` (and the order summary stays believable).
-- Also pin a `min-h` on the caption block (≈ `min-h-[68px]`) so any future line-length change still doesn't bounce the card.
+- **Twilio** — link the existing workspace connection (`std_01kmr6t25ke6zt3trv4npn9z81`) to this project. No new credentials needed from you. This exposes `TWILIO_API_KEY` (gateway key) to edge functions.
+- **ElevenLabs** — start the connect flow. You will paste an ElevenLabs API key (from elevenlabs.io → Profile → API Keys → "Create API Key", scoped to Text-to-Speech + Conversational AI).
+- **OpenAI** — add as a Lovable Cloud secret named `OPENAI_API_KEY` via the secure secret prompt (you'll paste your key — never share it in chat).
 
-## 2. Fix the weird "underline" behind "busiest employee"
+Lovable Cloud will be enabled if it isn't already (required to store secrets).
 
-The orange band behind the words isn't reading as an underline — it looks like a misaligned highlight bar. I'll remove it. The new headline (below) won't need an underline gimmick at all.
+## Step 2 — Voice service environment variables (your hosting provider)
 
-## 3. Rewrite the hero headline + subhead (punchier, real value)
+The `services/voice/` Node service runs outside Lovable. I cannot push secrets to its host. Instead I'll give you the exact list to paste into your host's env-var UI (Fly, Render, Railway, Docker, etc.). Based on `.env.example` and `services/voice/src/env.ts`, the keys you need to set there are:
 
-Replace the current 3-clause headline with something tight and outcome-led. Proposed copy (final wording open to your tweaks):
+```text
+# Twilio
+TWILIO_ACCOUNT_SID=AC...
+TWILIO_AUTH_TOKEN=...
+TWILIO_MESSAGING_SERVICE_SID=MG...   # optional, for SMS confirmations
+REQUIRE_TWILIO_SIGNATURE=true
 
-- **Eyebrow** (unchanged): "AI phone host for restaurants"
-- **Headline**: **"Answer every call. Capture every order."**
-- **Sub-headline**: "HostLine AI is the always-on phone host for your restaurant — taking pickup orders, booking tables, and routing complaints to a manager, 24/7."
-- Keep the two CTAs ("Start free trial" / "Hear a sample call") and the trust strip below.
+# OpenAI
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-5-mini
 
-This drops from ~22 words to ~6 words on the H1, and the value (orders captured, no missed calls) lands in the first glance.
+# ElevenLabs
+ELEVENLABS_API_KEY=...
+ELEVENLABS_VOICE_ID=BZgkqPqms7Kj9ulSkVzn
+ELEVENLABS_MODEL_ID=eleven_flash_v2_5
+```
 
-## 4. Remove fabricated stats; replace with honest framing
+Note: the voice service uses Twilio's classic Account SID + Auth Token (not the gateway), so even though Lovable's Twilio connector is linked, the voice host still needs its own raw Twilio credentials. You can grab those from console.twilio.com → Account → API keys & tokens.
 
-Two places have invented numbers — both get pulled or reframed.
+## Step 3 — Verify
 
-**Trust strip under hero** — currently "Trusted by 400+ independent restaurants" with five made-up restaurant names. Replace with a softer, honest line:
-- "Built with restaurant operators across the US."
-- Replace the fake-restaurant row with a small **integration logo row** ("Works with Toast · Square · OpenTable · Resy · Twilio") in muted text, which is true.
-
-**"Live metrics" block under testimonials** ("1.2M calls answered / 340k orders / $14.6M / 82,000 hours") — this whole block gets removed. In its place, a soft **"Why operators switch"** card with three qualitative points (no fake numbers):
-- "Never miss a dinner-rush call"
-- "Free up your host for the floor"
-- "Capture pickup orders 24/7"
-
-## 5. Add real imagery
-
-Generate three restaurant-themed photographs via the AI image gateway and use them in the marketing home. All saved to `public/marketing/` so they're served as static assets.
-
-Images to generate (Nano banana 2 — fast + high quality):
-1. `hero-restaurant.jpg` — warm, candid shot of a busy independent Italian-style restaurant interior at dinner, soft golden light, guests visible but blurred, no logos, no faces in sharp focus. Used as a **background/side photo on the hero** behind/next to the call card.
-2. `host-on-phone.jpg` — a friendly female host at a wood-grain restaurant podium holding a phone receiver, smiling, warm interior in background. Used in the "Product tour" or "How it works" section as a contextual photo.
-3. `happy-guests.jpg` — a small group of diners laughing together at a table with food and wine, warm restaurant lighting, candid. Used in the **testimonials** section as a wide banner above the quotes.
-
-Where each image lands:
-
-- **Hero**: introduce a faded restaurant interior photo as a tinted backdrop on the right side, behind the call card (low opacity, ~15-25%), to add warmth without competing with the UI mock.
-- **How it works**: small portrait-shaped photo of the host on the phone, placed alongside the 4-step strip.
-- **Testimonials**: full-bleed banner photo of happy guests above the three testimonial cards, with an overlay gradient so the section header sits on top.
-
-All photo placements use existing semantic tokens for any overlays / borders, and respect the warm terracotta brand palette.
-
-## Files touched
-
-- `src/components/marketing/CallTranscriptCard.tsx` — line swap + min-height on caption.
-- `src/pages/marketing/Home.tsx` — new headline/subhead, remove underline span, swap fake-restaurant trust row for integrations row, replace live-metrics block with qualitative card, add the three images in their sections.
-- `public/marketing/hero-restaurant.jpg`, `host-on-phone.jpg`, `happy-guests.jpg` — new generated images.
+- Run `fetch_secrets` to confirm `TWILIO_API_KEY`, `ELEVENLABS_API_KEY`, `OPENAI_API_KEY` are present in Lovable Cloud.
+- For the voice service, after you set its env vars and redeploy, run the existing readiness check:
+  ```sh
+  npm run check:voice -- https://voice.your-domain.com <locations.id>
+  ```
+  Expected: "Production ready: yes".
 
 ## Out of scope
 
-- Pricing page (not mentioned).
-- Real customer logos (we only have integration partners, which we'll show instead).
-- Sourcing real testimonials — quotes stay attributed to plausibly-named restaurants but the "live metric" fabrications are removed.
+- No code changes in this pass. No new features built. Just credentials wired up so you (or a follow-up plan) can build on them.
+- I will not modify `services/voice/` source — only document the env vars it needs.
+
+## What you'll need ready before I implement
+
+- ElevenLabs API key
+- OpenAI API key (you confirmed you have one)
+- Twilio Account SID + Auth Token (for the voice service host only — the workspace connection covers Lovable Cloud)
