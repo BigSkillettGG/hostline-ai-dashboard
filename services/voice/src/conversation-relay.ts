@@ -61,6 +61,12 @@ interface RelaySession {
   transcript: TranscriptTurn[];
 }
 
+interface PendingSessionCompletion {
+  cancelled: boolean;
+  resolve: () => void;
+  timer: ReturnType<typeof setTimeout>;
+}
+
 const RESTAURANT_RESPONSE_TOOLS: RestaurantResponseTool[] = [
   {
     description: "Look up restaurant-specific policies, FAQs, menu guidance, or knowledge base details before answering.",
@@ -158,6 +164,8 @@ const RESTAURANT_RESPONSE_TOOLS: RestaurantResponseTool[] = [
   },
 ];
 
+const RELAY_RECONNECT_GRACE_MS = 20_000;
+
 export function createConversationRelayHandler(
   env: VoiceServiceEnv,
   callStore: CallStore,
@@ -169,9 +177,11 @@ export function createConversationRelayHandler(
   } = {},
 ) {
   const sessions = new WeakMap<WebSocket, RelaySession>();
+  const sessionsByCallSid = new Map<string, RelaySession>();
+  const pendingCompletions = new Map<string, PendingSessionCompletion>();
 
   return function handleConversationRelayConnection(ws: WebSocket, req: IncomingMessage) {
-    const session: RelaySession = {
+    let session: RelaySession = {
       context: demoRestaurantContext,
       orderDraftItems: [],
       orderIntentSeen: false,
@@ -193,6 +203,23 @@ export function createConversationRelayHandler(
 
       if (message.type === "setup") {
         applySetupMessage(session, message);
+        const reconnect = reconnectSessionIfNeeded({
+          pendingCompletions,
+          session,
+          sessionsByCallSid,
+        });
+        session = reconnect.session;
+        sessions.set(ws, session);
+
+        if (reconnect.resumed) {
+          console.info("[conversation-relay] resumed existing call session", {
+            callSid: session.callSid,
+            sessionId: session.id,
+            transcriptTurns: session.transcript.length,
+          });
+          return;
+        }
+
         try {
           session.context = await contextStore.getContext(session.locationId);
         } catch (error) {
@@ -263,12 +290,15 @@ export function createConversationRelayHandler(
       }
     });
 
-    ws.on("close", () => {
+    ws.on("close", (code, reasonBuffer) => {
       const durationSeconds = getSessionOffsetSeconds(session);
-      const completion = completeSessionCall({
+      const reason = reasonBuffer.toString();
+      const completion = scheduleSessionCompletion({
         callStore,
+        pendingCompletions,
         durationSeconds,
         env,
+        sessionsByCallSid,
         session,
       }).catch((error) => console.error("[conversation-relay] call close persistence failed", error));
       lifecycle.onSessionCompletion?.(completion);
@@ -276,11 +306,84 @@ export function createConversationRelayHandler(
 
       console.info("[conversation-relay] closed", {
         callSid: session.callSid,
+        closeCode: code,
         durationSeconds,
+        reason,
         turns: session.transcript.length,
       });
     });
   };
+}
+
+function reconnectSessionIfNeeded({
+  pendingCompletions,
+  session,
+  sessionsByCallSid,
+}: {
+  pendingCompletions: Map<string, PendingSessionCompletion>;
+  session: RelaySession;
+  sessionsByCallSid: Map<string, RelaySession>;
+}) {
+  if (!session.callSid) return { resumed: false, session };
+
+  const pendingCompletion = pendingCompletions.get(session.callSid);
+  if (pendingCompletion) {
+    pendingCompletion.cancelled = true;
+    clearTimeout(pendingCompletion.timer);
+    pendingCompletions.delete(session.callSid);
+    pendingCompletion.resolve();
+  }
+
+  const existingSession = sessionsByCallSid.get(session.callSid);
+  if (!existingSession || existingSession === session) {
+    sessionsByCallSid.set(session.callSid, session);
+    return { resumed: false, session };
+  }
+
+  existingSession.id = session.id;
+  existingSession.callerPhone = session.callerPhone ?? existingSession.callerPhone;
+  existingSession.locationId = session.locationId ?? existingSession.locationId;
+  sessionsByCallSid.set(session.callSid, existingSession);
+
+  return { resumed: true, session: existingSession };
+}
+
+async function scheduleSessionCompletion({
+  callStore,
+  pendingCompletions,
+  durationSeconds,
+  env,
+  session,
+  sessionsByCallSid,
+}: {
+  callStore: CallStore;
+  pendingCompletions: Map<string, PendingSessionCompletion>;
+  durationSeconds: number;
+  env: VoiceServiceEnv;
+  session: RelaySession;
+  sessionsByCallSid: Map<string, RelaySession>;
+}) {
+  if (!session.callSid) {
+    await completeSessionCall({ callStore, durationSeconds, env, session });
+    return;
+  }
+
+  const callSid = session.callSid;
+  const pendingCompletion = await new Promise<PendingSessionCompletion>((resolvePendingCompletion) => {
+    const pending: PendingSessionCompletion = {
+      cancelled: false,
+      resolve: () => undefined,
+      timer: setTimeout(() => pending.resolve(), RELAY_RECONNECT_GRACE_MS),
+    };
+    pending.resolve = () => resolvePendingCompletion(pending);
+    pendingCompletions.set(callSid, pending);
+  });
+
+  if (pendingCompletion.cancelled || pendingCompletions.get(callSid) !== pendingCompletion) return;
+  pendingCompletions.delete(callSid);
+  sessionsByCallSid.delete(callSid);
+
+  await completeSessionCall({ callStore, durationSeconds, env, session });
 }
 
 async function handlePromptMessage({
