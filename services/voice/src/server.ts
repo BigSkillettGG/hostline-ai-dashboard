@@ -21,6 +21,7 @@ import { createOpenAIRealtimeSipService } from "./openai-realtime-sip";
 import { createPlatformIntegrationRegistry } from "./platform-integrations";
 import { createPhoneNumberStore } from "./phone-number-store";
 import { createRestaurantContextStore } from "./restaurant-context-store";
+import { createReservationPlatformService } from "./reservation-platform-service";
 import { createTelephonyService } from "./telephony";
 import { demoRestaurantContext } from "./restaurant-context";
 import { generateRestaurantReply } from "./restaurant-agent";
@@ -37,9 +38,11 @@ const staffNotificationService = createStaffNotificationService(env);
 const guestConfirmationService = createGuestConfirmationService(env);
 const menuIngestionService = createMenuIngestionService(env);
 const platformIntegrationRegistry = createPlatformIntegrationRegistry(env);
+const reservationPlatformService = createReservationPlatformService(env);
 const openAIRealtimeSipService = createOpenAIRealtimeSipService(env, restaurantContextStore, {
   callStore,
   guestConfirmationService,
+  reservationPlatformService,
   staffNotificationService,
 });
 const ADMIN_BODY_LIMIT_BYTES = 16 * 1024;

@@ -9,6 +9,7 @@ import type { CapturedOrderItem } from "./order-intake";
 import { buildRestaurantInstructions, generateCallSummary } from "./restaurant-agent";
 import { toSpokenRestaurantName, type RestaurantVoiceContext } from "./restaurant-context";
 import type { RestaurantContextStore } from "./restaurant-context-store";
+import type { ReservationPlatformService } from "./reservation-platform-service";
 import type { TranscriptRole, TranscriptTurn } from "./types";
 
 const OPENAI_REALTIME_DEFAULT_MODEL = "gpt-realtime";
@@ -45,6 +46,7 @@ interface OpenAIRealtimeSipServiceOptions {
   callStore?: CallStore;
   fetchImpl?: typeof fetch;
   guestConfirmationService?: GuestConfirmationService;
+  reservationPlatformService?: ReservationPlatformService;
   staffNotificationService?: StaffNotificationService;
   websocketFactory?: (url: string, options: { headers: Record<string, string> }) => RealtimeSocket;
 }
@@ -218,6 +220,7 @@ export function createOpenAIRealtimeSipService(
   const fetchImpl = options.fetchImpl ?? fetch;
   const callStore = options.callStore;
   const guestConfirmationService = options.guestConfirmationService;
+  const reservationPlatformService = options.reservationPlatformService;
   const staffNotificationService = options.staffNotificationService;
   const websocketFactory =
     options.websocketFactory ??
@@ -326,6 +329,7 @@ export function createOpenAIRealtimeSipService(
         externalCallId,
         guestConfirmationService,
         locationId: resolvedLocationId,
+        reservationPlatformService,
         staffNotificationService,
         websocketFactory,
       });
@@ -521,7 +525,7 @@ export function buildOpenAIRealtimeInstructions(
     "If you do not know an answer after checking context, do not guess. Offer a staff callback and collect the missing name, callback number, and question.",
     "For severe allergies, never guarantee safety. Use request_staff_callback and say staff needs to confirm because cross-contact is possible.",
     "For reservation requests, acknowledge any date, time, or party size already spoken, then ask only for missing details.",
-    "When reservation date, time, party size, and guest name are known, use create_reservation_request to save the request. If the tool says staff confirmation is needed, tell the caller it is requested and staff will confirm.",
+    "When reservation date, time, party size, and guest name are known, use create_reservation_request to save the request. If the tool says provider_confirmed, tell the caller the reservation is confirmed. If the tool says staff confirmation is needed, tell the caller it is requested and staff will confirm.",
     "For pickup orders, collect items, quantities, name, and callback number. Payment is pay at pickup unless a POS integration says otherwise.",
     "For menu substitutions or off-menu requests, use the restaurant substitution policy. If allowed and obvious, note it as a request; if uncertain, say you can include the request but staff must confirm. Never guarantee off-menu items, allergy accommodations, prices, or availability unless the menu context explicitly confirms them.",
     "For reservations and pickup orders, once the request is captured, naturally offer to text a confirmation. Example: 'Would you like me to text that confirmation to the number ending 1234?'",
@@ -736,6 +740,7 @@ function startSidebandSocket({
   externalCallId,
   guestConfirmationService,
   locationId,
+  reservationPlatformService,
   staffNotificationService,
   websocketFactory,
 }: {
@@ -749,6 +754,7 @@ function startSidebandSocket({
   externalCallId: string;
   guestConfirmationService?: GuestConfirmationService;
   locationId: string;
+  reservationPlatformService?: ReservationPlatformService;
   staffNotificationService?: StaffNotificationService;
   websocketFactory: (url: string, options: { headers: Record<string, string> }) => RealtimeSocket;
 }) {
@@ -831,6 +837,7 @@ function startSidebandSocket({
       context,
       guestConfirmationService,
       locationId,
+      reservationPlatformService,
       session,
       socket,
       staffNotificationService,
@@ -1180,6 +1187,7 @@ async function handleOpenAIRealtimeToolCalls({
   context,
   guestConfirmationService,
   locationId,
+  reservationPlatformService,
   session,
   socket,
   staffNotificationService,
@@ -1191,6 +1199,7 @@ async function handleOpenAIRealtimeToolCalls({
   context: RestaurantVoiceContext;
   guestConfirmationService?: GuestConfirmationService;
   locationId?: string;
+  reservationPlatformService?: ReservationPlatformService;
   session: OpenAIRealtimeSidebandSession;
   socket: RealtimeSocket;
   staffNotificationService?: StaffNotificationService;
@@ -1207,6 +1216,7 @@ async function handleOpenAIRealtimeToolCalls({
         context,
         guestConfirmationService,
         locationId,
+        reservationPlatformService,
         staffNotificationService,
         toolCall,
       });
@@ -1269,6 +1279,7 @@ async function handleOpenAIRealtimeToolCall({
   context,
   guestConfirmationService,
   locationId,
+  reservationPlatformService,
   staffNotificationService,
   toolCall,
 }: {
@@ -1278,6 +1289,7 @@ async function handleOpenAIRealtimeToolCall({
   context: RestaurantVoiceContext;
   guestConfirmationService?: GuestConfirmationService;
   locationId?: string;
+  reservationPlatformService?: ReservationPlatformService;
   staffNotificationService?: StaffNotificationService;
   toolCall: OpenAIRealtimeToolCall;
 }) {
@@ -1302,6 +1314,7 @@ async function handleOpenAIRealtimeToolCall({
       context,
       locationId,
       rawArguments: toolCall.arguments,
+      reservationPlatformService,
     });
   }
 
@@ -1344,6 +1357,7 @@ export async function createOpenAIRealtimeReservationRequest({
   context,
   locationId,
   rawArguments,
+  reservationPlatformService,
 }: {
   callRecordId?: string;
   callStore?: CallStore;
@@ -1351,6 +1365,7 @@ export async function createOpenAIRealtimeReservationRequest({
   context: RestaurantVoiceContext;
   locationId?: string;
   rawArguments: Record<string, unknown>;
+  reservationPlatformService?: ReservationPlatformService;
 }) {
   const date = stringValue(rawArguments.reservation_date);
   const time = normalizeRealtimeReservationTime(stringValue(rawArguments.reservation_time));
@@ -1374,6 +1389,48 @@ export async function createOpenAIRealtimeReservationRequest({
   }
 
   try {
+    const platformResult = await reservationPlatformService?.createReservation({
+      callId: callRecordId,
+      callerPhone: callbackPhone,
+      context,
+      date,
+      guestName,
+      locationId,
+      notes: stringValue(rawArguments.notes),
+      partySize,
+      time,
+    });
+    if (platformResult?.ok && platformResult.provider === "opentable" && platformResult.status === "confirmed") {
+      const result = await callStore?.createStaffReviewReservation({
+        callId: callRecordId,
+        callerPhone: callbackPhone,
+        confidence: 94,
+        date,
+        guestName,
+        locationId,
+        manualRequest: false,
+        notes: stringValue(rawArguments.notes),
+        partySize,
+        provider: "opentable",
+        providerReservationId: platformResult.providerReservationId ?? platformResult.confirmationCode,
+        status: "confirmed",
+        time,
+      });
+
+      return {
+        ok: true,
+        confirmationCode: platformResult.confirmationCode,
+        confirmationMode: "provider_confirmed",
+        message:
+          "Reservation confirmed in OpenTable. Tell the caller it is confirmed and offer to text the confirmation.",
+        provider: "opentable",
+        providerReservationId: platformResult.providerReservationId,
+        reservationId: result?.reservationId,
+        restaurantName: context.restaurantName,
+        status: "confirmed",
+      };
+    }
+
     const result = await callStore?.createStaffReviewReservation({
       callId: callRecordId,
       callerPhone: callbackPhone,
@@ -1381,9 +1438,12 @@ export async function createOpenAIRealtimeReservationRequest({
       date,
       guestName,
       locationId,
-      notes: stringValue(rawArguments.notes),
+      notes: buildReservationFallbackNotes({
+        notes: stringValue(rawArguments.notes),
+        platformResult,
+      }),
       partySize,
-      provider: "manual_request",
+      provider: platformResult?.provider === "opentable" ? "opentable" : "manual_request",
       time,
     });
 
@@ -1391,8 +1451,10 @@ export async function createOpenAIRealtimeReservationRequest({
       ok: true,
       confirmationMode: "staff_confirmed",
       message:
-        "Reservation request saved. Tell the caller staff will confirm it shortly; do not guarantee the table until staff confirms.",
-      provider: "manual_request",
+        platformResult?.status === "unavailable"
+          ? "Requested time was unavailable in OpenTable. Tell the caller staff will review and confirm options shortly; do not guarantee the table."
+          : "Reservation request saved. Tell the caller staff will confirm it shortly; do not guarantee the table until staff confirms.",
+      provider: platformResult?.provider ?? "manual_request",
       reservationId: result?.reservationId,
       restaurantName: context.restaurantName,
       status: "pending_staff_confirmation",
@@ -1404,6 +1466,23 @@ export async function createOpenAIRealtimeReservationRequest({
       message: error instanceof Error ? error.message : "Reservation request failed.",
     };
   }
+}
+
+function buildReservationFallbackNotes({
+  notes,
+  platformResult,
+}: {
+  notes?: string;
+  platformResult?: { message?: string; provider?: string; status?: string };
+}) {
+  return [
+    notes,
+    platformResult?.provider === "opentable"
+      ? `OpenTable did not confirm automatically. Status: ${platformResult.status}. ${platformResult.message ?? ""}`.trim()
+      : undefined,
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 export async function sendOpenAIRealtimeGuestConfirmation({

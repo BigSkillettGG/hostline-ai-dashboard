@@ -611,6 +611,72 @@ describe("OpenAI Realtime SIP", () => {
     });
   });
 
+  it("persists confirmed OpenTable reservations from realtime tool calls", async () => {
+    const savedReservations: unknown[] = [];
+    const result = await createOpenAIRealtimeReservationRequest({
+      callRecordId: "call_uuid",
+      callerPhone: "+14155550123",
+      context: demoRestaurantContext,
+      locationId: "location_uuid",
+      rawArguments: {
+        guest_name: "Tim Schneider",
+        party_size: 4,
+        reservation_date: "2026-05-12",
+        reservation_time: "18:00",
+      },
+      reservationPlatformService: {
+        configured: true,
+        provider: "opentable",
+        async createReservation() {
+          return {
+            confirmationCode: "OT-123",
+            ok: true,
+            message: "Confirmed.",
+            provider: "opentable",
+            providerReservationId: "ot_res_123",
+            status: "confirmed",
+          };
+        },
+      },
+      callStore: {
+        async addTranscriptTurn() {},
+        async attachCallRecording() {},
+        async completeCall() {},
+        async createStaffReviewOrder() {
+          return {};
+        },
+        async createStaffReviewReservation(input) {
+          savedReservations.push(input);
+          return { reservationId: "res_uuid" };
+        },
+        async createStaffTask() {
+          return {};
+        },
+        async startCall() {
+          return {};
+        },
+        async startRealtimeCall() {
+          return {};
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      confirmationCode: "OT-123",
+      confirmationMode: "provider_confirmed",
+      provider: "opentable",
+      providerReservationId: "ot_res_123",
+      reservationId: "res_uuid",
+      status: "confirmed",
+    });
+    expect(savedReservations[0]).toMatchObject({
+      manualRequest: false,
+      provider: "opentable",
+      providerReservationId: "ot_res_123",
+      status: "confirmed",
+    });
+  });
+
   it("verifies OpenAI webhook signatures when a secret is configured", () => {
     const secretBytes = Buffer.from("secret");
     const secret = `whsec_${secretBytes.toString("base64")}`;

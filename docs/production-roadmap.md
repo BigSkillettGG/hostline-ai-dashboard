@@ -43,6 +43,7 @@ There are 12 production workstreams:
 - The voice service can create staff-confirmed reservation requests from multi-turn calls.
 - OpenAI Realtime can now save reservation requests through a structured tool instead of only discussing reservations conversationally.
 - OpenTable is documented as the first direct reservation integration path because its official partner materials include API sandbox access, Booking API, Sync API, and Directory API reservation links. Resy remains after partner access.
+- The voice service now has an OpenTable reservation adapter that can post confirmed bookings to a configured OpenTable sandbox reservations endpoint, then persist provider-confirmed reservation rows in Supabase. Without credentials, it keeps the staff-confirmed fallback.
 - The Calls page now has a call-review and tuning loop so owners can mark good, wrong, awkward, missing-knowledge, or should-have-escalated answers and optionally turn corrections into knowledge-base material.
 - The Menu page can parse pasted menu text and replace a location's structured Supabase menu rows.
 - The Menu page can persist menu URL sources and queue ingestion jobs for later extraction workers.

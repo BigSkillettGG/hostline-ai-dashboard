@@ -21,14 +21,26 @@ For a reservation call, Vera should:
 3. Tell the caller staff will confirm shortly.
 4. Offer to text the request summary when texting is enabled.
 
+The voice service now includes the first OpenTable adapter. It stays dormant until the approved OpenTable sandbox/API credentials and the exact reservations endpoint are configured. When configured, `create_reservation_request` will try OpenTable first; if OpenTable confirms, the Supabase reservation row is saved as `provider = opentable`, `status = confirmed`, and `manual_request = false`. If OpenTable is unavailable or returns an error, Vera falls back to the staff-confirmed request flow and does not guarantee the table.
+
 ## OpenTable Production Milestones
 
 1. Request OpenTable API sandbox and partner access.
-2. Add `OPENTABLE_CLIENT_ID`, `OPENTABLE_CLIENT_SECRET`, and `OPENTABLE_RESTAURANT_ID`.
-3. Implement availability lookup.
-4. Implement booking creation.
-5. Persist `provider = opentable` and `provider_reservation_id` on confirmed reservation rows.
+2. Add `OPENTABLE_CLIENT_ID`, `OPENTABLE_CLIENT_SECRET`, `OPENTABLE_RESTAURANT_ID`, and `OPENTABLE_RESERVATIONS_URL`.
+3. Add `OPENTABLE_AUTH_URL` if OpenTable's issued sandbox uses OAuth client credentials.
+4. Test booking creation against the OpenTable sandbox endpoint.
+5. Implement a separate availability lookup endpoint once the sandbox docs expose the exact availability URL.
 6. Add dashboard conflict handling for unavailable times and alternate time suggestions.
+
+## Render Variables
+
+```txt
+OPENTABLE_CLIENT_ID=<from OpenTable sandbox>
+OPENTABLE_CLIENT_SECRET=<from OpenTable sandbox>
+OPENTABLE_RESTAURANT_ID=<OpenTable restaurant/venue id>
+OPENTABLE_RESERVATIONS_URL=<exact sandbox booking endpoint from OpenTable docs>
+OPENTABLE_AUTH_URL=<optional OAuth token URL from OpenTable docs>
+```
 
 ## Sources
 

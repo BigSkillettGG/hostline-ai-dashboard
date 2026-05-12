@@ -24,6 +24,7 @@ describe("platform integration registry", () => {
     const registry = createPlatformIntegrationRegistry({
       OPENTABLE_CLIENT_ID: "ot-client",
       OPENTABLE_CLIENT_SECRET: "ot-secret",
+      OPENTABLE_RESERVATIONS_URL: "https://sandbox-api.opentable.example/reservations",
       OPENTABLE_RESTAURANT_ID: "ot-restaurant",
       TOAST_CLIENT_ID: "toast-client",
       TOAST_CLIENT_SECRET: "toast-secret",
@@ -53,6 +54,15 @@ describe("platform integration registry", () => {
 
     expect(registry.orderProviders.find((provider) => provider.id === "toast")).toMatchObject({
       missingEnv: ["TOAST_CLIENT_SECRET", "TOAST_RESTAURANT_GUID"],
+      status: "needs_credentials",
+    });
+    expect(registry.reservationProviders.find((provider) => provider.id === "opentable")).toMatchObject({
+      missingEnv: [
+        "OPENTABLE_CLIENT_ID",
+        "OPENTABLE_CLIENT_SECRET",
+        "OPENTABLE_RESTAURANT_ID",
+        "OPENTABLE_RESERVATIONS_URL",
+      ],
       status: "needs_credentials",
     });
   });

@@ -43,8 +43,10 @@ type PlatformIntegrationEnv = Pick<
   VoiceServiceEnv,
   | "CLOVER_ACCESS_TOKEN"
   | "CLOVER_MERCHANT_ID"
+  | "OPENTABLE_AUTH_URL"
   | "OPENTABLE_CLIENT_ID"
   | "OPENTABLE_CLIENT_SECRET"
+  | "OPENTABLE_RESERVATIONS_URL"
   | "OPENTABLE_RESTAURANT_ID"
   | "RESY_API_KEY"
   | "RESY_VENUE_ID"
@@ -113,8 +115,9 @@ export function createPlatformIntegrationRegistry(env: PlatformIntegrationEnv): 
       env,
       id: "opentable",
       name: "OpenTable",
-      nextStep: "Request OpenTable API sandbox/partner access, then add the client ID, secret, and restaurant ID.",
-      requiredEnv: ["OPENTABLE_CLIENT_ID", "OPENTABLE_CLIENT_SECRET", "OPENTABLE_RESTAURANT_ID"],
+      nextStep:
+        "Request OpenTable API sandbox/partner access, then add the client ID, secret, restaurant ID, and sandbox reservations endpoint.",
+      requiredEnv: ["OPENTABLE_CLIENT_ID", "OPENTABLE_CLIENT_SECRET", "OPENTABLE_RESTAURANT_ID", "OPENTABLE_RESERVATIONS_URL"],
     }),
     buildProvider({
       accessPath: "Resy partner access",

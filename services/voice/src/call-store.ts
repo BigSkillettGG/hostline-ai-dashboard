@@ -58,7 +58,10 @@ export interface CreateStaffReviewReservationInput extends CapturedReservationRe
   callId?: string;
   callerPhone?: string;
   locationId?: string;
+  manualRequest?: boolean;
   provider?: string;
+  providerReservationId?: string;
+  status?: "pending" | "confirmed" | "declined";
 }
 
 export type StaffTaskPriority = "low" | "normal" | "high" | "urgent";
@@ -372,15 +375,16 @@ class SupabaseCallStore implements CallStore {
         guest_name: input.guestName ?? "Unknown",
         guest_phone: input.callerPhone ?? null,
         location_id: normalizeLocationId(input.locationId) ?? this.locationId,
-        manual_request: true,
+        manual_request: input.manualRequest ?? true,
         notes: buildReservationNotes(input),
         party_size: input.partySize,
         provider: input.provider ?? "manual_request",
+        provider_reservation_id: input.providerReservationId ?? null,
         reservation_date: input.date,
         reservation_time: `${input.time}:00`,
         source: "ai_host",
         source_call_id: input.callId,
-        status: "pending",
+        status: input.status ?? "pending",
       },
       headers: {
         Prefer: "return=representation",
@@ -395,8 +399,11 @@ class SupabaseCallStore implements CallStore {
     await this.request("calls", {
       body: {
         intent: "reservation",
-        outcome: "escalated",
-        summary: `Staff-confirmed reservation request created for ${input.partySize} on ${input.date} at ${input.time}.`,
+        outcome: input.status === "confirmed" ? "reservation_booked" : "escalated",
+        summary:
+          input.status === "confirmed"
+            ? `${providerLabel(input.provider)} reservation confirmed for ${input.partySize} on ${input.date} at ${input.time}.`
+            : `Staff-confirmed reservation request created for ${input.partySize} on ${input.date} at ${input.time}.`,
       },
       method: "PATCH",
       query: `id=eq.${encodeURIComponent(input.callId)}`,
@@ -444,10 +451,17 @@ function clampConfidence(value: number) {
 function buildReservationNotes(input: CreateStaffReviewReservationInput) {
   return [
     input.notes,
-    `AI-created staff-confirmed reservation request. Not confirmed until staff approves. Confidence: ${input.confidence}%.`,
+    input.status === "confirmed"
+      ? `AI-created reservation confirmed through ${providerLabel(input.provider)}. Confidence: ${input.confidence}%.`
+      : `AI-created staff-confirmed reservation request. Not confirmed until staff approves. Confidence: ${input.confidence}%.`,
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+function providerLabel(provider?: string) {
+  if (provider === "opentable") return "OpenTable";
+  return provider?.trim() || "Provider";
 }
 
 function dueAt(minutesFromNow: number) {

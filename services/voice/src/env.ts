@@ -68,8 +68,11 @@ const envSchema = z.object({
   SQUARE_LOCATION_ID: z.string().optional(),
   CLOVER_ACCESS_TOKEN: z.string().optional(),
   CLOVER_MERCHANT_ID: z.string().optional(),
+  OPENTABLE_API_BASE_URL: z.string().url().optional(),
+  OPENTABLE_AUTH_URL: z.string().url().optional(),
   OPENTABLE_CLIENT_ID: z.string().optional(),
   OPENTABLE_CLIENT_SECRET: z.string().optional(),
+  OPENTABLE_RESERVATIONS_URL: z.string().url().optional(),
   OPENTABLE_RESTAURANT_ID: z.string().optional(),
   RESY_API_KEY: z.string().optional(),
   RESY_VENUE_ID: z.string().optional(),
@@ -205,7 +208,10 @@ export function getVoiceServiceReadiness(env: VoiceServiceEnv): VoiceServiceRead
       id: "reservation_platform",
       label: "Reservation platform integration",
       ready: Boolean(
-        (env.OPENTABLE_CLIENT_ID && env.OPENTABLE_CLIENT_SECRET && env.OPENTABLE_RESTAURANT_ID) ||
+        (env.OPENTABLE_CLIENT_ID &&
+          env.OPENTABLE_CLIENT_SECRET &&
+          env.OPENTABLE_RESTAURANT_ID &&
+          env.OPENTABLE_RESERVATIONS_URL) ||
           (env.RESY_API_KEY && env.RESY_VENUE_ID) ||
           (env.SEVENROOMS_CLIENT_ID && env.SEVENROOMS_CLIENT_SECRET && env.SEVENROOMS_VENUE_ID) ||
           (env.TOCK_API_KEY && env.TOCK_BUSINESS_ID) ||
