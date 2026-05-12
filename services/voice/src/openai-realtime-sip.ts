@@ -24,9 +24,12 @@ type OpenAIRealtimeEnv = Pick<
   | "OPENAI_PROJECT_ID"
   | "OPENAI_REPLY_TIMEOUT_MS"
   | "OPENAI_REALTIME_FEMALE_VOICE"
+  | "OPENAI_REALTIME_INTERRUPT_RESPONSE"
   | "OPENAI_REALTIME_MALE_VOICE"
   | "OPENAI_REALTIME_MODEL"
+  | "OPENAI_REALTIME_NOISE_REDUCTION"
   | "OPENAI_REALTIME_SPEED"
+  | "OPENAI_REALTIME_TURN_EAGERNESS"
   | "OPENAI_REALTIME_VOICE"
   | "OPENAI_WEBHOOK_SECRET"
   | "PUBLIC_HTTP_BASE_URL"
@@ -142,7 +145,7 @@ interface BuildOpenAIRealtimeAcceptPayloadInput {
 interface OpenAIRealtimeAcceptPayload {
   audio: {
     input: {
-      noise_reduction: { type: "near_field" };
+      noise_reduction: { type: "near_field" | "far_field" };
       transcription: {
         language: "en";
         model: "gpt-4o-mini-transcribe";
@@ -150,8 +153,8 @@ interface OpenAIRealtimeAcceptPayload {
       };
       turn_detection: {
         create_response: true;
-        eagerness: "medium";
-        interrupt_response: true;
+        eagerness: "low" | "medium" | "high";
+        interrupt_response: boolean;
         type: "semantic_vad";
       };
     };
@@ -414,7 +417,7 @@ export function buildOpenAIRealtimeAcceptPayload({
   return {
     audio: {
       input: {
-        noise_reduction: { type: "near_field" },
+        noise_reduction: { type: resolveOpenAIRealtimeNoiseReduction(env) },
         transcription: {
           language: "en",
           model: "gpt-4o-mini-transcribe",
@@ -426,8 +429,8 @@ export function buildOpenAIRealtimeAcceptPayload({
         },
         turn_detection: {
           create_response: true,
-          eagerness: "medium",
-          interrupt_response: true,
+          eagerness: resolveOpenAIRealtimeTurnEagerness(env),
+          interrupt_response: resolveOpenAIRealtimeInterruptResponse(env),
           type: "semantic_vad",
         },
       },
@@ -470,9 +473,13 @@ export function buildOpenAIRealtimeInstructions(
     "Pacing: speak briskly enough for a phone call, with varied intonation and short sentence chunks. Do not drag out 'Olive and Ember'.",
     "Use natural restaurant-host acknowledgements like 'Sure', 'Absolutely', 'Of course', 'One moment', and 'Let me check that' when they fit.",
     "If the caller pauses, wait naturally. If silence continues, ask a gentle continuation question such as 'Take your time. What else can I help you with?'",
-    "Handle interruptions gracefully. If the caller cuts you off, stop and answer their latest request.",
+    "Speakerphone and car audio behavior: ignore faint echoes, background noise, room noise, and your own voice coming back through the caller's speaker. Only treat clear human speech as caller intent.",
+    "Handle clear interruptions gracefully. If the caller clearly cuts you off with speech, answer their latest request. Do not restart the call because of a noise, echo, or short silence.",
     "Use the lookup_restaurant_context tool for specials, hours, parking, directions, menu, reservation policy, pickup timing, payment, allergies, delivery drivers, lost items, complaints, or anything policy-like.",
-    "When a tool returns information, answer in one warm sentence and then ask a natural next question only if the call is not clearly over.",
+    "After answering any normal question or completing any task, ask a short loop-closing question such as 'Can I help you with anything else?' unless the caller has already clearly said goodbye.",
+    "Never end the call immediately after answering a question. The call should only close after the caller indicates they are done.",
+    "If the caller says no, no thanks, that's all, that's it, I'm good, or similar after your anything-else question, say a short closing line like 'Thanks for calling. Goodbye.' and let the call end.",
+    "If the caller says yes after your anything-else question, say 'Of course, what else can I help with?' and continue.",
     "There is no live staff transfer in this pilot. Never say you are connecting, transferring, or placing the caller on hold for staff.",
     "When a caller needs staff, use request_staff_callback, then say you are sending the message to staff and someone will call them back shortly.",
     "If you do not know an answer after checking context, do not guess. Offer a staff callback and collect the missing name, callback number, and question.",
@@ -1607,6 +1614,20 @@ export function resolveOpenAIRealtimeSpeed(env: OpenAIRealtimeEnv) {
   const speed = Number.parseFloat(env.OPENAI_REALTIME_SPEED ?? "1.02");
   if (!Number.isFinite(speed)) return 1.02;
   return Math.min(1.12, Math.max(0.9, speed));
+}
+
+export function resolveOpenAIRealtimeNoiseReduction(env: OpenAIRealtimeEnv) {
+  return env.OPENAI_REALTIME_NOISE_REDUCTION === "near_field" ? "near_field" : "far_field";
+}
+
+export function resolveOpenAIRealtimeTurnEagerness(env: OpenAIRealtimeEnv) {
+  return env.OPENAI_REALTIME_TURN_EAGERNESS === "medium" || env.OPENAI_REALTIME_TURN_EAGERNESS === "high"
+    ? env.OPENAI_REALTIME_TURN_EAGERNESS
+    : "low";
+}
+
+export function resolveOpenAIRealtimeInterruptResponse(env: OpenAIRealtimeEnv) {
+  return env.OPENAI_REALTIME_INTERRUPT_RESPONSE === true;
 }
 
 function resolveOpenAIRealtimeVoice(env: OpenAIRealtimeEnv, context: RestaurantVoiceContext) {

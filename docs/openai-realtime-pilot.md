@@ -17,7 +17,12 @@ Keep all existing Render variables. Add these optional pilot variables:
 OPENAI_REALTIME_MODEL=gpt-realtime
 OPENAI_REALTIME_FEMALE_VOICE=marin
 OPENAI_REALTIME_MALE_VOICE=cedar
+OPENAI_REALTIME_NOISE_REDUCTION=far_field
+OPENAI_REALTIME_TURN_EAGERNESS=low
+OPENAI_REALTIME_INTERRUPT_RESPONSE=false
 ```
+
+The last three defaults are intentionally speakerphone-safe. They make Vera less likely to treat room noise, car audio, or her own voice echoing through the caller's speaker as an interruption.
 
 Optional later:
 
@@ -84,11 +89,14 @@ Use a separate test number for this route.
 4. Pause for a couple of seconds and then ask: "Can I make a reservation for six tonight?"
 5. Interrupt Vera while she is speaking.
 6. Say: "No thanks, that's all."
+7. Repeat the call on speakerphone or car Bluetooth.
 
 Pass criteria:
 
 - Vera does not restart the opening greeting mid-call.
 - Vera answers multiple questions in one call.
 - Vera handles a short pause without starting over.
+- Speakerphone or car audio does not cause Vera to constantly restart, interrupt herself, or answer phantom speech.
 - Vera asks only for missing reservation details.
+- After each answer, Vera asks whether she can help with anything else.
 - Vera says a natural goodbye and the call ends cleanly.

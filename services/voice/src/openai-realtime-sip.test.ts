@@ -19,7 +19,10 @@ import {
   extractOpenAIRealtimeToolCalls,
   lookupRestaurantContext,
   requestOpenAIRealtimeStaffCallback,
+  resolveOpenAIRealtimeInterruptResponse,
+  resolveOpenAIRealtimeNoiseReduction,
   resolveOpenAIRealtimeSpeed,
+  resolveOpenAIRealtimeTurnEagerness,
   sendOpenAIRealtimeGuestConfirmation,
   verifyOpenAIWebhookSignature,
 } from "./openai-realtime-sip";
@@ -29,6 +32,9 @@ const baseEnv = {
   OPENAI_API_KEY: "sk-test",
   OPENAI_MODEL: "gpt-5-mini",
   OPENAI_REPLY_TIMEOUT_MS: 4500,
+  OPENAI_REALTIME_INTERRUPT_RESPONSE: false,
+  OPENAI_REALTIME_NOISE_REDUCTION: "far_field",
+  OPENAI_REALTIME_TURN_EAGERNESS: "low",
   PUBLIC_HTTP_BASE_URL: "https://voice.hostline.ai/",
   SUPABASE_DEMO_LOCATION_ID: "00000000-0000-0000-0000-000000000001",
 } satisfies Partial<VoiceServiceEnv>;
@@ -68,10 +74,11 @@ describe("OpenAI Realtime SIP", () => {
     });
     expect(payload.audio.input.turn_detection).toMatchObject({
       create_response: true,
-      eagerness: "medium",
-      interrupt_response: true,
+      eagerness: "low",
+      interrupt_response: false,
       type: "semantic_vad",
     });
+    expect(payload.audio.input.noise_reduction).toMatchObject({ type: "far_field" });
     expect(payload.audio.output.voice).toBe("marin");
     expect(payload.audio.output.speed).toBe(1.02);
     expect(payload.instructions).toContain("Never restart the opening greeting");
@@ -81,6 +88,8 @@ describe("OpenAI Realtime SIP", () => {
     expect(payload.instructions).toContain("There is no live staff transfer");
     expect(payload.instructions).toContain("substitutions or off-menu requests");
     expect(payload.instructions).toContain("create_reservation_request");
+    expect(payload.instructions).toContain("Speakerphone and car audio behavior");
+    expect(payload.instructions).toContain("Can I help you with anything else?");
     expect(payload.tools[0].name).toBe("lookup_restaurant_context");
     expect(payload.tools.map((tool) => tool.name)).toContain("send_guest_confirmation");
     expect(payload.tools.map((tool) => tool.name)).toContain("create_reservation_request");
@@ -243,7 +252,10 @@ describe("OpenAI Realtime SIP", () => {
     expect(instructions).toContain("If the caller says 'hello' before you have greeted them");
     expect(instructions).toContain("Greeting energy");
     expect(instructions).toContain("not 'Thanks, Schneider.'");
-    expect(instructions).toContain("Handle interruptions gracefully");
+    expect(instructions).toContain("Handle clear interruptions gracefully");
+    expect(instructions).toContain("Speakerphone and car audio behavior");
+    expect(instructions).toContain("Can I help you with anything else?");
+    expect(instructions).toContain("Thanks for calling. Goodbye.");
     expect(instructions).toContain("Never say you are connecting, transferring, or placing the caller on hold");
   });
 
@@ -266,6 +278,26 @@ describe("OpenAI Realtime SIP", () => {
     expect(resolveOpenAIRealtimeSpeed({ ...baseEnv, OPENAI_REALTIME_SPEED: "1.08" })).toBe(1.08);
     expect(resolveOpenAIRealtimeSpeed({ ...baseEnv, OPENAI_REALTIME_SPEED: "2" })).toBe(1.12);
     expect(resolveOpenAIRealtimeSpeed({ ...baseEnv, OPENAI_REALTIME_SPEED: "fast" })).toBe(1.02);
+  });
+
+  it("uses conservative speakerphone-safe turn detection by default", () => {
+    expect(resolveOpenAIRealtimeNoiseReduction(baseEnv)).toBe("far_field");
+    expect(resolveOpenAIRealtimeTurnEagerness(baseEnv)).toBe("low");
+    expect(resolveOpenAIRealtimeInterruptResponse(baseEnv)).toBe(false);
+    expect(
+      buildOpenAIRealtimeAcceptPayload({
+        context: demoRestaurantContext,
+        env: {
+          ...baseEnv,
+          OPENAI_REALTIME_INTERRUPT_RESPONSE: true,
+          OPENAI_REALTIME_NOISE_REDUCTION: "near_field",
+          OPENAI_REALTIME_TURN_EAGERNESS: "high",
+        },
+      }).audio.input.turn_detection,
+    ).toMatchObject({
+      eagerness: "high",
+      interrupt_response: true,
+    });
   });
 
   it("extracts the call id from supported incoming webhook shapes", () => {

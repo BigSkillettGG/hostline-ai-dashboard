@@ -41,7 +41,13 @@ const envSchema = z.object({
   OPENAI_REALTIME_FEMALE_VOICE: z.string().optional(),
   OPENAI_REALTIME_MALE_VOICE: z.string().optional(),
   OPENAI_REALTIME_MODEL: z.string().optional(),
+  OPENAI_REALTIME_NOISE_REDUCTION: z.enum(["near_field", "far_field"]).default("far_field"),
   OPENAI_REALTIME_SPEED: z.string().optional(),
+  OPENAI_REALTIME_INTERRUPT_RESPONSE: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
+  OPENAI_REALTIME_TURN_EAGERNESS: z.enum(["low", "medium", "high"]).default("low"),
   OPENAI_REALTIME_VOICE: z.string().optional(),
   OPENAI_WEBHOOK_SECRET: z.string().optional(),
   ELEVENLABS_API_KEY: z.string().optional(),
