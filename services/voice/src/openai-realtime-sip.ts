@@ -149,6 +149,8 @@ interface OpenAIRealtimeSidebandSession {
   completed: boolean;
   context: RestaurantVoiceContext;
   externalCallId: string;
+  finishCloseTimer?: ReturnType<typeof setTimeout>;
+  finishRequested: boolean;
   locationId: string;
   quality: RealtimeQualityMetrics;
   staffCallbackRequested: boolean;
@@ -510,7 +512,9 @@ export function buildOpenAIRealtimeInstructions(
     "Use the lookup_restaurant_context tool for specials, hours, parking, directions, menu, reservation policy, pickup timing, payment, allergies, delivery drivers, lost items, complaints, or anything policy-like.",
     "After answering any normal question or completing any task, ask a short loop-closing question such as 'Can I help you with anything else?' unless the caller has already clearly said goodbye.",
     "Never end the call immediately after answering a question. The call should only close after the caller indicates they are done.",
-    "If the caller says no, no thanks, that's all, that's it, I'm good, or similar after your anything-else question, say a short closing line like 'Thanks for calling. Goodbye.' and let the call end.",
+    "If the caller says no, no thanks, that's all, that's it, I'm good, or similar after your anything-else question, call finish_call with a short closing line like 'Thanks for calling. Goodbye.' Do not ask another question.",
+    "Do not call finish_call until the caller clearly indicates they are done or says goodbye.",
+    "When finish_call returns ok, say only the closing line, then stop speaking. The call will end.",
     "If the caller says yes after your anything-else question, say 'Of course, what else can I help with?' and continue.",
     "There is no live staff transfer in this pilot. Never say you are connecting, transferring, or placing the caller on hold for staff.",
     "When a caller needs staff, use request_staff_callback, then say you are sending the message to staff and someone will call them back shortly.",
@@ -523,7 +527,7 @@ export function buildOpenAIRealtimeInstructions(
     "For reservations and pickup orders, once the request is captured, naturally offer to text a confirmation. Example: 'Would you like me to text that confirmation to the number ending 1234?'",
     "Only send a text after the caller agrees or asks for it. Use the send_guest_confirmation tool for reservation, order, or helpful follow-up texts.",
     "If the send_guest_confirmation tool succeeds, tell the caller the text is sent. Do not mention backend setup, SMS providers, or placeholder mode.",
-    "Close naturally only after the caller is done. Say a short goodbye and do not ask another question after goodbye.",
+    "Close naturally only after the caller is done. Use finish_call, say a short goodbye, and do not ask another question after goodbye.",
   ].join("\n");
 }
 
@@ -763,6 +767,7 @@ function startSidebandSocket({
     completed: false,
     context,
     externalCallId,
+    finishRequested: false,
     locationId,
     quality: createRealtimeQualityMetrics(),
     staffCallbackRequested: false,
@@ -812,6 +817,10 @@ function startSidebandSocket({
       });
     }
 
+    if (eventType === "response.done" && session.finishRequested) {
+      scheduleOpenAIRealtimeFinishedClose({ callId, session, socket });
+    }
+
     const toolCalls = extractOpenAIRealtimeToolCalls(event);
     if (!toolCalls.length) return;
     markRealtimeToolCalls(session, toolCalls);
@@ -831,6 +840,7 @@ function startSidebandSocket({
 
   socket.on("close", (code, reason) => {
     activeSockets.delete(callId);
+    clearOpenAIRealtimeFinishedClose(session);
     void completeOpenAIRealtimeLoggedCall({
       callStore,
       closeCode: code,
@@ -847,6 +857,7 @@ function startSidebandSocket({
 
   socket.on("error", (error) => {
     activeSockets.delete(callId);
+    clearOpenAIRealtimeFinishedClose(session);
     void completeOpenAIRealtimeLoggedCall({
       callStore,
       closeReason: error.message,
@@ -983,6 +994,32 @@ function markRealtimeToolCalls(session: OpenAIRealtimeSidebandSession, toolCalls
       session.staffCallbackRequested = true;
     }
   }
+}
+
+function scheduleOpenAIRealtimeFinishedClose({
+  callId,
+  session,
+  socket,
+}: {
+  callId: string;
+  session: OpenAIRealtimeSidebandSession;
+  socket: RealtimeSocket;
+}) {
+  if (session.finishCloseTimer) return;
+  session.finishCloseTimer = setTimeout(() => {
+    console.info("[openai-realtime] closing completed call after goodbye", { callId });
+    try {
+      socket.close(1000, "HostLine call completed.");
+    } catch (error) {
+      console.warn("[openai-realtime] completed call close failed", { callId, error });
+    }
+  }, 250);
+}
+
+function clearOpenAIRealtimeFinishedClose(session: OpenAIRealtimeSidebandSession) {
+  if (!session.finishCloseTimer) return;
+  clearTimeout(session.finishCloseTimer);
+  delete session.finishCloseTimer;
 }
 
 async function completeOpenAIRealtimeLoggedCall({
@@ -1202,6 +1239,9 @@ function recordOpenAIRealtimeToolResult(
   session.quality.toolCallCount += 1;
   session.quality.toolLatencyMs.push(latencyMs);
   if (!ok) session.quality.toolErrorCount += 1;
+  if (toolCall.name === "finish_call" && ok) {
+    session.finishRequested = true;
+  }
 
   const existing = [...session.toolEvents].reverse().find((event) => event.name === toolCall.name && event.latencyMs === undefined);
   if (existing) {
@@ -1276,8 +1316,24 @@ async function handleOpenAIRealtimeToolCall({
     });
   }
 
+  if (toolCall.name === "finish_call") {
+    return finishOpenAIRealtimeCall({
+      rawArguments: toolCall.arguments,
+    });
+  }
+
   return {
     error: `Unknown tool: ${toolCall.name}`,
+  };
+}
+
+export function finishOpenAIRealtimeCall({ rawArguments }: { rawArguments: Record<string, unknown> }) {
+  const closingLine = sanitizeClosingLine(stringValue(rawArguments.closing_line) ?? "Thanks for calling. Goodbye.");
+  return {
+    ok: true,
+    action: "finish_call",
+    closingLine,
+    message: `Say only this closing line, then stop speaking: "${closingLine}"`,
   };
 }
 
@@ -1717,6 +1773,28 @@ function buildOpenAIRealtimeTools() {
       },
       type: "function" as const,
     },
+    {
+      description:
+        "Finish the live call only after the caller clearly says they are done, says no to the anything-else question, or says goodbye. This lets the service close the phone session after one final goodbye.",
+      name: "finish_call",
+      parameters: {
+        additionalProperties: false,
+        properties: {
+          closing_line: {
+            description: "Short final sentence to say to the caller before the call ends.",
+            type: "string",
+          },
+          reason: {
+            description: "Why the call is ready to end.",
+            enum: ["caller_done", "caller_goodbye", "wrong_number_complete", "silent_or_abandoned"],
+            type: "string",
+          },
+        },
+        required: ["reason"],
+        type: "object",
+      },
+      type: "function" as const,
+    },
   ];
 }
 
@@ -1992,6 +2070,14 @@ function formatPrice(priceCents: number) {
 
 function stringValue(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function sanitizeClosingLine(value: string) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (!normalized) return "Thanks for calling. Goodbye.";
+  const withoutQuestion = normalized.replace(/\?+$/g, ".");
+  const words = withoutQuestion.split(/\s+/).slice(0, 12).join(" ");
+  return /[.!]$/.test(words) ? words : `${words}.`;
 }
 
 function firstHeader(value: string | string[] | undefined) {

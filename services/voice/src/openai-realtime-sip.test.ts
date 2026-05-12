@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { VoiceServiceEnv } from "./env";
 import {
   buildOpenAIRealtimeAcceptPayload,
@@ -17,6 +17,7 @@ import {
   extractOpenAIRealtimeSipCallId,
   extractOpenAIRealtimeTranscriptTurn,
   extractOpenAIRealtimeToolCalls,
+  finishOpenAIRealtimeCall,
   lookupRestaurantContext,
   requestOpenAIRealtimeStaffCallback,
   resolveOpenAIRealtimeIdleTimeoutMs,
@@ -106,10 +107,12 @@ describe("OpenAI Realtime SIP", () => {
     expect(payload.instructions).toContain("create_reservation_request");
     expect(payload.instructions).toContain("Speakerphone and car audio behavior");
     expect(payload.instructions).toContain("Can I help you with anything else?");
+    expect(payload.instructions).toContain("finish_call");
     expect(payload.tools[0].name).toBe("lookup_restaurant_context");
     expect(payload.tools.map((tool) => tool.name)).toContain("send_guest_confirmation");
     expect(payload.tools.map((tool) => tool.name)).toContain("create_reservation_request");
     expect(payload.tools.map((tool) => tool.name)).toContain("request_staff_callback");
+    expect(payload.tools.map((tool) => tool.name)).toContain("finish_call");
   });
 
   it("adds restaurant-local time and caller phone context to realtime instructions", () => {
@@ -272,6 +275,7 @@ describe("OpenAI Realtime SIP", () => {
     expect(instructions).toContain("Speakerphone and car audio behavior");
     expect(instructions).toContain("Can I help you with anything else?");
     expect(instructions).toContain("Thanks for calling. Goodbye.");
+    expect(instructions).toContain("Do not call finish_call until");
     expect(instructions).toContain("Never say you are connecting, transferring, or placing the caller on hold");
   });
 
@@ -405,6 +409,89 @@ describe("OpenAI Realtime SIP", () => {
         name: "lookup_restaurant_context",
       },
     ]);
+  });
+
+  it("prepares a bounded closing line for finished calls", () => {
+    expect(
+      finishOpenAIRealtimeCall({
+        rawArguments: {
+          closing_line: "Thanks for calling Olive and Ember. Goodbye?",
+          reason: "caller_done",
+        },
+      }),
+    ).toMatchObject({
+      action: "finish_call",
+      closingLine: "Thanks for calling Olive and Ember. Goodbye.",
+      ok: true,
+    });
+  });
+
+  it("closes the realtime socket after the finish-call goodbye response completes", async () => {
+    vi.useFakeTimers();
+    try {
+      const socket = createFakeRealtimeSocket();
+      const service = createOpenAIRealtimeSipService(
+        baseEnv,
+        {
+          async getContext() {
+            return demoRestaurantContext;
+          },
+        },
+        {
+          fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+          websocketFactory: () => socket as never,
+        },
+      );
+
+      await service.handleIncomingWebhook({
+        headers: {},
+        rawBody: JSON.stringify({
+          data: {
+            call_id: "rtc_finish",
+            sip_headers: [{ name: "From", value: "sip:+17813072672@twilio.com" }],
+          },
+          type: "realtime.call.incoming",
+        }),
+      });
+
+      socket.emit("open");
+      socket.emit(
+        "message",
+        Buffer.from(JSON.stringify({
+          response: {
+            output: [
+              {
+                arguments: "{\"reason\":\"caller_done\",\"closing_line\":\"Thanks for calling. Goodbye.\"}",
+                call_id: "call_finish",
+                name: "finish_call",
+                type: "function_call",
+              },
+            ],
+          },
+          type: "response.done",
+        })),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(socket.closeCalls).toHaveLength(0);
+
+      socket.emit(
+        "message",
+        Buffer.from(JSON.stringify({
+          response: { output: [] },
+          type: "response.done",
+        })),
+      );
+      await vi.advanceTimersByTimeAsync(300);
+
+      expect(socket.closeCalls[0]).toMatchObject({
+        code: 1000,
+        reason: "HostLine call completed.",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("returns menu and specials context for realtime lookup calls", () => {
@@ -552,7 +639,13 @@ describe("OpenAI Realtime SIP", () => {
 function createFakeRealtimeSocket() {
   const listeners = new Map<string, Array<(...args: unknown[]) => void>>();
   return {
-    close() {},
+    closeCalls: [] as Array<{ code?: number; reason?: string }>,
+    sentEvents: [] as unknown[],
+    close(code?: number, reason?: Buffer | string) {
+      const reasonText = Buffer.isBuffer(reason) ? reason.toString("utf8") : String(reason ?? "");
+      this.closeCalls.push({ code, reason: reasonText });
+      this.emit("close", code ?? 1000, Buffer.from(reasonText));
+    },
     emit(event: string, ...args: unknown[]) {
       for (const listener of listeners.get(event) ?? []) listener(...args);
     },
@@ -562,6 +655,12 @@ function createFakeRealtimeSocket() {
       listeners.set(event, current);
       return this;
     },
-    send() {},
+    send(data: string) {
+      try {
+        this.sentEvents.push(JSON.parse(data) as unknown);
+      } catch {
+        this.sentEvents.push(data);
+      }
+    },
   };
 }
