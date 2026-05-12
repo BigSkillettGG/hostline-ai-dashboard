@@ -1,6 +1,7 @@
 import type { VoiceServiceEnv } from "./env";
 import { normalizeHostlineVoiceGender } from "../../../src/domain/voice-selection";
 import type { BusinessLink } from "../../../src/domain/business-links";
+import { normalizeBusinessType } from "../../../src/domain/business-templates";
 import {
   demoRestaurantContext,
   toSpokenRestaurantName,
@@ -113,7 +114,11 @@ export function buildRestaurantContext({
   onboardingProfile,
 }: BuildRestaurantContextInput): RestaurantVoiceContext {
   const draft = normalizeDraft(onboardingProfile?.draft);
-  const restaurantName = stringValue(draft.restaurantName) ?? location?.name?.trim() ?? demoRestaurantContext.restaurantName;
+  const restaurantName =
+    stringValue(draft.restaurantName) ??
+    stringValue(draft.businessName) ??
+    location?.name?.trim() ??
+    demoRestaurantContext.restaurantName;
   const hostName = stringValue(draft.hostName) ?? agentConfig?.host_name?.trim() ?? demoRestaurantContext.hostName;
   const timezone = stringValue(draft.timezone) ?? location?.timezone?.trim() ?? demoRestaurantContext.timezone;
   const greetingTemplate =
@@ -137,7 +142,7 @@ export function buildRestaurantContext({
 
   return {
     businessLinks,
-    businessType: stringValue(draft.businessType) ?? "restaurant",
+    businessType: normalizeBusinessType(stringValue(draft.businessType)),
     defaultPickupEtaMinutes: parseMinutes(stringValue(draft.defaultPickupEta)) ?? demoRestaurantContext.defaultPickupEtaMinutes,
     faqs: mappedFaqs.length ? mappedFaqs : demoRestaurantContext.faqs,
     greeting: renderTemplate(greetingTemplate, { hostName, restaurantName }),
@@ -410,6 +415,9 @@ function buildBusinessLinks(
   const onlineOrderingUrl = orderSettings.onlineOrderingUrl;
   const reservationBookingUrl = reservationSettings.bookingUrl;
   const menuUrl = stringValue(draft.menuUrl);
+  const appointmentBookingUrl = stringValue(draft.appointmentBookingUrl);
+  const quoteRequestUrl = stringValue(draft.quoteRequestUrl);
+  const intakeFormUrl = stringValue(draft.intakeFormUrl);
 
   if (onlineOrderingUrl) {
     links.push({
@@ -426,6 +434,33 @@ function buildBusinessLinks(
       kind: "reservation",
       label: "Reservations",
       url: reservationBookingUrl,
+    });
+  }
+
+  if (appointmentBookingUrl && appointmentBookingUrl !== reservationBookingUrl) {
+    links.push({
+      description: "Use this when a caller or chat visitor wants to book an appointment or consultation online.",
+      kind: "booking",
+      label: "Booking",
+      url: appointmentBookingUrl,
+    });
+  }
+
+  if (quoteRequestUrl) {
+    links.push({
+      description: "Use this when a caller or chat visitor wants to request a quote or estimate online.",
+      kind: "quote",
+      label: "Quote request",
+      url: quoteRequestUrl,
+    });
+  }
+
+  if (intakeFormUrl) {
+    links.push({
+      description: "Use this when a caller or chat visitor should fill out an intake form before staff follow-up.",
+      kind: "intake",
+      label: "Intake form",
+      url: intakeFormUrl,
     });
   }
 
@@ -696,6 +731,9 @@ function buildDraftKnowledgeSections(draft: OnboardingDraft): RestaurantKnowledg
   );
   addDraftSection(sections, "Order changes and cancellations", stringValue(draft.orderChangePolicy));
   addDraftSection(sections, "Reservation operating model", buildReservationPolicy(draft, undefined));
+  addDraftSection(sections, "Appointment booking link", stringValue(draft.appointmentBookingUrl));
+  addDraftSection(sections, "Quote request link", stringValue(draft.quoteRequestUrl));
+  addDraftSection(sections, "Intake form link", stringValue(draft.intakeFormUrl));
   addDraftSection(sections, "Reservation changes and cancellations", stringValue(draft.reservationChangePolicy));
   addDraftSection(sections, "Reservation seating and rooms", [stringValue(draft.seatingAreas), stringValue(draft.privateRoomPolicy)].filter(Boolean).join(" "));
   addDraftSection(sections, "Reservation deposits and timing", [stringValue(draft.depositPolicy), stringValue(draft.lateArrivalPolicy), stringValue(draft.noShowPolicy)].filter(Boolean).join(" "));

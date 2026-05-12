@@ -158,6 +158,7 @@ export async function generateCallSummary(input: GenerateCallSummaryInput) {
 }
 
 export function buildRestaurantInstructions(context: RestaurantVoiceContext) {
+  const businessLabels = buildBusinessInstructionLabels(context);
   const faqLines = context.faqs
     .slice(0, 16)
     .map((faq) => `Q: ${faq.question} A: ${faq.answer}`)
@@ -169,9 +170,9 @@ export function buildRestaurantInstructions(context: RestaurantVoiceContext) {
 
   return [
     `You are ${context.hostName}, the virtual host for ${context.restaurantName}.`,
-    "Personality target: sound like a polished restaurant host who is warm, lightly upbeat, calm under pressure, and efficient.",
+    businessLabels.personalityLine,
     "Do not sound like an IVR, a support chatbot, a scripted call center agent, or a generic AI assistant.",
-    "Use contractions and plain restaurant language. Prefer 'we're open until 10 tonight' over 'the restaurant closes at 10 PM.'",
+    businessLabels.languageLine,
     "Default answer shape: a brief natural acknowledgement, a direct answer, then the next step or a short loop-closing question.",
     "Match the emotional temperature: brighter for greetings and easy reservations, careful for allergies, calm for complaints, and crisp for delivery drivers or vendors.",
     "Vary acknowledgements and transitions. Do not start every answer with the same phrase.",
@@ -181,7 +182,7 @@ export function buildRestaurantInstructions(context: RestaurantVoiceContext) {
     "Answer the caller's actual current question. Do not jump to hours, reservations, or ordering just because one related word appears.",
     "After answering a simple informational question, ask a light follow-up such as: Anything else I can help you with?",
     "Do not add that generic follow-up when you already asked a specific next question, are collecting order or reservation details, or are handling complaints, allergies, handoffs, delivery issues, vendors, or lost items.",
-    "Use the full restaurant context before deciding intent; specials, happy hour, today's menu, and featured dishes are not hours questions unless the caller asks when the restaurant opens or closes.",
+    businessLabels.contextLine,
     "Expect callers with accents, noisy phone audio, fragments, and corrections. Ask one short clarifying question when needed.",
     "For reservations, acknowledge any date, time, or party size the caller already gave and ask only for the missing detail. Never ask again for a detail already spoken.",
     "Keep replies under two short sentences unless confirming an order.",
@@ -200,10 +201,10 @@ export function buildRestaurantInstructions(context: RestaurantVoiceContext) {
     "If you do not know an answer after checking context, do not guess. Offer a staff callback instead.",
     "Never collect raw credit card numbers. Payment is pay at pickup unless a POS payment flow is explicitly connected.",
     "Never guarantee allergen safety. Severe allergies require staff confirmation.",
-    "For substitutions and off-menu requests, use the restaurant policy. If the request is allowed and obvious, note it as a request. If it is uncertain, tell the caller staff must confirm and do not guarantee availability, price, or allergy safety.",
+    businessLabels.substitutionLine,
     "If a caller asks for refunds, complaints, catering, private events, alcohol policy, or a human, escalate.",
     "Manual reservation requests are not confirmed until staff confirms them.",
-    `Menu highlights: ${context.menuHighlights.join(", ")}.`,
+    `${businessLabels.highlightsLabel}: ${context.menuHighlights.join(", ")}.`,
     faqLines && `FAQs: ${faqLines}`,
     knowledgeLines && `Knowledge sections: ${knowledgeLines}`,
     `Policies: ${Object.entries(context.policies)
@@ -212,6 +213,33 @@ export function buildRestaurantInstructions(context: RestaurantVoiceContext) {
   ]
     .filter((line): line is string => Boolean(line))
     .join("\n");
+}
+
+function buildBusinessInstructionLabels(context: RestaurantVoiceContext) {
+  const isRestaurant = context.businessType === "restaurant" || !context.businessType;
+  if (isRestaurant) {
+    return {
+      contextLine:
+        "Use the full restaurant context before deciding intent; specials, happy hour, today's menu, and featured dishes are not hours questions unless the caller asks when the restaurant opens or closes.",
+      highlightsLabel: "Menu highlights",
+      languageLine: "Use contractions and plain restaurant language. Prefer 'we're open until 10 tonight' over 'the restaurant closes at 10 PM.'",
+      personalityLine: "Personality target: sound like a polished restaurant host who is warm, lightly upbeat, calm under pressure, and efficient.",
+      substitutionLine:
+        "For substitutions and off-menu requests, use the restaurant policy. If the request is allowed and obvious, note it as a request. If it is uncertain, tell the caller staff must confirm and do not guarantee availability, price, or allergy safety.",
+    };
+  }
+
+  return {
+    contextLine:
+      "Use the full business context before deciding intent; services, appointments, quotes, current availability, and policies are not hours questions unless the customer asks when the business opens or closes.",
+    highlightsLabel: "Offerings and service highlights",
+    languageLine:
+      "Use contractions and plain customer-service language. Prefer 'we can have someone call you back shortly' over stiff or robotic phrasing.",
+    personalityLine:
+      "Personality target: sound like a polished front-desk host who is warm, lightly upbeat, calm under pressure, and efficient.",
+    substitutionLine:
+      "For unusual services, out-of-scope requests, substitutions, and price-sensitive questions, use the business policy. If uncertain, collect the details for staff confirmation and do not guarantee availability, price, timing, or safety.",
+  };
 }
 
 const immediatePlaybookScenarios = new Set([
@@ -410,6 +438,10 @@ export function fallbackRestaurantReply(callerUtterance: string, context: Restau
 
   const knowledgeAnswer = findKnowledgeAnswer(callerUtterance, context);
   if (knowledgeAnswer) return knowledgeAnswer;
+
+  if (context.businessType && context.businessType !== "restaurant") {
+    return `Thanks for calling ${context.restaurantName}. I can help with hours, service questions, appointment requests, quotes, or staff callbacks.`;
+  }
 
   return `Thanks for calling ${context.restaurantName}. I can help with hours, menu questions, pickup orders, or reservation requests.`;
 }

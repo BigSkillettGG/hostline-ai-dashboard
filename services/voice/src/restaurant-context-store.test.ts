@@ -207,6 +207,49 @@ describe("restaurant context store", () => {
     expect(context.policies.location).toBe("55 Market St");
   });
 
+  it("builds generic business context and link types for service businesses", () => {
+    const context = buildRestaurantContext({
+      location: {
+        address: "Somerville, MA",
+        ai_host_phone: null,
+        cuisine: null,
+        id: "location_service",
+        name: "Harbor Plumbing",
+        phone: null,
+        timezone: "America/New_York",
+      },
+      onboardingProfile: {
+        draft: {
+          appointmentBookingUrl: "https://harbor.example/book",
+          businessType: "home_services",
+          concept: "Plumbing repairs, water heaters, drains, and emergency leak calls.",
+          intakeFormUrl: "https://harbor.example/intake",
+          menuCategories: "Leaks, drains, water heaters, fixtures, emergency service.",
+          menuUrl: "https://harbor.example/services",
+          quoteRequestUrl: "https://harbor.example/quote",
+          restaurantName: "Harbor Plumbing",
+        },
+      },
+    });
+
+    expect(context.businessType).toBe("home_services");
+    expect(context.restaurantName).toBe("Harbor Plumbing");
+    expect(context.businessLinks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "booking", url: "https://harbor.example/book" }),
+        expect.objectContaining({ kind: "quote", url: "https://harbor.example/quote" }),
+        expect.objectContaining({ kind: "intake", url: "https://harbor.example/intake" }),
+        expect.objectContaining({ kind: "menu", url: "https://harbor.example/services" }),
+      ]),
+    );
+    expect(context.knowledgeSections).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ title: "Quote request link", body: "https://harbor.example/quote" }),
+        expect.objectContaining({ title: "Intake form link", body: "https://harbor.example/intake" }),
+      ]),
+    );
+  });
+
   it("uses a spoken restaurant name in greeting templates without changing the stored name", () => {
     const context = buildRestaurantContext({
       agentConfig: {

@@ -1,4 +1,12 @@
+import {
+  businessTypeOptions,
+  getBusinessTemplate,
+  normalizeBusinessType,
+  type BusinessType,
+} from "./business-templates";
+
 export type OnboardingFieldControl = "short" | "long" | "url" | "select" | "toggle";
+export type OnboardingFieldOption = string | { label: string; value: string };
 
 export type OnboardingStepId =
   | "basics"
@@ -12,13 +20,14 @@ export type OnboardingStepId =
   | "launch";
 
 export interface OnboardingField {
+  businessTypes?: BusinessType[];
   id: string;
   label: string;
   prompt: string;
   placeholder?: string;
   control: OnboardingFieldControl;
   required?: boolean;
-  options?: string[];
+  options?: OnboardingFieldOption[];
 }
 
 export interface OnboardingSection {
@@ -43,6 +52,14 @@ export const onboardingSections: OnboardingSection[] = [
     assistantPrompt: "Let us start with the details the host should know before it answers a single call.",
     outcome: "Greeting, location context, staff escalation, and account owner details.",
     fields: [
+      {
+        id: "businessType",
+        label: "Business type",
+        prompt: "Which template should shape the setup interview and AI behavior?",
+        control: "select",
+        required: true,
+        options: businessTypeOptions,
+      },
       {
         id: "restaurantName",
         label: "Restaurant name",
@@ -225,6 +242,30 @@ export const onboardingSections: OnboardingSection[] = [
         label: "Online ordering link",
         prompt: "If callers can order online, what link should Vera text them?",
         placeholder: "https://oliveandember.example/order",
+        control: "url",
+      },
+      {
+        businessTypes: ["home_services", "professional_services", "retail", "salon_spa"],
+        id: "appointmentBookingUrl",
+        label: "Appointment booking link",
+        prompt: "If customers can book online, what link should the AI send?",
+        placeholder: "https://business.example/book",
+        control: "url",
+      },
+      {
+        businessTypes: ["home_services", "professional_services"],
+        id: "quoteRequestUrl",
+        label: "Quote request link",
+        prompt: "If customers can request an estimate online, what link should the AI send?",
+        placeholder: "https://business.example/quote",
+        control: "url",
+      },
+      {
+        businessTypes: ["home_services", "professional_services", "salon_spa"],
+        id: "intakeFormUrl",
+        label: "Intake form link",
+        prompt: "If customers should fill out an intake form before staff follow-up, what link should the AI send?",
+        placeholder: "https://business.example/intake",
         control: "url",
       },
       {
@@ -670,16 +711,342 @@ export const onboardingSections: OnboardingSection[] = [
   },
 ];
 
+type SectionCopyOverride = Partial<Pick<OnboardingSection, "assistantPrompt" | "eyebrow" | "outcome" | "title">>;
+type FieldCopyOverride = Partial<Omit<OnboardingField, "businessTypes" | "control" | "id">>;
+
+const businessSectionCopy: Partial<Record<BusinessType, Partial<Record<OnboardingStepId, SectionCopyOverride>>>> = {
+  home_services: {
+    basics: {
+      title: "Business basics",
+      assistantPrompt: "Let us capture the service area, dispatch rules, and details the AI needs before answering calls.",
+      outcome: "Business identity, service area, escalation contact, and account owner details.",
+    },
+    menus: {
+      title: "Services and pricing",
+      eyebrow: "Service catalog",
+      assistantPrompt: "Now we need the service brain: what you do, what you do not do, common add-ons, and price ranges.",
+      outcome: "Services, estimates, emergency pricing, service-area rules, warranties, and out-of-scope requests.",
+    },
+    orders: {
+      title: "Service request workflow",
+      eyebrow: "Jobs",
+      assistantPrompt: "Now let us decide how new service calls become staff follow-up, booking links, or quote requests.",
+      outcome: "Lead capture rules, booking links, quote links, response estimates, payment rules, and routing.",
+    },
+    reservations: {
+      title: "Appointments and estimates",
+      eyebrow: "Scheduling",
+      assistantPrompt: "Teach the AI what can be booked, what needs dispatch approval, and how emergencies are handled.",
+      outcome: "Scheduling system, appointment rules, emergency thresholds, service windows, and staff-confirmed requests.",
+    },
+    policies: {
+      title: "Customer policies",
+      outcome: "Service area, safety, warranties, arrival rules, financing, jobs, vendor calls, and common FAQs.",
+    },
+    launch: {
+      title: "Phone launch",
+      outcome: "HostLine number, forwarding mode, test script, launch checklist, and dashboard handoff.",
+    },
+  },
+  professional_services: {
+    basics: {
+      title: "Firm basics",
+      outcome: "Firm identity, office context, escalation contact, and client-facing boundaries.",
+    },
+    menus: {
+      title: "Services and intake",
+      eyebrow: "Practice areas",
+      outcome: "Service lines, intake rules, consultation links, document requirements, and client-fit rules.",
+    },
+    orders: {
+      title: "Lead and intake workflow",
+      eyebrow: "Client requests",
+      outcome: "Lead capture, intake links, consultation links, callback rules, and staff routing.",
+    },
+    reservations: {
+      title: "Consultations",
+      eyebrow: "Scheduling",
+      outcome: "Consultation booking, staff approval, availability windows, cancellation rules, and next steps.",
+    },
+    policies: {
+      title: "Client policies",
+      outcome: "Office hours, confidentiality boundaries, document handling, billing basics, and common FAQs.",
+    },
+  },
+  retail: {
+    basics: {
+      title: "Shop basics",
+      outcome: "Store identity, location, escalation contact, and staff handoff details.",
+    },
+    menus: {
+      title: "Products and inventory",
+      eyebrow: "Catalog",
+      outcome: "Product categories, availability language, special orders, returns, and pickup rules.",
+    },
+    orders: {
+      title: "Purchase and pickup workflow",
+      eyebrow: "Orders",
+      outcome: "Online store links, special-order requests, pickup timing, payment policy, and staff routing.",
+    },
+    reservations: {
+      title: "Visits and appointments",
+      eyebrow: "Booking",
+      outcome: "Personal shopping, fittings, consultations, appointment links, and staff-confirmed requests.",
+    },
+    policies: {
+      title: "Customer policies",
+      outcome: "Parking, returns, exchanges, gift cards, product holds, warranties, and common FAQs.",
+    },
+  },
+  salon_spa: {
+    basics: {
+      title: "Studio basics",
+      outcome: "Studio identity, location, escalation contact, and front-desk details.",
+    },
+    menus: {
+      title: "Services and pricing",
+      eyebrow: "Service menu",
+      outcome: "Service menu, durations, starting prices, add-ons, providers, packages, and contraindications.",
+    },
+    orders: {
+      title: "Booking request workflow",
+      eyebrow: "Clients",
+      outcome: "Booking links, staff-confirmed requests, deposits, response estimates, and routing.",
+    },
+    reservations: {
+      title: "Appointments",
+      eyebrow: "Scheduling",
+      outcome: "Scheduling system, service duration rules, provider requests, deposits, cancellation policy, and staff confirmation.",
+    },
+    policies: {
+      title: "Client policies",
+      outcome: "Parking, late arrivals, cancellations, deposits, allergies, accessibility, pets, children, and common FAQs.",
+    },
+  },
+};
+
+const homeServicesOrderOptions = [
+  "Create service request for staff review",
+  "Send booking link",
+  "Send quote request link",
+  "Create request and also offer booking link",
+  "Do not handle service requests",
+];
+
+const genericSchedulingOptions = [
+  "Send caller a booking link",
+  "Create request for staff confirmation",
+  "Save pending request in HostLine",
+  "Take a message only",
+  "Say appointments require staff confirmation",
+];
+
+const businessFieldOverrides: Partial<Record<BusinessType, Record<string, FieldCopyOverride>>> = {
+  home_services: {
+    restaurantName: {
+      label: "Business name",
+      prompt: "What business name should the AI use on calls and chats?",
+      placeholder: "Harbor Plumbing",
+    },
+    concept: {
+      label: "Services and specialties",
+      prompt: "How would staff describe what the business does in one or two sentences?",
+      placeholder: "Licensed plumbing company handling leaks, drains, water heaters, fixture installs, and emergency calls.",
+    },
+    primaryLocation: {
+      label: "Office or service-area base",
+      prompt: "What address or service area should customers hear?",
+      placeholder: "Serving Greater Boston from Somerville, MA.",
+    },
+    menuUrl: {
+      label: "Service catalog link",
+      prompt: "Where can we fetch the most current service list?",
+      placeholder: "https://harborplumbing.example/services",
+    },
+    menuUploadNotes: {
+      label: "Uploaded files or notes",
+      prompt: "List any service sheets, price books, FAQs, license docs, or intake forms staff will provide.",
+      placeholder: "Service price sheet, emergency policy PDF, warranty notes, dispatch checklist.",
+    },
+    menuCategories: {
+      label: "Services offered",
+      prompt: "Which services should customers be able to ask about or request?",
+      placeholder: "Leak repair, drains, toilets, water heaters, faucets, sump pumps, emergency service.",
+    },
+    modifiers: {
+      label: "Job details to collect",
+      prompt: "Which details help staff understand the job before calling back?",
+      placeholder: "Location of issue, urgency, photos available, property type, shutoff status, access instructions.",
+    },
+    substitutionPolicy: {
+      label: "Out-of-scope requests",
+      prompt: "Which requests can the AI accept, flag for staff, or decline?",
+      placeholder: "Gas line work, remodel bids, and commercial jobs need staff review before promising availability or price.",
+    },
+    timedPricing: {
+      label: "Trip fees and emergency pricing",
+      prompt: "What prices, fees, or availability change by time, day, distance, or emergency status?",
+      placeholder: "Emergency surcharge after 6 PM and weekends. Free estimates for planned installs within 15 miles.",
+    },
+    drinkRules: {
+      label: "Licenses, warranties, and safety rules",
+      prompt: "What should the AI know about licenses, permits, warranties, and safety?",
+      placeholder: "Licensed and insured. Do not advise unsafe DIY steps. Ask caller to shut off water if safe.",
+    },
+    takeOrders: {
+      label: "Capture service requests",
+      prompt: "Should the AI capture service requests for staff follow-up?",
+    },
+    orderHandlingMode: {
+      label: "What the AI should do",
+      prompt: "When a customer needs service, what should the AI do first?",
+      options: homeServicesOrderOptions,
+    },
+    onlineOrderingUrl: {
+      label: "Primary service request link",
+      prompt: "If customers can submit service requests online, what link should the AI send?",
+      placeholder: "https://harborplumbing.example/request",
+    },
+    defaultPickupEta: {
+      label: "Default response ETA",
+      prompt: "What follow-up estimate should the AI use when dispatch is not connected?",
+      placeholder: "A dispatcher will call back within 15 minutes during business hours.",
+    },
+    orderDestination: {
+      label: "Request destination",
+      prompt: "Where should new service requests go first?",
+      options: ["Staff review queue", "Dispatch board", "CRM integration", "Email or webhook"],
+    },
+    takeReservations: {
+      label: "Handle appointment requests",
+      prompt: "Should the AI answer scheduling questions or collect appointment requests?",
+    },
+    reservationSourceToday: {
+      label: "Current scheduling workflow",
+      prompt: "How does the business manage appointments today?",
+      options: ["ServiceTitan", "Housecall Pro", "Jobber", "Google Calendar", "Booking link", "Phone calls only", "Spreadsheet", "No formal system"],
+    },
+    reservationHandlingMode: {
+      label: "What the AI should do",
+      prompt: "When a customer asks for an appointment, what should the AI do first?",
+      options: genericSchedulingOptions,
+    },
+    reservationProvider: {
+      label: "Scheduling system",
+      prompt: "Which scheduling system or link should we connect later?",
+      options: ["ServiceTitan", "Housecall Pro", "Jobber", "Google Calendar", "Booking link", "Manual requests only"],
+    },
+    reservationBookingUrl: {
+      label: "Booking link",
+      prompt: "If the AI should send a booking link, what URL should it use?",
+      placeholder: "https://harborplumbing.example/book",
+    },
+    partyRules: {
+      label: "Appointment rules",
+      prompt: "Which appointment types can be requested automatically, and which need staff confirmation?",
+      placeholder: "Routine service can be requested online. Emergency, commercial, and remodel jobs need dispatcher review.",
+    },
+    privateEvents: {
+      label: "Commercial or larger projects",
+      prompt: "What should happen when customers ask about larger jobs, remodels, or commercial work?",
+      placeholder: "Collect scope, property type, timeline, budget range, and contact info for owner follow-up.",
+    },
+    waitlistPolicy: {
+      label: "Urgent and emergency calls",
+      prompt: "What should the AI say about emergencies, urgent calls, and response windows?",
+      placeholder: "Active leaks get urgent callback. If there is flooding or safety risk, tell the caller to shut off water if safe.",
+    },
+    mainPhone: {
+      label: "Business main line",
+      prompt: "Which number do customers call today?",
+    },
+    assignedHostLineNumber: {
+      prompt: "This is the number the business forwards calls to.",
+    },
+    firstTestCall: {
+      placeholder: "Ask about emergency service, request a quote, ask service-area questions, then check dashboard.",
+    },
+  },
+  professional_services: {
+    restaurantName: { label: "Firm name", prompt: "What firm name should the AI use?", placeholder: "Northstar Advisory" },
+    concept: { label: "Services and client fit", prompt: "How would staff describe the firm and who it helps?", placeholder: "Boutique advisory firm offering consultations, intake calls, and document review." },
+    menuUrl: { label: "Services link", prompt: "Where can we fetch service or practice-area information?", placeholder: "https://northstar.example/services" },
+    menuCategories: { label: "Service lines", prompt: "Which services should clients be able to ask about?", placeholder: "Consultations, document review, onboarding, billing questions, existing-client support." },
+    modifiers: { label: "Intake details", prompt: "Which details should staff collect before follow-up?", placeholder: "Client status, matter type, deadline, contact info, conflict-check notes." },
+    orderHandlingMode: { label: "What the AI should do", options: ["Create lead for staff review", "Send consultation booking link", "Send intake form", "Take a message only"] },
+    onlineOrderingUrl: { label: "Primary client request link", prompt: "If clients can start online, what link should the AI send?", placeholder: "https://northstar.example/contact" },
+    takeReservations: { label: "Handle consultations", prompt: "Should the AI answer scheduling questions or collect consultation requests?" },
+    reservationBookingUrl: { label: "Consultation booking link", placeholder: "https://northstar.example/book" },
+    reservationHandlingMode: { label: "What the AI should do", options: genericSchedulingOptions },
+    reservationProvider: { label: "Scheduling system", options: ["Calendly", "Google Calendar", "Microsoft Bookings", "Booking link", "Manual requests only"] },
+    partyRules: { label: "Consultation rules", placeholder: "New clients require conflict check. Existing clients can request callbacks." },
+    privateEvents: { label: "Complex requests", placeholder: "Collect topic, deadline, organization, contact info, and route to the office team." },
+  },
+  retail: {
+    restaurantName: { label: "Shop name", prompt: "What store name should the AI use?", placeholder: "Cedar & Finch" },
+    concept: { label: "Products and positioning", prompt: "How would staff describe the shop?", placeholder: "Independent home goods shop with gifts, decor, special orders, and local pickup." },
+    menuUrl: { label: "Catalog or store link", placeholder: "https://cedarfinch.example/shop" },
+    menuCategories: { label: "Product categories", prompt: "Which product categories should customers ask about?", placeholder: "Gifts, candles, tableware, linens, furniture, special orders, gift cards." },
+    modifiers: { label: "Product details to collect", placeholder: "Size, color, brand, SKU, pickup date, gift wrap, delivery preference." },
+    orderHandlingMode: { label: "What the AI should do", options: ["Create request for staff review", "Send online store link", "Take a message only", "Do not handle orders"] },
+    onlineOrderingUrl: { label: "Online store link", prompt: "If customers can shop online, what link should the AI send?", placeholder: "https://cedarfinch.example/shop" },
+    takeReservations: { label: "Handle appointments", prompt: "Should the AI handle personal shopping, fitting, or consultation requests?" },
+    reservationBookingUrl: { label: "Appointment link", placeholder: "https://cedarfinch.example/book" },
+    partyRules: { label: "Appointment rules", placeholder: "Personal shopping and fittings need staff confirmation." },
+    waitlistPolicy: { label: "Product holds and availability", placeholder: "Staff can hold in-stock items until close of next business day after confirmation." },
+  },
+  salon_spa: {
+    restaurantName: { label: "Studio name", prompt: "What studio name should the AI use?", placeholder: "Luna Studio" },
+    concept: { label: "Services and vibe", prompt: "How would staff describe the salon or spa?", placeholder: "Modern salon offering cuts, color, blowouts, facials, massage, and bridal services." },
+    menuUrl: { label: "Service menu link", placeholder: "https://lunastudio.example/services" },
+    menuCategories: { label: "Services offered", prompt: "Which services should clients ask about or book?", placeholder: "Haircuts, color, blowouts, facials, massage, waxing, bridal, packages." },
+    modifiers: { label: "Service options", placeholder: "Provider preference, hair length, color history, add-ons, duration, first visit notes." },
+    timedPricing: { label: "Timed pricing and promos", placeholder: "New-client facial promo weekdays. Bridal consultations require deposit." },
+    drinkRules: { label: "Contraindications and product notes", placeholder: "Pregnancy massage limitations, skin sensitivities, patch tests, product allergies." },
+    orderHandlingMode: { label: "What the AI should do", options: ["Create booking request for staff review", "Send booking link", "Take a message only", "Do not handle booking requests"] },
+    onlineOrderingUrl: { label: "Booking or store link", prompt: "If clients can book or buy products online, what link should the AI send?", placeholder: "https://lunastudio.example/book" },
+    takeReservations: { label: "Handle appointments", prompt: "Should the AI answer appointment questions or collect booking requests?" },
+    reservationSourceToday: { label: "Current booking workflow", options: ["Boulevard", "Vagaro", "Square Appointments", "Mindbody", "Google Calendar", "Booking link", "Phone calls only"] },
+    reservationHandlingMode: { label: "What the AI should do", options: genericSchedulingOptions },
+    reservationProvider: { label: "Booking system", options: ["Boulevard", "Vagaro", "Square Appointments", "Mindbody", "Booking link", "Manual requests only"] },
+    reservationBookingUrl: { label: "Booking link", placeholder: "https://lunastudio.example/book" },
+    partyRules: { label: "Appointment rules", placeholder: "Color corrections, bridal parties, and first-time skin treatments need staff confirmation." },
+    depositPolicy: { label: "Deposits and cancellation fees", placeholder: "Color services and bridal appointments require deposits. 24-hour cancellation policy." },
+    waitlistPolicy: { label: "Waitlist and same-day appointments", placeholder: "Same-day appointments can be requested but staff confirms availability." },
+  },
+};
+
+export function getBusinessOnboardingSections(value: OnboardingDraft | BusinessType | string | undefined) {
+  const businessType = normalizeBusinessType(typeof value === "object" ? value.businessType : value);
+  const sectionCopy = businessSectionCopy[businessType] ?? {};
+  const fieldCopy = businessFieldOverrides[businessType] ?? {};
+
+  return onboardingSections.map((section) => ({
+    ...section,
+    ...(sectionCopy[section.id] ?? {}),
+    fields: section.fields
+      .filter((field) => !field.businessTypes || field.businessTypes.includes(businessType))
+      .map((field) => ({
+        ...field,
+        ...(fieldCopy[field.id] ?? {}),
+      })),
+  }));
+}
+
+export function getOnboardingBusinessTemplate(value: OnboardingDraft | BusinessType | string | undefined) {
+  return getBusinessTemplate(typeof value === "object" ? value.businessType : value);
+}
+
 export const productionWorkstreams = [
   "Self-service auth, billing, organization, and location signup",
-  "Conversational onboarding and restaurant knowledge extraction",
+  "Conversational onboarding and multi-industry knowledge extraction",
   "Menu ingestion from PDFs, images, links, spreadsheets, and POS exports",
   "Twilio number provisioning, forwarding instructions, and live call routing",
   "Realtime voice latency tuning across Twilio, transcription, LLM, and ElevenLabs",
   "Supabase persistence, RLS, roles, audit logs, and admin workflows",
-  "Staff-review order queue, kitchen tablet, and printer delivery",
-  "Toast ordering integration, then Square, Clover, and bridge partners",
-  "OpenTable reservations, then Yelp Guest Manager, SevenRooms, Resy, and Tock",
+  "Staff-review queues for orders, reservations, appointments, quotes, and callbacks",
+  "Link-first workflows for ordering, booking, quotes, intake forms, and menus",
+  "Optional industry integrations later for POS, booking, CRM, and dispatch systems",
   "SMS confirmations, staff alerts, low-confidence review, and human handoff",
   "Analytics, call QA, transcript review, and launch-readiness monitoring",
   "Compliance, security, secrets, observability, deployment, and support tooling",
@@ -688,6 +1055,7 @@ export const productionWorkstreams = [
 export const sampleOnboardingDraft: OnboardingDraft = {
   assignedHostLineNumber: assignedDemoPhoneNumber,
   allergyPolicy: "Severe allergies require staff confirmation. Gluten-free crust is available, but cross-contact is possible.",
+  businessType: "restaurant",
   callHandling: "After 3 rings",
   askSalesIntent: true,
   complaintPolicy:

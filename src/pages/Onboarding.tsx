@@ -35,10 +35,12 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   assignedDemoPhoneNumber,
   calculateOnboardingProgress,
-  onboardingSections,
+  getBusinessOnboardingSections,
+  getOnboardingBusinessTemplate,
   productionWorkstreams,
   type OnboardingDraft,
   type OnboardingField,
+  type OnboardingFieldOption,
   type OnboardingStepId,
 } from "@/domain/onboarding";
 import { loadOnboardingDraft, saveOnboardingDraft } from "@/lib/onboarding-draft";
@@ -121,8 +123,10 @@ export default function Onboarding() {
   const [provisioningNumber, setProvisioningNumber] = useState<string | null>(null);
   const [savingVerificationKey, setSavingVerificationKey] = useState<string | null>(null);
   const [searchingNumbers, setSearchingNumbers] = useState(false);
-  const progress = useMemo(() => calculateOnboardingProgress(draft), [draft]);
-  const activeSection = onboardingSections.find((section) => section.id === activeSectionId) ?? onboardingSections[0];
+  const businessTemplate = useMemo(() => getOnboardingBusinessTemplate(draft), [draft]);
+  const activeOnboardingSections = useMemo(() => getBusinessOnboardingSections(draft), [draft]);
+  const progress = useMemo(() => calculateOnboardingProgress(draft, activeOnboardingSections), [draft, activeOnboardingSections]);
+  const activeSection = activeOnboardingSections.find((section) => section.id === activeSectionId) ?? activeOnboardingSections[0];
   const ActiveIcon = sectionIcons[activeSection.id];
   const assignedNumber = String(draft.assignedHostLineNumber || assignedDemoPhoneNumber);
   const assignedNumberIsDemo = assignedNumber === assignedDemoPhoneNumber;
@@ -301,8 +305,8 @@ export default function Onboarding() {
   return (
     <>
       <PageHeader
-        title="Restaurant Onboarding"
-        description="Guided setup for a launch-ready phone host"
+        title={`${businessTemplate.workspaceLabel} Onboarding`}
+        description={`Guided setup for a launch-ready ${businessTemplate.businessNoun} phone and chat host`}
         actions={
           <>
             <Button variant="outline" size="sm" asChild>
@@ -363,7 +367,7 @@ export default function Onboarding() {
               <Card className="h-fit p-2">
                 <div className="px-2 py-1.5 text-xs font-semibold uppercase text-muted-foreground">Interview</div>
                 <div className="space-y-1">
-                  {onboardingSections.map((section) => {
+                  {activeOnboardingSections.map((section) => {
                     const Icon = sectionIcons[section.id];
                     const sectionProgress = getSectionProgress(section.id, draft);
                     const active = section.id === activeSection.id;
@@ -445,7 +449,7 @@ export default function Onboarding() {
               </CardHeader>
               <CardContent>
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                  {onboardingSections.map((section) => (
+                  {activeOnboardingSections.map((section) => (
                     <div key={section.id} className="rounded-md border border-border p-3">
                       <div className="text-sm font-medium">{section.title}</div>
                       <div className="mt-1 text-xs text-muted-foreground">{section.fields.length} captured variables</div>
@@ -702,7 +706,7 @@ export default function Onboarding() {
   );
 
   function getSectionProgress(sectionId: OnboardingStepId, currentDraft: OnboardingDraft) {
-    const section = onboardingSections.find((item) => item.id === sectionId);
+    const section = activeOnboardingSections.find((item) => item.id === sectionId);
     const requiredFields = section?.fields.filter((field) => field.required) ?? [];
     const completed = requiredFields.filter((field) => hasDraftValue(currentDraft[field.id])).length;
 
@@ -747,8 +751,8 @@ function OnboardingFieldControl({
           </SelectTrigger>
           <SelectContent>
             {(field.options ?? []).map((option) => (
-              <SelectItem key={option} value={option}>
-                {option}
+              <SelectItem key={optionValue(option)} value={optionValue(option)}>
+                {optionLabel(option)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -794,6 +798,14 @@ function FieldLabel({ field }: { field: OnboardingField }) {
       {field.required && <Badge variant="secondary" className="text-[10px]">Required</Badge>}
     </div>
   );
+}
+
+function optionValue(option: OnboardingFieldOption) {
+  return typeof option === "string" ? option : option.value;
+}
+
+function optionLabel(option: OnboardingFieldOption) {
+  return typeof option === "string" ? option : option.label;
 }
 
 function hasDraftValue(value: string | boolean | undefined) {

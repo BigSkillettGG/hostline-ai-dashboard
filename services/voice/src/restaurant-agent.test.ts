@@ -59,6 +59,19 @@ describe("restaurant fallback replies", () => {
     expect(instructions).toContain("Do not be funny, sassy, flirty, theatrical, or overly chatty");
   });
 
+  it("adapts model instructions for non-restaurant businesses", () => {
+    const instructions = buildRestaurantInstructions({
+      ...demoRestaurantContext,
+      businessType: "home_services",
+      restaurantName: "Harbor Plumbing",
+    });
+
+    expect(instructions).toContain("polished front-desk host");
+    expect(instructions).toContain("Use the full business context");
+    expect(instructions).toContain("Offerings and service highlights");
+    expect(instructions).toContain("out-of-scope requests");
+  });
+
   it("coaches the model not to address callers by a bare last name", () => {
     const instructions = buildRestaurantInstructions(demoRestaurantContext);
 
