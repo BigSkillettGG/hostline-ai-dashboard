@@ -470,7 +470,13 @@ function sortMemberships(memberships: RestaurantMembership[]) {
 }
 
 function normalizeAuthMode(value: unknown): AuthMode {
-  return typeof value === "string" && value.toLowerCase() === "supabase" ? "supabase" : "demo";
+  if (typeof value === "string") {
+    const normalized = value.toLowerCase();
+    if (normalized === "supabase") return "supabase";
+    if (normalized === "demo") return "demo";
+  }
+  // Default to supabase when Lovable Cloud / Supabase is configured.
+  return supabaseUrl && supabasePublishableKey ? "supabase" : "demo";
 }
 
 function defaultWorkspaceKind(authProvider: AuthMode, role: UserRole): WorkspaceKind {
