@@ -24,6 +24,9 @@ describe("restaurant phone playbook", () => {
       staffAlertKind: "low_confidence",
       text: expect.stringContaining("staff confirmation"),
     });
+    expect(matchPhonePlaybookReply("I have a severe peanut allergy", demoRestaurantContext)?.text).toContain(
+      "callback",
+    );
     expect(matchPhonePlaybookReply("Can I pay over the phone with a card?", demoRestaurantContext)).toMatchObject({
       scenario: "payment",
       text: expect.stringContaining("cannot take card numbers"),

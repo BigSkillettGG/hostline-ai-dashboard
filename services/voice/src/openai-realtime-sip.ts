@@ -3,6 +3,7 @@ import type { IncomingHttpHeaders } from "node:http";
 import WebSocket, { type RawData } from "ws";
 import type { VoiceServiceEnv } from "./env";
 import type { GuestConfirmationService } from "./guest-confirmation-service";
+import type { StaffAlertKind, StaffNotificationService } from "./notification-service";
 import type { CapturedOrderItem } from "./order-intake";
 import { buildRestaurantInstructions } from "./restaurant-agent";
 import { toSpokenRestaurantName, type RestaurantVoiceContext } from "./restaurant-context";
@@ -31,6 +32,7 @@ type OpenAIRealtimeEnv = Pick<
 interface OpenAIRealtimeSipServiceOptions {
   fetchImpl?: typeof fetch;
   guestConfirmationService?: GuestConfirmationService;
+  staffNotificationService?: StaffNotificationService;
   websocketFactory?: (url: string, options: { headers: Record<string, string> }) => RealtimeSocket;
 }
 
@@ -152,6 +154,7 @@ export function createOpenAIRealtimeSipService(
 ) {
   const fetchImpl = options.fetchImpl ?? fetch;
   const guestConfirmationService = options.guestConfirmationService;
+  const staffNotificationService = options.staffNotificationService;
   const websocketFactory =
     options.websocketFactory ??
     ((url: string, socketOptions: { headers: Record<string, string> }) => new WebSocket(url, socketOptions));
@@ -237,6 +240,7 @@ export function createOpenAIRealtimeSipService(
         env,
         guestConfirmationService,
         locationId: resolvedLocationId,
+        staffNotificationService,
         websocketFactory,
       });
 
@@ -419,8 +423,13 @@ export function buildOpenAIRealtimeInstructions(
     "Handle interruptions gracefully. If the caller cuts you off, stop and answer their latest request.",
     "Use the lookup_restaurant_context tool for specials, hours, parking, directions, menu, reservation policy, pickup timing, payment, allergies, delivery drivers, lost items, complaints, or anything policy-like.",
     "When a tool returns information, answer in one warm sentence and then ask a natural next question only if the call is not clearly over.",
+    "There is no live staff transfer in this pilot. Never say you are connecting, transferring, or placing the caller on hold for staff.",
+    "When a caller needs staff, use request_staff_callback, then say you are sending the message to staff and someone will call them back shortly.",
+    "If you do not know an answer after checking context, do not guess. Offer a staff callback and collect the missing name, callback number, and question.",
+    "For severe allergies, never guarantee safety. Use request_staff_callback and say staff needs to confirm because cross-contact is possible.",
     "For reservation requests, acknowledge any date, time, or party size already spoken, then ask only for missing details.",
     "For pickup orders, collect items, quantities, name, and callback number. Payment is pay at pickup unless a POS integration says otherwise.",
+    "For menu substitutions or off-menu requests, use the restaurant substitution policy. If allowed and obvious, note it as a request; if uncertain, say you can include the request but staff must confirm. Never guarantee off-menu items, allergy accommodations, prices, or availability unless the menu context explicitly confirms them.",
     "For reservations and pickup orders, once the request is captured, naturally offer to text a confirmation. Example: 'Would you like me to text that confirmation to the number ending 1234?'",
     "Only send a text after the caller agrees or asks for it. Use the send_guest_confirmation tool for reservation, order, or helpful follow-up texts.",
     "If the send_guest_confirmation tool succeeds, tell the caller the text is sent. Do not mention backend setup, SMS providers, or placeholder mode.",
@@ -487,10 +496,11 @@ export function lookupRestaurantContext(context: RestaurantVoiceContext, rawTopi
       menuHighlights: context.menuHighlights,
       menuItems: context.menuItems.slice(0, 30).map((item) => ({
         aliases: item.aliases,
+        modifiers: item.modifiers,
         name: item.name,
         price: formatPrice(item.priceCents),
       })),
-      policies: pickPolicies(context, ["menu", "specials", "pickup", "payment", "allergies"]),
+      policies: pickPolicies(context, ["menu", "substitutions", "specials", "pickup", "payment", "allergies"]),
       currentRestaurantTime: buildRestaurantLocalTimeContext(context),
       restaurantName: context.restaurantName,
       topic,
@@ -576,6 +586,7 @@ function startSidebandSocket({
   env,
   guestConfirmationService,
   locationId,
+  staffNotificationService,
   websocketFactory,
 }: {
   activeSockets: Map<string, RealtimeSocket>;
@@ -585,6 +596,7 @@ function startSidebandSocket({
   env: OpenAIRealtimeEnv;
   guestConfirmationService?: GuestConfirmationService;
   locationId: string;
+  staffNotificationService?: StaffNotificationService;
   websocketFactory: (url: string, options: { headers: Record<string, string> }) => RealtimeSocket;
 }) {
   if (!env.OPENAI_API_KEY || activeSockets.has(callId)) return;
@@ -633,6 +645,7 @@ function startSidebandSocket({
       context,
       guestConfirmationService,
       socket,
+      staffNotificationService,
       toolCalls,
     });
   });
@@ -671,12 +684,14 @@ async function handleOpenAIRealtimeToolCalls({
   context,
   guestConfirmationService,
   socket,
+  staffNotificationService,
   toolCalls,
 }: {
   callerPhone?: string;
   context: RestaurantVoiceContext;
   guestConfirmationService?: GuestConfirmationService;
   socket: RealtimeSocket;
+  staffNotificationService?: StaffNotificationService;
   toolCalls: OpenAIRealtimeToolCall[];
 }) {
   for (const toolCall of toolCalls) {
@@ -684,6 +699,7 @@ async function handleOpenAIRealtimeToolCalls({
       callerPhone,
       context,
       guestConfirmationService,
+      staffNotificationService,
       toolCall,
     });
     sendRealtimeEvent(socket, {
@@ -702,11 +718,13 @@ async function handleOpenAIRealtimeToolCall({
   callerPhone,
   context,
   guestConfirmationService,
+  staffNotificationService,
   toolCall,
 }: {
   callerPhone?: string;
   context: RestaurantVoiceContext;
   guestConfirmationService?: GuestConfirmationService;
+  staffNotificationService?: StaffNotificationService;
   toolCall: OpenAIRealtimeToolCall;
 }) {
   if (toolCall.name === "lookup_restaurant_context") {
@@ -719,6 +737,15 @@ async function handleOpenAIRealtimeToolCall({
       context,
       guestConfirmationService,
       rawArguments: toolCall.arguments,
+    });
+  }
+
+  if (toolCall.name === "request_staff_callback") {
+    return requestOpenAIRealtimeStaffCallback({
+      callerPhone,
+      context,
+      rawArguments: toolCall.arguments,
+      staffNotificationService,
     });
   }
 
@@ -819,6 +846,74 @@ export async function sendOpenAIRealtimeGuestConfirmation({
       error: "send_failed",
       message: error instanceof Error ? error.message : "Text confirmation failed.",
       phoneNumber,
+    };
+  }
+}
+
+export async function requestOpenAIRealtimeStaffCallback({
+  callerPhone,
+  context,
+  rawArguments,
+  staffNotificationService,
+}: {
+  callerPhone?: string;
+  context: RestaurantVoiceContext;
+  rawArguments: Record<string, unknown>;
+  staffNotificationService?: StaffNotificationService;
+}) {
+  const callbackPhone = normalizeCallerPhone(stringValue(rawArguments.callback_phone) ?? callerPhone);
+  if (!callbackPhone) {
+    return {
+      ok: false,
+      error: "missing_callback_phone",
+      message: "Ask the caller for the best callback number before promising staff follow-up.",
+    };
+  }
+
+  const kind = normalizeStaffCallbackKind(rawArguments.kind);
+  const severity = normalizeStaffCallbackSeverity(rawArguments.urgency, kind);
+  const callerName = stringValue(rawArguments.caller_name);
+  const reason = stringValue(rawArguments.reason) ?? "Caller needs staff follow-up.";
+  const question = stringValue(rawArguments.question);
+  const details = [
+    callerName && `Caller name: ${callerName}`,
+    `Callback: ${callbackPhone}`,
+    question && `Question: ${question}`,
+    `Reason: ${reason}`,
+  ].filter((item): item is string => Boolean(item));
+
+  try {
+    if (staffNotificationService) {
+      await staffNotificationService.sendStaffAlert({
+        callerPhone: callbackPhone,
+        details,
+        kind,
+        restaurantName: context.restaurantName,
+        severity,
+        summary: buildStaffCallbackSummary(kind, callerName, reason),
+      });
+    } else {
+      console.info("[openai-realtime] placeholder staff callback recorded", {
+        callbackLastFour: callbackPhone.slice(-4),
+        kind,
+        reason,
+        restaurantName: context.restaurantName,
+      });
+    }
+
+    return {
+      ok: true,
+      callbackPhone,
+      message: "Staff callback request recorded. Tell the caller staff will call them back shortly; do not say you are transferring or placing them on hold.",
+      sentToStaff: Boolean(staffNotificationService?.configured),
+      status: "callback_requested",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      callbackPhone,
+      error: "staff_callback_failed",
+      message: error instanceof Error ? error.message : "Staff callback request failed.",
     };
   }
 }
@@ -944,6 +1039,45 @@ function buildOpenAIRealtimeTools() {
       },
       type: "function" as const,
     },
+    {
+      description:
+        "Create a staff callback request for severe allergies, unknown answers, complaints, human requests, unusual substitutions, unavailable items, or any situation staff must confirm. This does not transfer the live call.",
+      name: "request_staff_callback",
+      parameters: {
+        additionalProperties: false,
+        properties: {
+          callback_phone: {
+            description: "Best callback number. Omit to use SIP caller ID when available.",
+            type: "string",
+          },
+          caller_name: {
+            description: "Caller name, if known.",
+            type: "string",
+          },
+          kind: {
+            description: "Reason category for staff routing.",
+            enum: ["allergy", "complaint", "delivery_failure", "handoff", "low_confidence", "order", "reservation", "sales"],
+            type: "string",
+          },
+          question: {
+            description: "The exact question staff needs to answer, if this is an unknown-answer callback.",
+            type: "string",
+          },
+          reason: {
+            description: "Short staff-facing reason for the callback.",
+            type: "string",
+          },
+          urgency: {
+            description: "How urgent this feels.",
+            enum: ["low", "medium", "high"],
+            type: "string",
+          },
+        },
+        required: ["kind", "reason"],
+        type: "object",
+      },
+      type: "function" as const,
+    },
   ];
 }
 
@@ -1045,6 +1179,29 @@ function parseObjectArguments(value: unknown): Record<string, unknown> {
 
 function pickPolicies(context: RestaurantVoiceContext, keys: string[]) {
   return Object.fromEntries(keys.map((key) => [key, context.policies[key]]).filter(([, value]) => Boolean(value)));
+}
+
+function normalizeStaffCallbackKind(value: unknown): StaffAlertKind {
+  const kind = stringValue(value)?.toLowerCase();
+  if (kind === "complaint") return "complaint";
+  if (kind === "delivery_failure") return "delivery_failure";
+  if (kind === "order") return "order";
+  if (kind === "reservation") return "reservation";
+  if (kind === "sales") return "sales";
+  if (kind === "allergy" || kind === "low_confidence") return "low_confidence";
+  return "handoff";
+}
+
+function normalizeStaffCallbackSeverity(value: unknown, kind: StaffAlertKind) {
+  const severity = stringValue(value)?.toLowerCase();
+  if (severity === "high" || kind === "complaint" || kind === "delivery_failure") return "high";
+  if (severity === "low") return "low";
+  return "medium";
+}
+
+function buildStaffCallbackSummary(kind: StaffAlertKind, callerName: string | undefined, reason: string) {
+  const label = kind === "low_confidence" ? "Staff confirmation" : "Staff callback";
+  return `${label} requested${callerName ? ` for ${callerName}` : ""}: ${reason}`;
 }
 
 function extractCallerPhoneFromSipHeaders(headers: Array<{ name?: unknown; value?: unknown }> | undefined) {

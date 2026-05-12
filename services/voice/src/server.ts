@@ -39,6 +39,7 @@ const menuIngestionService = createMenuIngestionService(env);
 const platformIntegrationRegistry = createPlatformIntegrationRegistry(env);
 const openAIRealtimeSipService = createOpenAIRealtimeSipService(env, restaurantContextStore, {
   guestConfirmationService,
+  staffNotificationService,
 });
 const ADMIN_BODY_LIMIT_BYTES = 16 * 1024;
 const OPENAI_WEBHOOK_BODY_LIMIT_BYTES = 32 * 1024;

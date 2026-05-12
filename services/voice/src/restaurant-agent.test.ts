@@ -58,6 +58,15 @@ describe("restaurant fallback replies", () => {
     expect(instructions).toContain("Use an honorific only if the caller says it");
   });
 
+  it("prevents fake live transfers and over-promising substitutions", () => {
+    const instructions = buildRestaurantInstructions(demoRestaurantContext);
+
+    expect(instructions).toContain("There is no live staff transfer");
+    expect(instructions).toContain("Never say you are connecting, transferring, or placing the caller on hold");
+    expect(instructions).toContain("substitutions and off-menu requests");
+    expect(instructions).toContain("do not guarantee availability, price, or allergy safety");
+  });
+
   it("passes structured conversation turns to the Responses API", () => {
     const input = buildConversationInput("Do you have patio seating?", [
       {

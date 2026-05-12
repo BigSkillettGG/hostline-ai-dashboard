@@ -88,6 +88,10 @@ export const demoRestaurantContext: RestaurantVoiceContext = {
       title: "Brunch",
     },
     {
+      body: "Simple pizza changes can be noted when ingredients are already on the menu. Off-menu items, added proteins, severe allergy changes, and price changes need staff confirmation before promising.",
+      title: "Menu substitutions",
+    },
+    {
       body: "For delivery drivers, ask for the guest name and app name. Drivers should check the pickup shelf near the host stand and wait outside if the order is not ready.",
       title: "Delivery driver pickup",
     },
@@ -136,6 +140,8 @@ export const demoRestaurantContext: RestaurantVoiceContext = {
     pickup: "Pickup orders are pay at pickup. Typical wait is 20 to 30 minutes during peak hours.",
     reservations: "Reservations can be requested by phone. Parties up to 6 can usually be handled normally if availability exists. Parties of 8 or more need staff confirmation.",
     allergies: "Severe allergies require staff confirmation because cross-contact is possible.",
+    menu: "Menu substitutions and modifiers can be requested, but only listed items and listed modifiers are guaranteed.",
+    substitutions: "Simple pizza changes can be noted when ingredients are already on the menu. Off-menu items, added proteins, severe allergy changes, and price changes need staff confirmation before promising.",
     parking: "Metered street parking is available nearby, with a paid lot at 17th and Valencia. The 16th Street BART station is about a 10-minute walk.",
     specials: "Tonight's specials are roasted branzino with lemon-caper butter, burrata with stone fruit and basil, and mushroom risotto. Specials can sell out.",
     music: "Live jazz is scheduled Thursdays from 7 PM to 9 PM, and acoustic guitar is scheduled Sundays from 5 PM to 7 PM.",

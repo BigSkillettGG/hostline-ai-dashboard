@@ -165,10 +165,12 @@ export function matchPhonePlaybookReply(
   }
 
   if (/\b(allergy|allergic|allergen|celiac|gluten|peanut|nut|shellfish|dairy)\b/.test(normalized)) {
+    const allergyPolicy = policy(context, "allergies");
     return reply(
       "allergy",
-      policy(context, "allergies") ??
-        "I can note that for staff, but severe allergies need staff confirmation because cross-contact is possible. What allergy should I flag?",
+      allergyPolicy
+        ? `${allergyPolicy} I can send this to staff for a callback; what name and best number should I include?`
+        : "I can note that for staff, but severe allergies need staff confirmation because cross-contact is possible. What name, callback number, and allergy should I flag?",
       "low_confidence",
     );
   }

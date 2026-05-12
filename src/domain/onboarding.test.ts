@@ -39,6 +39,7 @@ describe("restaurant onboarding scope", () => {
         "lostAndFoundPolicy",
         "orderChangePolicy",
         "reservationChangePolicy",
+        "substitutionPolicy",
         "vendorCallPolicy",
         "waitlistPolicy",
       ]),

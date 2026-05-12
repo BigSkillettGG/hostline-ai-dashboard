@@ -87,6 +87,7 @@ describe("restaurant context store", () => {
           reservationProvider: "Manual requests only",
           restaurantName: "Saffron Table",
           specialsSchedule: "Chef's curry special is available Friday dinner only.",
+          substitutionPolicy: "No off-menu noodles. Simple sauce-on-side requests are okay; allergy substitutions need staff confirmation.",
           timezone: "America/New_York",
           vendorCallPolicy: "Vendors should leave company, reason, phone, and email for the owner.",
           voiceGender: "Male - Michael",
@@ -122,6 +123,7 @@ describe("restaurant context store", () => {
     expect(context.policies.reservation_changes).toContain("Reservation changes");
     expect(context.policies.sales).toContain("Vendors should leave");
     expect(context.policies.specials).toContain("Chef's curry special");
+    expect(context.policies.substitutions).toContain("No off-menu noodles");
     expect(context.policies.waitlist).toContain("quoted waits");
     expect(context.faqs).toEqual([
       {
@@ -146,6 +148,10 @@ describe("restaurant context store", () => {
         {
           body: "Drivers use the side pickup window and give the app name.",
           title: "Delivery drivers",
+        },
+        {
+          body: "No off-menu noodles. Simple sauce-on-side requests are okay; allergy substitutions need staff confirmation.",
+          title: "Menu substitutions and off-menu requests",
         },
         {
           body: "Vendors should leave company, reason, phone, and email for the owner.",

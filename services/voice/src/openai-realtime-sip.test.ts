@@ -13,6 +13,7 @@ import {
   extractOpenAIRealtimeCallerPhone,
   extractOpenAIRealtimeToolCalls,
   lookupRestaurantContext,
+  requestOpenAIRealtimeStaffCallback,
   resolveOpenAIRealtimeSpeed,
   sendOpenAIRealtimeGuestConfirmation,
   verifyOpenAIWebhookSignature,
@@ -70,8 +71,11 @@ describe("OpenAI Realtime SIP", () => {
     expect(payload.instructions).toContain("Hi, thank you for calling Olive and Ember. How can I help you?");
     expect(payload.instructions).toContain("do not say you are virtual or AI");
     expect(payload.instructions).toContain("Avoid IVR cadence");
+    expect(payload.instructions).toContain("There is no live staff transfer");
+    expect(payload.instructions).toContain("substitutions or off-menu requests");
     expect(payload.tools[0].name).toBe("lookup_restaurant_context");
     expect(payload.tools.map((tool) => tool.name)).toContain("send_guest_confirmation");
+    expect(payload.tools.map((tool) => tool.name)).toContain("request_staff_callback");
   });
 
   it("adds restaurant-local time and caller phone context to realtime instructions", () => {
@@ -138,6 +142,7 @@ describe("OpenAI Realtime SIP", () => {
     expect(instructions).toContain("Greeting energy");
     expect(instructions).toContain("not 'Thanks, Schneider.'");
     expect(instructions).toContain("Handle interruptions gracefully");
+    expect(instructions).toContain("Never say you are connecting, transferring, or placing the caller on hold");
   });
 
   it("builds a short opening greeting that does not introduce the host", () => {
@@ -211,6 +216,40 @@ describe("OpenAI Realtime SIP", () => {
 
     expect(JSON.stringify(result)).toContain("specials");
     expect(JSON.stringify(result)).toContain("Margherita pizza");
+    expect(JSON.stringify(result)).toContain("substitutions");
+  });
+
+  it("records staff callback requests instead of pretending to transfer live calls", async () => {
+    const alerts: unknown[] = [];
+    const result = await requestOpenAIRealtimeStaffCallback({
+      callerPhone: "+14155550123",
+      context: demoRestaurantContext,
+      rawArguments: {
+        caller_name: "Tim",
+        kind: "allergy",
+        question: "My son has a severe peanut allergy. Can you accommodate that?",
+        reason: "Severe peanut allergy needs staff confirmation.",
+        urgency: "high",
+      },
+      staffNotificationService: {
+        configured: true,
+        async sendStaffAlert(input) {
+          alerts.push(input);
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      status: "callback_requested",
+    });
+    expect(JSON.stringify(result)).toContain("do not say you are transferring");
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toMatchObject({
+      callerPhone: "+14155550123",
+      kind: "low_confidence",
+      severity: "high",
+    });
   });
 
   it("lets demo calls treat guest texts as sent when SMS is not configured", async () => {

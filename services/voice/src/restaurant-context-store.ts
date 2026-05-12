@@ -154,6 +154,7 @@ export function buildRestaurantContext({
         stringValue(draft.lostAndFoundPolicy) ??
         "Collect the item description, visit timing, caller name, and callback number for staff follow-up.",
       menu: buildMenuPolicy(draft, categoryNames),
+      substitutions: buildSubstitutionPolicy(draft),
       order_changes:
         stringValue(draft.orderChangePolicy) ??
         "Order changes and cancellations need staff confirmation before they are promised.",
@@ -436,6 +437,13 @@ function buildMenuPolicy(draft: OnboardingDraft, categoryNames: string) {
     .join(" ");
 }
 
+function buildSubstitutionPolicy(draft: OnboardingDraft) {
+  return (
+    stringValue(draft.substitutionPolicy) ??
+    "If a caller asks for an off-menu item or unusual substitution, note it as a request only when it is a simple variation of an existing menu item. Staff must confirm availability, price changes, severe allergy accommodations, and anything not clearly listed."
+  );
+}
+
 function buildSpecialsPolicy(draft: OnboardingDraft) {
   return [
     stringValue(draft.specialsSchedule),
@@ -481,6 +489,7 @@ function buildDraftKnowledgeSections(draft: OnboardingDraft): RestaurantKnowledg
   const sections: RestaurantKnowledgeSection[] = [];
 
   addDraftSection(sections, "Private events and catering", stringValue(draft.privateEvents));
+  addDraftSection(sections, "Menu substitutions and off-menu requests", stringValue(draft.substitutionPolicy));
   addDraftSection(sections, "Order changes and cancellations", stringValue(draft.orderChangePolicy));
   addDraftSection(sections, "Reservation changes and cancellations", stringValue(draft.reservationChangePolicy));
   addDraftSection(sections, "Waitlist and walk-ins", stringValue(draft.waitlistPolicy));

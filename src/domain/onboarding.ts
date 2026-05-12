@@ -124,6 +124,14 @@ export const onboardingSections: OnboardingSection[] = [
         required: true,
       },
       {
+        id: "substitutionPolicy",
+        label: "Off-menu requests",
+        prompt: "When callers ask for items or substitutions that are not exactly on the menu, what can the host accept, note for staff, or decline?",
+        placeholder: "Simple pizza changes are okay if ingredients are in-house. Off-menu proteins, severe allergy changes, and price changes need staff confirmation.",
+        control: "long",
+        required: true,
+      },
+      {
         id: "timedPricing",
         label: "Timed pricing",
         prompt: "What prices or items change by time, day, service, or happy hour?",
@@ -576,6 +584,8 @@ export const sampleOnboardingDraft: OnboardingDraft = {
   menuUploadNotes: "Dinner menu PDF, brunch photo menu, cocktail list spreadsheet, and current specials sheet.",
   menuUrl: "https://oliveandember.example/menu",
   modifiers: "Gluten-free crust +$4, light cheese, no anchovy, add chicken +$6.",
+  substitutionPolicy:
+    "Simple pizza substitutions can be noted when ingredients are already on the menu. Off-menu items, severe allergy changes, extra proteins, and price changes need staff confirmation before promising.",
   orderChangePolicy: "Collect the order name, phone number, requested change, and send staff for confirmation.",
   orderDestination: "Staff review queue",
   orderingCutoffs: "Kitchen stops new pickup orders 30 minutes before close. Pizza and pasta are unavailable after the kitchen closes.",
