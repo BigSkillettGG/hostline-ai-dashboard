@@ -37,24 +37,40 @@ export default function Pricing() {
 
   return (
     <>
-      <section className="border-b border-border bg-card/35">
-        <div className="mx-auto max-w-5xl px-5 py-16 text-center md:py-20">
-          <Badge variant="outline" className="mb-5 gap-1.5 border-primary/30 bg-primary/10 text-primary">
+      <section className="border-b border-border bg-foreground text-background">
+        <div className="mx-auto grid max-w-6xl gap-10 px-5 py-16 md:py-20 lg:grid-cols-[1fr_0.85fr] lg:items-center">
+          <div>
+          <Badge variant="outline" className="mb-5 gap-1.5 border-background/25 bg-background/10 text-background">
             <Sparkles className="h-3 w-3" />
             Pricing by solution
           </Badge>
-          <h1 className="text-4xl font-semibold leading-none md:text-6xl">
+          <h1 className="max-w-3xl text-5xl font-semibold leading-none md:text-7xl">
             Pay by the call or chat.
-            <span className="block text-muted-foreground">Not by the minute.</span>
+            <span className="block text-background/58">Not by the minute.</span>
           </h1>
-          <p className="mx-auto mt-5 max-w-2xl text-lg text-muted-foreground">
+          <p className="mt-5 max-w-2xl text-lg leading-8 text-background/72">
             Every industry starts with full answering coverage, then adds booking, request capture, and integrations as the workflow gets more valuable.
           </p>
-          <div className="mt-7 inline-flex flex-wrap items-center justify-center gap-x-3 gap-y-2 rounded-lg border border-border bg-background px-3 py-2 shadow-sm">
-            <span className={!annual ? "text-sm font-medium" : "text-sm text-muted-foreground"}>Monthly</span>
+          <div className="mt-7 inline-flex flex-wrap items-center justify-center gap-x-3 gap-y-2 rounded-lg border border-background/20 bg-background/10 px-3 py-2 shadow-sm">
+            <span className={!annual ? "text-sm font-medium" : "text-sm text-background/55"}>Monthly</span>
             <Switch checked={annual} onCheckedChange={setAnnual} />
-            <span className={annual ? "text-sm font-medium" : "text-sm text-muted-foreground"}>Annual</span>
-            <Badge variant="secondary">Save 15%</Badge>
+            <span className={annual ? "text-sm font-medium" : "text-sm text-background/55"}>Annual</span>
+            <Badge variant="outline" className="border-background/20 bg-background/10 text-background">Save 15%</Badge>
+          </div>
+          </div>
+
+          <div className="rounded-lg border border-background/15 bg-background/8 p-5">
+            <div className="text-xs font-semibold uppercase text-primary-glow">Current selection</div>
+            <div className="mt-3 text-2xl font-semibold">{selected.label}</div>
+            <p className="mt-2 text-sm leading-6 text-background/70">{selected.proofPoint}</p>
+            <div className="mt-5 grid gap-2">
+              {selected.pricing.map((tier) => (
+                <div key={tier.id} className="flex items-center justify-between rounded-md border border-background/15 bg-background/8 px-4 py-3 text-sm">
+                  <span>{tier.name}</span>
+                  <span className="font-semibold">${Math.round(tier.monthly * factor)}/mo</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>

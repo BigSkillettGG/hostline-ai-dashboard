@@ -6,7 +6,7 @@ export function LogoCloud() {
       {integrations.map((name) => (
         <div
           key={name}
-          className="flex h-16 items-center justify-center bg-card text-sm font-semibold tracking-tight text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+          className="flex h-16 items-center justify-center bg-card text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
         >
           {name}
         </div>

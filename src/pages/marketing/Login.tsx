@@ -47,7 +47,7 @@ export default function Login() {
         <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
           <Flame className="h-4 w-4" />
         </span>
-        <span className="text-lg font-semibold tracking-tight">HostLine AI</span>
+        <span className="text-lg font-semibold">HostLine AI</span>
       </Link>
       <Card className="w-full">
         <CardHeader>

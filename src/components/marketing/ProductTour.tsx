@@ -83,7 +83,7 @@ function Copy({ title, body, bullets }: { title: string; body: string; bullets: 
   return (
     <>
       <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">In the dashboard</div>
-      <h3 className="text-2xl font-semibold tracking-tight md:text-3xl">{title}</h3>
+      <h3 className="text-2xl font-semibold md:text-3xl">{title}</h3>
       <p className="text-muted-foreground">{body}</p>
       <ul className="mt-4 space-y-2 text-sm">
         {bullets.map((b) => (

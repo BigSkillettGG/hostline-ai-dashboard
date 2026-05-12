@@ -50,7 +50,7 @@ export function MissedCallCalculator() {
         <div className="relative bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-6 md:col-span-2 md:p-8">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">You're losing</div>
           <div className="mt-1 flex flex-wrap items-baseline gap-x-2">
-            <span className="text-3xl font-semibold tabular-nums tracking-tight text-foreground sm:text-4xl md:text-5xl">{fmt(lostMonth)}</span>
+            <span className="text-3xl font-semibold tabular-nums text-foreground sm:text-4xl md:text-5xl">{fmt(lostMonth)}</span>
             <span className="text-sm text-muted-foreground">/ month</span>
           </div>
           <div className="mt-1 inline-flex items-center gap-1 text-xs text-destructive">

@@ -301,7 +301,7 @@ export function VoiceDemoPlayer() {
           <span className="h-px w-7 bg-primary/60" />
           Live demo
         </div>
-        <h2 className="text-3xl font-semibold tracking-tight md:text-4xl lg:text-[44px] lg:leading-[1.05]">
+        <h2 className="text-3xl font-semibold md:text-4xl lg:text-[44px] lg:leading-[1.05]">
           Listen to Vera handle real restaurant calls.
         </h2>
         <p className="mx-auto mt-4 max-w-2xl text-base text-white/60 md:text-lg">
@@ -356,7 +356,7 @@ export function VoiceDemoPlayer() {
                   {scenario.label}
                 </span>
               </div>
-              <h3 className="mt-3 text-xl font-semibold tracking-tight md:text-2xl">
+              <h3 className="mt-3 text-xl font-semibold md:text-2xl">
                 {scenario.caller.name} is calling. Vera picks up.
               </h3>
             </div>

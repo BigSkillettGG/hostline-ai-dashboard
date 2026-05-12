@@ -3,12 +3,14 @@ import {
   ArrowRight,
   CalendarCheck,
   Check,
+  ClipboardCheck,
   ClipboardList,
   Clock,
   MessageSquareText,
   PhoneCall,
   ShieldAlert,
   Sparkles,
+  Zap,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,65 +25,65 @@ export default function Solution() {
 
   if (!solution) return <Navigate to="/" replace />;
 
+  const primaryUseCase = solution.useCases[0];
+  const secondaryUseCase = solution.useCases[1] ?? solution.useCases[0];
+  const tertiaryUseCase = solution.useCases[2] ?? solution.useCases[0];
+
   return (
     <>
-      <section className="border-b border-border bg-card/30">
-        <div className="mx-auto grid max-w-6xl gap-10 px-5 py-16 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:py-20">
+      <section className="border-b border-border bg-foreground text-background">
+        <div className="mx-auto grid min-h-[calc(100svh-10rem)] max-w-6xl gap-10 px-5 py-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:py-20">
           <div>
-            <Badge variant="outline" className="mb-5 border-primary/30 bg-primary/10 text-primary">
+            <Badge variant="outline" className="mb-5 border-background/25 bg-background/10 text-background">
               {solution.label}
             </Badge>
-            <h1 className="max-w-3xl text-4xl font-semibold leading-none text-foreground md:text-6xl">
+            <h1 className="max-w-3xl text-5xl font-semibold leading-none md:text-7xl">
               {solution.heroTitle}
             </h1>
-            <p className="mt-5 max-w-2xl text-lg text-muted-foreground">{solution.heroSubtitle}</p>
-            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+            <p className="mt-6 max-w-2xl text-lg leading-8 text-background/76">{solution.heroSubtitle}</p>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Button asChild size="lg" className="h-12 px-6">
                 <Link to={`/signup?industry=${solution.slug}`}>
                   {solution.ctaLabel}
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Link>
               </Button>
-              <Button asChild variant="outline" size="lg" className="h-12 px-6">
+              <Button asChild variant="outline" size="lg" className="h-12 border-background/35 bg-transparent px-6 text-background hover:bg-background/10 hover:text-background">
                 <Link to={`/pricing?industry=${solution.slug}`}>See pricing</Link>
               </Button>
             </div>
           </div>
 
-          <div className="rounded-lg border border-border bg-background shadow-sm">
-            <div className="border-b border-border p-5">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <div className="text-xs font-semibold uppercase text-primary">Live request</div>
-                  <div className="mt-1 text-lg font-semibold">{solution.label} caller</div>
-                </div>
-                <Badge variant="secondary" className="gap-1.5">
-                  <Clock className="h-3 w-3" />
-                  Answered now
-                </Badge>
+          <div className="rounded-lg border border-background/15 bg-background/8 p-5 shadow-2xl">
+            <div className="flex items-center justify-between gap-4 border-b border-background/15 pb-4">
+              <div>
+                <div className="text-xs font-semibold uppercase text-primary-glow">Live request</div>
+                <div className="mt-1 text-lg font-semibold">{solution.label} caller</div>
               </div>
+              <Badge variant="outline" className="border-background/20 bg-background/10 text-background">
+                <Clock className="mr-1.5 h-3 w-3" />
+                Answered now
+              </Badge>
             </div>
-            <div className="space-y-3 p-5">
-              {solution.useCases.slice(0, 3).map((line, index) => (
-                <div key={line} className={cn("rounded-lg border p-4", index === 1 ? "border-primary/25 bg-primary/5" : "border-border bg-card/35")}>
-                  <div className="mb-1 text-xs font-semibold uppercase text-muted-foreground">
-                    {index === 0 ? "Caller says" : index === 1 ? "HostLine captures" : "Staff receives"}
-                  </div>
-                  <p className="text-sm leading-6">{line}</p>
+            <div className="mt-5 space-y-3">
+              {[
+                ["Caller needs", primaryUseCase],
+                ["HostLine handles", secondaryUseCase],
+                ["Staff receives", tertiaryUseCase],
+              ].map(([label, body], index) => (
+                <div key={label} className={cn("rounded-md border p-4", index === 1 ? "border-primary/35 bg-primary/10" : "border-background/15 bg-background/8")}>
+                  <div className="text-xs font-semibold uppercase text-background/48">{label}</div>
+                  <p className="mt-2 text-sm leading-6 text-background/84">{body}</p>
                 </div>
               ))}
             </div>
-            <div className="border-t border-border p-5">
-              <div className="text-xs font-semibold uppercase text-primary">Why it wins</div>
-              <p className="mt-2 text-sm text-muted-foreground">{solution.proofPoint}</p>
-              <div className="mt-4 grid gap-2">
-                {solution.outcomeMetrics.map((metric) => (
-                  <div key={metric} className="flex items-center gap-2 text-sm">
-                    <Check className="h-4 w-4 text-success" />
-                    <span>{metric}</span>
-                  </div>
-                ))}
-              </div>
+            <div className="mt-5 grid grid-cols-3 gap-2 border-t border-background/15 pt-4 text-center">
+              {solution.outcomeMetrics.map((metric) => (
+                <div key={metric} className="rounded-md bg-background/8 p-3">
+                  <Check className="mx-auto h-4 w-4 text-primary-glow" />
+                  <div className="mt-2 text-xs leading-5 text-background/70">{metric}</div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -90,9 +92,9 @@ export default function Solution() {
       <section className="border-b border-border">
         <div className="mx-auto max-w-6xl px-5 py-16 md:py-20">
           <SectionHeader
-            eyebrow={`${solution.label} use cases`}
-            title={`Calls ${solution.staffNoun}s should not have to chase.`}
-            subtitle={`HostLine handles the common, urgent, repetitive, and after-hours conversations ${solution.customerNoun}s already bring to your phone line.`}
+            eyebrow={`${solution.label} call handling`}
+            title={`Give ${solution.customerNoun}s a real answer before they call someone else.`}
+            subtitle={solution.proofPoint}
           />
           <div className="mt-10 grid gap-4 md:grid-cols-2">
             {solution.useCases.map((useCase, index) => {
@@ -113,32 +115,32 @@ export default function Solution() {
       </section>
 
       <section className="border-b border-border bg-card/35">
-        <div className="mx-auto max-w-6xl px-5 py-16 md:py-20">
-          <SectionHeader
-            eyebrow="Setup interview"
-            title="Simple for the owner. Deep enough for a real AI operator."
-            subtitle="The onboarding interview changes by industry, then turns answers into the knowledge base, policies, links, and escalation rules the AI uses on live calls and website chat."
-          />
-          <div className="mt-10 grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
-            <div className="rounded-lg border border-border bg-background p-5">
-              <div className="text-sm font-semibold">The interview captures</div>
-              <div className="mt-4 space-y-3">
-                {solution.setupFocus.map((item) => (
-                  <div key={item} className="flex gap-3">
-                    <ClipboardList className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                    <p className="text-sm text-muted-foreground">{item}</p>
+        <div className="mx-auto grid max-w-6xl gap-8 px-5 py-16 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
+          <div>
+            <SectionHeader
+              eyebrow="Setup interview"
+              title="The owner does not configure software. They answer smart questions."
+              subtitle="The onboarding interview builds the knowledge base, call policy, text-link behavior, and escalation map behind the AI."
+            />
+            <Button asChild className="mt-8">
+              <Link to={`/signup?industry=${solution.slug}`}>Start this setup</Link>
+            </Button>
+          </div>
+
+          <div className="grid gap-4">
+            {solution.setupFocus.map((item, index) => (
+              <div key={item} className="rounded-lg border border-border bg-background p-5">
+                <div className="flex items-start gap-4">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                    {String(index + 1).padStart(2, "0")}
                   </div>
-                ))}
-              </div>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-3">
-              {solution.valuePillars.map((pillar) => (
-                <div key={pillar.title} className="rounded-lg border border-border bg-background p-5">
-                  <div className="text-sm font-semibold">{pillar.title}</div>
-                  <p className="mt-2 text-sm text-muted-foreground">{pillar.body}</p>
+                  <div>
+                    <div className="text-sm font-semibold">{item.split(",")[0]}</div>
+                    <p className="mt-1 text-sm leading-6 text-muted-foreground">{item}</p>
+                  </div>
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -146,13 +148,35 @@ export default function Solution() {
       <section className="border-b border-border">
         <div className="mx-auto max-w-6xl px-5 py-16 md:py-20">
           <SectionHeader
+            eyebrow="Integrations and links"
+            title="Start link-first. Connect deeper systems when the workflow deserves it."
+            subtitle="The middle tier can send booking, quote, order, or intake links. The high tier can wire into the systems that matter for the vertical."
+          />
+          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {solution.integrations.map((integration) => (
+              <div key={integration} className="rounded-lg border border-border bg-background p-5">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-md bg-muted text-primary">
+                    <Zap className="h-4 w-4" />
+                  </div>
+                  <div className="font-semibold">{integration}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="border-b border-border bg-card/35">
+        <div className="mx-auto max-w-6xl px-5 py-16 md:py-20">
+          <SectionHeader
             eyebrow={`${solution.label} pricing`}
-            title="Three tiers. Overage by call or chat, not by the minute."
-            subtitle="Start with full answering coverage, add booking and request capture, then connect the systems that make sense for the business."
+            title="Three tiers that match the value of the call."
+            subtitle="Basic covers answering. Middle captures work. High end connects the operating systems."
           />
           <div className="mt-10 grid gap-5 md:grid-cols-3">
             {solution.pricing.map((tier) => (
-              <Card key={tier.id} className={cn("flex flex-col border-border/80", tier.id === "growth" && "border-primary/40 shadow-sm")}>
+              <Card key={tier.id} className={cn("flex flex-col border-border/80", tier.id === "growth" && "border-primary/40 shadow-md")}>
                 <CardContent className="flex flex-1 flex-col p-5">
                   <div className="flex items-center justify-between gap-3">
                     <div className="text-base font-semibold">{tier.name}</div>
@@ -189,9 +213,9 @@ export default function Solution() {
         <div className="mx-auto inline-flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary">
           <Sparkles className="h-5 w-5" />
         </div>
-        <h2 className="mt-5 text-3xl font-semibold md:text-4xl">Give your next caller the feeling that someone picked up.</h2>
+        <h2 className="mt-5 text-3xl font-semibold md:text-4xl">Put HostLine on the next {solution.label.toLowerCase()} call.</h2>
         <p className="mx-auto mt-3 max-w-2xl text-muted-foreground">
-          HostLine answers by phone and website chat, uses the same knowledge base, and hands your team clean transcripts, tasks, and customer details.
+          The fastest path is still simple: choose the solution, answer the interview, forward the line, and test.
         </p>
         <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
           <Button asChild size="lg" className="h-12 px-6">
@@ -207,5 +231,5 @@ export default function Solution() {
 }
 
 function getUseCaseIcon(index: number) {
-  return [PhoneCall, CalendarCheck, MessageSquareText, ShieldAlert, ClipboardList, Sparkles][index % 6];
+  return [PhoneCall, CalendarCheck, MessageSquareText, ShieldAlert, ClipboardList, ClipboardCheck][index % 6];
 }
