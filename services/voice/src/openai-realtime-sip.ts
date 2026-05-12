@@ -24,11 +24,16 @@ type OpenAIRealtimeEnv = Pick<
   | "OPENAI_PROJECT_ID"
   | "OPENAI_REPLY_TIMEOUT_MS"
   | "OPENAI_REALTIME_FEMALE_VOICE"
+  | "OPENAI_REALTIME_IDLE_TIMEOUT_MS"
   | "OPENAI_REALTIME_INTERRUPT_RESPONSE"
   | "OPENAI_REALTIME_MALE_VOICE"
   | "OPENAI_REALTIME_MODEL"
   | "OPENAI_REALTIME_NOISE_REDUCTION"
+  | "OPENAI_REALTIME_SERVER_VAD_PREFIX_PADDING_MS"
+  | "OPENAI_REALTIME_SERVER_VAD_SILENCE_MS"
+  | "OPENAI_REALTIME_SERVER_VAD_THRESHOLD"
   | "OPENAI_REALTIME_SPEED"
+  | "OPENAI_REALTIME_TURN_DETECTION_MODE"
   | "OPENAI_REALTIME_TURN_EAGERNESS"
   | "OPENAI_REALTIME_VOICE"
   | "OPENAI_WEBHOOK_SECRET"
@@ -121,6 +126,23 @@ interface RealtimeTranscriptTurn {
   text: string;
 }
 
+interface RealtimeQualityMetrics {
+  activeResponseStartedAt?: number;
+  agentTranscriptCount: number;
+  callerTranscriptCount: number;
+  firstGreetingResponseMs?: number;
+  firstModelResponseMs?: number;
+  lastResponseDurationMs?: number;
+  lastSpeechStoppedAt?: number;
+  responseCount: number;
+  speechStartedDuringResponseCount: number;
+  speechStartCount: number;
+  speechStopCount: number;
+  toolCallCount: number;
+  toolErrorCount: number;
+  toolLatencyMs: number[];
+}
+
 interface OpenAIRealtimeSidebandSession {
   callRecordId?: string;
   callerPhone?: string;
@@ -128,9 +150,10 @@ interface OpenAIRealtimeSidebandSession {
   context: RestaurantVoiceContext;
   externalCallId: string;
   locationId: string;
+  quality: RealtimeQualityMetrics;
   staffCallbackRequested: boolean;
   startedAt: number;
-  toolEvents: Array<{ kind?: string; name: string }>;
+  toolEvents: Array<{ kind?: string; latencyMs?: number; name: string; ok?: boolean }>;
   transcript: TranscriptTurn[];
   transcriptKeys: Set<string>;
 }
@@ -156,6 +179,14 @@ interface OpenAIRealtimeAcceptPayload {
         eagerness: "low" | "medium" | "high";
         interrupt_response: boolean;
         type: "semantic_vad";
+      } | {
+        create_response: true;
+        idle_timeout_ms: number;
+        interrupt_response: boolean;
+        prefix_padding_ms: number;
+        silence_duration_ms: number;
+        threshold: number;
+        type: "server_vad";
       };
     };
     output: {
@@ -427,12 +458,7 @@ export function buildOpenAIRealtimeAcceptPayload({
             `Menu terms include: ${context.menuHighlights.slice(0, 16).join(", ")}.`,
           ].join(" "),
         },
-        turn_detection: {
-          create_response: true,
-          eagerness: resolveOpenAIRealtimeTurnEagerness(env),
-          interrupt_response: resolveOpenAIRealtimeInterruptResponse(env),
-          type: "semantic_vad",
-        },
+        turn_detection: resolveOpenAIRealtimeTurnDetection(env),
       },
       output: {
         speed: resolveOpenAIRealtimeSpeed(env),
@@ -475,6 +501,9 @@ export function buildOpenAIRealtimeInstructions(
     "If the caller pauses, wait naturally. If silence continues, ask a gentle continuation question such as 'Take your time. What else can I help you with?'",
     "Speakerphone and car audio behavior: ignore faint echoes, background noise, room noise, and your own voice coming back through the caller's speaker. Only treat clear human speech as caller intent.",
     "Handle clear interruptions gracefully. If the caller clearly cuts you off with speech, answer their latest request. Do not restart the call because of a noise, echo, or short silence.",
+    "If the caller is in a very loud place or the audio is too unclear to understand, do not guess. Say briefly that it is too noisy to hear clearly and ask them to move somewhere quieter, call back, or let staff follow up by text/callback.",
+    "Before any lookup or task that may take a moment, say one short natural bridge such as 'Sure, let me check that' or 'One moment, I am checking now,' then use the tool. Vary the wording and do not sound like an IVR.",
+    "Use cached restaurant facts naturally. The facts are not a script; keep your wording warm, human, and specific to the caller's question.",
     "Use the lookup_restaurant_context tool for specials, hours, parking, directions, menu, reservation policy, pickup timing, payment, allergies, delivery drivers, lost items, complaints, or anything policy-like.",
     "After answering any normal question or completing any task, ask a short loop-closing question such as 'Can I help you with anything else?' unless the caller has already clearly said goodbye.",
     "Never end the call immediately after answering a question. The call should only close after the caller indicates they are done.",
@@ -732,6 +761,7 @@ function startSidebandSocket({
     context,
     externalCallId,
     locationId,
+    quality: createRealtimeQualityMetrics(),
     staffCallbackRequested: false,
     startedAt: Date.now(),
     toolEvents: [],
@@ -768,6 +798,8 @@ function startSidebandSocket({
       return;
     }
 
+    recordOpenAIRealtimeQualityEvent(session, eventType, callId);
+
     const transcriptTurn = extractOpenAIRealtimeTranscriptTurn(event);
     if (transcriptTurn) {
       void persistOpenAIRealtimeTranscriptTurn({
@@ -787,6 +819,7 @@ function startSidebandSocket({
       context,
       guestConfirmationService,
       locationId,
+      session,
       socket,
       staffNotificationService,
       toolCalls,
@@ -835,6 +868,64 @@ export function buildShortOpeningGreeting(context: RestaurantVoiceContext) {
   return `Hi, thank you for calling ${toSpokenRestaurantName(context.restaurantName)}. How can I help you?`;
 }
 
+function createRealtimeQualityMetrics(): RealtimeQualityMetrics {
+  return {
+    agentTranscriptCount: 0,
+    callerTranscriptCount: 0,
+    responseCount: 0,
+    speechStartedDuringResponseCount: 0,
+    speechStartCount: 0,
+    speechStopCount: 0,
+    toolCallCount: 0,
+    toolErrorCount: 0,
+    toolLatencyMs: [],
+  };
+}
+
+function recordOpenAIRealtimeQualityEvent(session: OpenAIRealtimeSidebandSession, eventType: string, callId: string) {
+  const now = Date.now();
+  if (eventType === "input_audio_buffer.speech_started") {
+    session.quality.speechStartCount += 1;
+    if (session.quality.activeResponseStartedAt) {
+      session.quality.speechStartedDuringResponseCount += 1;
+      console.info("[openai-realtime] caller speech detected during response", {
+        callId,
+        count: session.quality.speechStartedDuringResponseCount,
+      });
+    }
+    return;
+  }
+
+  if (eventType === "input_audio_buffer.speech_stopped") {
+    session.quality.speechStopCount += 1;
+    session.quality.lastSpeechStoppedAt = now;
+    return;
+  }
+
+  if (eventType === "response.created") {
+    session.quality.responseCount += 1;
+    session.quality.activeResponseStartedAt = now;
+    if (session.quality.responseCount === 1) {
+      session.quality.firstGreetingResponseMs = now - session.startedAt;
+    } else if (!session.quality.firstModelResponseMs && session.quality.lastSpeechStoppedAt) {
+      session.quality.firstModelResponseMs = now - session.quality.lastSpeechStoppedAt;
+    }
+    console.info("[openai-realtime] response started", {
+      callId,
+      responseCount: session.quality.responseCount,
+      sinceLastSpeechStopMs: session.quality.lastSpeechStoppedAt ? now - session.quality.lastSpeechStoppedAt : undefined,
+    });
+    return;
+  }
+
+  if (eventType === "response.done") {
+    if (session.quality.activeResponseStartedAt) {
+      session.quality.lastResponseDurationMs = now - session.quality.activeResponseStartedAt;
+    }
+    delete session.quality.activeResponseStartedAt;
+  }
+}
+
 async function persistOpenAIRealtimeTranscriptTurn({
   callStore,
   session,
@@ -857,6 +948,11 @@ async function persistOpenAIRealtimeTranscriptTurn({
     text,
   } satisfies TranscriptTurn;
   session.transcript.push(transcriptTurn);
+  if (turn.role === "caller") {
+    session.quality.callerTranscriptCount += 1;
+  } else if (turn.role === "agent") {
+    session.quality.agentTranscriptCount += 1;
+  }
 
   try {
     await callStore?.addTranscriptTurn({
@@ -960,7 +1056,11 @@ function classifyOpenAIRealtimeCall(session: OpenAIRealtimeSidebandSession): {
           ? "faq"
           : "other";
 
-  const needsReview = session.staffCallbackRequested || toolNames.has("request_staff_callback");
+  const qualityNeedsReview =
+    session.quality.toolErrorCount > 0 ||
+    session.quality.speechStartedDuringResponseCount >= 3 ||
+    (session.quality.speechStartCount >= 3 && session.quality.callerTranscriptCount === 0);
+  const needsReview = session.staffCallbackRequested || toolNames.has("request_staff_callback") || qualityNeedsReview;
   const outcome = needsReview
     ? "escalated"
     : toolNames.has("create_reservation_request")
@@ -972,7 +1072,7 @@ function classifyOpenAIRealtimeCall(session: OpenAIRealtimeSidebandSession): {
         : "resolved";
 
   return {
-    confidence: session.transcript.length ? (needsReview ? 78 : 88) : 20,
+    confidence: session.transcript.length ? (needsReview ? 72 : 88) : 20,
     intent,
     outcome,
     status: needsReview || !session.transcript.length ? "needs_review" : "resolved",
@@ -988,16 +1088,46 @@ function buildOpenAIRealtimeStructuredSummary(
   const callerTurns = session.transcript.filter((turn) => turn.role === "caller").map((turn) => turn.text);
   const agentTurns = session.transcript.filter((turn) => turn.role === "agent").map((turn) => turn.text);
   const actionSummary = session.toolEvents.length
-    ? `Tools used: ${session.toolEvents.map((event) => event.kind ? `${event.name}:${event.kind}` : event.name).join(", ")}.`
+    ? `Tools used: ${session.toolEvents.map(formatRealtimeToolEventSummary).join(", ")}.`
     : "No tools were used.";
   const closeSummary = closeCode || closeReason ? `Call close: ${[closeCode, closeReason].filter(Boolean).join(" ")}.` : "";
+  const qualitySummary = buildRealtimeQualitySummary(session);
 
   return [
     `OpenAI Realtime call classified as ${classification.intent}; outcome ${classification.outcome}.`,
     callerTurns.length ? `Caller said: ${callerTurns.slice(-3).join(" / ")}.` : "No caller transcript was captured.",
     agentTurns.length ? `Vera replied: ${agentTurns.slice(-2).join(" / ")}.` : "",
     actionSummary,
+    qualitySummary,
     closeSummary,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function formatRealtimeToolEventSummary(event: OpenAIRealtimeSidebandSession["toolEvents"][number]) {
+  const parts = [event.kind ? `${event.name}:${event.kind}` : event.name];
+  if (event.latencyMs !== undefined) parts.push(`${event.latencyMs}ms`);
+  if (event.ok === false) parts.push("failed");
+  return parts.join(" ");
+}
+
+function buildRealtimeQualitySummary(session: OpenAIRealtimeSidebandSession) {
+  const avgToolLatency = session.quality.toolLatencyMs.length
+    ? Math.round(session.quality.toolLatencyMs.reduce((sum, latency) => sum + latency, 0) / session.quality.toolLatencyMs.length)
+    : undefined;
+  const flags = [
+    session.quality.speechStartedDuringResponseCount >= 3 && "possible speakerphone echo/false interruptions",
+    session.quality.speechStartCount >= 3 && session.quality.callerTranscriptCount === 0 && "speech detected but no caller transcript",
+    session.quality.toolErrorCount > 0 && "tool errors",
+  ].filter((flag): flag is string => Boolean(flag));
+
+  return [
+    `Call quality: speech starts ${session.quality.speechStartCount}, speech stops ${session.quality.speechStopCount}, caller turns ${session.quality.callerTranscriptCount}, agent turns ${session.quality.agentTranscriptCount}.`,
+    session.quality.firstGreetingResponseMs !== undefined ? `Greeting response started after ${session.quality.firstGreetingResponseMs}ms.` : "",
+    session.quality.firstModelResponseMs !== undefined ? `First post-caller response started after ${session.quality.firstModelResponseMs}ms from speech stop.` : "",
+    avgToolLatency !== undefined ? `Average tool latency ${avgToolLatency}ms.` : "",
+    flags.length ? `Quality flags: ${flags.join(", ")}.` : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -1010,6 +1140,7 @@ async function handleOpenAIRealtimeToolCalls({
   context,
   guestConfirmationService,
   locationId,
+  session,
   socket,
   staffNotificationService,
   toolCalls,
@@ -1020,21 +1151,32 @@ async function handleOpenAIRealtimeToolCalls({
   context: RestaurantVoiceContext;
   guestConfirmationService?: GuestConfirmationService;
   locationId?: string;
+  session: OpenAIRealtimeSidebandSession;
   socket: RealtimeSocket;
   staffNotificationService?: StaffNotificationService;
   toolCalls: OpenAIRealtimeToolCall[];
 }) {
   for (const toolCall of toolCalls) {
-    const output = await handleOpenAIRealtimeToolCall({
-      callStore,
-      callerPhone,
-      callRecordId,
-      context,
-      guestConfirmationService,
-      locationId,
-      staffNotificationService,
-      toolCall,
-    });
+    const startedAt = Date.now();
+    let output: unknown;
+    try {
+      output = await handleOpenAIRealtimeToolCall({
+        callStore,
+        callerPhone,
+        callRecordId,
+        context,
+        guestConfirmationService,
+        locationId,
+        staffNotificationService,
+        toolCall,
+      });
+    } catch (error) {
+      output = {
+        error: error instanceof Error ? error.message : "Tool call failed.",
+        ok: false,
+      };
+    }
+    recordOpenAIRealtimeToolResult(session, toolCall, output, Date.now() - startedAt);
     sendRealtimeEvent(socket, {
       item: {
         call_id: toolCall.callId,
@@ -1045,6 +1187,36 @@ async function handleOpenAIRealtimeToolCalls({
     });
   }
   sendRealtimeEvent(socket, { type: "response.create" });
+}
+
+function recordOpenAIRealtimeToolResult(
+  session: OpenAIRealtimeSidebandSession,
+  toolCall: OpenAIRealtimeToolCall,
+  output: unknown,
+  latencyMs: number,
+) {
+  const ok = !isErrorToolOutput(output);
+  session.quality.toolCallCount += 1;
+  session.quality.toolLatencyMs.push(latencyMs);
+  if (!ok) session.quality.toolErrorCount += 1;
+
+  const existing = [...session.toolEvents].reverse().find((event) => event.name === toolCall.name && event.latencyMs === undefined);
+  if (existing) {
+    existing.latencyMs = latencyMs;
+    existing.ok = ok;
+  }
+
+  console.info("[openai-realtime] tool call completed", {
+    latencyMs,
+    name: toolCall.name,
+    ok,
+  });
+}
+
+function isErrorToolOutput(output: unknown) {
+  if (!output || typeof output !== "object") return false;
+  const record = output as Record<string, unknown>;
+  return record.ok === false || typeof record.error === "string";
 }
 
 async function handleOpenAIRealtimeToolCall({
@@ -1620,10 +1792,51 @@ export function resolveOpenAIRealtimeNoiseReduction(env: OpenAIRealtimeEnv) {
   return env.OPENAI_REALTIME_NOISE_REDUCTION === "near_field" ? "near_field" : "far_field";
 }
 
+export function resolveOpenAIRealtimeTurnDetection(env: OpenAIRealtimeEnv): OpenAIRealtimeAcceptPayload["audio"]["input"]["turn_detection"] {
+  if (env.OPENAI_REALTIME_TURN_DETECTION_MODE === "semantic_vad") {
+    return {
+      create_response: true,
+      eagerness: resolveOpenAIRealtimeTurnEagerness(env),
+      interrupt_response: resolveOpenAIRealtimeInterruptResponse(env),
+      type: "semantic_vad",
+    };
+  }
+
+  return {
+    create_response: true,
+    idle_timeout_ms: resolveOpenAIRealtimeIdleTimeoutMs(env),
+    interrupt_response: resolveOpenAIRealtimeInterruptResponse(env),
+    prefix_padding_ms: resolveOpenAIRealtimeServerVadPrefixPaddingMs(env),
+    silence_duration_ms: resolveOpenAIRealtimeServerVadSilenceMs(env),
+    threshold: resolveOpenAIRealtimeServerVadThreshold(env),
+    type: "server_vad",
+  };
+}
+
 export function resolveOpenAIRealtimeTurnEagerness(env: OpenAIRealtimeEnv) {
   return env.OPENAI_REALTIME_TURN_EAGERNESS === "medium" || env.OPENAI_REALTIME_TURN_EAGERNESS === "high"
     ? env.OPENAI_REALTIME_TURN_EAGERNESS
     : "low";
+}
+
+export function resolveOpenAIRealtimeServerVadThreshold(env: OpenAIRealtimeEnv) {
+  const threshold = env.OPENAI_REALTIME_SERVER_VAD_THRESHOLD;
+  return Number.isFinite(threshold) ? Math.min(0.95, Math.max(0.05, threshold)) : 0.72;
+}
+
+export function resolveOpenAIRealtimeServerVadSilenceMs(env: OpenAIRealtimeEnv) {
+  const silenceMs = env.OPENAI_REALTIME_SERVER_VAD_SILENCE_MS;
+  return Number.isFinite(silenceMs) ? Math.min(2000, Math.max(200, Math.round(silenceMs))) : 550;
+}
+
+export function resolveOpenAIRealtimeServerVadPrefixPaddingMs(env: OpenAIRealtimeEnv) {
+  const prefixPaddingMs = env.OPENAI_REALTIME_SERVER_VAD_PREFIX_PADDING_MS;
+  return Number.isFinite(prefixPaddingMs) ? Math.min(1000, Math.max(0, Math.round(prefixPaddingMs))) : 250;
+}
+
+export function resolveOpenAIRealtimeIdleTimeoutMs(env: OpenAIRealtimeEnv) {
+  const idleTimeoutMs = env.OPENAI_REALTIME_IDLE_TIMEOUT_MS;
+  return Number.isFinite(idleTimeoutMs) ? Math.min(30000, Math.max(5000, Math.round(idleTimeoutMs))) : 9000;
 }
 
 export function resolveOpenAIRealtimeInterruptResponse(env: OpenAIRealtimeEnv) {

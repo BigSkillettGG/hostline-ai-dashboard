@@ -19,10 +19,14 @@ import {
   extractOpenAIRealtimeToolCalls,
   lookupRestaurantContext,
   requestOpenAIRealtimeStaffCallback,
+  resolveOpenAIRealtimeIdleTimeoutMs,
   resolveOpenAIRealtimeInterruptResponse,
   resolveOpenAIRealtimeNoiseReduction,
+  resolveOpenAIRealtimeServerVadPrefixPaddingMs,
+  resolveOpenAIRealtimeServerVadSilenceMs,
+  resolveOpenAIRealtimeServerVadThreshold,
   resolveOpenAIRealtimeSpeed,
-  resolveOpenAIRealtimeTurnEagerness,
+  resolveOpenAIRealtimeTurnDetection,
   sendOpenAIRealtimeGuestConfirmation,
   verifyOpenAIWebhookSignature,
 } from "./openai-realtime-sip";
@@ -32,8 +36,13 @@ const baseEnv = {
   OPENAI_API_KEY: "sk-test",
   OPENAI_MODEL: "gpt-5-mini",
   OPENAI_REPLY_TIMEOUT_MS: 4500,
+  OPENAI_REALTIME_IDLE_TIMEOUT_MS: 9000,
   OPENAI_REALTIME_INTERRUPT_RESPONSE: false,
   OPENAI_REALTIME_NOISE_REDUCTION: "far_field",
+  OPENAI_REALTIME_SERVER_VAD_PREFIX_PADDING_MS: 250,
+  OPENAI_REALTIME_SERVER_VAD_SILENCE_MS: 550,
+  OPENAI_REALTIME_SERVER_VAD_THRESHOLD: 0.72,
+  OPENAI_REALTIME_TURN_DETECTION_MODE: "server_vad",
   OPENAI_REALTIME_TURN_EAGERNESS: "low",
   PUBLIC_HTTP_BASE_URL: "https://voice.hostline.ai/",
   SUPABASE_DEMO_LOCATION_ID: "00000000-0000-0000-0000-000000000001",
@@ -60,7 +69,7 @@ describe("OpenAI Realtime SIP", () => {
     });
   });
 
-  it("configures semantic VAD, restaurant instructions, and realtime tools", () => {
+  it("configures server VAD, restaurant instructions, and realtime tools", () => {
     const payload = buildOpenAIRealtimeAcceptPayload({
       context: demoRestaurantContext,
       env: baseEnv,
@@ -74,9 +83,12 @@ describe("OpenAI Realtime SIP", () => {
     });
     expect(payload.audio.input.turn_detection).toMatchObject({
       create_response: true,
-      eagerness: "low",
+      idle_timeout_ms: 9000,
       interrupt_response: false,
-      type: "semantic_vad",
+      prefix_padding_ms: 250,
+      silence_duration_ms: 550,
+      threshold: 0.72,
+      type: "server_vad",
     });
     expect(payload.audio.input.noise_reduction).toMatchObject({ type: "far_field" });
     expect(payload.audio.output.voice).toBe("marin");
@@ -280,10 +292,18 @@ describe("OpenAI Realtime SIP", () => {
     expect(resolveOpenAIRealtimeSpeed({ ...baseEnv, OPENAI_REALTIME_SPEED: "fast" })).toBe(1.02);
   });
 
-  it("uses conservative speakerphone-safe turn detection by default", () => {
+  it("uses server VAD speakerphone-safe turn detection by default", () => {
     expect(resolveOpenAIRealtimeNoiseReduction(baseEnv)).toBe("far_field");
-    expect(resolveOpenAIRealtimeTurnEagerness(baseEnv)).toBe("low");
     expect(resolveOpenAIRealtimeInterruptResponse(baseEnv)).toBe(false);
+    expect(resolveOpenAIRealtimeServerVadThreshold(baseEnv)).toBe(0.72);
+    expect(resolveOpenAIRealtimeServerVadSilenceMs(baseEnv)).toBe(550);
+    expect(resolveOpenAIRealtimeServerVadPrefixPaddingMs(baseEnv)).toBe(250);
+    expect(resolveOpenAIRealtimeIdleTimeoutMs(baseEnv)).toBe(9000);
+    expect(resolveOpenAIRealtimeTurnDetection(baseEnv)).toMatchObject({
+      interrupt_response: false,
+      threshold: 0.72,
+      type: "server_vad",
+    });
     expect(
       buildOpenAIRealtimeAcceptPayload({
         context: demoRestaurantContext,
@@ -291,12 +311,14 @@ describe("OpenAI Realtime SIP", () => {
           ...baseEnv,
           OPENAI_REALTIME_INTERRUPT_RESPONSE: true,
           OPENAI_REALTIME_NOISE_REDUCTION: "near_field",
+          OPENAI_REALTIME_TURN_DETECTION_MODE: "semantic_vad",
           OPENAI_REALTIME_TURN_EAGERNESS: "high",
         },
       }).audio.input.turn_detection,
     ).toMatchObject({
       eagerness: "high",
       interrupt_response: true,
+      type: "semantic_vad",
     });
   });
 

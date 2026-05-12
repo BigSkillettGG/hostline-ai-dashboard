@@ -18,11 +18,22 @@ OPENAI_REALTIME_MODEL=gpt-realtime
 OPENAI_REALTIME_FEMALE_VOICE=marin
 OPENAI_REALTIME_MALE_VOICE=cedar
 OPENAI_REALTIME_NOISE_REDUCTION=far_field
-OPENAI_REALTIME_TURN_EAGERNESS=low
+OPENAI_REALTIME_TURN_DETECTION_MODE=server_vad
+OPENAI_REALTIME_SERVER_VAD_THRESHOLD=0.72
+OPENAI_REALTIME_SERVER_VAD_SILENCE_MS=550
+OPENAI_REALTIME_SERVER_VAD_PREFIX_PADDING_MS=250
+OPENAI_REALTIME_IDLE_TIMEOUT_MS=9000
 OPENAI_REALTIME_INTERRUPT_RESPONSE=false
 ```
 
-The last three defaults are intentionally speakerphone-safe. They make Vera less likely to treat room noise, car audio, or her own voice echoing through the caller's speaker as an interruption.
+The realtime defaults are intentionally speakerphone-safe. `far_field` noise reduction plus server VAD at a higher threshold makes Vera less likely to treat room noise, car audio, or her own voice echoing through the caller's speaker as an interruption. If handset calls feel too slow after speakerphone is stable, test `OPENAI_REALTIME_SERVER_VAD_SILENCE_MS=450` before lowering the threshold.
+
+Optional semantic VAD test mode:
+
+```text
+OPENAI_REALTIME_TURN_DETECTION_MODE=semantic_vad
+OPENAI_REALTIME_TURN_EAGERNESS=low
+```
 
 Optional later:
 
