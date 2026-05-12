@@ -97,6 +97,10 @@ describe("OpenAI Realtime SIP", () => {
     expect(payload.instructions).toContain("Hi, thank you for calling Olive and Ember. How can I help you?");
     expect(payload.instructions).toContain("do not say you are virtual or AI");
     expect(payload.instructions).toContain("Avoid IVR cadence");
+    expect(payload.instructions).toContain("polished restaurant host");
+    expect(payload.instructions).toContain("Voice color");
+    expect(payload.instructions).toContain("Make answers feel specific to what the caller just said");
+    expect(payload.instructions).toContain("Use 'we' when speaking for the restaurant");
     expect(payload.instructions).toContain("There is no live staff transfer");
     expect(payload.instructions).toContain("substitutions or off-menu requests");
     expect(payload.instructions).toContain("create_reservation_request");

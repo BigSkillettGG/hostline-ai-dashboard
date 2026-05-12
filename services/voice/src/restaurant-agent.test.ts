@@ -49,6 +49,16 @@ describe("restaurant fallback replies", () => {
     expect(instructions).toContain("Anything else I can help you with?");
   });
 
+  it("coaches a warmer host personality without becoming theatrical", () => {
+    const instructions = buildRestaurantInstructions(demoRestaurantContext);
+
+    expect(instructions).toContain("polished restaurant host");
+    expect(instructions).toContain("Do not sound like an IVR");
+    expect(instructions).toContain("Use contractions and plain restaurant language");
+    expect(instructions).toContain("Match the emotional temperature");
+    expect(instructions).toContain("Do not be funny, sassy, flirty, theatrical, or overly chatty");
+  });
+
   it("coaches the model not to address callers by a bare last name", () => {
     const instructions = buildRestaurantInstructions(demoRestaurantContext);
 
