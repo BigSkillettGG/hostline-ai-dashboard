@@ -65,7 +65,7 @@ describe("reservation platform service", () => {
         method: "POST",
       }),
     );
-    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain('"source":"hostline_ai"');
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain('"source":"signalhost_ai"');
     expect(fetchMock.mock.calls[0]?.[1]?.headers).toMatchObject({
       "Content-Type": "application/json",
       "X-OpenTable-Restaurant-Id": "restaurant_123",

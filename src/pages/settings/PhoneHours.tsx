@@ -80,7 +80,7 @@ export default function PhoneHours() {
                         </Badge>
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        Main line {record.restaurantMainLine ?? restaurant.phone} forwards to HostLine on overflow.
+                        Main line {record.restaurantMainLine ?? restaurant.phone} forwards to SignalHost on overflow.
                       </div>
                     </div>
                   ))}

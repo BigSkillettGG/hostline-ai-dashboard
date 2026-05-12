@@ -75,7 +75,7 @@ const sectionIcons: Record<OnboardingStepId, LucideIcon> = {
 };
 
 const launchChecklist = [
-  "Call the assigned HostLine number directly.",
+  "Call the assigned SignalHost number directly.",
   "Ask hours, parking, menu, and allergy questions.",
   "Place a pay-at-pickup order and confirm it appears in Orders.",
   "Forward unanswered calls from the restaurant main line.",
@@ -89,17 +89,17 @@ const forwardingVerificationChecks: Array<{
   label: string;
 }> = [
   {
-    description: "Call the assigned HostLine number directly and confirm the AI answers.",
+    description: "Call the assigned SignalHost number directly and confirm the AI answers.",
     key: "directCall",
     label: "Direct AI number",
   },
   {
-    description: "Let the restaurant main line ring unanswered and confirm the call reaches HostLine.",
+    description: "Let the restaurant main line ring unanswered and confirm the call reaches SignalHost.",
     key: "noAnswerForwarding",
     label: "No-answer forwarding",
   },
   {
-    description: "Keep the restaurant line busy, place a second call, and confirm it reaches HostLine instead of busy/call-waiting/voicemail.",
+    description: "Keep the restaurant line busy, place a second call, and confirm it reaches SignalHost instead of busy/call-waiting/voicemail.",
     key: "busyForwarding",
     label: "Busy-line forwarding",
   },
@@ -128,7 +128,7 @@ export default function Onboarding() {
   const progress = useMemo(() => calculateOnboardingProgress(draft, activeOnboardingSections), [draft, activeOnboardingSections]);
   const activeSection = activeOnboardingSections.find((section) => section.id === activeSectionId) ?? activeOnboardingSections[0];
   const ActiveIcon = sectionIcons[activeSection.id];
-  const assignedNumber = String(draft.assignedHostLineNumber || assignedDemoPhoneNumber);
+  const assignedNumber = String(draft.assignedSignalHostNumber || draft.assignedHostLineNumber || assignedDemoPhoneNumber);
   const assignedNumberIsDemo = assignedNumber === assignedDemoPhoneNumber;
   const forwardingVerification = phoneNumberRecord?.forwardingVerification ?? localForwardingVerification;
   const forwardingVerificationStatus = buildVerificationStatus(forwardingVerification);
@@ -262,10 +262,10 @@ export default function Onboarding() {
       });
       const nextDraft = {
         ...draft,
-        assignedHostLineNumber: result.phoneNumber.phoneNumber,
+        assignedSignalHostNumber: result.phoneNumber.phoneNumber,
       };
       setDraft(nextDraft);
-      await persistDraft(nextDraft, "HostLine number assigned");
+      await persistDraft(nextDraft, "SignalHost number assigned");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Phone number provisioning failed.";
       setPhoneSearchError(message);
@@ -348,7 +348,7 @@ export default function Onboarding() {
 
               <Card>
                 <CardContent className="p-4">
-                  <div className="text-xs font-medium text-muted-foreground">HostLine number</div>
+                  <div className="text-xs font-medium text-muted-foreground">SignalHost number</div>
                   <div className="mt-2 truncate text-xl font-semibold tabular-nums">{assignedNumber}</div>
                   <div className="mt-1 text-xs text-muted-foreground">Twilio provisioning target</div>
                 </CardContent>
@@ -477,7 +477,7 @@ export default function Onboarding() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="rounded-md border border-border bg-muted/20 p-4">
-                  <div className="text-xs font-medium text-muted-foreground">Assigned HostLine number</div>
+                  <div className="text-xs font-medium text-muted-foreground">Assigned SignalHost number</div>
                   <div className="mt-1 text-2xl font-semibold tabular-nums">{assignedNumber}</div>
                   <Badge
                     variant="outline"
@@ -527,7 +527,7 @@ export default function Onboarding() {
                 <div className="space-y-3">
                   <div className="flex items-end gap-2">
                     <div className="min-w-0 flex-1 space-y-2">
-                      <Label>Search HostLine numbers</Label>
+                      <Label>Search SignalHost numbers</Label>
                       <Input
                         inputMode="numeric"
                         maxLength={3}

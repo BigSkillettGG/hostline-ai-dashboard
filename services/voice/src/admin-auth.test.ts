@@ -35,7 +35,7 @@ const baseEnv: VoiceServiceEnv = {
   TWILIO_ELEVENLABS_SIMILARITY_BOOST: "0.8",
   TWILIO_ELEVENLABS_SPEED: "1.0",
   TWILIO_ELEVENLABS_STABILITY: "0.5",
-  VOICE_SERVICE_ALLOWED_ORIGIN: "https://app.hostline.ai",
+  VOICE_SERVICE_ALLOWED_ORIGIN: "https://app.signalhost.ai",
 };
 
 describe("authorizeVoiceAdminRequest", () => {
@@ -105,8 +105,8 @@ describe("authorizeVoiceAdminRequest", () => {
   it("keeps the legacy internal key path for server-side deployment checks", async () => {
     await expect(
       authorizeVoiceAdminRequest({
-        currentEnv: { ...baseEnv, HOSTLINE_INTERNAL_API_KEY: "server-check-key" },
-        req: { headers: { "x-hostline-api-key": "server-check-key" } } as unknown as IncomingMessage,
+        currentEnv: { ...baseEnv, SIGNALHOST_INTERNAL_API_KEY: "server-check-key" },
+        req: { headers: { "x-signalhost-api-key": "server-check-key" } } as unknown as IncomingMessage,
       }),
     ).resolves.toMatchObject({ authorized: true });
   });

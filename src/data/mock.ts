@@ -1,4 +1,4 @@
-// Mock data for HostLine AI — restaurant: "Olive & Ember"
+// Mock data for SignalHost — restaurant: "Olive & Ember"
 
 export type CallIntent = "order" | "reservation" | "faq" | "hours" | "complaint" | "sales" | "other";
 export type CallOutcome = "resolved" | "order_placed" | "reservation_booked" | "escalated" | "manager_alerted" | "message_taken" | "voicemail" | "missed" | "unknown";

@@ -37,7 +37,7 @@ import {
 } from "@/domain/team";
 import type { RestaurantMembershipRole } from "@/domain/access-control";
 
-const LOCAL_INVITES_KEY = "hostline.demoTeamInvites";
+const LOCAL_INVITES_KEY = "signalhost.demoTeamInvites";
 const roleOptions: RestaurantMembershipRole[] = ["owner", "admin", "manager", "staff"];
 
 const notifications = [

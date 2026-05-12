@@ -48,9 +48,9 @@ export default function WebsiteChat() {
 
   const embedSnippet = useMemo(() => {
     const widgetUrl = typeof window === "undefined"
-      ? "https://app.hostline.ai/hostline-chat.js"
-      : `${window.location.origin}/hostline-chat.js`;
-    const serviceUrl = voiceServiceBaseUrl || "https://hostline-voice.onrender.com";
+      ? "https://app.signalhost.ai/signalhost-chat.js"
+      : `${window.location.origin}/signalhost-chat.js`;
+    const serviceUrl = voiceServiceBaseUrl || "https://voice.signalhost.ai";
     return (
     `<script
   src="${widgetUrl}"
@@ -122,7 +122,7 @@ export default function WebsiteChat() {
     <>
       <PageHeader
         title="Website Chat"
-        description="Use the same HostLine brain on the website, with chat-friendly replies and staff follow-up."
+        description="Use the same SignalHost brain on the website, with chat-friendly replies and staff follow-up."
         actions={
           <Badge variant="outline" className={cn(
             "gap-1.5",

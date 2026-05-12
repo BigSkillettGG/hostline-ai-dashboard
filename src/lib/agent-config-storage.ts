@@ -1,7 +1,7 @@
 import { defaultRestaurantAgentConfig, type RestaurantAgentConfig } from "@/domain/restaurant-config";
-import { normalizeHostlineVoiceGender } from "@/domain/voice-selection";
+import { normalizeSignalHostVoiceGender } from "@/domain/voice-selection";
 
-const storageKey = "hostline:agent-config";
+const storageKey = "signalhost:agent-config";
 
 export function loadAgentConfigDraft(): RestaurantAgentConfig | null {
   if (typeof window === "undefined") return null;
@@ -14,7 +14,7 @@ export function loadAgentConfigDraft(): RestaurantAgentConfig | null {
     return {
       ...defaultRestaurantAgentConfig,
       ...parsed,
-      voiceGender: normalizeHostlineVoiceGender(parsed.voiceGender ?? defaultRestaurantAgentConfig.voiceGender),
+      voiceGender: normalizeSignalHostVoiceGender(parsed.voiceGender ?? defaultRestaurantAgentConfig.voiceGender),
     };
   } catch {
     return null;

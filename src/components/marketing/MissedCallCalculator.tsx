@@ -42,7 +42,7 @@ export function MissedCallCalculator() {
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Based on industry data: ~60% of missed callers don't call back. HostLine AI recovers ~85% of them.
+            Based on industry data: ~60% of missed callers don't call back. SignalHost recovers ~85% of them.
           </p>
         </CardContent>
 
@@ -59,7 +59,7 @@ export function MissedCallCalculator() {
           </div>
 
           <div className="mt-6 rounded-lg border border-primary/30 bg-background/70 p-4 backdrop-blur">
-            <div className="text-[11px] font-semibold uppercase text-primary">With HostLine AI</div>
+            <div className="text-[11px] font-semibold uppercase text-primary">With SignalHost</div>
             <div className="mt-1 flex flex-wrap items-baseline gap-x-2">
               <span className="text-2xl font-semibold tabular-nums text-foreground">+{fmt(recoveredMonth)}</span>
               <span className="text-xs text-muted-foreground">recovered / mo</span>

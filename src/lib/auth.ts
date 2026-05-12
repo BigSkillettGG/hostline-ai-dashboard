@@ -70,8 +70,8 @@ interface SupabaseMembershipRow {
   role?: string;
 }
 
-const STORAGE_KEY = "hostline.currentUser";
-const EVENT = "hostline.auth.changed";
+const STORAGE_KEY = "signalhost.currentUser";
+const EVENT = "signalhost.auth.changed";
 const DEMO_ORGANIZATION_ID = "demo-olive-ember";
 const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL ?? "").replace(/\/$/, "");
 const supabasePublishableKey =
@@ -200,7 +200,7 @@ export function useCurrentUser(): CurrentUser | null {
 }
 
 export function buildDemoUser(email: string, name?: string): CurrentUser {
-  if (isHostLineStaffEmail(email)) return buildDemoSuperAdmin(email, name);
+  if (isSignalHostStaffEmail(email)) return buildDemoSuperAdmin(email, name);
 
   const memberships: RestaurantMembership[] = [
     {
@@ -222,7 +222,7 @@ export function buildDemoUser(email: string, name?: string): CurrentUser {
   });
 }
 
-export function buildDemoSuperAdmin(email = "staff@hostline.ai", name = "HostLine Staff"): CurrentUser {
+export function buildDemoSuperAdmin(email = "staff@signalhost.ai", name = "SignalHost Staff"): CurrentUser {
   return applyAccessModel({
     authProvider: "demo",
     email,
@@ -271,7 +271,7 @@ export function roleFromEmailAndMetadata(
   appMetadata: Record<string, unknown> = {},
   userMetadata: Record<string, unknown> = {},
   access: {
-    inferHostlineEmail?: boolean;
+    inferSignalHostEmail?: boolean;
     isPlatformAdmin?: boolean;
     memberships?: RestaurantMembership[];
   } = {},
@@ -281,7 +281,7 @@ export function roleFromEmailAndMetadata(
 
   if (access.isPlatformAdmin || platformFlag || role === "superadmin") return "superadmin";
   if (access.memberships?.length || role === "admin") return "admin";
-  return access.inferHostlineEmail && isHostLineStaffEmail(email) ? "superadmin" : "admin";
+  return access.inferSignalHostEmail && isSignalHostStaffEmail(email) ? "superadmin" : "admin";
 }
 
 function readUser(): CurrentUser | null {
@@ -485,7 +485,7 @@ function defaultWorkspaceKind(authProvider: AuthMode, role: UserRole): Workspace
 }
 
 function defaultNameFor(email: string, role: UserRole) {
-  if (role === "superadmin") return "HostLine Staff";
+  if (role === "superadmin") return "SignalHost Staff";
   return email.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) || "Restaurant Owner";
 }
 
@@ -499,6 +499,6 @@ function booleanMetadataValue(metadata: Record<string, unknown> | undefined, key
   return typeof value === "boolean" ? value : undefined;
 }
 
-function isHostLineStaffEmail(email: string) {
-  return /staff|@hostline|admin@hostline/i.test(email);
+function isSignalHostStaffEmail(email: string) {
+  return /staff|@signalhost|admin@signalhost|@hostline|admin@hostline/i.test(email);
 }

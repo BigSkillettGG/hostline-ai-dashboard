@@ -62,7 +62,7 @@ describe("phone number store", () => {
         phoneNumber: "+14155550199",
         providerSid: "PN123",
         status: "in-use",
-        voiceWebhookUrl: "https://voice.hostline.test/twilio/voice?locationId=loc",
+        voiceWebhookUrl: "https://voice.signalhost.test/twilio/voice?locationId=loc",
       },
     );
 

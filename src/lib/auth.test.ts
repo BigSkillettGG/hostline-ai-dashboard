@@ -51,10 +51,10 @@ describe("auth helpers", () => {
   it("derives demo and Supabase roles consistently", () => {
     expect(buildDemoUser("maria@oliveandember.com").role).toBe("admin");
     expect(buildDemoUser("maria@oliveandember.com").restaurantMembershipRole).toBe("owner");
-    expect(buildDemoUser("staff@hostline.ai").role).toBe("superadmin");
+    expect(buildDemoUser("staff@signalhost.ai").role).toBe("superadmin");
     expect(buildDemoSuperAdmin().isPlatformAdmin).toBe(true);
     expect(roleFromEmailAndMetadata("owner@example.com", { role: "superadmin" })).toBe("superadmin");
-    expect(roleFromEmailAndMetadata("staff@hostline.ai")).toBe("admin");
+    expect(roleFromEmailAndMetadata("staff@signalhost.ai")).toBe("admin");
   });
 
   it("maps Supabase auth responses into membership-backed dashboard users", () => {
@@ -90,7 +90,7 @@ describe("auth helpers", () => {
     const user = mapSupabaseAuthResponse({
       access_token: "access_token",
       user: {
-        email: "ops@hostline.ai",
+        email: "ops@signalhost.ai",
         id: "user_2",
         user_metadata: { name: "Ops User" },
       },

@@ -4,7 +4,7 @@
  * generate-vera-audio.mjs
  *
  * Pre-generates ElevenLabs TTS audio for ALL lines (Vera + callers) used
- * on the HostLine AI marketing page.
+ * on the SignalHost marketing page.
  *
  * - Vera always uses one consistent voice (warm, professional female host)
  * - Each scenario has a DIFFERENT caller voice to feel like real people
@@ -193,7 +193,7 @@ async function main() {
   let totalBytes = 0;
   let skipped = 0;
 
-  console.log("HostLine AI — Marketing Audio Generator");
+  console.log("SignalHost — Marketing Audio Generator");
   console.log("========================================");
   console.log(`Vera voice:  ${VERA_VOICE_ID}`);
   console.log(`Model:       ${MODEL_ID}`);

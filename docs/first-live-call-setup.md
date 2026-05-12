@@ -1,6 +1,6 @@
 # First Live Call Setup
 
-This checklist gets HostLine from deployed code to the first real call with Vera.
+This checklist gets SignalHost from deployed code to the first real call with Vera.
 
 ## Secrets You Need
 
@@ -22,7 +22,7 @@ PORT=8787
 PUBLIC_HTTP_BASE_URL=https://voice.your-domain.com
 PUBLIC_WS_BASE_URL=wss://voice.your-domain.com
 VOICE_SERVICE_ALLOWED_ORIGIN=https://app.your-domain.com
-HOSTLINE_INTERNAL_API_KEY=<optional-server-side-check-key>
+SIGNALHOST_INTERNAL_API_KEY=<optional-server-side-check-key>
 
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
@@ -55,7 +55,7 @@ ELEVENLABS_MODEL_ID=eleven_flash_v2_5
 
 Do not commit any real secret values. Put them in the deployment provider's environment variable UI. For local-only testing, put them in `.env.local`, which is gitignored.
 
-Dashboard-to-voice admin requests use the signed-in Supabase user's bearer token. Do not create a `VITE_HOSTLINE_INTERNAL_API_KEY`; browser-exposed internal keys are not a production-safe control.
+Dashboard-to-voice admin requests use the signed-in Supabase user's bearer token. Do not create a `VITE_SIGNALHOST_INTERNAL_API_KEY`; browser-exposed internal keys are not a production-safe control.
 
 ## Supabase
 
@@ -88,7 +88,7 @@ npm run start:voice
 After deploy:
 
 ```bash
-HOSTLINE_INTERNAL_API_KEY=<optional-server-side-check-key> npm run check:voice -- https://voice.your-domain.com <locations.id>
+SIGNALHOST_INTERNAL_API_KEY=<optional-server-side-check-key> npm run check:voice -- https://voice.your-domain.com <locations.id>
 ```
 
 The super admin Telephony page shows the same first-call readiness path in the dashboard. Use it as the no-terminal checklist once Lovable and the voice-service deploy have their environment variables set.

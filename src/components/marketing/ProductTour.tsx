@@ -74,7 +74,7 @@ export function ProductTour() {
             {active === "afterhours" && (
               <Copy
                 title="Working the phones while you sleep."
-                body="At night, HostLine still answers, captures the request, sets expectations, and gives staff the full context in the morning."
+                body="At night, SignalHost still answers, captures the request, sets expectations, and gives staff the full context in the morning."
                 bullets={["24/7 coverage", "Special hours support", "Clean summaries for staff"]}
               />
             )}

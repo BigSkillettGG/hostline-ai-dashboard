@@ -6,7 +6,7 @@ describe("Twilio signatures", () => {
     const signature = computeTwilioSignature({
       authToken: "secret",
       params: { CallSid: "CA123", From: "+15551234567" },
-      url: "https://voice.hostline.test/twilio/voice",
+      url: "https://voice.signalhost.test/twilio/voice",
     });
 
     expect(
@@ -14,7 +14,7 @@ describe("Twilio signatures", () => {
         authToken: "secret",
         expectedSignature: signature,
         params: { From: "+15551234567", CallSid: "CA123" },
-        url: "https://voice.hostline.test/twilio/voice",
+        url: "https://voice.signalhost.test/twilio/voice",
       }),
     ).toBe(true);
   });

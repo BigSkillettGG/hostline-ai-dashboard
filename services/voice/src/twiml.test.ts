@@ -4,18 +4,18 @@ import { buildConversationRelayTwiML, buildEmptyTwiML, buildHangupTwiML, escapeX
 describe("ConversationRelay TwiML", () => {
   it("builds Twilio ConversationRelay XML with ElevenLabs voice settings", () => {
     const xml = buildConversationRelayTwiML({
-      actionUrl: "https://voice.hostline.test/twilio/conversation-ended",
+      actionUrl: "https://voice.signalhost.test/twilio/conversation-ended",
       customParameters: { locationId: "loc_123" },
       language: "en-US",
       speechTimeoutMs: 1800,
       transcriptionProvider: "Deepgram",
       ttsProvider: "ElevenLabs",
       ttsVoice: "voice123-flash_v2_5-1.0_0.5_0.8",
-      websocketUrl: "wss://voice.hostline.test/twilio/conversation-relay",
+      websocketUrl: "wss://voice.signalhost.test/twilio/conversation-relay",
       welcomeGreeting: "Thanks for calling Olive & Ember.",
     });
 
-    expect(xml).toContain('<ConversationRelay url="wss://voice.hostline.test/twilio/conversation-relay"');
+    expect(xml).toContain('<ConversationRelay url="wss://voice.signalhost.test/twilio/conversation-relay"');
     expect(xml).toContain('ttsProvider="ElevenLabs"');
     expect(xml).toContain('voice="voice123-flash_v2_5-1.0_0.5_0.8"');
     expect(xml).toContain('speechTimeout="1800"');
@@ -29,14 +29,14 @@ describe("ConversationRelay TwiML", () => {
 
   it("can reconnect ConversationRelay without replaying the welcome greeting", () => {
     const xml = buildConversationRelayTwiML({
-      actionUrl: "https://voice.hostline.test/twilio/conversation-ended?locationId=loc_123&reconnectAttempt=1",
+      actionUrl: "https://voice.signalhost.test/twilio/conversation-ended?locationId=loc_123&reconnectAttempt=1",
       customParameters: { callSessionKey: "CA123", locationId: "loc_123" },
       language: "en-US",
       speechTimeoutMs: 1800,
       transcriptionProvider: "Deepgram",
       ttsProvider: "ElevenLabs",
       ttsVoice: "voice123-flash_v2_5-0.95_0.35_0.85",
-      websocketUrl: "wss://voice.hostline.test/twilio/conversation-relay",
+      websocketUrl: "wss://voice.signalhost.test/twilio/conversation-relay",
     });
 
     expect(xml).toContain("<ConversationRelay");

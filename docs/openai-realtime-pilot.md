@@ -6,7 +6,7 @@ This pilot lets us test OpenAI's phone-native realtime stack without removing th
 
 - OpenAI sends the voice service a webhook when a SIP call arrives.
 - The voice service accepts the call with restaurant-specific instructions.
-- The voice service opens a sideband WebSocket so HostLine can provide restaurant context tools.
+- The voice service opens a sideband WebSocket so SignalHost can provide restaurant context tools.
 - The current Twilio webhook at `/twilio/voice` stays unchanged.
 
 ## Render Environment Variables
@@ -44,24 +44,24 @@ OPENAI_WEBHOOK_SECRET=whsec_...
 
 Do not add `OPENAI_WEBHOOK_SECRET` until the OpenAI webhook is configured and the first unsigned pilot call works. The service will reject webhooks if the secret is wrong.
 
-## HostLine URLs
+## SignalHost URLs
 
 Admin config endpoint:
 
 ```text
-https://hostline-voice.onrender.com/openai/realtime/live-call-config?locationId=YOUR_LOCATION_ID
+https://voice.signalhost.ai/openai/realtime/live-call-config?locationId=YOUR_LOCATION_ID
 ```
 
 Admin preflight endpoint:
 
 ```text
-https://hostline-voice.onrender.com/openai/realtime/preflight?locationId=YOUR_LOCATION_ID
+https://voice.signalhost.ai/openai/realtime/preflight?locationId=YOUR_LOCATION_ID
 ```
 
 OpenAI webhook endpoint:
 
 ```text
-https://hostline-voice.onrender.com/openai/realtime/webhook?locationId=YOUR_LOCATION_ID
+https://voice.signalhost.ai/openai/realtime/webhook?locationId=YOUR_LOCATION_ID
 ```
 
 For the demo restaurant, use the Lovable/Supabase `locations.id` value you are testing with. If you do not know it yet, use the same location id already used by the Twilio live-call config.
@@ -70,10 +70,10 @@ For the demo restaurant, use the Lovable/Supabase `locations.id` value you are t
 
 1. Open the OpenAI dashboard.
 2. Go to the Realtime/SIP setup area.
-3. Add the HostLine webhook URL:
+3. Add the SignalHost webhook URL:
 
 ```text
-https://hostline-voice.onrender.com/openai/realtime/webhook?locationId=YOUR_LOCATION_ID
+https://voice.signalhost.ai/openai/realtime/webhook?locationId=YOUR_LOCATION_ID
 ```
 
 4. Use the SIP URI that OpenAI shows in the dashboard when routing a test number or SIP trunk.

@@ -1,6 +1,6 @@
 const baseUrl = process.argv[2]?.replace(/\/$/, "");
 const locationId = process.argv[3];
-const internalApiKey = process.env.HOSTLINE_INTERNAL_API_KEY;
+const internalApiKey = process.env.SIGNALHOST_INTERNAL_API_KEY ?? process.env.HOSTLINE_INTERNAL_API_KEY;
 
 if (!baseUrl) {
   console.error("Usage: npm run check:voice -- https://voice.example.com [location-id]");
@@ -23,19 +23,19 @@ if (internalApiKey) {
   const query = locationId ? `?locationId=${encodeURIComponent(locationId)}` : "";
   const liveCallConfig = await readJson(`${baseUrl}/twilio/live-call-config${query}`, {
     allowFailure: true,
-    headers: { "x-hostline-api-key": internalApiKey },
+    headers: { "x-signalhost-api-key": internalApiKey },
   });
   const openAIRealtimeConfig = await readJson(`${baseUrl}/openai/realtime/live-call-config${query}`, {
     allowFailure: true,
-    headers: { "x-hostline-api-key": internalApiKey },
+    headers: { "x-signalhost-api-key": internalApiKey },
   });
   const openAIRealtimePreflight = await readJson(`${baseUrl}/openai/realtime/preflight${query}`, {
     allowFailure: true,
-    headers: { "x-hostline-api-key": internalApiKey },
+    headers: { "x-signalhost-api-key": internalApiKey },
   });
   const twiml = await readText(`${baseUrl}/twilio/twiml-preview${query}`, {
     allowFailure: true,
-    headers: { "x-hostline-api-key": internalApiKey },
+    headers: { "x-signalhost-api-key": internalApiKey },
   });
 
   console.log("");
@@ -51,7 +51,7 @@ if (internalApiKey) {
   console.log(`TwiML preview: ${twiml.includes("<ConversationRelay") ? "ok" : "missing ConversationRelay"}`);
 } else {
   console.log("");
-  console.log("Skipping live-call URL preview because HOSTLINE_INTERNAL_API_KEY is not set.");
+  console.log("Skipping live-call URL preview because SIGNALHOST_INTERNAL_API_KEY is not set.");
 }
 
 if (!health.ok || !ready.productionReady) {

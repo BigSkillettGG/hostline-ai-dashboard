@@ -78,9 +78,11 @@ export async function authorizeVoiceAdminRequest({
 }
 
 function isAuthorizedLegacyInternalRequest(req: IncomingMessage, currentEnv: VoiceServiceEnv) {
+  const internalApiKey = currentEnv.SIGNALHOST_INTERNAL_API_KEY ?? currentEnv.HOSTLINE_INTERNAL_API_KEY;
+  const headerValue = req.headers["x-signalhost-api-key"] ?? req.headers["x-hostline-api-key"];
   return Boolean(
-    currentEnv.HOSTLINE_INTERNAL_API_KEY &&
-      req.headers["x-hostline-api-key"] === currentEnv.HOSTLINE_INTERNAL_API_KEY,
+    internalApiKey &&
+      headerValue === internalApiKey,
   );
 }
 

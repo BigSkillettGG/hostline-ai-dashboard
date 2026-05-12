@@ -30,7 +30,7 @@ export default function MarketingLayout() {
             <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
               <Flame className="h-4 w-4" />
             </span>
-            <span className="text-base font-semibold">HostLine AI</span>
+            <span className="text-base font-semibold">SignalHost</span>
           </Link>
 
           <nav className="hidden items-center gap-5 text-sm md:flex">
@@ -39,7 +39,7 @@ export default function MarketingLayout() {
             <NavLink to="/pricing" className={({ isActive }) => isActive ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground"}>Pricing</NavLink>
             <a href="/#live-demo" className="text-muted-foreground hover:text-foreground">Live demo</a>
             <a href="/#how" className="text-muted-foreground hover:text-foreground">How it works</a>
-            <a href="mailto:sales@hostline.ai" className="text-muted-foreground hover:text-foreground">Talk to sales</a>
+            <a href="mailto:sales@signalhost.ai" className="text-muted-foreground hover:text-foreground">Talk to sales</a>
           </nav>
 
           <div className="ml-auto flex items-center gap-2">
@@ -76,7 +76,7 @@ export default function MarketingLayout() {
                       {link.label}
                     </Link>
                   ))}
-                  <a href="mailto:sales@hostline.ai" onClick={() => setOpen(false)} className="rounded-md px-3 py-2.5 text-foreground hover:bg-muted">Talk to sales</a>
+                  <a href="mailto:sales@signalhost.ai" onClick={() => setOpen(false)} className="rounded-md px-3 py-2.5 text-foreground hover:bg-muted">Talk to sales</a>
                   <div className="mt-4 border-t border-border pt-4">
                     {user ? (
                       <div className="flex flex-col gap-2">
@@ -111,7 +111,7 @@ export default function MarketingLayout() {
                 <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
                   <Flame className="h-4 w-4" />
                 </span>
-                <span className="text-base font-semibold">HostLine AI</span>
+                <span className="text-base font-semibold">SignalHost</span>
               </div>
               <p className="mt-3 max-w-sm text-sm text-muted-foreground">
                 The AI phone and website chat operator for local businesses. Answer every call, capture every request, and give staff clean follow-up.
@@ -121,7 +121,7 @@ export default function MarketingLayout() {
             {[
               { title: "Product", links: [["Overview", "/"], ["Pricing", "/pricing"], ["How it works", "/#how"], ["Live demo", "/#live-demo"]] },
               { title: "Solutions", links: industrySolutions.slice(0, 4).map((solution) => [solution.label, `/solutions/${solution.slug}`]) },
-              { title: "Company", links: [["Contact", "mailto:hello@hostline.ai"], ["Sales", "mailto:sales@hostline.ai"], ["Log in", "/login"]] },
+              { title: "Company", links: [["Contact", "mailto:hello@signalhost.ai"], ["Sales", "mailto:sales@signalhost.ai"], ["Log in", "/login"]] },
               { title: "Legal", links: [["Privacy", "#"], ["Terms", "#"], ["Security", "#"], ["DPA", "#"]] },
             ].map((column) => (
               <div key={column.title}>
@@ -138,7 +138,7 @@ export default function MarketingLayout() {
           </div>
 
           <div className="mt-10 flex flex-col gap-3 border-t border-border pt-6 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-            <span>&copy; {new Date().getFullYear()} HostLine AI - Built for local service teams.</span>
+            <span>&copy; {new Date().getFullYear()} SignalHost - Built for local service teams.</span>
             <span>Built with care in Brooklyn, NY.</span>
           </div>
         </div>

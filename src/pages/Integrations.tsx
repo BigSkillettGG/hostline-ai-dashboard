@@ -28,7 +28,7 @@ export default function Integrations() {
     <>
       <PageHeader
         title="Integrations"
-        description="Connect HostLine AI to the tools you already use"
+        description="Connect SignalHost to the tools you already use"
       />
       <PageBody className="space-y-6">
         {Object.entries(grouped).map(([cat, list]) => (

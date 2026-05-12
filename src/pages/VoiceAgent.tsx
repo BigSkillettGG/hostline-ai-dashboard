@@ -25,9 +25,9 @@ import {
   type ReservationMode,
 } from "@/domain/restaurant-config";
 import {
-  hostlineVoiceProfiles,
-  normalizeHostlineVoiceGender,
-  type HostlineVoiceGender,
+  signalHostVoiceProfiles,
+  normalizeSignalHostVoiceGender,
+  type SignalHostVoiceGender,
 } from "@/domain/voice-selection";
 import {
   AlertTriangle,
@@ -252,7 +252,7 @@ export default function VoiceAgent() {
                     <Select
                       value={config.voiceGender}
                       onValueChange={(voiceGender) =>
-                        setConfig({ ...config, voiceGender: normalizeHostlineVoiceGender(voiceGender) })
+                        setConfig({ ...config, voiceGender: normalizeSignalHostVoiceGender(voiceGender) })
                       }
                     >
                       <SelectTrigger>
@@ -737,7 +737,7 @@ export default function VoiceAgent() {
                   <Select
                     value={config.voiceGender}
                     onValueChange={(voiceGender) =>
-                      setConfig({ ...config, voiceGender: normalizeHostlineVoiceGender(voiceGender) })
+                      setConfig({ ...config, voiceGender: normalizeSignalHostVoiceGender(voiceGender) })
                     }
                   >
                     <SelectTrigger>
@@ -776,7 +776,7 @@ export default function VoiceAgent() {
               </CardHeader>
               <CardContent className="space-y-3">
                 <ReadinessRow icon={PhoneCall} label="Call mode" value={callHandlingLabels[config.callHandlingMode]} />
-                <ReadinessRow icon={Bot} label="Voice" value={hostlineVoiceProfiles[config.voiceGender].shortLabel} />
+                <ReadinessRow icon={Bot} label="Voice" value={signalHostVoiceProfiles[config.voiceGender].shortLabel} />
                 <ReadinessRow icon={ShoppingBag} label="Orders" value={orderModeLabels[config.orders.mode]} />
                 <ReadinessRow icon={CreditCard} label="Payment" value="Pay at pickup" />
                 <ReadinessRow icon={Printer} label="Order routing" value={`${config.orders.destinations.length} destinations`} />
@@ -806,7 +806,7 @@ function createConfigFromOnboardingDraft(): RestaurantAgentConfig {
     escalationPhoneNumber: String(draft.escalationPhone || defaultRestaurantAgentConfig.escalationPhoneNumber),
     greetingTemplate: String(draft.greeting || defaultRestaurantAgentConfig.greetingTemplate),
     hostName: String(draft.hostName || defaultRestaurantAgentConfig.hostName),
-    voiceGender: normalizeHostlineVoiceGender(draft.voiceGender),
+    voiceGender: normalizeSignalHostVoiceGender(draft.voiceGender),
     orders: {
       ...defaultRestaurantAgentConfig.orders,
       defaultPickupEtaMinutes: parsePickupEta(String(draft.defaultPickupEta ?? "")),
@@ -854,8 +854,8 @@ function mapReservationMode(
   const normalized = value.toLowerCase();
   if (normalized.includes("do not") || normalized.includes("no reservations")) return "disabled";
   if (normalized.includes("booking link") || normalized.includes("send caller")) return "booking_link";
-  if (normalized.includes("pending request in hostline")) return "hostline_lite_request";
-  if (normalized.includes("confirm in hostline")) return "hostline_lite_confirm";
+  if (normalized.includes("pending request in signalhost") || normalized.includes("pending request in hostline")) return "hostline_lite_request";
+  if (normalized.includes("confirm in signalhost") || normalized.includes("confirm in hostline")) return "hostline_lite_confirm";
   if (normalized.includes("connected reservation system")) return provider === "none" ? "manual_request" : "integration";
   return "manual_request";
 }
@@ -886,27 +886,27 @@ function parsePositiveInteger(value: string, fallback: number) {
   return Number.isFinite(minutes) && minutes > 0 ? minutes : fallback;
 }
 
-const voiceGenderOptions: Array<{ label: string; value: HostlineVoiceGender }> = [
-  { label: hostlineVoiceProfiles.female.label, value: "female" },
-  { label: hostlineVoiceProfiles.male.label, value: "male" },
+const voiceGenderOptions: Array<{ label: string; value: SignalHostVoiceGender }> = [
+  { label: signalHostVoiceProfiles.female.label, value: "female" },
+  { label: signalHostVoiceProfiles.male.label, value: "male" },
 ];
 
-function persistVoiceGenderToLocalOnboardingDraft(voiceGender: HostlineVoiceGender) {
+function persistVoiceGenderToLocalOnboardingDraft(voiceGender: SignalHostVoiceGender) {
   const draft = {
     ...loadOnboardingDraft(),
-    voiceGender: hostlineVoiceProfiles[voiceGender].label,
+    voiceGender: signalHostVoiceProfiles[voiceGender].label,
   };
   saveOnboardingDraft(draft);
   return draft;
 }
 
-async function syncVoiceGenderToOnboardingProfile(voiceGender: HostlineVoiceGender) {
+async function syncVoiceGenderToOnboardingProfile(voiceGender: SignalHostVoiceGender) {
   if (!isOnboardingPersistenceConfigured()) return;
 
   const remoteDraft = await fetchOnboardingProfileFromSupabase().catch(() => null);
   const draft = {
     ...(remoteDraft ?? loadOnboardingDraft()),
-    voiceGender: hostlineVoiceProfiles[voiceGender].label,
+    voiceGender: signalHostVoiceProfiles[voiceGender].label,
   };
   saveOnboardingDraft(draft);
   await saveOnboardingProfileToSupabase(draft);

@@ -1,4 +1,4 @@
-import type { HostlineVoiceGender } from "./voice-selection";
+import type { SignalHostVoiceGender } from "./voice-selection";
 
 export type CallHandlingMode =
   | "answer_immediately"
@@ -34,7 +34,7 @@ export type PaymentMode = "pay_at_pickup";
 
 export interface RestaurantAgentConfig {
   hostName: string;
-  voiceGender: HostlineVoiceGender;
+  voiceGender: SignalHostVoiceGender;
   tone: VoiceTone;
   greetingTemplate: string;
   disclosureEnabled: boolean;
@@ -98,8 +98,8 @@ export const reservationModeLabels: Record<ReservationMode, string> = {
   integration: "Book through integration",
   booking_link: "Send booking link",
   manual_request: "Create manual requests",
-  hostline_lite_request: "HostLine pending requests",
-  hostline_lite_confirm: "HostLine auto-confirm when rules allow",
+  hostline_lite_request: "SignalHost pending requests",
+  hostline_lite_confirm: "SignalHost auto-confirm when rules allow",
   disabled: "Do not handle reservations",
 };
 

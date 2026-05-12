@@ -1,4 +1,4 @@
--- HostLine AI production RLS policies.
+-- SignalHost production RLS policies.
 -- Run after docs/supabase-schema.sql.
 -- Browser clients should use a Supabase Auth JWT; the voice service should keep using SUPABASE_SECRET_KEY.
 

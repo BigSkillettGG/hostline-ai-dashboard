@@ -1,5 +1,5 @@
 import { getSupabaseAccessToken } from "@/lib/auth";
-import type { HostlineVoiceGender } from "@/domain/voice-selection";
+import type { SignalHostVoiceGender } from "@/domain/voice-selection";
 
 export interface VoiceServiceHealth {
   ok: boolean;
@@ -121,7 +121,7 @@ export async function fetchTwiMLPreview(locationId?: string) {
   return text;
 }
 
-export async function fetchVoicePreviewAudio(text: string, voiceGender?: HostlineVoiceGender) {
+export async function fetchVoicePreviewAudio(text: string, voiceGender?: SignalHostVoiceGender) {
   if (!voiceServiceBaseUrl) {
     throw new Error("VITE_VOICE_SERVICE_URL is not configured.");
   }

@@ -4,7 +4,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* HostLine AI design system. All colors HSL. */
+/* SignalHost design system. All colors HSL. */
 
 @layer base {
   :root {

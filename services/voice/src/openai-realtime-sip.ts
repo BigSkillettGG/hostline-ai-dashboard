@@ -241,7 +241,7 @@ export function createOpenAIRealtimeSipService(
     closeAll() {
       for (const [callId, socket] of activeSockets) {
         try {
-          socket.close(1001, "HostLine voice service is restarting.");
+          socket.close(1001, "SignalHost voice service is restarting.");
         } catch (error) {
           console.warn("[openai-realtime] websocket close failed", { callId, error });
         }
@@ -575,10 +575,10 @@ function buildRealtimeReservationModeInstruction(context: RestaurantVoiceContext
     return `${base} Try the connected provider through create_reservation_request; only call it after date, time, party size, and guest name are known.`;
   }
   if (settings.handlingMode === "hostline_lite_confirm") {
-    return `${base} HostLine may confirm only within configured rules${settings.autoConfirmPartyLimit ? `, including parties up to ${settings.autoConfirmPartyLimit}` : ""}; otherwise the request needs staff confirmation.`;
+    return `${base} SignalHost may confirm only within configured rules${settings.autoConfirmPartyLimit ? `, including parties up to ${settings.autoConfirmPartyLimit}` : ""}; otherwise the request needs staff confirmation.`;
   }
   if (settings.handlingMode === "hostline_lite_request") {
-    return `${base} Save a pending HostLine reservation request and tell the caller staff will confirm shortly.`;
+    return `${base} Save a pending SignalHost reservation request and tell the caller staff will confirm shortly.`;
   }
   return `${base} Create a staff-confirmed reservation request; never guarantee the table until staff confirms.`;
 }
@@ -1097,7 +1097,7 @@ function scheduleOpenAIRealtimeFinishedClose({
   session.finishCloseTimer = setTimeout(() => {
     console.info("[openai-realtime] closing completed call after goodbye", { callId });
     try {
-      socket.close(1000, "HostLine call completed.");
+      socket.close(1000, "SignalHost call completed.");
     } catch (error) {
       console.warn("[openai-realtime] completed call close failed", { callId, error });
     }
@@ -1540,7 +1540,7 @@ export async function createOpenAIRealtimeReservationRequest({
         ok: true,
         confirmationMode: "hostline_lite_confirmed",
         message:
-          "Reservation confirmed in HostLine. Tell the caller it is confirmed and offer to text the confirmation.",
+          "Reservation confirmed in SignalHost. Tell the caller it is confirmed and offer to text the confirmation.",
         provider: "hostline_lite",
         reservationId: result?.reservationId,
         restaurantName: context.restaurantName,

@@ -1,20 +1,20 @@
 # Production Roadmap
 
-This roadmap assumes HostLine AI starts with independent restaurants and multi-location groups, while preserving a path to enterprise chains later.
+This roadmap assumes SignalHost starts with independent restaurants and local service businesses, while preserving a path to multi-location groups, enterprise chains, and larger service brands later.
 
 ## Workstream Count
 
 There are 12 production workstreams:
 
 1. Self-service auth, billing, organization, and location signup.
-2. Conversational onboarding and restaurant knowledge extraction.
+2. Conversational onboarding and vertical-specific knowledge extraction.
 3. Menu ingestion from PDFs, images, links, spreadsheets, and POS exports.
 4. Twilio number provisioning, forwarding instructions, and live call routing.
 5. Realtime voice latency tuning across Twilio, transcription, LLM, and ElevenLabs.
 6. Supabase persistence, RLS, roles, audit logs, and admin workflows.
 7. Staff-review order queue, kitchen tablet, and printer delivery.
-8. Toast ordering integration, then Square, Clover, and bridge partners.
-9. OpenTable reservations, then Yelp Guest Manager, SevenRooms, Resy, and Tock.
+8. Link-first order, reservation, appointment, and quote workflows, then vertical integrations when demand proves them.
+9. Restaurant integrations such as Toast, Square, Clover, OpenTable, Yelp Guest Manager, SevenRooms, Resy, and Tock after the link/manual flows are durable.
 10. SMS confirmations, staff alerts, low-confidence review, and human handoff.
 11. Analytics, call QA, transcript review, and launch-readiness monitoring.
 12. Compliance, security, secrets, observability, deployment, and support tooling.

@@ -47,7 +47,7 @@ const baseEnv = {
   OPENAI_REALTIME_SERVER_VAD_THRESHOLD: 0.72,
   OPENAI_REALTIME_TURN_DETECTION_MODE: "server_vad",
   OPENAI_REALTIME_TURN_EAGERNESS: "low",
-  PUBLIC_HTTP_BASE_URL: "https://voice.hostline.ai/",
+  PUBLIC_HTTP_BASE_URL: "https://voice.signalhost.ai/",
   SUPABASE_DEMO_LOCATION_ID: "00000000-0000-0000-0000-000000000001",
 } satisfies Partial<VoiceServiceEnv>;
 
@@ -68,7 +68,7 @@ describe("OpenAI Realtime SIP", () => {
       sipUri: "sip:proj_123@sip.api.openai.com;transport=tls",
       voice: "marin",
       webhookSecretConfigured: false,
-      webhookUrl: "https://voice.hostline.ai/openai/realtime/webhook?locationId=loc_123",
+      webhookUrl: "https://voice.signalhost.ai/openai/realtime/webhook?locationId=loc_123",
     });
   });
 
@@ -157,7 +157,7 @@ describe("OpenAI Realtime SIP", () => {
     });
 
     expect(preflight.ready).toBe(true);
-    expect(preflight.config.webhookUrl).toBe("https://voice.hostline.ai/openai/realtime/webhook?locationId=loc_123");
+    expect(preflight.config.webhookUrl).toBe("https://voice.signalhost.ai/openai/realtime/webhook?locationId=loc_123");
     expect(preflight.checks.find((check) => check.id === "openai_realtime_model")).toMatchObject({ ready: true });
     expect(preflight.restaurantName).toBe("Olive & Ember");
   });
@@ -496,7 +496,7 @@ describe("OpenAI Realtime SIP", () => {
 
       expect(socket.closeCalls[0]).toMatchObject({
         code: 1000,
-        reason: "HostLine call completed.",
+        reason: "SignalHost call completed.",
       });
     } finally {
       vi.useRealTimers();
@@ -810,7 +810,7 @@ describe("OpenAI Realtime SIP", () => {
     });
   });
 
-  it("can auto-confirm HostLine Lite reservations within configured rules", async () => {
+  it("can auto-confirm SignalHost Lite reservations within configured rules", async () => {
     const savedReservations: unknown[] = [];
     const context: RestaurantVoiceContext = {
       ...demoRestaurantContext,

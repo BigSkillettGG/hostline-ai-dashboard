@@ -229,7 +229,7 @@ class SupabaseMenuIngestionService implements MenuIngestionService {
     const response = await fetch(sourceUrl, {
       headers: {
         Accept: "text/html,text/plain;q=0.9,*/*;q=0.8",
-        "User-Agent": "HostLineAI/1.0 menu-ingestion",
+        "User-Agent": "SignalHostAI/1.0 menu-ingestion",
       },
     });
 

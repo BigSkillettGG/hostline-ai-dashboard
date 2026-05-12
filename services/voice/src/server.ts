@@ -113,7 +113,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
     const readiness = getVoiceServiceReadiness(currentEnv);
     sendJson(res, 200, {
       ok: true,
-      service: "hostline-voice",
+      service: "signalhost-voice",
       productionReady: readiness.productionReady,
       readinessChecks: readiness.checks,
       openaiConfigured: Boolean(currentEnv.OPENAI_API_KEY),
@@ -145,7 +145,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       ok: readiness.productionReady,
       productionReady: readiness.productionReady,
       readinessChecks: readiness.checks,
-      service: "hostline-voice",
+      service: "signalhost-voice",
     });
     return;
   }
@@ -229,7 +229,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
 
     const liveCallConfig = buildLiveCallConfig(currentEnv, locationId);
     if (!liveCallConfig.conversationRelayUrl) {
-      sendXml(res, 503, buildUnavailableTwiML("HostLine AI needs PUBLIC_WS_BASE_URL before live calls."));
+      sendXml(res, 503, buildUnavailableTwiML("SignalHost needs PUBLIC_WS_BASE_URL before live calls."));
       return;
     }
 
@@ -390,7 +390,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
         sendText(res, error.statusCode, error.message);
       } else {
         console.error("[voice-service] Twilio voice webhook failed", error);
-        sendXml(res, 500, buildUnavailableTwiML("HostLine AI hit a setup issue. Please try again soon."));
+        sendXml(res, 500, buildUnavailableTwiML("SignalHost hit a setup issue. Please try again soon."));
       }
     }
     return;
@@ -730,7 +730,7 @@ function applyCors(req: IncomingMessage, res: ServerResponse, currentEnv: VoiceS
   }
 
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, webhook-id, webhook-signature, webhook-timestamp, x-hostline-api-key");
+  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, webhook-id, webhook-signature, webhook-timestamp, x-signalhost-api-key, x-hostline-api-key");
 }
 
 async function shutdownGracefully(signal: "SIGINT" | "SIGTERM") {
@@ -748,7 +748,7 @@ async function shutdownGracefully(signal: "SIGINT" | "SIGTERM") {
 
   for (const ws of activeRelaySockets) {
     try {
-      ws.close(1001, "HostLine voice service is restarting.");
+      ws.close(1001, "SignalHost voice service is restarting.");
     } catch (error) {
       console.warn("[voice-service] websocket close failed", error);
     }

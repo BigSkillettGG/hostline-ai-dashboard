@@ -1,6 +1,6 @@
 # Production Deployment
 
-HostLine has two deployable surfaces:
+SignalHost has two deployable surfaces:
 
 - Dashboard: Vite React app, hosted as a static site.
 - Voice service: Node HTTP/WebSocket service that Twilio reaches for `/twilio/voice` and `/twilio/conversation-relay`.
@@ -25,7 +25,7 @@ PORT=8787
 PUBLIC_HTTP_BASE_URL=https://voice.your-domain.com
 PUBLIC_WS_BASE_URL=wss://voice.your-domain.com
 VOICE_SERVICE_ALLOWED_ORIGIN=https://app.your-domain.com
-HOSTLINE_INTERNAL_API_KEY=<optional-server-side-check-key>
+SIGNALHOST_INTERNAL_API_KEY=<optional-server-side-check-key>
 
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
@@ -64,8 +64,8 @@ npm run start:voice
 Container build:
 
 ```bash
-docker build -f services/voice/Dockerfile -t hostline-voice .
-docker run --env-file .env.production -p 8787:8787 hostline-voice
+docker build -f services/voice/Dockerfile -t signalhost-voice .
+docker run --env-file .env.production -p 8787:8787 signalhost-voice
 ```
 
 Deployment hosts should run the image command:
@@ -103,7 +103,7 @@ Optional checks:
 6. Open the super admin Overview and confirm production readiness.
 7. Run `npm run check:voice -- https://voice.your-domain.com`.
 
-Set `HOSTLINE_INTERNAL_API_KEY` only in the voice-service environment, or in the shell before running the check command, if you want server-side deployment checks to include live-call URL and TwiML preview checks. Do not expose it as a dashboard `VITE_` variable.
+Set `SIGNALHOST_INTERNAL_API_KEY` only in the voice-service environment, or in the shell before running the check command, if you want server-side deployment checks to include live-call URL and TwiML preview checks. Do not expose it as a dashboard `VITE_` variable.
 
 ## First Live Call Checklist
 

@@ -1,20 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
   buildTwilioElevenLabsVoice,
-  normalizeHostlineVoiceGender,
-  resolveHostlineVoiceId,
+  normalizeSignalHostVoiceGender,
+  resolveSignalHostVoiceId,
 } from "./voice-selection";
 
-describe("HostLine voice selection", () => {
+describe("SignalHost voice selection", () => {
   it("normalizes the V1 voice choices", () => {
-    expect(normalizeHostlineVoiceGender("Female - Eve")).toBe("female");
-    expect(normalizeHostlineVoiceGender("Male - Michael")).toBe("male");
-    expect(normalizeHostlineVoiceGender(undefined)).toBe("female");
+    expect(normalizeSignalHostVoiceGender("Female - Eve")).toBe("female");
+    expect(normalizeSignalHostVoiceGender("Male - Michael")).toBe("male");
+    expect(normalizeSignalHostVoiceGender(undefined)).toBe("female");
   });
 
   it("resolves Eve and Michael ElevenLabs voice IDs", () => {
-    expect(resolveHostlineVoiceId("female")).toBe("BZgkqPqms7Kj9ulSkVzn");
-    expect(resolveHostlineVoiceId("male")).toBe("ljX1ZrXuDIIRVcmiVSyR");
+    expect(resolveSignalHostVoiceId("female")).toBe("BZgkqPqms7Kj9ulSkVzn");
+    expect(resolveSignalHostVoiceId("male")).toBe("ljX1ZrXuDIIRVcmiVSyR");
   });
 
   it("formats Twilio ConversationRelay voice strings", () => {

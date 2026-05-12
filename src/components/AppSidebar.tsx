@@ -66,7 +66,7 @@ export function AppSidebar() {
           </div>
           {!collapsed && (
             <div className="min-w-0 leading-tight">
-              <div className="truncate text-sm font-semibold text-sidebar-foreground">HostLine AI</div>
+              <div className="truncate text-sm font-semibold text-sidebar-foreground">SignalHost</div>
               <div className="truncate text-[11px] text-sidebar-foreground/60">Olive & Ember</div>
             </div>
           )}

@@ -125,11 +125,11 @@ export default function VoiceAgentAdvanced() {
             <CardContent className="space-y-3">
               <div className="space-y-1.5">
                 <Label>Call event webhook</Label>
-                <Input className="font-mono text-xs" defaultValue="https://api.hostline.ai/webhooks/calls" />
+                <Input className="font-mono text-xs" defaultValue="https://api.signalhost.ai/webhooks/calls" />
               </div>
               <div className="space-y-1.5">
                 <Label>Order event webhook</Label>
-                <Input className="font-mono text-xs" defaultValue="https://api.hostline.ai/webhooks/orders" />
+                <Input className="font-mono text-xs" defaultValue="https://api.signalhost.ai/webhooks/orders" />
               </div>
               <Button variant="outline" size="sm" onClick={() => toast.success("Test ping sent")}>Send test ping</Button>
             </CardContent>

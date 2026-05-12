@@ -137,7 +137,7 @@ class TwilioTelephonyService implements TelephonyService {
     }
 
     const body = new URLSearchParams({
-      FriendlyName: `HostLine ${input.locationId ?? "location"}`,
+      FriendlyName: `SignalHost ${input.locationId ?? "location"}`,
       PhoneNumber: input.phoneNumber,
       VoiceMethod: "POST",
       VoiceUrl: voiceWebhookUrl,

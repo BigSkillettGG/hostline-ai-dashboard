@@ -1,5 +1,5 @@
 import type { VoiceServiceEnv } from "./env";
-import { normalizeHostlineVoiceGender } from "../../../src/domain/voice-selection";
+import { normalizeSignalHostVoiceGender } from "../../../src/domain/voice-selection";
 import type { BusinessLink } from "../../../src/domain/business-links";
 import { normalizeBusinessType } from "../../../src/domain/business-templates";
 import {
@@ -195,7 +195,7 @@ export function buildRestaurantContext({
     reservationSettings,
     smsConfirmationsEnabled: agentConfig?.sms_confirmations_enabled ?? true,
     timezone,
-    voiceGender: normalizeHostlineVoiceGender(draft.voiceGender),
+    voiceGender: normalizeSignalHostVoiceGender(draft.voiceGender),
   };
 }
 
@@ -557,8 +557,16 @@ function normalizeReservationMode(
     return provider === "none" ? "manual_request" : "integration";
   }
   if (normalized === "booking_link" || normalized.includes("booking link") || normalized.includes("send caller")) return "booking_link";
-  if (normalized === "hostline_lite_request" || normalized.includes("pending request in hostline")) return "hostline_lite_request";
-  if (normalized === "hostline_lite_confirm" || normalized.includes("confirm in hostline")) return "hostline_lite_confirm";
+  if (
+    normalized === "hostline_lite_request" ||
+    normalized.includes("pending request in signalhost") ||
+    normalized.includes("pending request in hostline")
+  ) return "hostline_lite_request";
+  if (
+    normalized === "hostline_lite_confirm" ||
+    normalized.includes("confirm in signalhost") ||
+    normalized.includes("confirm in hostline")
+  ) return "hostline_lite_confirm";
   if (normalized === "disabled" || normalized.includes("do not") || normalized.includes("no reservations")) return "disabled";
   return "manual_request";
 }
@@ -579,8 +587,8 @@ function normalizeReservationProvider(value: string) {
 function reservationModeInstruction(mode: RestaurantReservationMode) {
   if (mode === "integration") return "try the connected reservation provider first, and fall back to staff confirmation if not confirmed";
   if (mode === "booking_link") return "offer to send the caller the booking link instead of promising a table";
-  if (mode === "hostline_lite_request") return "save a pending HostLine reservation request for staff review";
-  if (mode === "hostline_lite_confirm") return "confirm in HostLine only when configured rules allow it; otherwise use staff confirmation";
+  if (mode === "hostline_lite_request") return "save a pending SignalHost reservation request for staff review";
+  if (mode === "hostline_lite_confirm") return "confirm in SignalHost only when configured rules allow it; otherwise use staff confirmation";
   if (mode === "disabled") return "do not take reservations";
   return "create a request for staff confirmation";
 }

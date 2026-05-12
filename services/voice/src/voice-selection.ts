@@ -1,7 +1,7 @@
 import {
   buildTwilioElevenLabsVoice,
-  normalizeHostlineVoiceGender,
-  resolveHostlineVoiceId,
+  normalizeSignalHostVoiceGender,
+  resolveSignalHostVoiceId,
 } from "../../../src/domain/voice-selection";
 import type { VoiceServiceEnv } from "./env";
 import type { RestaurantVoiceContext } from "./restaurant-context";
@@ -10,7 +10,7 @@ export function resolvePreviewElevenLabsVoiceId(
   env: Pick<VoiceServiceEnv, "ELEVENLABS_EVE_VOICE_ID" | "ELEVENLABS_MICHAEL_VOICE_ID">,
   voiceGender?: unknown,
 ) {
-  return resolveHostlineVoiceId(normalizeHostlineVoiceGender(voiceGender), {
+  return resolveSignalHostVoiceId(normalizeSignalHostVoiceGender(voiceGender), {
     female: env.ELEVENLABS_EVE_VOICE_ID,
     male: env.ELEVENLABS_MICHAEL_VOICE_ID,
   });

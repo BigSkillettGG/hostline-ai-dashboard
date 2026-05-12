@@ -41,7 +41,7 @@ import {
 } from "@/lib/supabase-rest";
 import { toast } from "sonner";
 
-const STORAGE_KEY = "hostline.alertRouting";
+const STORAGE_KEY = "signalhost.alertRouting";
 
 const routeIcons: Record<AlertRouteKind, typeof BadgeAlert> = {
   complaint: MessageCircleWarning,

@@ -31,7 +31,7 @@ const baseEnv: VoiceServiceEnv = {
   TWILIO_ELEVENLABS_SIMILARITY_BOOST: "0.8",
   TWILIO_ELEVENLABS_SPEED: "1.0",
   TWILIO_ELEVENLABS_STABILITY: "0.5",
-  VOICE_SERVICE_ALLOWED_ORIGIN: "https://app.hostline.ai",
+  VOICE_SERVICE_ALLOWED_ORIGIN: "https://app.signalhost.ai",
 };
 
 describe("voice service readiness", () => {
@@ -56,8 +56,8 @@ describe("voice service readiness", () => {
       ...baseEnv,
       ELEVENLABS_API_KEY: "elevenlabs",
       OPENAI_API_KEY: "openai",
-      PUBLIC_HTTP_BASE_URL: "https://voice.hostline.ai",
-      PUBLIC_WS_BASE_URL: "wss://voice.hostline.ai",
+      PUBLIC_HTTP_BASE_URL: "https://voice.signalhost.ai",
+      PUBLIC_WS_BASE_URL: "wss://voice.signalhost.ai",
       SUPABASE_DEMO_LOCATION_ID: "00000000-0000-0000-0000-000000000001",
       SUPABASE_SECRET_KEY: "service-role",
       SUPABASE_URL: "https://example.supabase.co",
@@ -73,8 +73,8 @@ describe("voice service readiness", () => {
       ...baseEnv,
       ELEVENLABS_API_KEY: "elevenlabs",
       OPENAI_API_KEY: "openai",
-      PUBLIC_HTTP_BASE_URL: "https://voice.hostline.ai",
-      PUBLIC_WS_BASE_URL: "wss://voice.hostline.ai",
+      PUBLIC_HTTP_BASE_URL: "https://voice.signalhost.ai",
+      PUBLIC_WS_BASE_URL: "wss://voice.signalhost.ai",
       SUPABASE_DEMO_LOCATION_ID: "00000000-0000-0000-0000-000000000001",
       SUPABASE_SECRET_KEY: "service-role",
       SUPABASE_URL: "https://example.supabase.co",

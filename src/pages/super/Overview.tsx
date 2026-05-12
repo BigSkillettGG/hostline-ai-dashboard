@@ -49,7 +49,7 @@ export default function SuperOverview() {
 
   return (
     <>
-      <PageHeader title="HostLine AI Operations" description="Internal overview across all tenants" />
+      <PageHeader title="SignalHost Operations" description="Internal overview across all tenants" />
       <PageBody>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <MiniStat label="Active tenants" value={tenants.length.toString()} icon={Building2} />

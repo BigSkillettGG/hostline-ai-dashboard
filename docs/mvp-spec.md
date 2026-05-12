@@ -1,20 +1,21 @@
-# HostLine AI MVP Spec
+# SignalHost MVP Spec
 
-HostLine AI is an AI phone host for restaurants. The MVP is built around one promise: never lose a valuable call because staff are busy, closed, or stuck in service.
+SignalHost is an AI phone and website chat operator for local businesses. The first production vertical is restaurants, but the platform is built around a broader promise: never lose a valuable customer moment because staff are busy, closed, in the field, or stuck in service.
 
 ## Target Customers
 
 - Independent restaurants.
+- HVAC, plumbing, roofing, electrical, and salon/barbershop operators.
 - Small and mid-sized multi-location groups.
-- Enterprise chains later, after the product has durable integrations and compliance patterns.
+- Enterprise chains and larger service brands later, after the product has durable integrations and compliance patterns.
 
-The product should remain restaurant-type agnostic. Pizza shops, cafes, Thai restaurants, diners, and full-service restaurants should all configure the same core system differently.
+The product should remain vertical-aware without becoming vertical-locked. Restaurants, trades, and salons all use the same core system, but each gets a different onboarding interview, knowledge model, escalation rules, pricing, and marketing page.
 
 ## MVP Wedge
 
-The first wedge is missed calls and staff phone overload.
+The first wedge is missed calls, staff phone overload, and website visitor capture.
 
-HostLine should answer calls based on restaurant configuration, resolve FAQs, capture pickup orders, create reservation bookings or requests, send confirmations, and escalate when a human should take over.
+SignalHost should answer calls and website chats based on business configuration, resolve FAQs, send booking/order/intake links, capture orders or appointment requests when enabled, send confirmations when messaging is configured, and escalate when a human should take over.
 
 ## Restaurant Configuration
 

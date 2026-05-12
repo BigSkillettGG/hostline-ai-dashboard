@@ -1,12 +1,12 @@
-export type HostlineVoiceGender = "female" | "male";
+export type SignalHostVoiceGender = "female" | "male";
 
-export interface HostlineVoiceProfile {
+export interface SignalHostVoiceProfile {
   label: string;
   shortLabel: string;
   voiceId: string;
 }
 
-export const hostlineVoiceProfiles: Record<HostlineVoiceGender, HostlineVoiceProfile> = {
+export const signalHostVoiceProfiles: Record<SignalHostVoiceGender, SignalHostVoiceProfile> = {
   female: {
     label: "Female - Eve",
     shortLabel: "Eve",
@@ -19,7 +19,7 @@ export const hostlineVoiceProfiles: Record<HostlineVoiceGender, HostlineVoicePro
   },
 };
 
-export function normalizeHostlineVoiceGender(value: unknown): HostlineVoiceGender {
+export function normalizeSignalHostVoiceGender(value: unknown): SignalHostVoiceGender {
   if (typeof value !== "string") return "female";
 
   const normalized = value.trim().toLowerCase();
@@ -27,11 +27,11 @@ export function normalizeHostlineVoiceGender(value: unknown): HostlineVoiceGende
   return "female";
 }
 
-export function resolveHostlineVoiceId(
-  gender: HostlineVoiceGender,
-  overrides: Partial<Record<HostlineVoiceGender, string>> = {},
+export function resolveSignalHostVoiceId(
+  gender: SignalHostVoiceGender,
+  overrides: Partial<Record<SignalHostVoiceGender, string>> = {},
 ) {
-  return overrides[gender]?.trim() || hostlineVoiceProfiles[gender].voiceId;
+  return overrides[gender]?.trim() || signalHostVoiceProfiles[gender].voiceId;
 }
 
 export function buildTwilioElevenLabsVoice({
@@ -42,12 +42,12 @@ export function buildTwilioElevenLabsVoice({
   speed = "0.95",
   stability = "0.35",
 }: {
-  gender: HostlineVoiceGender;
+  gender: SignalHostVoiceGender;
   modelId?: string;
-  overrides?: Partial<Record<HostlineVoiceGender, string>>;
+  overrides?: Partial<Record<SignalHostVoiceGender, string>>;
   similarityBoost?: string;
   speed?: string;
   stability?: string;
 }) {
-  return `${resolveHostlineVoiceId(gender, overrides)}-${modelId}-${speed}_${stability}_${similarityBoost}`;
+  return `${resolveSignalHostVoiceId(gender, overrides)}-${modelId}-${speed}_${stability}_${similarityBoost}`;
 }

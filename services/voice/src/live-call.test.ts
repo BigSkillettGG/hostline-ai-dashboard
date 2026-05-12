@@ -32,26 +32,26 @@ const baseEnv: VoiceServiceEnv = {
   TWILIO_ELEVENLABS_SIMILARITY_BOOST: "0.8",
   TWILIO_ELEVENLABS_SPEED: "1.0",
   TWILIO_ELEVENLABS_STABILITY: "0.5",
-  VOICE_SERVICE_ALLOWED_ORIGIN: "https://app.hostline.ai",
+  VOICE_SERVICE_ALLOWED_ORIGIN: "https://app.signalhost.ai",
 };
 
 describe("live call config", () => {
   it("builds Twilio webhook URLs from public deployment origins", () => {
     const config = buildLiveCallConfig({
       ...baseEnv,
-      PUBLIC_HTTP_BASE_URL: "https://voice.hostline.ai/",
-      PUBLIC_WS_BASE_URL: "wss://voice.hostline.ai/",
+      PUBLIC_HTTP_BASE_URL: "https://voice.signalhost.ai/",
+      PUBLIC_WS_BASE_URL: "wss://voice.signalhost.ai/",
       SUPABASE_DEMO_LOCATION_ID: "00000000-0000-0000-0000-000000000001",
     });
 
     expect(config).toMatchObject({
-      conversationRelayUrl: "wss://voice.hostline.ai/twilio/conversation-relay",
+      conversationRelayUrl: "wss://voice.signalhost.ai/twilio/conversation-relay",
       locationId: "00000000-0000-0000-0000-000000000001",
       ready: true,
       twilioSignatureRequired: true,
       actionUrl:
-        "https://voice.hostline.ai/twilio/conversation-ended?locationId=00000000-0000-0000-0000-000000000001",
-      voiceWebhookUrl: "https://voice.hostline.ai/twilio/voice?locationId=00000000-0000-0000-0000-000000000001",
+        "https://voice.signalhost.ai/twilio/conversation-ended?locationId=00000000-0000-0000-0000-000000000001",
+      voiceWebhookUrl: "https://voice.signalhost.ai/twilio/voice?locationId=00000000-0000-0000-0000-000000000001",
     });
   });
 
@@ -59,19 +59,19 @@ describe("live call config", () => {
     const config = buildLiveCallConfig(
       {
         ...baseEnv,
-        PUBLIC_HTTP_BASE_URL: "https://voice.hostline.ai",
-        PUBLIC_WS_BASE_URL: "wss://voice.hostline.ai",
+        PUBLIC_HTTP_BASE_URL: "https://voice.signalhost.ai",
+        PUBLIC_WS_BASE_URL: "wss://voice.signalhost.ai",
       },
       "loc_test",
     );
 
     expect(config.locationId).toBe("loc_test");
-    expect(config.actionUrl).toBe("https://voice.hostline.ai/twilio/conversation-ended?locationId=loc_test");
-    expect(config.voiceWebhookUrl).toBe("https://voice.hostline.ai/twilio/voice?locationId=loc_test");
+    expect(config.actionUrl).toBe("https://voice.signalhost.ai/twilio/conversation-ended?locationId=loc_test");
+    expect(config.voiceWebhookUrl).toBe("https://voice.signalhost.ai/twilio/voice?locationId=loc_test");
   });
 
   it("is not ready until both HTTP and websocket origins exist", () => {
-    expect(buildLiveCallConfig({ ...baseEnv, PUBLIC_HTTP_BASE_URL: "https://voice.hostline.ai" }).ready).toBe(false);
-    expect(buildLiveCallConfig({ ...baseEnv, PUBLIC_WS_BASE_URL: "wss://voice.hostline.ai" }).ready).toBe(false);
+    expect(buildLiveCallConfig({ ...baseEnv, PUBLIC_HTTP_BASE_URL: "https://voice.signalhost.ai" }).ready).toBe(false);
+    expect(buildLiveCallConfig({ ...baseEnv, PUBLIC_WS_BASE_URL: "wss://voice.signalhost.ai" }).ready).toBe(false);
   });
 });

@@ -3,9 +3,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
 const events = [
-  { ts: "2026-05-05 09:14", actor: "staff@hostline.ai", action: "Issued $25 credit", target: "Olive & Ember" },
+  { ts: "2026-05-05 09:14", actor: "staff@signalhost.ai", action: "Issued $25 credit", target: "Olive & Ember" },
   { ts: "2026-05-05 08:47", actor: "system", action: "Webhook retry succeeded", target: "voice/conversation-relay" },
-  { ts: "2026-05-04 22:03", actor: "staff@hostline.ai", action: "Updated system prompt template", target: "global" },
+  { ts: "2026-05-04 22:03", actor: "staff@signalhost.ai", action: "Updated system prompt template", target: "global" },
   { ts: "2026-05-04 17:30", actor: "system", action: "Tenant exceeded plan", target: "North Pier Oyster" },
   { ts: "2026-05-04 11:12", actor: "maria@oliveandember.com", action: "Updated knowledge base", target: "Olive & Ember" },
 ];

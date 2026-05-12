@@ -1,6 +1,6 @@
 # Auth and RLS Setup
 
-HostLine supports two dashboard auth modes:
+SignalHost supports two dashboard auth modes:
 
 - `VITE_AUTH_MODE=demo`: local demo auth in `localStorage`. This is the Lovable-friendly mode.
 - `VITE_AUTH_MODE=supabase`: Supabase email/password auth. Dashboard REST calls send the user's Supabase access token as the `Authorization` bearer token so RLS policies apply.
@@ -26,11 +26,11 @@ values ('<auth-user-id>', '<organization-id>', 'admin', 'Maria Lombardi', 'maria
 
 5. Team invitations are stored in `team_invitations`. The dashboard can create pending invitations when the signed-in user is an `owner` or `admin`; a backend worker should send the email invite and create the final Supabase Auth user plus membership after acceptance.
 
-6. Insert HostLine internal staff as platform admins only when needed:
+6. Insert SignalHost internal staff as platform admins only when needed:
 
 ```sql
 insert into platform_admins (user_id)
-values ('<hostline-staff-auth-user-id>');
+values ('<signalhost-staff-auth-user-id>');
 ```
 
 7. Set frontend environment variables:
@@ -49,7 +49,7 @@ The voice service should continue to use `SUPABASE_SECRET_KEY` from the backend 
 - `owner` and `admin`: manage organization settings, locations, onboarding, phone numbers, menu, integrations, and routing.
 - `manager`: operate the restaurant workflow and manage most location content.
 - `staff`: operate calls, orders, reservations, and tasks.
-- `platform_admins`: HostLine internal support access across tenants.
+- `platform_admins`: SignalHost internal support access across tenants.
 - Demo access is not a database role. It is a local seeded workspace for sales walkthroughs and Lovable/local development.
 
 The current UI still has a single active location selector driven by `VITE_SUPABASE_DEMO_LOCATION_ID`; the RLS policies are multi-tenant-ready while the location switcher becomes production-backed in a later slice.

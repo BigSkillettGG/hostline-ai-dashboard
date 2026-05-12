@@ -40,7 +40,7 @@ function SuperSidebar() {
           </div>
           {!collapsed && (
             <div className="min-w-0 leading-tight">
-              <div className="truncate text-sm font-semibold text-sidebar-foreground">HostLine AI</div>
+              <div className="truncate text-sm font-semibold text-sidebar-foreground">SignalHost</div>
               <div className="truncate text-[11px] text-sidebar-foreground/60">Internal · Staff</div>
             </div>
           )}
@@ -85,7 +85,7 @@ export default function SuperLayout() {
         <div className="flex flex-1 flex-col min-w-0">
           <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border bg-background/80 px-3 backdrop-blur md:px-5">
             <SidebarTrigger />
-            <Badge variant="outline" className="border-destructive/40 bg-destructive/10 text-destructive">HostLine AI Staff</Badge>
+            <Badge variant="outline" className="border-destructive/40 bg-destructive/10 text-destructive">SignalHost Staff</Badge>
             <Badge
               variant="outline"
               className={authReadiness.ready ? "hidden border-success/20 bg-success/10 text-success sm:inline-flex" : "hidden border-warning/30 bg-warning/10 text-warning sm:inline-flex"}

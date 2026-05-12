@@ -1,4 +1,4 @@
-# HostLine Voice Service
+# SignalHost Voice Service
 
 This service is the production path for inbound restaurant phone calls.
 
@@ -47,8 +47,8 @@ npm run start:voice
 The production build bundles the TypeScript service to `dist-voice/server.mjs` and runs it with plain Node. The Docker image uses the same build output.
 
 ```sh
-docker build -f services/voice/Dockerfile -t hostline-voice .
-docker run --env-file .env.production -p 8787:8787 hostline-voice
+docker build -f services/voice/Dockerfile -t signalhost-voice .
+docker run --env-file .env.production -p 8787:8787 signalhost-voice
 ```
 
 Health endpoints:
@@ -84,7 +84,7 @@ POST https://your-tunnel.ngrok.app/twilio/voice
 - Twilio phone number pointed at `/twilio/voice`.
 - `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN` for number search/provisioning.
 - Supabase Auth plus `SUPABASE_SECRET_KEY` for protecting dashboard admin endpoints in production.
-- Optional `HOSTLINE_INTERNAL_API_KEY` for server-side deployment checks such as `scripts/check-voice-deployment.mjs`. Do not expose it as a dashboard `VITE_` variable.
+- Optional `SIGNALHOST_INTERNAL_API_KEY` for server-side deployment checks such as `scripts/check-voice-deployment.mjs`. Do not expose it as a dashboard `VITE_` variable.
 - OpenAI API key for real LLM replies.
 - ElevenLabs voice ID for branded voice.
 - `TWILIO_SMS_FROM_NUMBER` or `TWILIO_MESSAGING_SERVICE_SID` for direct SMS staff alerts. `STAFF_ALERT_SMS_TO` remains the fallback recipient when no Supabase route is configured.
@@ -108,7 +108,7 @@ When Supabase is configured, Twilio requests can include `locationId` in the web
 - Staff alert outcomes are logged to `staff_alert_events` when Supabase is configured. Logging failures are warned but do not block the live call.
 - `POST /web-chat/message` accepts `{ message, locationId, transcript, visitorName, visitorPhone, visitorEmail }` and returns a chat-friendly reply plus any created business-link or staff-request actions. This endpoint is public for embedded site widgets and is IP rate-limited.
 
-In production, provisioning, menu ingestion, TwiML preview, live-call config, and hosted voice preview requests require a Supabase bearer token for a platform admin or a restaurant owner/admin. `HOSTLINE_INTERNAL_API_KEY` remains a server-side-only legacy path for deployment checks.
+In production, provisioning, menu ingestion, TwiML preview, live-call config, and hosted voice preview requests require a Supabase bearer token for a platform admin or a restaurant owner/admin. `SIGNALHOST_INTERNAL_API_KEY` remains a server-side-only legacy path for deployment checks.
 
 ## Important Safety Defaults
 

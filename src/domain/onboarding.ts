@@ -358,8 +358,8 @@ export const onboardingSections: OnboardingSection[] = [
           "Confirm through connected reservation system",
           "Send caller a booking link",
           "Create request for staff confirmation",
-          "Save pending request in HostLine",
-          "Confirm in HostLine when rules allow",
+          "Save pending request in SignalHost",
+          "Confirm in SignalHost when rules allow",
           "Take a message only",
           "Say we do not take reservations",
         ],
@@ -672,7 +672,7 @@ export const onboardingSections: OnboardingSection[] = [
     id: "launch",
     title: "Phone launch",
     eyebrow: "Twilio",
-    assistantPrompt: "Last step: assign the HostLine number, test the first call, and forward the restaurant line.",
+    assistantPrompt: "Last step: assign the SignalHost number, test the first call, and forward the restaurant line.",
     outcome: "Twilio number, forwarding mode, test script, launch checklist, and dashboard handoff.",
     fields: [
       {
@@ -692,8 +692,8 @@ export const onboardingSections: OnboardingSection[] = [
         options: ["Forward all calls", "Forward only unanswered calls", "After-hours forwarding", "Port number later"],
       },
       {
-        id: "assignedHostLineNumber",
-        label: "HostLine number",
+        id: "assignedSignalHostNumber",
+        label: "SignalHost number",
         prompt: "This is the number the restaurant forwards calls to.",
         placeholder: assignedDemoPhoneNumber,
         control: "short",
@@ -750,7 +750,7 @@ const tradeSectionCopy: Partial<Record<OnboardingStepId, SectionCopyOverride>> =
   },
   launch: {
     title: "Phone launch",
-    outcome: "HostLine number, forwarding mode, test script, launch checklist, and dashboard handoff.",
+    outcome: "SignalHost number, forwarding mode, test script, launch checklist, and dashboard handoff.",
   },
 };
 
@@ -832,7 +832,7 @@ const tradeOrderOptions = [
 const genericSchedulingOptions = [
   "Send caller a booking link",
   "Create request for staff confirmation",
-  "Save pending request in HostLine",
+  "Save pending request in SignalHost",
   "Take a message only",
   "Say appointments require staff confirmation",
 ];
@@ -1043,7 +1043,7 @@ const tradeFieldOverrides: Record<string, FieldCopyOverride> = {
     label: "Business main line",
     prompt: "Which number do customers call today?",
   },
-  assignedHostLineNumber: {
+  assignedSignalHostNumber: {
     prompt: "This is the number the business forwards calls to.",
   },
   firstTestCall: {
@@ -1223,7 +1223,7 @@ const businessFieldOverrides: Partial<Record<BusinessType, Record<string, FieldC
       label: "Business main line",
       prompt: "Which number do customers call today?",
     },
-    assignedHostLineNumber: {
+    assignedSignalHostNumber: {
       prompt: "This is the number the business forwards calls to.",
     },
     firstTestCall: {
@@ -1350,7 +1350,7 @@ const businessFieldOverrides: Partial<Record<BusinessType, Record<string, FieldC
       prompt: "Should clients receive text confirmations for appointment requests, booking links, waitlist notes, or intake forms?",
     },
     mainPhone: { label: "Business main line", prompt: "Which number do clients call today?" },
-    assignedHostLineNumber: { prompt: "This is the number the studio forwards calls to." },
+    assignedSignalHostNumber: { prompt: "This is the number the studio forwards calls to." },
     firstTestCall: { placeholder: "Ask for a same-day haircut, ask about color pricing, then check dashboard." },
   },
 };
@@ -1392,7 +1392,7 @@ export const productionWorkstreams = [
 ] as const;
 
 export const sampleOnboardingDraft: OnboardingDraft = {
-  assignedHostLineNumber: assignedDemoPhoneNumber,
+  assignedSignalHostNumber: assignedDemoPhoneNumber,
   allergyPolicy: "Severe allergies require staff confirmation. Gluten-free crust is available, but cross-contact is possible.",
   businessType: "restaurant",
   callHandling: "After 3 rings",

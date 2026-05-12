@@ -25,9 +25,9 @@ const localBusinessImage = "/marketing/happy-guests.jpg";
 const faqs = [
   { q: "Does this only work for restaurants?", a: "No. Restaurants are the first polished demo, but the platform supports restaurants, HVAC, plumbers, roofers, electricians, and hair salons or barbershops." },
   { q: "Will callers know they are talking to AI?", a: "The greeting and disclosure are configurable. The experience is designed to feel like a polished operator while staying conservative in sensitive situations." },
-  { q: "How long does setup take?", a: "Most businesses can test a first call the same day. Pick an industry, answer the setup interview, add links or files, and forward the phone line to HostLine." },
+  { q: "How long does setup take?", a: "Most businesses can test a first call the same day. Pick an industry, answer the setup interview, add links or files, and forward the phone line to SignalHost." },
   { q: "What if the AI does not know the answer?", a: "It takes a clean message, alerts staff, saves the transcript, and avoids promising anything it cannot verify." },
-  { q: "Can I keep my current phone number?", a: "Yes. You can port the number later or forward unanswered, busy, after-hours, or all calls to your HostLine number." },
+  { q: "Can I keep my current phone number?", a: "Yes. You can port the number later or forward unanswered, busy, after-hours, or all calls to your SignalHost number." },
 ];
 
 const heroMetrics = [
@@ -38,9 +38,9 @@ const heroMetrics = [
 
 const heroTranscript = [
   ["Caller", "Hi, are you still taking pickup orders tonight?"],
-  ["HostLine", "Yes. Kitchen is open until 9:30. What can I get started for you?"],
+  ["SignalHost", "Yes. Kitchen is open until 9:30. What can I get started for you?"],
   ["Caller", "Two margheritas, one gluten-free, and a Caesar."],
-  ["HostLine", "Got it. That's 54 dollars, ready in about 25 minutes. What name should I put on the order?"],
+  ["SignalHost", "Got it. That's 54 dollars, ready in about 25 minutes. What name should I put on the order?"],
 ];
 
 const urgentMoments = [
@@ -83,7 +83,7 @@ export default function MarketingHome() {
               Miss the call. Lose the customer.
             </h1>
             <p className="mt-6 max-w-2xl text-lg leading-8 text-background/78 md:text-xl">
-              HostLine answers like a trained front desk, captures what matters, sends the right link, and gives your team the transcript, recording, and next step.
+              SignalHost answers like a trained front desk, captures what matters, sends the right link, and gives your team the transcript, recording, and next step.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Button asChild size="lg" className="h-12 px-6 text-base">
@@ -135,11 +135,11 @@ export default function MarketingHome() {
                   </div>
                   <div className="space-y-3">
                     {heroTranscript.map(([speaker, text], index) => (
-                      <div key={`${speaker}-${text}`} className={cn("flex", speaker === "HostLine" && "justify-end")}>
+                      <div key={`${speaker}-${text}`} className={cn("flex", speaker === "SignalHost" && "justify-end")}>
                         <div
                           className={cn(
                             "max-w-[88%] rounded-md border px-3 py-2 text-sm leading-6",
-                            speaker === "HostLine"
+                            speaker === "SignalHost"
                               ? "border-primary/30 bg-primary/16 text-background"
                               : "border-background/12 bg-background/7 text-background/82",
                             index === heroTranscript.length - 1 && "shadow-[0_0_0_3px_rgba(220,82,34,0.12)]",
@@ -185,7 +185,7 @@ export default function MarketingHome() {
             <SectionHeader
               eyebrow="The problem"
               title="Local businesses do not lose calls. They lose moments."
-              subtitle="The customer is already choosing. HostLine gives every high-intent moment a calm, useful answer before it disappears."
+              subtitle="The customer is already choosing. SignalHost gives every high-intent moment a calm, useful answer before it disappears."
             />
             <div className="grid gap-3 sm:grid-cols-2">
               {urgentMoments.map((moment) => (
@@ -263,7 +263,7 @@ export default function MarketingHome() {
               <SectionHeader
                 eyebrow="The setup"
                 title="The onboarding interview is the product's training room."
-                subtitle="Owners answer plain-English questions. HostLine turns the answers into phone behavior, chat behavior, staff handoff, links, policies, and escalation rules."
+                subtitle="Owners answer plain-English questions. SignalHost turns the answers into phone behavior, chat behavior, staff handoff, links, policies, and escalation rules."
               />
               <div className="mt-8 grid gap-4 sm:grid-cols-3">
                 {operatingModes.map(([title, body]) => (
@@ -306,7 +306,7 @@ export default function MarketingHome() {
             <SectionHeader
               eyebrow="The rule"
               title="Fast when clear. Careful when it matters."
-              subtitle="HostLine should never sound like an old IVR, and it should never casually guess on safety, allergies, refunds, exact availability, or anything your staff should own."
+              subtitle="SignalHost should never sound like an old IVR, and it should never casually guess on safety, allergies, refunds, exact availability, or anything your staff should own."
             />
             <div className="mt-8 grid gap-3">
               {[

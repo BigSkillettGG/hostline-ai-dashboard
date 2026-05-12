@@ -1,6 +1,6 @@
-# HostLine AI Architecture
+# SignalHost Architecture
 
-HostLine is a customer communication platform for local businesses. Restaurants are the first vertical, but the core system should support multiple channels and industries.
+SignalHost is a customer communication platform for local businesses. Restaurants are the first vertical, but the core system should support multiple channels and industries.
 
 The architecture has three layers:
 
@@ -31,7 +31,7 @@ Owns restaurant setup, operations views, order review, reservation review, knowl
 
 The Calls, Orders, and Reservations pages can read from Supabase REST using `VITE_SUPABASE_URL` and either `VITE_SUPABASE_PUBLISHABLE_KEY` or the legacy `VITE_SUPABASE_ANON_KEY`. If Supabase is missing or unavailable, these pages fall back to sample data and mark the source in the UI. The Orders and Reservations pages can also persist status changes back to Supabase.
 
-Dashboard auth can run in local demo mode or Supabase Auth mode. In Supabase mode, dashboard REST calls use the signed-in user's access token so `docs/supabase-rls.sql` can enforce organization and location access. Restaurant users are modeled through organization memberships (`owner`, `admin`, `manager`, `staff`), while HostLine internal users are modeled through `platform_admins`. The demo workspace is a seeded local sales/development experience, not a production role.
+Dashboard auth can run in local demo mode or Supabase Auth mode. In Supabase mode, dashboard REST calls use the signed-in user's access token so `docs/supabase-rls.sql` can enforce organization and location access. Restaurant users are modeled through organization memberships (`owner`, `admin`, `manager`, `staff`), while SignalHost internal users are modeled through `platform_admins`. The demo workspace is a seeded local sales/development experience, not a production role.
 
 ### Voice Service
 

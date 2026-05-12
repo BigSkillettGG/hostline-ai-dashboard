@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildVoiceWebhookUrl, mapTwilioAvailableNumbers } from "./telephony";
 
 describe("Twilio telephony helpers", () => {
-  it("maps available Twilio numbers into HostLine options", () => {
+  it("maps available Twilio numbers into SignalHost options", () => {
     const numbers = mapTwilioAvailableNumbers({
       available_phone_numbers: [
         {
@@ -30,9 +30,9 @@ describe("Twilio telephony helpers", () => {
   it("builds a location-aware Twilio voice webhook URL", () => {
     expect(
       buildVoiceWebhookUrl(
-        { PUBLIC_HTTP_BASE_URL: "https://voice.hostline.test/" },
+        { PUBLIC_HTTP_BASE_URL: "https://voice.signalhost.test/" },
         "00000000-0000-4000-8000-000000000001",
       ),
-    ).toBe("https://voice.hostline.test/twilio/voice?locationId=00000000-0000-4000-8000-000000000001");
+    ).toBe("https://voice.signalhost.test/twilio/voice?locationId=00000000-0000-4000-8000-000000000001");
   });
 });

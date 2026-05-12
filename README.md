@@ -1,6 +1,6 @@
-# HostLine AI Dashboard
+# SignalHost Dashboard
 
-HostLine AI is an AI phone host for restaurants. This repository contains the admin dashboard generated with Lovable and hardened for the first real product pass.
+SignalHost is an AI phone and website chat operator for local businesses. This repository contains the marketing site, onboarding flow, admin dashboard, super-admin console, and voice service generated with Lovable and hardened for the first real product pass.
 
 ## What The App Covers
 
@@ -8,14 +8,14 @@ HostLine AI is an AI phone host for restaurants. This repository contains the ad
 - Pickup orders with pay-at-pickup workflow. The Orders page reads from Supabase when dashboard keys are configured, falls back to sample data otherwise, persists status changes, and records staff queue, tablet, and printer delivery attempts when live. The Kitchen page gives staff a tablet-friendly fulfillment board for accepting, starting, and marking phone orders ready.
 - Reservation bookings and manual staff-confirmed requests. The Reservations page reads from Supabase when dashboard keys are configured, persists status changes, and can create provider-tagged manual requests.
 - Menu, availability, modifiers, prep times, and upsell suggestions. The Menu page can import pasted menu text into structured Supabase `menu_categories` and `menu_items` rows, and it can persist menu URLs as `menu_sources` with queued `ingestion_jobs`.
-- Restaurant knowledge base and FAQs.
+- Business knowledge base and FAQs, with restaurants as the first fully wired operating template.
 - Voice agent configuration.
 - Staff alert routing and delivery audit logs for phone orders, reservation requests, complaints, handoffs, delivery failures, low-confidence calls, and sales/vendor messages.
 - POS, reservation, printer, and kitchen tablet integration placeholders.
 
 ## Product Direction
 
-The MVP focuses on missed calls and staff phone overload for independent restaurants and small multi-location groups. The dashboard should stay restaurant-type agnostic: each location configures whether the AI answers immediately, after several rings, after hours, or only when manually enabled.
+The product focuses on missed calls, staff phone overload, and website visitor capture for local businesses. Restaurants remain the first production-grade vertical, while the marketing site and onboarding model now support restaurants, HVAC, plumbers, roofers, electricians, and hair salons or barbershops.
 
 See:
 
@@ -70,7 +70,7 @@ See `services/voice/README.md` for provider setup.
 
 ## Onboarding
 
-The app now includes a guided onboarding surface at `/app/onboarding`. It captures the restaurant profile, menu sources, service periods, order rules, reservation rules, policies, voice behavior, and phone launch details needed before the first test call.
+The app now includes a guided onboarding surface at `/app/onboarding`. It captures the business profile, vertical-specific knowledge, links, service periods, order or appointment rules, policies, voice behavior, and phone launch details needed before the first test call.
 
 When `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, and `VITE_SUPABASE_DEMO_LOCATION_ID` are set, onboarding drafts sync to the `onboarding_profiles` table. Without those values, the dashboard saves the draft to local browser storage.
 

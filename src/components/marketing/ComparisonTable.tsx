@@ -2,8 +2,8 @@ import { Check, Minus } from "lucide-react";
 import { comparisonRows } from "@/data/marketing";
 import { cn } from "@/lib/utils";
 
-const COLS: { key: "hostline" | "voicemail" | "ivr" | "human"; label: string; highlight?: boolean }[] = [
-  { key: "hostline",  label: "HostLine AI", highlight: true },
+const COLS: { key: "signalhost" | "voicemail" | "ivr" | "human"; label: string; highlight?: boolean }[] = [
+  { key: "signalhost",  label: "SignalHost", highlight: true },
   { key: "voicemail", label: "Voicemail" },
   { key: "ivr",       label: "IVR menu" },
   { key: "human",     label: "Answering service" },

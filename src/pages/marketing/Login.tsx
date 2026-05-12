@@ -47,12 +47,12 @@ export default function Login() {
         <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
           <Flame className="h-4 w-4" />
         </span>
-        <span className="text-lg font-semibold">HostLine AI</span>
+        <span className="text-lg font-semibold">SignalHost</span>
       </Link>
       <Card className="w-full">
         <CardHeader>
           <CardTitle>Welcome back</CardTitle>
-          <CardDescription>Sign in to your HostLine AI dashboard.</CardDescription>
+          <CardDescription>Sign in to your SignalHost dashboard.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={onSubmit} className="space-y-4">
@@ -80,7 +80,7 @@ export default function Login() {
             </p>
             {demoAuth && (
               <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
-                Demo: any email works. Use the demo workspace for an owner sales walkthrough, or an email containing <code className="font-mono">staff</code> or <code className="font-mono">@hostline</code> for the internal console.
+                Demo: any email works. Use the demo workspace for an owner sales walkthrough, or an email containing <code className="font-mono">staff</code> or <code className="font-mono">@signalhost</code> for the internal console.
               </p>
             )}
           </form>

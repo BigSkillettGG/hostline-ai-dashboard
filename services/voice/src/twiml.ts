@@ -54,7 +54,7 @@ export function buildHangupTwiML() {
   return ['<?xml version="1.0" encoding="UTF-8"?>', "<Response>", "  <Hangup />", "</Response>"].join("\n");
 }
 
-export function buildUnavailableTwiML(message = "HostLine AI is not configured yet. Please try again soon.") {
+export function buildUnavailableTwiML(message = "SignalHost is not configured yet. Please try again soon.") {
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
     "<Response>",

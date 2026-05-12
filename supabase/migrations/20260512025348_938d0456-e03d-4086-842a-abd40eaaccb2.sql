@@ -756,7 +756,7 @@ do $$
 declare
   v_user_id uuid;
 begin
-  select id into v_user_id from auth.users where lower(email) = lower('tim@hostline.ai') limit 1;
+  select id into v_user_id from auth.users where lower(email) = lower('tim@signalhost.ai') limit 1;
   if v_user_id is null then
     v_user_id := gen_random_uuid();
     insert into auth.users (
@@ -765,17 +765,17 @@ begin
       created_at, updated_at, confirmation_token, email_change, email_change_token_new, recovery_token
     ) values (
       '00000000-0000-0000-0000-000000000000', v_user_id, 'authenticated', 'authenticated',
-      'tim@hostline.ai', crypt('HostLinePilot!2026', gen_salt('bf')),
+      'tim@signalhost.ai', crypt('SignalHostPilot!2026', gen_salt('bf')),
       now(), '{"provider":"email","providers":["email"]}'::jsonb, '{"name":"Tim"}'::jsonb,
       now(), now(), '', '', '', ''
     );
     insert into auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
     values (gen_random_uuid(), v_user_id, v_user_id::text,
-      jsonb_build_object('sub', v_user_id::text, 'email', 'tim@hostline.ai', 'email_verified', true),
+      jsonb_build_object('sub', v_user_id::text, 'email', 'tim@signalhost.ai', 'email_verified', true),
       'email', now(), now(), now());
   else
     update auth.users
-      set encrypted_password = crypt('HostLinePilot!2026', gen_salt('bf')),
+      set encrypted_password = crypt('SignalHostPilot!2026', gen_salt('bf')),
           email_confirmed_at = coalesce(email_confirmed_at, now()),
           updated_at = now()
       where id = v_user_id;

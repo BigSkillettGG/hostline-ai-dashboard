@@ -16,7 +16,7 @@ export default function SuperTenants() {
 
   return (
     <>
-      <PageHeader title="Tenants" description="All restaurants on HostLine AI" />
+      <PageHeader title="Tenants" description="All restaurants on SignalHost" />
       <PageBody>
         <div className="mb-3 flex items-center gap-2">
           <div className="relative w-full max-w-sm">

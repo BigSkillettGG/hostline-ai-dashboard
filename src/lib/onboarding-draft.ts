@@ -1,6 +1,6 @@
 import { sampleOnboardingDraft, type OnboardingDraft } from "@/domain/onboarding";
 
-const storageKey = "hostline:onboarding-draft";
+const storageKey = "signalhost:onboarding-draft";
 
 export function loadOnboardingDraft(): OnboardingDraft {
   if (typeof window === "undefined") return sampleOnboardingDraft;

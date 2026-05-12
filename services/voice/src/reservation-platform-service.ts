@@ -189,7 +189,7 @@ function buildOpenTableReservationPayload(input: ReservationPlatformRequest, res
     notes: input.notes,
     party_size: input.partySize,
     restaurant_id: restaurantId,
-    source: "hostline_ai",
+    source: "signalhost_ai",
     time: input.time,
     venue_name: input.context.restaurantName,
   };

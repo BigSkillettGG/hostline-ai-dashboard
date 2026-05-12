@@ -1,4 +1,4 @@
-import type { HostlineVoiceGender } from "../../../src/domain/voice-selection";
+import type { SignalHostVoiceGender } from "../../../src/domain/voice-selection";
 import type { BusinessLink } from "../../../src/domain/business-links";
 
 export interface RestaurantVoiceContext {
@@ -6,7 +6,7 @@ export interface RestaurantVoiceContext {
   businessType: string;
   restaurantName: string;
   hostName: string;
-  voiceGender: HostlineVoiceGender;
+  voiceGender: SignalHostVoiceGender;
   timezone: string;
   greeting: string;
   defaultPickupEtaMinutes?: number;

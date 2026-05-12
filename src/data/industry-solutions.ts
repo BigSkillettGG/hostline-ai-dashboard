@@ -18,6 +18,17 @@ export interface IndustrySolution {
   heroSubtitle: string;
   integrations: string[];
   label: string;
+  landing: {
+    callout: string;
+    callerLine: string;
+    cta: string;
+    headline: string;
+    operatorReply: string;
+    proof: string;
+    staffHandoff: string;
+    stakes: string;
+    stats: Array<{ label: string; value: string }>;
+  };
   outcomeMetrics: string[];
   proofPoint: string;
   setupFocus: string[];
@@ -38,6 +49,21 @@ export const industrySolutions: IndustrySolution[] = [
       "Handle dinner-rush questions, pickup orders, reservation requests, delivery driver calls, allergies, complaints, and after-hours questions without pulling your host off the floor.",
     integrations: ["Toast", "Square", "Clover", "OpenTable", "Resy", "Yelp Reservations"],
     label: "Restaurants",
+    landing: {
+      callout: "Dinner rush does not wait for voicemail.",
+      callerLine: "Do you have a table for four tonight, and can I place a pickup order too?",
+      cta: "Turn dinner-rush calls into orders and reservation requests.",
+      headline: "When the host stand is slammed, SignalHost still picks up.",
+      operatorReply: "I can help with both. Let me take the order first, then I will collect the reservation request and send the team the details.",
+      proof: "Built for the messy mix of orders, reservations, allergies, parking, specials, and complaint calls restaurants get every night.",
+      staffHandoff: "Order details, reservation request, caller number, transcript, recording, allergy flags, and staff task.",
+      stakes: "Missed calls become lost covers, lost pickup revenue, and guests who call the restaurant down the street.",
+      stats: [
+        { label: "covered", value: "rush hour" },
+        { label: "captured", value: "orders" },
+        { label: "protected", value: "allergy calls" },
+      ],
+    },
     outcomeMetrics: ["pickup orders captured", "reservation requests saved", "hosts back on the floor"],
     proofPoint: "Built for missed calls, busy lines, and the questions restaurants get all night.",
     setupFocus: [
@@ -100,6 +126,21 @@ export const industrySolutions: IndustrySolution[] = [
       "Answer no-heat, no-AC, tune-up, filter, warranty, financing, and after-hours calls while your techs stay in the field and dispatch stays focused.",
     integrations: ["ServiceTitan", "Housecall Pro", "Jobber", "Google Calendar", "Zapier", "HubSpot"],
     label: "HVAC",
+    landing: {
+      callout: "The first company to answer often wins the job.",
+      callerLine: "My heat is out, I have kids at home, and I need someone today.",
+      cta: "Capture emergency HVAC demand before the next company answers.",
+      headline: "Book more HVAC jobs when the phone spikes.",
+      operatorReply: "I am sorry you are dealing with that. I will collect the address, system type, urgency, and callback number so dispatch can prioritize you.",
+      proof: "Designed for no-heat, no-AC, tune-up, warranty, financing, membership, and after-hours calls during seasonal surges.",
+      staffHandoff: "Urgency, equipment type, address, membership status, preferred window, callback number, and safety flags.",
+      stakes: "During heat waves and cold snaps, every unanswered call is a ready-to-book homeowner moving down the search results.",
+      stats: [
+        { label: "triaged", value: "emergency" },
+        { label: "booked", value: "tune-ups" },
+        { label: "captured", value: "estimates" },
+      ],
+    },
     outcomeMetrics: ["emergency leads captured", "tune-ups booked", "dispatch interruptions reduced"],
     proofPoint: "Perfect for seasonal spikes, after-hours emergencies, and callers who need reassurance fast.",
     setupFocus: [
@@ -162,6 +203,21 @@ export const industrySolutions: IndustrySolution[] = [
       "Turn missed calls into qualified plumbing jobs, collect the right details, and protect your team from vague voicemails and repeat phone tag.",
     integrations: ["Housecall Pro", "Jobber", "ServiceTitan", "Google Calendar", "Zapier", "QuickBooks"],
     label: "Plumbers",
+    landing: {
+      callout: "Leaks do not leave calm voicemails.",
+      callerLine: "There is water coming through the ceiling. Do you have anyone available?",
+      cta: "Answer urgent plumbing calls with calm, useful intake.",
+      headline: "When water is moving, your phone has to answer.",
+      operatorReply: "I can help get the right details to the team. Is the water actively flowing, and do you know where the shutoff valve is?",
+      proof: "Built for leaks, clogged drains, water heaters, sewer backups, fixture installs, emergency pricing, and property-manager calls.",
+      staffHandoff: "Leak location, shutoff status, property type, urgency, photos/link prompt, access notes, and caller details.",
+      stakes: "Plumbing callers are high intent. If they reach voicemail, they usually keep calling until someone answers.",
+      stats: [
+        { label: "captured", value: "leaks" },
+        { label: "routed", value: "urgent" },
+        { label: "organized", value: "job details" },
+      ],
+    },
     outcomeMetrics: ["leaks triaged", "estimates requested", "callbacks prioritized"],
     proofPoint: "Built for urgent, messy, high-intent calls where speed and confidence matter.",
     setupFocus: [
@@ -224,6 +280,21 @@ export const industrySolutions: IndustrySolution[] = [
       "Qualify roofing leads, collect storm and insurance details, send estimate links, and route urgent leak calls before the next contractor answers.",
     integrations: ["JobNimbus", "AccuLynx", "CompanyCam", "Jobber", "Google Calendar", "Zapier"],
     label: "Roofers",
+    landing: {
+      callout: "Storm leads come in waves.",
+      callerLine: "The storm last night damaged my roof, and now there is a leak upstairs.",
+      cta: "Capture storm, repair, and inspection leads while crews are in the field.",
+      headline: "After the storm, SignalHost catches the calls your crew cannot.",
+      operatorReply: "I can get this to the team quickly. I will collect your address, roof type, leak location, photos, and insurance status.",
+      proof: "Built for storm damage, emergency tarping, inspections, estimates, financing, warranties, and active leak escalation.",
+      staffHandoff: "Address, storm date, roof type, leak status, photo prompt, insurance context, urgency, and callback number.",
+      stakes: "Roofing demand is bursty. If your office misses the surge, another contractor owns the relationship.",
+      stats: [
+        { label: "captured", value: "storm leads" },
+        { label: "flagged", value: "active leaks" },
+        { label: "ready", value: "inspection notes" },
+      ],
+    },
     outcomeMetrics: ["storm leads captured", "estimate requests organized", "urgent leaks escalated"],
     proofPoint: "Especially useful after storms, during inspection season, and when crews are on roofs instead of phones.",
     setupFocus: [
@@ -286,6 +357,21 @@ export const industrySolutions: IndustrySolution[] = [
       "Capture panel, outlet, EV charger, generator, lighting, and emergency electrical calls while keeping safety-sensitive conversations conservative.",
     integrations: ["ServiceTitan", "Housecall Pro", "Jobber", "Google Calendar", "Zapier", "HubSpot"],
     label: "Electricians",
+    landing: {
+      callout: "Electrical calls need confidence and caution.",
+      callerLine: "The outlet is sparking and half the room lost power. Is that dangerous?",
+      cta: "Route urgent electrical calls without guessing on safety.",
+      headline: "A safer front desk for electrical demand.",
+      operatorReply: "I do not want to guess on safety. I will collect the details and mark this urgent so a licensed team member can call you back.",
+      proof: "Built for outlets, panels, EV chargers, generators, lighting, inspections, permits, emergency rates, and safety escalation.",
+      staffHandoff: "Symptom, panel/breaker notes, property type, safety concern, preferred window, address, and callback number.",
+      stakes: "The highest-value electrical calls are often the ones that require the most careful intake.",
+      stats: [
+        { label: "escalated", value: "safety" },
+        { label: "captured", value: "EV leads" },
+        { label: "qualified", value: "projects" },
+      ],
+    },
     outcomeMetrics: ["urgent calls escalated", "estimates booked", "job details captured"],
     proofPoint: "Designed for high-intent callers who need confidence, safety, and a fast callback.",
     setupFocus: [
@@ -348,6 +434,21 @@ export const industrySolutions: IndustrySolution[] = [
       "Answer appointment, price, color, barber, cancellation, product, bridal, and after-hours questions without making clients wait on hold.",
     integrations: ["Boulevard", "Vagaro", "Square Appointments", "Mindbody", "Google Calendar", "Zapier"],
     label: "Hair Salons and Barbershops",
+    landing: {
+      callout: "Clients call while hands are busy.",
+      callerLine: "Do you have any color appointments this week, and how much does balayage start at?",
+      cta: "Book and qualify clients without interrupting the chair.",
+      headline: "Your stylists stay with clients. SignalHost handles the phone.",
+      operatorReply: "I can help. Balayage starts at the listed consultation price, and I can collect your preferred day, stylist, and color history.",
+      proof: "Built for haircuts, color, barber services, consultations, bridal, cancellations, deposits, patch tests, and retail questions.",
+      staffHandoff: "Service requested, preferred provider, date/time, color history, hair length, callback number, and booking-link status.",
+      stakes: "Every missed call is a client who may book the salon that answered faster.",
+      stats: [
+        { label: "captured", value: "new clients" },
+        { label: "protected", value: "chair time" },
+        { label: "handled", value: "reschedules" },
+      ],
+    },
     outcomeMetrics: ["appointments requested", "front-desk interruptions reduced", "new clients captured"],
     proofPoint: "Great for studios that miss calls while cutting, coloring, shampooing, or checking out clients.",
     setupFocus: [

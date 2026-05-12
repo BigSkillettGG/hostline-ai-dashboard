@@ -8,6 +8,7 @@ const envSchema = z.object({
   PUBLIC_HTTP_BASE_URL: z.string().url().optional(),
   PUBLIC_WS_BASE_URL: z.string().url().optional(),
   VOICE_SERVICE_ALLOWED_ORIGIN: z.string().default("*"),
+  SIGNALHOST_INTERNAL_API_KEY: z.string().optional(),
   HOSTLINE_INTERNAL_API_KEY: z.string().optional(),
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_PUBLISHABLE_KEY: z.string().optional(),

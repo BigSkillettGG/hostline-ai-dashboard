@@ -500,7 +500,7 @@ describe("Supabase phone number mapping", () => {
           noAnswerForwarding: "passed",
           updatedAt: "2026-05-05T14:01:00.000Z",
         },
-        voice_webhook_url: "https://voice.hostline.test/twilio/voice",
+        voice_webhook_url: "https://voice.signalhost.test/twilio/voice",
       });
 
     expect(phoneNumber).toEqual({
@@ -521,7 +521,7 @@ describe("Supabase phone number mapping", () => {
       restaurantMainLine: "+14155550148",
       status: "in-use",
       updatedAt: "2026-05-05T14:00:00.000Z",
-      voiceWebhookUrl: "https://voice.hostline.test/twilio/voice",
+      voiceWebhookUrl: "https://voice.signalhost.test/twilio/voice",
     });
   });
 
