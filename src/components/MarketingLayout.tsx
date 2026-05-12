@@ -138,7 +138,7 @@ export default function MarketingLayout() {
           </div>
 
           <div className="mt-10 flex flex-col gap-3 border-t border-border pt-6 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-            <span>© {new Date().getFullYear()} HostLine AI · Built for local service teams.</span>
+            <span>&copy; {new Date().getFullYear()} HostLine AI - Built for local service teams.</span>
             <span>Built with care in Brooklyn, NY.</span>
           </div>
         </div>

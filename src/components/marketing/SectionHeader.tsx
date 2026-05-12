@@ -16,7 +16,7 @@ export function SectionHeader({
       className
     )}>
       {eyebrow && (
-        <div className="mb-3 inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
+        <div className="mb-3 inline-flex items-center gap-2 text-[11px] font-semibold uppercase text-primary">
           <span className="h-px w-6 bg-primary/60" />
           {eyebrow}
         </div>

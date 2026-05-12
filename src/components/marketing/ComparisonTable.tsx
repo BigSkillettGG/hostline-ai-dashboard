@@ -52,7 +52,7 @@ export function ComparisonTable() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border bg-muted/30 text-left text-xs uppercase tracking-wider text-muted-foreground">
+              <tr className="border-b border-border bg-muted/30 text-left text-xs uppercase text-muted-foreground">
                 <th className="px-5 py-3 font-semibold"> </th>
                 {COLS.map((c) => (
                   <th key={c.key} className={cn(

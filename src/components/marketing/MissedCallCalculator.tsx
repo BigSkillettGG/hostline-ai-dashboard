@@ -48,7 +48,7 @@ export function MissedCallCalculator() {
 
         {/* result */}
         <div className="relative bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-6 md:col-span-2 md:p-8">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">You're losing</div>
+          <div className="text-[11px] font-semibold uppercase text-muted-foreground">You're losing</div>
           <div className="mt-1 flex flex-wrap items-baseline gap-x-2">
             <span className="text-3xl font-semibold tabular-nums text-foreground sm:text-4xl md:text-5xl">{fmt(lostMonth)}</span>
             <span className="text-sm text-muted-foreground">/ month</span>
@@ -59,7 +59,7 @@ export function MissedCallCalculator() {
           </div>
 
           <div className="mt-6 rounded-lg border border-primary/30 bg-background/70 p-4 backdrop-blur">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-primary">With HostLine AI</div>
+            <div className="text-[11px] font-semibold uppercase text-primary">With HostLine AI</div>
             <div className="mt-1 flex flex-wrap items-baseline gap-x-2">
               <span className="text-2xl font-semibold tabular-nums text-foreground">+{fmt(recoveredMonth)}</span>
               <span className="text-xs text-muted-foreground">recovered / mo</span>

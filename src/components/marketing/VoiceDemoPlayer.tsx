@@ -295,18 +295,24 @@ export function VoiceDemoPlayer() {
   }, [audioFallback, isReadyAudio, playback]);
 
   return (
-    <div className="mx-auto max-w-5xl text-white">
-      <div className="mx-auto max-w-3xl text-center">
-        <div className="mb-4 inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
-          <span className="h-px w-7 bg-primary/60" />
-          Live demo
+    <div className="mx-auto max-w-6xl text-white">
+      <div className="grid gap-8 lg:grid-cols-[0.72fr_0.28fr] lg:items-end">
+        <div>
+          <div className="mb-4 inline-flex items-center gap-2 text-[11px] font-semibold uppercase text-primary">
+            <span className="h-px w-7 bg-primary/60" />
+            Product proof
+          </div>
+          <h2 className="max-w-3xl text-4xl font-semibold leading-[1.02] md:text-5xl">
+            Hear a call become an order, a task, and a clean record.
+          </h2>
+          <p className="mt-4 max-w-2xl text-base leading-7 text-white/62 md:text-lg">
+            The point is not that Vera talks. The point is that the business gets a useful outcome without a human picking up.
+          </p>
         </div>
-        <h2 className="text-3xl font-semibold md:text-4xl lg:text-[44px] lg:leading-[1.05]">
-          Listen to Vera handle real restaurant calls.
-        </h2>
-        <p className="mx-auto mt-4 max-w-2xl text-base text-white/60 md:text-lg">
-          Finished audio is live for parking questions and pickup orders, with the remaining scenarios available as timed previews.
-        </p>
+        <div className="border-l border-white/12 pl-5">
+          <div className="text-3xl font-semibold text-primary">2</div>
+          <div className="mt-1 text-sm text-white/64">real MP3 call demos are live now. The rest run as transcript previews until audio is added.</div>
+        </div>
       </div>
 
       <div className="mt-10 -mx-5 overflow-x-auto px-5 sm:mx-0 sm:overflow-visible sm:px-0">
@@ -331,7 +337,7 @@ export function VoiceDemoPlayer() {
                 <Icon className="h-4 w-4" />
                 {item.label}
                 {item.audioUrl && (
-                  <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-success">
+                  <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-semibold uppercase text-success">
                     <span className="h-1.5 w-1.5 rounded-full bg-success sm:hidden" />
                     <span className="hidden sm:inline">Audio</span>
                   </span>
@@ -383,7 +389,7 @@ export function VoiceDemoPlayer() {
             <PersonPanel active={activeLineIndex >= 0 && scenario.lines[activeLineIndex]?.speaker === "caller"} caller={scenario.caller} speaker="caller" />
 
             <div className="flex min-h-[240px] flex-col items-center justify-center bg-[#241b14] px-5 py-8 text-center">
-              <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-[#18120e] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/40">
+              <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-[#18120e] px-3 py-1.5 text-[11px] font-semibold uppercase text-white/40">
                 <span className={cn("h-2 w-2 rounded-full", playback === "playing" ? "bg-success" : "bg-primary")} />
                 {playback === "playing" ? "Connected" : playback === "done" ? "Complete" : "Ready"}
               </div>
@@ -412,7 +418,7 @@ export function VoiceDemoPlayer() {
                 ))}
               </div>
 
-              <div className="mt-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/35">
+              <div className="mt-4 text-[11px] font-semibold uppercase text-white/35">
                 {playback === "playing" ? "On the call" : playback === "done" ? "Replay call" : "Press play"}
               </div>
               <div className="mt-2 flex items-center gap-2 text-sm text-white/70">
@@ -440,9 +446,9 @@ export function VoiceDemoPlayer() {
           <div className="max-h-[430px] overflow-y-auto bg-[#211912] px-4 py-5 md:px-7">
             <div className="mx-auto max-w-3xl space-y-3">
               <div className="mb-4 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-white/35">
+                <div className="flex items-center gap-2 text-xs font-semibold uppercase text-white/35">
                   <FileText className="h-4 w-4 text-primary" />
-                  Live transcript
+                  What the caller heard
                 </div>
                 <div className="text-xs text-white/35">{scenario.lines.length} turns</div>
               </div>
@@ -471,7 +477,7 @@ export function VoiceDemoPlayer() {
                         isActive && "border-primary bg-primary/25 shadow-[0_0_0_3px_hsl(var(--primary)/0.18)]",
                       )}
                     >
-                      <div className="mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em]">
+                      <div className="mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase">
                         {isVera ? (
                           <Sparkles className="h-3 w-3 text-primary" />
                         ) : (
@@ -506,7 +512,7 @@ function PersonPanel({
   const isVera = speaker === "vera";
   return (
     <div className="flex min-h-[200px] flex-col items-center justify-center bg-[#211912] px-5 py-6 text-center sm:min-h-[240px] sm:py-8">
-      <div className="mb-3 rounded-full border border-white/10 bg-white/[0.045] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">
+      <div className="mb-3 rounded-full border border-white/10 bg-white/[0.045] px-3 py-1 text-[10px] font-semibold uppercase text-white/35">
         {isVera ? "Restaurant host" : "Caller"}
       </div>
       <div className="relative">
@@ -538,7 +544,7 @@ function PersonPanel({
 function DemoStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="bg-[#18120e] px-4 py-4">
-      <div className="text-[10px] uppercase tracking-[0.16em] text-white/30">{label}</div>
+      <div className="text-[10px] uppercase text-white/30">{label}</div>
       <div className="mt-1 text-sm font-semibold text-white">{value}</div>
     </div>
   );
