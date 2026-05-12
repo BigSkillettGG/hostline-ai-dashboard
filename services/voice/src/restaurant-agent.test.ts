@@ -49,6 +49,15 @@ describe("restaurant fallback replies", () => {
     expect(instructions).toContain("Anything else I can help you with?");
   });
 
+  it("coaches the model not to address callers by a bare last name", () => {
+    const instructions = buildRestaurantInstructions(demoRestaurantContext);
+
+    expect(instructions).toContain("Name etiquette for orders and reservations");
+    expect(instructions).toContain("not 'Thanks, Schneider.'");
+    expect(instructions).toContain("Do not infer Mr., Ms., or Mrs. from the sound of the caller's voice");
+    expect(instructions).toContain("Use an honorific only if the caller says it");
+  });
+
   it("passes structured conversation turns to the Responses API", () => {
     const input = buildConversationInput("Do you have patio seating?", [
       {

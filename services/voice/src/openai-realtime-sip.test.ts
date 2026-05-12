@@ -136,6 +136,7 @@ describe("OpenAI Realtime SIP", () => {
     expect(instructions).toContain("Say the opening greeting once");
     expect(instructions).toContain("If the caller says 'hello' before you have greeted them");
     expect(instructions).toContain("Greeting energy");
+    expect(instructions).toContain("not 'Thanks, Schneider.'");
     expect(instructions).toContain("Handle interruptions gracefully");
   });
 
