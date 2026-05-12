@@ -23,6 +23,7 @@ export interface RestaurantMembership {
 
 export interface CurrentUser {
   accessToken?: string;
+  activeLocationId?: string;
   activeOrganizationId?: string;
   authProvider: AuthMode;
   email: string;
@@ -68,6 +69,11 @@ interface SupabaseMembershipRow {
   id?: string;
   organization_id?: string;
   role?: string;
+}
+
+interface SupabaseLocationRow {
+  id?: string;
+  organization_id?: string | null;
 }
 
 const STORAGE_KEY = "signalhost.currentUser";
@@ -122,6 +128,10 @@ export function getCurrentUser() {
 
 export function getActiveOrganizationId() {
   return readUser()?.activeOrganizationId;
+}
+
+export function getActiveLocationId() {
+  return readUser()?.activeLocationId;
 }
 
 export function getSupabaseAccessToken() {
@@ -180,6 +190,25 @@ export function signOut() {
   writeUser(null);
 }
 
+export function updateCurrentUserAccess(input: {
+  activeLocationId?: string;
+  activeOrganizationId?: string;
+  memberships?: RestaurantMembership[];
+}) {
+  const current = readUser();
+  if (!current) return null;
+
+  const next = applyAccessModel({
+    ...current,
+    activeLocationId: input.activeLocationId ?? current.activeLocationId,
+    activeOrganizationId: input.activeOrganizationId ?? current.activeOrganizationId,
+    memberships: input.memberships ?? current.memberships,
+    restaurantId: input.activeOrganizationId ?? current.restaurantId,
+  });
+  writeUser(next);
+  return next;
+}
+
 export function setRole(role: UserRole) {
   if (!isDemoAuthMode()) return;
   writeUser(role === "superadmin" ? buildDemoSuperAdmin() : buildDemoUser("maria@oliveandember.com", "Maria Lombardi"));
@@ -236,7 +265,7 @@ export function buildDemoSuperAdmin(email = "staff@signalhost.ai", name = "Signa
 
 export function mapSupabaseAuthResponse(
   data: SupabaseAuthResponse,
-  access: { isPlatformAdmin?: boolean; memberships?: RestaurantMembership[] } = {},
+  access: { activeLocationId?: string; isPlatformAdmin?: boolean; memberships?: RestaurantMembership[] } = {},
 ): CurrentUser {
   if (!data.access_token || !data.user?.email || !data.user.id) {
     throw new Error("Supabase Auth did not return an active session. Confirm the email address before signing in.");
@@ -254,6 +283,10 @@ export function mapSupabaseAuthResponse(
 
   return applyAccessModel({
     accessToken: data.access_token,
+    activeLocationId:
+      access.activeLocationId ??
+      stringMetadataValue(data.user.app_metadata, "location_id") ??
+      stringMetadataValue(data.user.user_metadata, "location_id"),
     authProvider: "supabase",
     email: data.user.email,
     isPlatformAdmin: Boolean(access.isPlatformAdmin),
@@ -336,8 +369,11 @@ async function hydrateSupabaseUser(data: SupabaseAuthResponse, config: AuthRunti
     fetchSupabaseMemberships(base, config),
     fetchSupabasePlatformAdmin(base, config),
   ]);
+  const activeLocationId = memberships[0]?.organizationId
+    ? await fetchSupabasePrimaryLocation(base, config, memberships[0].organizationId)
+    : undefined;
 
-  return mapSupabaseAuthResponse(data, { isPlatformAdmin, memberships });
+  return mapSupabaseAuthResponse(data, { activeLocationId, isPlatformAdmin, memberships });
 }
 
 async function fetchSupabaseMemberships(user: CurrentUser, config: AuthRuntimeConfig): Promise<RestaurantMembership[]> {
@@ -362,6 +398,23 @@ async function fetchSupabasePlatformAdmin(user: CurrentUser, config: AuthRuntime
   });
   const rows = await supabaseRestRequest<Array<{ id?: string }>>("platform_admins", params, user.accessToken, config);
   return rows.length > 0;
+}
+
+async function fetchSupabasePrimaryLocation(
+  user: CurrentUser,
+  config: AuthRuntimeConfig,
+  organizationId: string,
+) {
+  if (!user.accessToken) return undefined;
+
+  const params = new URLSearchParams({
+    limit: "1",
+    order: "created_at.asc",
+    organization_id: `eq.${organizationId}`,
+    select: "id,organization_id",
+  });
+  const rows = await supabaseRestRequest<SupabaseLocationRow[]>("locations", params, user.accessToken, config);
+  return rows[0]?.id;
 }
 
 async function supabaseAuthRequest<T>(path: string, body: unknown, config: AuthRuntimeConfig): Promise<T> {
@@ -436,6 +489,7 @@ function applyAccessModel(user: CurrentUser): CurrentUser {
   return {
     ...user,
     activeOrganizationId: user.activeOrganizationId ?? primaryMembership?.organizationId,
+    activeLocationId: user.activeLocationId,
     isPlatformAdmin: Boolean(user.isPlatformAdmin || role === "superadmin"),
     memberships,
     restaurantId: user.restaurantId ?? primaryMembership?.organizationId,

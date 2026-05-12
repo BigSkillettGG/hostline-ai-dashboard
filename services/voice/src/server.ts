@@ -22,6 +22,7 @@ import { createPlatformIntegrationRegistry } from "./platform-integrations";
 import { createPhoneNumberStore } from "./phone-number-store";
 import { createRestaurantContextStore } from "./restaurant-context-store";
 import { createReservationPlatformService } from "./reservation-platform-service";
+import { createTenantProvisioningService, type TenantBootstrapInput } from "./tenant-provisioning";
 import { createTelephonyService } from "./telephony";
 import { demoRestaurantContext } from "./restaurant-context";
 import { generateRestaurantReply } from "./restaurant-agent";
@@ -40,6 +41,7 @@ const guestConfirmationService = createGuestConfirmationService(env);
 const menuIngestionService = createMenuIngestionService(env);
 const platformIntegrationRegistry = createPlatformIntegrationRegistry(env);
 const reservationPlatformService = createReservationPlatformService(env);
+const tenantProvisioningService = createTenantProvisioningService(env);
 const openAIRealtimeSipService = createOpenAIRealtimeSipService(env, restaurantContextStore, {
   callStore,
   guestConfirmationService,
@@ -50,6 +52,7 @@ const webChatService = createWebChatService(env, restaurantContextStore, { callS
 const ADMIN_BODY_LIMIT_BYTES = 16 * 1024;
 const OPENAI_WEBHOOK_BODY_LIMIT_BYTES = 32 * 1024;
 const PREVIEW_BODY_LIMIT_BYTES = 4 * 1024;
+const TENANT_BOOTSTRAP_BODY_LIMIT_BYTES = 64 * 1024;
 const TWILIO_BODY_LIMIT_BYTES = 16 * 1024;
 const WEB_CHAT_BODY_LIMIT_BYTES = 16 * 1024;
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -131,6 +134,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       menuIngestionConfigured: menuIngestionService.configured,
       openAIRealtimeSipConfigured: openAIRealtimeSipService.configured,
       platformIntegrations: platformIntegrationRegistry.summary,
+      tenantProvisioningConfigured: tenantProvisioningService.configured,
       twilioProvisioningConfigured: telephonyService.configured,
       staffAlertsConfigured: staffNotificationService.configured,
       guestConfirmationsConfigured: guestConfirmationService.configured,
@@ -159,6 +163,19 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
     }
 
     sendJson(res, 200, createPlatformIntegrationRegistry(currentEnv));
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/tenant/bootstrap") {
+    if (!allowRateLimitedRequest(req, res, "tenant-bootstrap", 20)) return;
+
+    try {
+      const body = parseJsonRequestBody(await readLimitedRequestBody(req, TENANT_BOOTSTRAP_BODY_LIMIT_BYTES)) as TenantBootstrapInput;
+      const result = await tenantProvisioningService.bootstrap(body, req.headers.authorization);
+      sendJson(res, 200, result);
+    } catch (error) {
+      sendCaughtError(res, error, "Tenant provisioning failed");
+    }
     return;
   }
 

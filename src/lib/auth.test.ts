@@ -4,8 +4,11 @@ import {
   buildDemoUser,
   buildDemoSuperAdmin,
   getAuthReadiness,
+  getActiveLocationId,
   mapSupabaseAuthResponse,
   roleFromEmailAndMetadata,
+  signOut,
+  updateCurrentUserAccess,
 } from "./auth";
 
 describe("auth helpers", () => {
@@ -68,12 +71,14 @@ describe("auth helpers", () => {
         user_metadata: { name: "Owner Example" },
       },
     }, {
+      activeLocationId: "loc_1",
       memberships: [{ organizationId: "org_1", role: "owner" }],
     });
 
     expect(user).toMatchObject({
       accessToken: "access_token",
       activeOrganizationId: "org_1",
+      activeLocationId: "loc_1",
       authProvider: "supabase",
       email: "owner@example.com",
       name: "Owner Example",
@@ -84,6 +89,32 @@ describe("auth helpers", () => {
       workspaceKind: "restaurant",
     });
     expect(canCurrentUserManageTeam(user)).toBe(true);
+  });
+
+  it("updates the stored user with provisioned organization and location access", () => {
+    signOut();
+    localStorage.setItem("signalhost.currentUser", JSON.stringify({
+      accessToken: "access_token",
+      authProvider: "supabase",
+      email: "owner@example.com",
+      name: "Owner",
+      role: "admin",
+      supabaseUserId: "user_1",
+    }));
+
+    const user = updateCurrentUserAccess({
+      activeLocationId: "loc_1",
+      activeOrganizationId: "org_1",
+      memberships: [{ organizationId: "org_1", role: "owner" }],
+    });
+
+    expect(user).toMatchObject({
+      activeLocationId: "loc_1",
+      activeOrganizationId: "org_1",
+      restaurantMembershipRole: "owner",
+    });
+    expect(getActiveLocationId()).toBe("loc_1");
+    signOut();
   });
 
   it("maps platform admins separately from restaurant memberships", () => {

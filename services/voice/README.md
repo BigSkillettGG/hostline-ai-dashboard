@@ -98,6 +98,7 @@ When Supabase is configured, Twilio requests can include `locationId` in the web
 
 ## Internal Telephony Endpoints
 
+- `POST /tenant/bootstrap` creates the signed-in user's organization, owner membership, first location, onboarding profile, and default agent config after website signup. It requires a Supabase bearer token and uses the backend-only service role key.
 - `GET /telephony/available-numbers?areaCode=415&limit=5` searches Twilio local numbers with voice and SMS enabled.
 - `POST /telephony/provision-number` purchases a selected number, sets its voice webhook to `/twilio/voice?locationId=...`, writes `phone_numbers`, and updates `locations.ai_host_phone`.
 - `GET /twilio/live-call-config?locationId=...` returns the generated live call URLs.

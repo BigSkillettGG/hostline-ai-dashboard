@@ -48,6 +48,7 @@ import { loadOnboardingDraft, saveOnboardingDraft } from "@/lib/onboarding-draft
 import {
   fetchOnboardingProfileFromSupabase,
   fetchPhoneNumbersFromSupabase,
+  getActiveSupabaseLocationId,
   type ForwardingTestStatus,
   type ForwardingVerification,
   isOnboardingPersistenceConfigured,
@@ -248,6 +249,7 @@ export default function Onboarding() {
     try {
       const result = await provisionVoicePhoneNumber({
         forwardingMode: mapForwardingMode(String(draft.forwardingMode ?? "")),
+        locationId: getActiveSupabaseLocationId(),
         phoneNumber,
         restaurantMainLine: String(draft.mainPhone ?? "").trim() || undefined,
       });

@@ -1,4 +1,6 @@
-import { getSupabaseAccessToken } from "@/lib/auth";
+import { getActiveLocationId, getSupabaseAccessToken } from "@/lib/auth";
+import type { OnboardingDraft } from "@/domain/onboarding";
+import type { BusinessType } from "@/domain/business-templates";
 import type { SignalHostVoiceGender } from "@/domain/voice-selection";
 
 export interface VoiceServiceHealth {
@@ -10,6 +12,7 @@ export interface VoiceServiceHealth {
   onboardedContextConfigured?: boolean;
   staffAlertsConfigured?: boolean;
   supabaseConfigured: boolean;
+  tenantProvisioningConfigured?: boolean;
   twilioProvisioningConfigured?: boolean;
   twilioSignatureRequired: boolean;
   productionReady?: boolean;
@@ -38,6 +41,26 @@ export interface ProvisionedVoicePhoneNumber {
   providerSid: string;
   status: string;
   voiceWebhookUrl?: string;
+}
+
+export interface TenantBootstrapResult {
+  businessType: BusinessType;
+  createdLocation: boolean;
+  createdOrganization: boolean;
+  locationId: string;
+  membership: {
+    createdAt?: string;
+    id?: string;
+    organizationId: string;
+    role: "owner";
+  };
+  onboarding: {
+    completedRequired: number;
+    progressPercent: number;
+    status: string;
+    totalRequired: number;
+  };
+  organizationId: string;
 }
 
 export interface RunMenuIngestionResult {
@@ -81,7 +104,7 @@ export async function fetchVoiceServiceHealth() {
   return (await response.json()) as VoiceServiceHealth;
 }
 
-export async function fetchLiveCallConfig(locationId?: string) {
+export async function fetchLiveCallConfig(locationId = getActiveLocationId()) {
   if (!voiceServiceBaseUrl) {
     throw new Error("VITE_VOICE_SERVICE_URL is not configured.");
   }
@@ -101,7 +124,7 @@ export async function fetchLiveCallConfig(locationId?: string) {
   return (await response.json()) as LiveCallConfig;
 }
 
-export async function fetchTwiMLPreview(locationId?: string) {
+export async function fetchTwiMLPreview(locationId = getActiveLocationId()) {
   if (!voiceServiceBaseUrl) {
     throw new Error("VITE_VOICE_SERVICE_URL is not configured.");
   }
@@ -143,6 +166,33 @@ export async function fetchVoicePreviewAudio(text: string, voiceGender?: SignalH
   return response.blob();
 }
 
+export async function bootstrapTenantProvisioning(input: {
+  businessName?: string;
+  businessType: BusinessType;
+  draft: OnboardingDraft;
+  ownerName?: string;
+}) {
+  if (!voiceServiceBaseUrl) {
+    throw new Error("VITE_VOICE_SERVICE_URL is not configured.");
+  }
+
+  const response = await fetch(`${voiceServiceBaseUrl}/tenant/bootstrap`, {
+    body: JSON.stringify(input),
+    headers: {
+      "Content-Type": "application/json",
+      ...buildVoiceAdminHeaders(),
+    },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(body || `Tenant provisioning failed with ${response.status}.`);
+  }
+
+  return (await response.json()) as TenantBootstrapResult;
+}
+
 export async function searchAvailableVoicePhoneNumbers(input: {
   areaCode?: string;
   contains?: string;
@@ -182,7 +232,10 @@ export async function provisionVoicePhoneNumber(input: {
   }
 
   const response = await fetch(`${voiceServiceBaseUrl}/telephony/provision-number`, {
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      ...input,
+      locationId: input.locationId ?? getActiveLocationId(),
+    }),
     headers: {
       "Content-Type": "application/json",
       ...buildVoiceAdminHeaders(),
@@ -204,7 +257,10 @@ export async function runNextMenuIngestionJob(input: { jobId?: string; locationI
   }
 
   const response = await fetch(`${voiceServiceBaseUrl}/ingestion/run-next`, {
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      ...input,
+      locationId: input.locationId ?? getActiveLocationId(),
+    }),
     headers: {
       "Content-Type": "application/json",
       ...buildVoiceAdminHeaders(),

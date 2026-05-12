@@ -5,11 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { signUp } from "@/lib/auth";
+import { signUp, updateCurrentUserAccess } from "@/lib/auth";
 import { saveOnboardingDraft } from "@/lib/onboarding-draft";
 import { createOnboardingDraftForBusiness } from "@/domain/onboarding";
 import { industrySolutions } from "@/data/industry-solutions";
 import { getBusinessTemplate, type BusinessType } from "@/domain/business-templates";
+import { bootstrapTenantProvisioning, isVoiceServiceConfigured } from "@/lib/voice-service";
 import { toast } from "sonner";
 
 export default function Signup() {
@@ -40,7 +41,7 @@ export default function Signup() {
 
     setIsSubmitting(true);
     try {
-      saveOnboardingDraft({
+      const onboardingDraft = {
         ...createOnboardingDraftForBusiness(businessType, {
           restaurantName: businessName || template.defaultName,
           selectedPlanId: selectedTier.id,
@@ -49,8 +50,34 @@ export default function Signup() {
           selectedPlanIncludedInteractions: String(selectedTier.includedInteractions),
           selectedPlanOverage: selectedTier.overage,
         }),
-      });
-      await signUp({ email, name, password, restaurant: businessName });
+      };
+      saveOnboardingDraft(onboardingDraft);
+      const user = await signUp({ email, name, password, restaurant: businessName });
+
+      if (user.authProvider === "supabase" && user.accessToken && isVoiceServiceConfigured()) {
+        const bootstrap = await bootstrapTenantProvisioning({
+          businessName: businessName || template.defaultName,
+          businessType,
+          draft: onboardingDraft,
+          ownerName: name,
+        });
+        updateCurrentUserAccess({
+          activeLocationId: bootstrap.locationId,
+          activeOrganizationId: bootstrap.organizationId,
+          memberships: [{
+            createdAt: bootstrap.membership.createdAt,
+            id: bootstrap.membership.id,
+            organizationId: bootstrap.organizationId,
+            role: "owner",
+          }],
+        });
+        saveOnboardingDraft({
+          ...onboardingDraft,
+          provisionedLocationId: bootstrap.locationId,
+          provisionedOrganizationId: bootstrap.organizationId,
+        });
+      }
+
       toast.success("Account created - let's get you set up");
       navigate("/app/onboarding", { replace: true });
     } catch (error) {

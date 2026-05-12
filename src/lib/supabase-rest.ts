@@ -13,7 +13,7 @@ import type {
   ReservationStatus,
   TranscriptSpeaker,
 } from "@/data/mock";
-import { getActiveOrganizationId, getSupabaseAccessToken } from "@/lib/auth";
+import { getActiveLocationId, getActiveOrganizationId, getSupabaseAccessToken } from "@/lib/auth";
 import type { ParsedMenuCategory } from "@/domain/menu-ingestion";
 import { calculateOnboardingProgress, type OnboardingDraft } from "@/domain/onboarding";
 import {
@@ -417,40 +417,44 @@ export function isSupabaseConfigured() {
   return Boolean(supabaseUrl && supabasePublishableKey);
 }
 
+export function getActiveSupabaseLocationId() {
+  return getActiveLocationId() ?? supabaseDemoLocationId;
+}
+
 export function isOnboardingPersistenceConfigured() {
-  return Boolean(isSupabaseConfigured() && supabaseDemoLocationId);
+  return Boolean(isSupabaseConfigured() && getActiveSupabaseLocationId());
 }
 
 export function isMenuPersistenceConfigured() {
-  return Boolean(isSupabaseConfigured() && supabaseDemoLocationId);
+  return Boolean(isSupabaseConfigured() && getActiveSupabaseLocationId());
 }
 
 export function isMenuSourcePersistenceConfigured() {
-  return Boolean(isSupabaseConfigured() && supabaseDemoLocationId);
+  return Boolean(isSupabaseConfigured() && getActiveSupabaseLocationId());
 }
 
 export function isReservationPersistenceConfigured() {
-  return Boolean(isSupabaseConfigured() && supabaseDemoLocationId);
+  return Boolean(isSupabaseConfigured() && getActiveSupabaseLocationId());
 }
 
 export function isAgentConfigPersistenceConfigured() {
-  return Boolean(isSupabaseConfigured() && supabaseDemoLocationId);
+  return Boolean(isSupabaseConfigured() && getActiveSupabaseLocationId());
 }
 
 export function isAlertRoutingPersistenceConfigured() {
-  return Boolean(isSupabaseConfigured() && supabaseDemoLocationId);
+  return Boolean(isSupabaseConfigured() && getActiveSupabaseLocationId());
 }
 
 export function isStaffAlertEventPersistenceConfigured() {
-  return Boolean(isSupabaseConfigured() && supabaseDemoLocationId);
+  return Boolean(isSupabaseConfigured() && getActiveSupabaseLocationId());
 }
 
 export function isStaffTaskPersistenceConfigured() {
-  return Boolean(isSupabaseConfigured() && supabaseDemoLocationId);
+  return Boolean(isSupabaseConfigured() && getActiveSupabaseLocationId());
 }
 
 export function isCallFeedbackPersistenceConfigured() {
-  return Boolean(isSupabaseConfigured() && supabaseDemoLocationId);
+  return Boolean(isSupabaseConfigured() && getActiveSupabaseLocationId());
 }
 
 export function isTeamPersistenceConfigured(organizationId = getActiveOrganizationId()) {
@@ -589,7 +593,7 @@ export async function fetchCallFeedbackFromSupabase(callId: string): Promise<Cal
 
 export async function createCallFeedbackInSupabase(
   input: CreateCallFeedbackInput,
-  locationId = supabaseDemoLocationId,
+  locationId = getActiveSupabaseLocationId(),
 ): Promise<CallFeedback> {
   if (!isSupabaseConfigured() || !locationId) {
     throw new Error("Supabase call feedback persistence is not configured.");
@@ -714,7 +718,7 @@ export async function createOrderDeliveryAttemptInSupabase(input: CreateOrderDel
 }
 
 export async function fetchOnboardingProfileFromSupabase(
-  locationId = supabaseDemoLocationId,
+  locationId = getActiveSupabaseLocationId(),
 ): Promise<OnboardingDraft | null> {
   if (!isSupabaseConfigured() || !locationId) {
     throw new Error("Supabase onboarding persistence is not configured.");
@@ -735,7 +739,7 @@ export async function fetchOnboardingProfileFromSupabase(
 
 export async function saveOnboardingProfileToSupabase(
   draft: OnboardingDraft,
-  locationId = supabaseDemoLocationId,
+  locationId = getActiveSupabaseLocationId(),
 ) {
   if (!isSupabaseConfigured() || !locationId) {
     throw new Error("Supabase onboarding persistence is not configured.");
@@ -762,7 +766,7 @@ export async function saveOnboardingProfileToSupabase(
 
 export async function fetchAgentConfigFromSupabase(
   fallbackConfig: RestaurantAgentConfig,
-  locationId = supabaseDemoLocationId,
+  locationId = getActiveSupabaseLocationId(),
 ): Promise<RestaurantAgentConfig | null> {
   if (!isSupabaseConfigured() || !locationId) {
     throw new Error("Supabase agent-config persistence is not configured.");
@@ -783,7 +787,7 @@ export async function fetchAgentConfigFromSupabase(
 
 export async function saveAgentConfigToSupabase(
   config: RestaurantAgentConfig,
-  locationId = supabaseDemoLocationId,
+  locationId = getActiveSupabaseLocationId(),
 ) {
   if (!isSupabaseConfigured() || !locationId) {
     throw new Error("Supabase agent-config persistence is not configured.");
@@ -837,7 +841,7 @@ export async function saveAgentConfigToSupabase(
 }
 
 export async function fetchAlertRoutingConfigFromSupabase(
-  locationId = supabaseDemoLocationId,
+  locationId = getActiveSupabaseLocationId(),
 ): Promise<AlertRoutingConfig | null> {
   if (!isSupabaseConfigured() || !locationId) {
     throw new Error("Supabase alert-routing persistence is not configured.");
@@ -862,7 +866,7 @@ export async function fetchAlertRoutingConfigFromSupabase(
 
 export async function saveAlertRoutingConfigToSupabase(
   config: AlertRoutingConfig,
-  locationId = supabaseDemoLocationId,
+  locationId = getActiveSupabaseLocationId(),
 ) {
   if (!isSupabaseConfigured() || !locationId) {
     throw new Error("Supabase alert-routing persistence is not configured.");
@@ -894,7 +898,7 @@ export async function saveAlertRoutingConfigToSupabase(
 }
 
 export async function fetchStaffAlertEventsFromSupabase(
-  locationId = supabaseDemoLocationId,
+  locationId = getActiveSupabaseLocationId(),
 ): Promise<StaffAlertEvent[]> {
   if (!isSupabaseConfigured() || !locationId) {
     throw new Error("Supabase alert event persistence is not configured.");
@@ -914,7 +918,7 @@ export async function fetchStaffAlertEventsFromSupabase(
 }
 
 export async function fetchStaffTasksFromSupabase(
-  locationId = supabaseDemoLocationId,
+  locationId = getActiveSupabaseLocationId(),
 ): Promise<StaffTask[]> {
   if (!isSupabaseConfigured() || !locationId) {
     throw new Error("Supabase staff task persistence is not configured.");
@@ -935,7 +939,7 @@ export async function fetchStaffTasksFromSupabase(
 
 export async function createStaffTaskInSupabase(
   input: CreateStaffTaskInput,
-  locationId = supabaseDemoLocationId,
+  locationId = getActiveSupabaseLocationId(),
 ): Promise<StaffTask | undefined> {
   if (!isSupabaseConfigured() || !locationId) {
     throw new Error("Supabase staff task persistence is not configured.");
@@ -973,7 +977,7 @@ export async function updateStaffTaskStatusInSupabase(taskId: string, status: St
 }
 
 export async function fetchPhoneNumbersFromSupabase(
-  locationId = supabaseDemoLocationId,
+  locationId = getActiveSupabaseLocationId(),
 ): Promise<PhoneNumberRecord[]> {
   if (!isSupabaseConfigured() || !locationId) {
     throw new Error("Supabase phone-number persistence is not configured.");
@@ -1025,7 +1029,7 @@ export async function savePhoneNumberVerificationToSupabase(
   return rows?.[0] ? mapSupabasePhoneNumber(rows[0]) : undefined;
 }
 
-export async function fetchMenuFromSupabase(locationId = supabaseDemoLocationId): Promise<MenuCategoryRecord[]> {
+export async function fetchMenuFromSupabase(locationId = getActiveSupabaseLocationId()): Promise<MenuCategoryRecord[]> {
   if (!isSupabaseConfigured() || !locationId) {
     throw new Error("Supabase menu persistence is not configured.");
   }
@@ -1055,7 +1059,7 @@ export async function fetchMenuFromSupabase(locationId = supabaseDemoLocationId)
 }
 
 export async function fetchMenuSourcesFromSupabase(
-  locationId = supabaseDemoLocationId,
+  locationId = getActiveSupabaseLocationId(),
 ): Promise<{ jobs: IngestionJob[]; sources: MenuSource[] }> {
   if (!isSupabaseConfigured() || !locationId) {
     throw new Error("Supabase menu-source persistence is not configured.");
@@ -1091,7 +1095,7 @@ export async function fetchMenuSourcesFromSupabase(
 
 export async function createMenuSourceInSupabase(
   input: CreateMenuSourceInput,
-  locationId = supabaseDemoLocationId,
+  locationId = getActiveSupabaseLocationId(),
 ): Promise<{ job?: IngestionJob; source: MenuSource }> {
   if (!isSupabaseConfigured() || !locationId) {
     throw new Error("Supabase menu-source persistence is not configured.");
@@ -1123,7 +1127,7 @@ export async function createMenuSourceInSupabase(
 
 export async function queueMenuSourceSyncInSupabase(
   source: MenuSource,
-  locationId = supabaseDemoLocationId,
+  locationId = getActiveSupabaseLocationId(),
 ): Promise<{ job?: IngestionJob; source?: MenuSource }> {
   if (!isSupabaseConfigured() || !locationId) {
     throw new Error("Supabase menu-source persistence is not configured.");
@@ -1179,7 +1183,7 @@ export async function deleteMenuSourceFromSupabase(sourceId: string) {
 
 export async function importParsedMenuToSupabase(
   categories: ParsedMenuCategory[],
-  locationId = supabaseDemoLocationId,
+  locationId = getActiveSupabaseLocationId(),
 ): Promise<MenuCategoryRecord[]> {
   if (!isSupabaseConfigured() || !locationId) {
     throw new Error("Supabase menu persistence is not configured.");
@@ -1229,7 +1233,7 @@ export async function importParsedMenuToSupabase(
 }
 
 export async function fetchReservationsFromSupabase(
-  locationId = supabaseDemoLocationId,
+  locationId = getActiveSupabaseLocationId(),
 ): Promise<Reservation[]> {
   if (!isSupabaseConfigured() || !locationId) {
     throw new Error("Supabase reservation persistence is not configured.");
@@ -1279,7 +1283,7 @@ export async function updateReservationStatusInSupabase(
 
 export async function createReservationInSupabase(
   input: CreateReservationInput,
-  locationId = supabaseDemoLocationId,
+  locationId = getActiveSupabaseLocationId(),
 ): Promise<Reservation | undefined> {
   if (!isSupabaseConfigured() || !locationId) {
     throw new Error("Supabase reservation persistence is not configured.");
