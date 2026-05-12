@@ -57,7 +57,7 @@ export default function Pricing() {
           <Badge variant="outline" className="mb-5 gap-1.5 border-primary/30 bg-primary/10 text-primary">
             <Sparkles className="h-3 w-3" /> Simple, usage-based pricing
           </Badge>
-          <h1 className="text-4xl font-semibold tracking-tight md:text-6xl">
+          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl md:text-6xl">
             Pay for the calls you answer.<br />
             <span className="text-muted-foreground">Never lose a guest again.</span>
           </h1>
@@ -65,12 +65,11 @@ export default function Pricing() {
             Pick a plan based on monthly call volume. Go over and you only pay for what you use — there's no
             penalty for being busy.
           </p>
-          <div className="mt-7 inline-flex items-center gap-3 rounded-full border border-border bg-card px-3 py-1.5 shadow-sm">
+          <div className="mt-7 inline-flex flex-wrap items-center justify-center gap-x-3 gap-y-2 rounded-2xl border border-border bg-card px-3 py-2 shadow-sm sm:rounded-full sm:py-1.5">
             <span className={!annual ? "text-sm font-medium" : "text-sm text-muted-foreground"}>Monthly</span>
             <Switch checked={annual} onCheckedChange={setAnnual} />
-            <span className={annual ? "text-sm font-medium" : "text-sm text-muted-foreground"}>
-              Annual <Badge variant="secondary" className="ml-1">Save 2 months</Badge>
-            </span>
+            <span className={annual ? "text-sm font-medium" : "text-sm text-muted-foreground"}>Annual</span>
+            <Badge variant="secondary">Save 2 months</Badge>
           </div>
         </div>
       </section>

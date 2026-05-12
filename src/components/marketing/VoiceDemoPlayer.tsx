@@ -309,34 +309,37 @@ export function VoiceDemoPlayer() {
         </p>
       </div>
 
-      <div className="mt-10 flex flex-wrap justify-center gap-2">
-        {scenarios.map((item, index) => {
-          const Icon = item.icon;
-          const isActive = index === scenarioIndex;
+      <div className="mt-10 -mx-5 overflow-x-auto px-5 sm:mx-0 sm:overflow-visible sm:px-0">
+        <div className="flex gap-2 sm:flex-wrap sm:justify-center">
+          {scenarios.map((item, index) => {
+            const Icon = item.icon;
+            const isActive = index === scenarioIndex;
 
-          return (
-            <button
-              aria-pressed={isActive}
-              className={cn(
-                "inline-flex min-h-10 items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors",
-                isActive
-                  ? "border-primary bg-primary text-primary-foreground shadow-[0_0_0_4px_hsl(var(--primary)/0.14)]"
-                  : "border-white/10 bg-white/[0.04] text-white/65 hover:border-primary/50 hover:bg-white/[0.07] hover:text-white",
-              )}
-              key={item.id}
-              onClick={() => chooseScenario(index)}
-              type="button"
-            >
-              <Icon className="h-4 w-4" />
-              {item.label}
-              {item.audioUrl && (
-                <span className="ml-1 rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-success">
-                  Audio
-                </span>
-              )}
-            </button>
-          );
-        })}
+            return (
+              <button
+                aria-pressed={isActive}
+                className={cn(
+                  "inline-flex min-h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border px-4 py-2 text-sm font-medium transition-colors",
+                  isActive
+                    ? "border-primary bg-primary text-primary-foreground shadow-[0_0_0_4px_hsl(var(--primary)/0.14)]"
+                    : "border-white/10 bg-white/[0.04] text-white/65 hover:border-primary/50 hover:bg-white/[0.07] hover:text-white",
+                )}
+                key={item.id}
+                onClick={() => chooseScenario(index)}
+                type="button"
+              >
+                <Icon className="h-4 w-4" />
+                {item.label}
+                {item.audioUrl && (
+                  <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-success">
+                    <span className="h-1.5 w-1.5 rounded-full bg-success sm:hidden" />
+                    <span className="hidden sm:inline">Audio</span>
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="mt-8 overflow-hidden rounded-lg border border-white/10 bg-[#18120e] shadow-[0_32px_100px_-42px_rgba(0,0,0,0.85)]">
@@ -502,7 +505,7 @@ function PersonPanel({
 }) {
   const isVera = speaker === "vera";
   return (
-    <div className="flex min-h-[240px] flex-col items-center justify-center bg-[#211912] px-5 py-8 text-center">
+    <div className="flex min-h-[200px] flex-col items-center justify-center bg-[#211912] px-5 py-6 text-center sm:min-h-[240px] sm:py-8">
       <div className="mb-3 rounded-full border border-white/10 bg-white/[0.045] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">
         {isVera ? "Restaurant host" : "Caller"}
       </div>
