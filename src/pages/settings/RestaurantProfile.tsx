@@ -5,26 +5,40 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { getOnboardingBusinessTemplate } from "@/domain/onboarding";
 import { restaurant } from "@/data/mock";
+import { loadOnboardingDraft } from "@/lib/onboarding-draft";
 import { toast } from "sonner";
 
 export default function RestaurantProfile() {
+  const draft = loadOnboardingDraft();
+  const template = getOnboardingBusinessTemplate(draft);
+  const businessName = String(draft.restaurantName || template.defaultName);
+  const profileDescription = String(draft.concept || template.defaultOffering);
+  const addressOrArea = String(draft.primaryLocation || restaurant.address);
+  const contactPhone = String(draft.mainPhone || restaurant.phone);
+  const timezone = String(draft.timezone || restaurant.timezone);
+  const locationLabel = template.id === "restaurant" ? `${businessName} - Valencia` : businessName;
+  const profileLabel = template.id === "restaurant" ? "Cuisine / concept" : "Services and specialties";
+  const timezoneValue = timezone.includes("New_York") ? "ny" : timezone.includes("Chicago") ? "ch" : "la";
+
   return (
     <>
-      <PageHeader title="Restaurant Profile" description="Name, cuisine, locations" actions={<Button size="sm" onClick={() => toast.success("Profile saved")}>Save</Button>} />
+      <PageHeader title="Business Profile" description="Name, service model, and locations" actions={<Button size="sm" onClick={() => toast.success("Profile saved")}>Save</Button>} />
       <PageBody>
         <div className="grid gap-5 lg:grid-cols-2">
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">Profile</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5"><Label>Name</Label><Input defaultValue={restaurant.name} /></div>
-                <div className="space-y-1.5"><Label>Cuisine</Label><Input defaultValue={restaurant.cuisine} /></div>
+                <div className="space-y-1.5"><Label>Business name</Label><Input defaultValue={businessName} /></div>
+                <div className="space-y-1.5"><Label>Business type</Label><Input defaultValue={template.label} /></div>
               </div>
-              <div className="space-y-1.5"><Label>Address</Label><Input defaultValue={restaurant.address} /></div>
+              <div className="space-y-1.5"><Label>{profileLabel}</Label><Input defaultValue={profileDescription} /></div>
+              <div className="space-y-1.5"><Label>Address or service area</Label><Input defaultValue={addressOrArea} /></div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5"><Label>Timezone</Label>
-                  <Select defaultValue="la">
+                  <Select defaultValue={timezoneValue}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="la">America/Los_Angeles</SelectItem>
@@ -33,7 +47,7 @@ export default function RestaurantProfile() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1.5"><Label>Contact phone</Label><Input defaultValue={restaurant.phone} /></div>
+                <div className="space-y-1.5"><Label>Contact phone</Label><Input defaultValue={contactPhone} /></div>
               </div>
             </CardContent>
           </Card>
@@ -47,8 +61,8 @@ export default function RestaurantProfile() {
               <div className="divide-y divide-border rounded-md border border-border">
                 <div className="flex items-center justify-between p-3">
                   <div>
-                    <div className="text-sm font-medium">Olive & Ember · Valencia</div>
-                    <div className="text-xs text-muted-foreground">{restaurant.address}</div>
+                    <div className="text-sm font-medium">{locationLabel}</div>
+                    <div className="text-xs text-muted-foreground">{addressOrArea}</div>
                   </div>
                   <Badge variant="outline" className="border-success/30 bg-success/10 text-success">Active</Badge>
                 </div>

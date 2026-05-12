@@ -1,4 +1,4 @@
-import { sampleOnboardingDraft, type OnboardingDraft } from "@/domain/onboarding";
+import { createOnboardingDraftForBusiness, sampleOnboardingDraft, type OnboardingDraft } from "@/domain/onboarding";
 
 const storageKey = "signalhost:onboarding-draft";
 
@@ -9,7 +9,8 @@ export function loadOnboardingDraft(): OnboardingDraft {
   if (!rawDraft) return sampleOnboardingDraft;
 
   try {
-    return { ...sampleOnboardingDraft, ...(JSON.parse(rawDraft) as OnboardingDraft) };
+    const parsedDraft = JSON.parse(rawDraft) as OnboardingDraft;
+    return { ...createOnboardingDraftForBusiness(String(parsedDraft.businessType ?? "restaurant")), ...parsedDraft };
   } catch {
     return sampleOnboardingDraft;
   }

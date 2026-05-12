@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { restaurant } from "@/data/mock";
+import { getOnboardingBusinessTemplate } from "@/domain/onboarding";
+import { loadOnboardingDraft } from "@/lib/onboarding-draft";
 import {
   fetchPhoneNumbersFromSupabase,
   isSupabaseConfigured,
@@ -29,6 +31,16 @@ const samplePhoneNumbers: PhoneNumberRecord[] = [
 ];
 
 export default function PhoneHours() {
+  const draft = loadOnboardingDraft();
+  const template = getOnboardingBusinessTemplate(draft);
+  const mainPhone = String(draft.mainPhone || restaurant.phone);
+  const assignedSignalHostNumber = String(draft.assignedSignalHostNumber || restaurant.aiHostNumber);
+  const businessLineLabel = template.id === "restaurant" ? "Restaurant main line" : "Business main line";
+  const sampleNumbers = samplePhoneNumbers.map((record) => ({
+    ...record,
+    phoneNumber: assignedSignalHostNumber,
+    restaurantMainLine: mainPhone,
+  }));
   const [phoneNumbers, setPhoneNumbers] = useState<PhoneNumberRecord[]>(samplePhoneNumbers);
   const [dataMode, setDataMode] = useState<"sample" | "live">("sample");
 
@@ -48,7 +60,7 @@ export default function PhoneHours() {
     <>
       <PageHeader
         title="Phone & Hours"
-        description="Forwarding numbers and weekly schedule"
+        description={`Forwarding numbers and weekly schedule for this ${template.businessNoun}`}
         actions={<Button size="sm" onClick={() => toast.success("Saved")}>Save</Button>}
       />
       <PageBody>
@@ -62,13 +74,13 @@ export default function PhoneHours() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-1.5">
-                <Label>Restaurant main line</Label>
-                <Input defaultValue={restaurant.phone} />
+                <Label>{businessLineLabel}</Label>
+                <Input defaultValue={mainPhone} />
               </div>
               <div className="space-y-2">
                 <Label>AI host numbers</Label>
                 <div className="divide-y divide-border rounded-md border border-border">
-                  {phoneNumbers.map((record) => (
+                  {(dataMode === "live" ? phoneNumbers : sampleNumbers).map((record) => (
                     <div key={record.id} className="space-y-2 p-3">
                       <div className="flex items-center justify-between gap-3">
                         <div>
@@ -80,7 +92,7 @@ export default function PhoneHours() {
                         </Badge>
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        Main line {record.restaurantMainLine ?? restaurant.phone} forwards to SignalHost on overflow.
+                        Main line {record.restaurantMainLine ?? mainPhone} forwards to SignalHost on overflow.
                       </div>
                     </div>
                   ))}

@@ -35,6 +35,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   assignedDemoPhoneNumber,
   calculateOnboardingProgress,
+  createOnboardingDraftForBusiness,
   getBusinessOnboardingSections,
   getOnboardingBusinessTemplate,
   productionWorkstreams,
@@ -74,36 +75,11 @@ const sectionIcons: Record<OnboardingStepId, LucideIcon> = {
   voice: Bot,
 };
 
-const launchChecklist = [
-  "Call the assigned SignalHost number directly.",
-  "Ask hours, parking, menu, and allergy questions.",
-  "Place a pay-at-pickup order and confirm it appears in Orders.",
-  "Forward unanswered calls from the restaurant main line.",
-  "Call the restaurant main line from a mobile phone.",
-  "Review the call transcript, order, and staff alert behavior.",
-];
-
-const forwardingVerificationChecks: Array<{
+type ForwardingVerificationCheck = {
   description: string;
   key: keyof Pick<ForwardingVerification, "busyForwarding" | "directCall" | "noAnswerForwarding">;
   label: string;
-}> = [
-  {
-    description: "Call the assigned SignalHost number directly and confirm the AI answers.",
-    key: "directCall",
-    label: "Direct AI number",
-  },
-  {
-    description: "Let the restaurant main line ring unanswered and confirm the call reaches SignalHost.",
-    key: "noAnswerForwarding",
-    label: "No-answer forwarding",
-  },
-  {
-    description: "Keep the restaurant line busy, place a second call, and confirm it reaches SignalHost instead of busy/call-waiting/voicemail.",
-    key: "busyForwarding",
-    label: "Busy-line forwarding",
-  },
-];
+};
 
 export default function Onboarding() {
   const [activeSectionId, setActiveSectionId] = useState<OnboardingStepId>("basics");
@@ -130,8 +106,12 @@ export default function Onboarding() {
   const ActiveIcon = sectionIcons[activeSection.id];
   const assignedNumber = String(draft.assignedSignalHostNumber || draft.assignedHostLineNumber || assignedDemoPhoneNumber);
   const assignedNumberIsDemo = assignedNumber === assignedDemoPhoneNumber;
+  const launchChecklist = useMemo(() => buildLaunchChecklist(businessTemplate), [businessTemplate]);
+  const forwardingVerificationChecks = useMemo(() => buildForwardingVerificationChecks(businessTemplate), [businessTemplate]);
   const forwardingVerification = phoneNumberRecord?.forwardingVerification ?? localForwardingVerification;
   const forwardingVerificationStatus = buildVerificationStatus(forwardingVerification);
+  const selectedPlanName = String(draft.selectedPlanName ?? "Not selected");
+  const selectedPlanMonthly = String(draft.selectedPlanMonthly ?? "");
 
   useEffect(() => {
     if (!isOnboardingPersistenceConfigured()) return;
@@ -148,7 +128,13 @@ export default function Onboarding() {
           return;
         }
 
-        const mergedDraft = { ...loadOnboardingDraft(), ...remoteDraft };
+        const localDraft = loadOnboardingDraft();
+        const remoteBusinessType = String(remoteDraft.businessType ?? localDraft.businessType ?? "restaurant");
+        const mergedDraft = {
+          ...createOnboardingDraftForBusiness(remoteBusinessType),
+          ...(localDraft.businessType === remoteBusinessType ? localDraft : {}),
+          ...remoteDraft,
+        };
         setDraft(mergedDraft);
         saveOnboardingDraft(mergedDraft);
         setSyncState("live");
@@ -188,6 +174,11 @@ export default function Onboarding() {
   }, [assignedNumber]);
 
   const updateField = (fieldId: string, value: string | boolean) => {
+    if (fieldId === "businessType" && typeof value === "string") {
+      setDraft((current) => mergeDraftForBusinessTypeChange(current, value));
+      return;
+    }
+
     setDraft((current) => ({ ...current, [fieldId]: value }));
   };
 
@@ -340,9 +331,11 @@ export default function Onboarding() {
 
               <Card>
                 <CardContent className="p-4">
-                  <div className="text-xs font-medium text-muted-foreground">Production scope</div>
-                  <div className="mt-2 text-3xl font-semibold tabular-nums">{productionWorkstreams.length}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">remaining workstreams tracked</div>
+                  <div className="text-xs font-medium text-muted-foreground">Selected plan</div>
+                  <div className="mt-2 truncate text-2xl font-semibold">{selectedPlanName}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {selectedPlanMonthly ? `$${selectedPlanMonthly}/mo from signup` : "Choose pricing before launch"}
+                  </div>
                 </CardContent>
               </Card>
 
@@ -582,13 +575,17 @@ export default function Onboarding() {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <div className="text-sm font-medium">Forwarding instruction</div>
-                      <div className="mt-1 text-xs text-muted-foreground">{buildForwardingInstruction(String(draft.forwardingMode ?? ""), assignedNumber)}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {buildForwardingInstruction(String(draft.forwardingMode ?? ""), assignedNumber, businessTemplate.businessNoun)}
+                      </div>
                     </div>
                     <Button
                       size="icon"
                       variant="outline"
                       onClick={() => {
-                        void navigator.clipboard?.writeText(buildForwardingInstruction(String(draft.forwardingMode ?? ""), assignedNumber));
+                        void navigator.clipboard?.writeText(
+                          buildForwardingInstruction(String(draft.forwardingMode ?? ""), assignedNumber, businessTemplate.businessNoun),
+                        );
                         toast.success("Forwarding instruction copied");
                       }}
                     >
@@ -663,7 +660,7 @@ export default function Onboarding() {
                   {forwardingVerificationStatus !== "verified" && (
                     <div className="mt-3 rounded-md border border-warning/30 bg-warning/10 p-3 text-xs text-muted-foreground">
                       Until busy-line and no-answer forwarding both pass, position this setup as missed-call coverage,
-                      not guaranteed no-busy-signal coverage.
+                      not guaranteed no-busy-signal coverage for this {businessTemplate.businessNoun}.
                     </div>
                   )}
                 </div>
@@ -827,20 +824,104 @@ function mapForwardingMode(value: string) {
   return "forward_unanswered";
 }
 
-function buildForwardingInstruction(forwardingMode: string, assignedNumber: string) {
+function buildForwardingInstruction(forwardingMode: string, assignedNumber: string, businessNoun = "business") {
   if (forwardingMode === "Forward all calls") {
-    return `Forward all inbound calls from the restaurant main line to ${assignedNumber}.`;
+    return `Forward all inbound calls from the ${businessNoun} main line to ${assignedNumber}.`;
   }
 
   if (forwardingMode === "After-hours forwarding") {
-    return `Set after-hours call forwarding to ${assignedNumber} when the restaurant is closed.`;
+    return `Set after-hours call forwarding to ${assignedNumber} when the ${businessNoun} is closed.`;
   }
 
   if (forwardingMode === "Port number later") {
     return `Keep the current main line active for now. Use ${assignedNumber} for test calls before starting a port request.`;
   }
 
-  return `Forward unanswered calls to ${assignedNumber} after the restaurant line rings 3 to 4 times.`;
+  return `Forward unanswered calls to ${assignedNumber} after the ${businessNoun} line rings 3 to 4 times.`;
+}
+
+function buildLaunchChecklist(template: ReturnType<typeof getOnboardingBusinessTemplate>) {
+  const isRestaurant = template.id === "restaurant";
+
+  if (isRestaurant) {
+    return [
+      "Call the assigned SignalHost number directly.",
+      "Ask hours, parking, menu, and allergy questions.",
+      "Place a pay-at-pickup order and confirm it appears in Orders.",
+      "Forward unanswered calls from the restaurant main line.",
+      "Call the restaurant main line from a mobile phone.",
+      "Review the call transcript, order, and staff alert behavior.",
+    ];
+  }
+
+  return [
+    "Call the assigned SignalHost number directly.",
+    `Ask hours, service area, ${template.offeringNoun}, and safety or policy questions.`,
+    `Request ${withIndefiniteArticle(template.appointmentNoun)}, estimate, or staff callback and confirm it appears in Tasks.`,
+    `Forward unanswered calls from the ${template.businessNoun} main line.`,
+    `Call the ${template.businessNoun} main line from a mobile phone.`,
+    "Review the transcript, recording, captured request, and staff alert behavior.",
+  ];
+}
+
+function buildForwardingVerificationChecks(template: ReturnType<typeof getOnboardingBusinessTemplate>): ForwardingVerificationCheck[] {
+  return [
+    {
+      description: "Call the assigned SignalHost number directly and confirm the AI answers.",
+      key: "directCall",
+      label: "Direct AI number",
+    },
+    {
+      description: `Let the ${template.businessNoun} main line ring unanswered and confirm the call reaches SignalHost.`,
+      key: "noAnswerForwarding",
+      label: "No-answer forwarding",
+    },
+    {
+      description: `Keep the ${template.businessNoun} line busy, place a second call, and confirm it reaches SignalHost instead of busy/call-waiting/voicemail.`,
+      key: "busyForwarding",
+      label: "Busy-line forwarding",
+    },
+  ];
+}
+
+function withIndefiniteArticle(noun: string) {
+  return `${/^[aeiou]/i.test(noun) ? "an" : "a"} ${noun}`;
+}
+
+function mergeDraftForBusinessTypeChange(current: OnboardingDraft, nextBusinessType: string): OnboardingDraft {
+  const currentTemplate = getOnboardingBusinessTemplate(current);
+  const nextDefaults = createOnboardingDraftForBusiness(nextBusinessType);
+  const businessNameWasEdited =
+    typeof current.restaurantName === "string" &&
+    current.restaurantName.trim().length > 0 &&
+    current.restaurantName !== currentTemplate.defaultName;
+  const conceptWasEdited =
+    typeof current.concept === "string" &&
+    current.concept.trim().length > 0 &&
+    current.concept !== currentTemplate.defaultOffering;
+
+  return {
+    ...nextDefaults,
+    assignedSignalHostNumber: current.assignedSignalHostNumber || nextDefaults.assignedSignalHostNumber,
+    businessType: nextDefaults.businessType,
+    callHandling: current.callHandling || nextDefaults.callHandling,
+    concept: conceptWasEdited ? current.concept : nextDefaults.concept,
+    escalationPhone: current.escalationPhone || nextDefaults.escalationPhone,
+    forwardingMode: current.forwardingMode || nextDefaults.forwardingMode,
+    hostName: current.hostName || nextDefaults.hostName,
+    mainPhone: current.mainPhone || nextDefaults.mainPhone,
+    primaryLocation: businessNameWasEdited ? current.primaryLocation || nextDefaults.primaryLocation : nextDefaults.primaryLocation,
+    restaurantName: businessNameWasEdited ? current.restaurantName : nextDefaults.restaurantName,
+    selectedPlanId: current.selectedPlanId,
+    selectedPlanIncludedInteractions: current.selectedPlanIncludedInteractions,
+    selectedPlanMonthly: current.selectedPlanMonthly,
+    selectedPlanName: current.selectedPlanName,
+    selectedPlanOverage: current.selectedPlanOverage,
+    smsConfirmations: current.smsConfirmations ?? nextDefaults.smsConfirmations,
+    timezone: current.timezone || nextDefaults.timezone,
+    tone: current.tone || nextDefaults.tone,
+    voiceGender: current.voiceGender || nextDefaults.voiceGender,
+  };
 }
 
 function buildVerificationStatus(verification: ForwardingVerification) {

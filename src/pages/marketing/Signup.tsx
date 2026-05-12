@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { signUp } from "@/lib/auth";
 import { saveOnboardingDraft } from "@/lib/onboarding-draft";
-import { sampleOnboardingDraft } from "@/domain/onboarding";
+import { createOnboardingDraftForBusiness } from "@/domain/onboarding";
 import { industrySolutions } from "@/data/industry-solutions";
 import { getBusinessTemplate, type BusinessType } from "@/domain/business-templates";
 import { toast } from "sonner";
@@ -41,10 +41,14 @@ export default function Signup() {
     setIsSubmitting(true);
     try {
       saveOnboardingDraft({
-        ...sampleOnboardingDraft,
-        businessType,
-        concept: template.defaultOffering,
-        restaurantName: businessName || template.defaultName,
+        ...createOnboardingDraftForBusiness(businessType, {
+          restaurantName: businessName || template.defaultName,
+          selectedPlanId: selectedTier.id,
+          selectedPlanName: selectedTier.name,
+          selectedPlanMonthly: String(selectedTier.monthly),
+          selectedPlanIncludedInteractions: String(selectedTier.includedInteractions),
+          selectedPlanOverage: selectedTier.overage,
+        }),
       });
       await signUp({ email, name, password, restaurant: businessName });
       toast.success("Account created - let's get you set up");

@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useState } from "react";
+import { getOnboardingBusinessTemplate } from "@/domain/onboarding";
+import { loadOnboardingDraft } from "@/lib/onboarding-draft";
 
 const operations = [
   { title: "Dashboard", url: "/app", icon: LayoutDashboard, end: true },
@@ -34,7 +36,7 @@ const settings = [
   { title: "Phone & Hours", url: "/app/settings", icon: Phone },
   { title: "Alerts & Routing", url: "/app/settings/alerts", icon: BellRing },
   { title: "Team", url: "/app/team", icon: Users },
-  { title: "Restaurant Profile", url: "/app/profile", icon: Building2 },
+  { title: "Business Profile", url: "/app/profile", icon: Building2 },
   { title: "Billing", url: "/app/billing", icon: CreditCard },
 ];
 
@@ -45,6 +47,21 @@ export function AppSidebar() {
   const isActive = (url: string, end?: boolean) => end ? pathname === url : pathname === url || pathname.startsWith(url + "/");
   const settingsActive = settings.some((s) => isActive(s.url));
   const [settingsOpen, setSettingsOpen] = useState(settingsActive);
+  const draft = loadOnboardingDraft();
+  const businessTemplate = getOnboardingBusinessTemplate(draft);
+  const businessName = String(draft.restaurantName || businessTemplate.defaultName);
+  const operationsNav = operations.map((item) => {
+    if (businessTemplate.id === "restaurant") return item;
+    if (item.title === "Orders") return { ...item, title: businessTemplate.id === "salon_barber" ? "Client Requests" : "Requests" };
+    if (item.title === "Kitchen") return { ...item, title: businessTemplate.id === "salon_barber" ? "Front Desk" : "Dispatch" };
+    if (item.title === "Reservations") return { ...item, title: businessTemplate.appointmentNoun === "inspection" ? "Inspections" : "Appointments" };
+    return item;
+  });
+  const contentNav = content.map((item) => {
+    if (businessTemplate.id === "restaurant") return item;
+    if (item.title === "Menu") return { ...item, title: businessTemplate.id === "salon_barber" ? "Services" : "Service Catalog" };
+    return item;
+  });
 
   const renderItem = (item: { title: string; url: string; icon: typeof Phone; end?: boolean }) => (
     <SidebarMenuItem key={item.title}>
@@ -67,7 +84,7 @@ export function AppSidebar() {
           {!collapsed && (
             <div className="min-w-0 leading-tight">
               <div className="truncate text-sm font-semibold text-sidebar-foreground">SignalHost</div>
-              <div className="truncate text-[11px] text-sidebar-foreground/60">Olive & Ember</div>
+              <div className="truncate text-[11px] text-sidebar-foreground/60">{businessName}</div>
             </div>
           )}
         </div>
@@ -77,14 +94,14 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupLabel>Operations</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>{operations.map(renderItem)}</SidebarMenu>
+            <SidebarMenu>{operationsNav.map(renderItem)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
         <SidebarGroup>
           <SidebarGroupLabel>Content</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>{content.map(renderItem)}</SidebarMenu>
+            <SidebarMenu>{contentNav.map(renderItem)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
@@ -117,7 +134,7 @@ export function AppSidebar() {
       <SidebarFooter className="border-t border-sidebar-border">
         {!collapsed && (
           <div className="px-2 py-2 text-[11px] text-sidebar-foreground/60">
-            v1.0 · <span className="text-sidebar-foreground/80">Live</span>
+            v1.0 - <span className="text-sidebar-foreground/80">Live</span>
           </div>
         )}
       </SidebarFooter>

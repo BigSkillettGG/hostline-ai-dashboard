@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateOnboardingProgress,
+  createOnboardingDraftForBusiness,
   getBusinessOnboardingSections,
   getOnboardingBusinessTemplate,
   onboardingSections,
@@ -57,6 +58,22 @@ describe("restaurant onboarding scope", () => {
     expect(fieldIds).toContain("businessType");
     expect(fieldIds).not.toContain("quoteRequestUrl");
     expect(fieldIds).not.toContain("appointmentBookingUrl");
+  });
+
+  it("creates vertical-specific sample drafts instead of restaurant defaults", () => {
+    const hvacDraft = createOnboardingDraftForBusiness("hvac");
+    const salonDraft = createOnboardingDraftForBusiness("salon_barber");
+
+    expect(hvacDraft.businessType).toBe("hvac");
+    expect(hvacDraft.restaurantName).toBe("Summit Air");
+    expect(hvacDraft.menuCategories).toContain("No heat");
+    expect(hvacDraft.menuCategories).not.toContain("wood-fired pizza");
+    expect(hvacDraft.reservationProvider).toBe("ServiceTitan");
+
+    expect(salonDraft.businessType).toBe("salon_barber");
+    expect(salonDraft.restaurantName).toBe("Luna Studio");
+    expect(salonDraft.menuCategories).toContain("Haircuts");
+    expect(salonDraft.reservationProvider).toBe("Vagaro");
   });
 
   it("keeps the remaining production build visible", () => {

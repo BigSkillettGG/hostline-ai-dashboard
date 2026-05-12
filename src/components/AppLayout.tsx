@@ -21,6 +21,8 @@ import {
   signOut,
   setRole,
 } from "@/lib/auth";
+import { getOnboardingBusinessTemplate } from "@/domain/onboarding";
+import { loadOnboardingDraft } from "@/lib/onboarding-draft";
 
 export default function AppLayout() {
   const [agentLive, setAgentLive] = useState(true);
@@ -30,6 +32,10 @@ export default function AppLayout() {
   const authReadiness = getAuthReadiness();
   const demoAuth = isDemoAuthMode();
   const restaurantRole = getRestaurantRoleLabel(user?.restaurantMembershipRole);
+  const draft = loadOnboardingDraft();
+  const businessTemplate = getOnboardingBusinessTemplate(draft);
+  const businessName = String(draft.restaurantName || businessTemplate.defaultName);
+  const locationLabel = businessTemplate.id === "restaurant" ? `${businessName} - Valencia` : businessName;
 
   return (
     <SidebarProvider>
@@ -44,15 +50,15 @@ export default function AppLayout() {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="sm" className="gap-1.5 px-2 text-sm font-medium">
                   <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="hidden sm:inline">Olive & Ember · Valencia</span>
-                  <span className="sm:hidden">Valencia</span>
+                  <span className="hidden sm:inline">{locationLabel}</span>
+                  <span className="sm:hidden">{businessTemplate.workspaceLabel}</span>
                   <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-56">
                 <DropdownMenuLabel>Locations</DropdownMenuLabel>
-                <DropdownMenuItem>Olive & Ember · Valencia</DropdownMenuItem>
-                <DropdownMenuItem disabled>Olive & Ember · Hayes (soon)</DropdownMenuItem>
+                <DropdownMenuItem>{locationLabel}</DropdownMenuItem>
+                <DropdownMenuItem disabled>{businessTemplate.workspaceLabel} second location (soon)</DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem>Add location</DropdownMenuItem>
               </DropdownMenuContent>
@@ -60,7 +66,7 @@ export default function AppLayout() {
 
             <div className="relative ml-auto hidden md:block w-72">
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input placeholder="Search calls, orders, guests…" className="h-9 pl-8 text-sm" />
+              <Input placeholder={`Search calls, requests, ${businessTemplate.customerNoun}s...`} className="h-9 pl-8 text-sm" />
             </div>
 
             <div className="ml-auto md:ml-0 flex items-center gap-2">
