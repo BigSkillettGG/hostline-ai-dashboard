@@ -613,10 +613,18 @@ describe("OpenAI Realtime SIP", () => {
 
   it("persists confirmed OpenTable reservations from realtime tool calls", async () => {
     const savedReservations: unknown[] = [];
+    const context: RestaurantVoiceContext = {
+      ...demoRestaurantContext,
+      reservationSettings: {
+        ...demoRestaurantContext.reservationSettings,
+        handlingMode: "integration",
+        provider: "opentable",
+      },
+    };
     const result = await createOpenAIRealtimeReservationRequest({
       callRecordId: "call_uuid",
       callerPhone: "+14155550123",
-      context: demoRestaurantContext,
+      context,
       locationId: "location_uuid",
       rawArguments: {
         guest_name: "Tim Schneider",
@@ -673,6 +681,93 @@ describe("OpenAI Realtime SIP", () => {
       manualRequest: false,
       provider: "opentable",
       providerReservationId: "ot_res_123",
+      status: "confirmed",
+    });
+  });
+
+  it("returns a booking-link response when reservations are link-only", async () => {
+    const context: RestaurantVoiceContext = {
+      ...demoRestaurantContext,
+      reservationSettings: {
+        ...demoRestaurantContext.reservationSettings,
+        bookingUrl: "https://www.opentable.com/r/olive-and-ember",
+        handlingMode: "booking_link",
+      },
+    };
+
+    const result = await createOpenAIRealtimeReservationRequest({
+      context,
+      rawArguments: {
+        guest_name: "Avery Chen",
+        party_size: 2,
+        reservation_date: "2026-05-12",
+        reservation_time: "7 PM",
+      },
+    });
+
+    expect(result).toMatchObject({
+      bookingUrl: "https://www.opentable.com/r/olive-and-ember",
+      confirmationMode: "booking_link",
+      ok: true,
+      status: "booking_link_required",
+    });
+  });
+
+  it("can auto-confirm HostLine Lite reservations within configured rules", async () => {
+    const savedReservations: unknown[] = [];
+    const context: RestaurantVoiceContext = {
+      ...demoRestaurantContext,
+      reservationSettings: {
+        ...demoRestaurantContext.reservationSettings,
+        autoConfirmPartyLimit: 4,
+        handlingMode: "hostline_lite_confirm",
+        provider: "none",
+      },
+    };
+
+    const result = await createOpenAIRealtimeReservationRequest({
+      callRecordId: "call_uuid",
+      callerPhone: "+14155550123",
+      context,
+      locationId: "location_uuid",
+      rawArguments: {
+        guest_name: "Avery Chen",
+        party_size: 4,
+        reservation_date: "2026-05-12",
+        reservation_time: "7 PM",
+      },
+      callStore: {
+        async addTranscriptTurn() {},
+        async attachCallRecording() {},
+        async completeCall() {},
+        async createStaffReviewOrder() {
+          return {};
+        },
+        async createStaffReviewReservation(input) {
+          savedReservations.push(input);
+          return { reservationId: "res_uuid" };
+        },
+        async createStaffTask() {
+          return {};
+        },
+        async startCall() {
+          return {};
+        },
+        async startRealtimeCall() {
+          return {};
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      confirmationMode: "hostline_lite_confirmed",
+      ok: true,
+      provider: "hostline_lite",
+      status: "confirmed",
+    });
+    expect(savedReservations[0]).toMatchObject({
+      manualRequest: false,
+      provider: "hostline_lite",
       status: "confirmed",
     });
   });

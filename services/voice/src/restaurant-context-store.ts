@@ -6,6 +6,8 @@ import {
   type RestaurantFaq,
   type RestaurantKnowledgeSection,
   type RestaurantMenuItem,
+  type RestaurantReservationMode,
+  type RestaurantReservationSettings,
   type RestaurantVoiceContext,
 } from "./restaurant-context";
 import { buildSupabaseServiceHeaders } from "./supabase-headers";
@@ -32,6 +34,7 @@ export interface SupabaseAgentConfigRow {
   host_name: string | null;
   greeting_template: string | null;
   escalation_phone_number: string | null;
+  reservation_mode: string | null;
   reservation_provider: string | null;
   sms_confirmations_enabled: boolean | null;
 }
@@ -125,6 +128,7 @@ export function buildRestaurantContext({
   const locationPolicy =
     location?.address?.trim() ?? stringValue(draft.primaryLocation) ?? "The restaurant address has not been configured yet.";
   const parkingPolicy = stringValue(draft.parking) ?? demoRestaurantContext.policies.parking;
+  const reservationSettings = buildReservationSettings(draft, agentConfig);
 
   return {
     defaultPickupEtaMinutes: parseMinutes(stringValue(draft.defaultPickupEta)) ?? demoRestaurantContext.defaultPickupEtaMinutes,
@@ -167,7 +171,7 @@ export function buildRestaurantContext({
       reservation_changes:
         stringValue(draft.reservationChangePolicy) ??
         "Reservation changes and cancellations need staff confirmation before they are promised.",
-      reservations: buildReservationPolicy(draft, agentConfig),
+      reservations: buildReservationPolicy(draft, agentConfig, reservationSettings),
       sales: buildVendorPolicy(draft),
       specials: buildSpecialsPolicy(draft),
       waitlist:
@@ -175,6 +179,7 @@ export function buildRestaurantContext({
         "Live wait times can change quickly, so staff should confirm the wait when the guest arrives.",
     },
     restaurantName,
+    reservationSettings,
     smsConfirmationsEnabled: agentConfig?.sms_confirmations_enabled ?? true,
     timezone,
     voiceGender: normalizeHostlineVoiceGender(draft.voiceGender),
@@ -254,7 +259,7 @@ class SupabaseRestaurantContextStore implements RestaurantContextStore {
         ),
         this.request<SupabaseAgentConfigRow[]>(
           "agent_configs",
-          `location_id=eq.${encodeURIComponent(resolvedLocationId)}&limit=1&select=host_name,greeting_template,escalation_phone_number,reservation_provider,sms_confirmations_enabled`,
+          `location_id=eq.${encodeURIComponent(resolvedLocationId)}&limit=1&select=host_name,greeting_template,escalation_phone_number,reservation_mode,reservation_provider,sms_confirmations_enabled`,
         ),
         this.request<SupabaseOnboardingProfileRow[]>(
           "onboarding_profiles",
@@ -354,13 +359,125 @@ function buildDeliveryIssuePolicy(draft: OnboardingDraft) {
     .join(" ");
 }
 
-function buildReservationPolicy(draft: OnboardingDraft, agentConfig?: SupabaseAgentConfigRow | null) {
-  const provider = stringValue(draft.reservationProvider) ?? agentConfig?.reservation_provider ?? "manual requests";
+function buildReservationPolicy(
+  draft: OnboardingDraft,
+  agentConfig: SupabaseAgentConfigRow | null | undefined,
+  settings = buildReservationSettings(draft, agentConfig),
+) {
+  if (!settings.enabled || settings.handlingMode === "disabled") {
+    return "Reservations are disabled. Do not collect reservation requests unless staff configures reservations.";
+  }
+
+  const provider = labelProvider(settings.provider);
   const partyRules = stringValue(draft.partyRules) ?? demoRestaurantContext.policies.reservations;
   const specialReservationDays = stringValue(draft.specialReservationDays);
-  return [`Provider or mode: ${provider}.`, partyRules, specialReservationDays && `Special reservation days: ${specialReservationDays}`]
+  const bookingUrl = settings.bookingUrl;
+  const seatingAreas = stringValue(draft.seatingAreas);
+  const privateRoomPolicy = stringValue(draft.privateRoomPolicy);
+  const depositPolicy = stringValue(draft.depositPolicy);
+  const lateArrivalPolicy = stringValue(draft.lateArrivalPolicy);
+  const noShowPolicy = stringValue(draft.noShowPolicy);
+  const cutoffRules = settings.cutoffRules;
+  const largePartyThreshold = settings.largePartyThreshold;
+  const autoConfirmPartyLimit = settings.autoConfirmPartyLimit;
+  return [
+    `Handling mode: ${reservationModeInstruction(settings.handlingMode)}.`,
+    `Current workflow: ${settings.sourceToday ?? provider}.`,
+    `Provider or system: ${provider}.`,
+    bookingUrl && `Booking link: ${bookingUrl}.`,
+    autoConfirmPartyLimit && `Auto-confirm limit: parties up to ${autoConfirmPartyLimit}.`,
+    largePartyThreshold && `Large-party threshold: ${largePartyThreshold} or more guests.`,
+    settings.minNotice && `Minimum notice: ${settings.minNotice}.`,
+    settings.maxAdvance && `Advance booking window: ${settings.maxAdvance}.`,
+    cutoffRules && `Cutoff rules: ${cutoffRules}.`,
+    partyRules,
+    seatingAreas && `Seating areas: ${seatingAreas}.`,
+    privateRoomPolicy && `Private room policy: ${privateRoomPolicy}.`,
+    depositPolicy && `Deposit and card policy: ${depositPolicy}.`,
+    lateArrivalPolicy && `Late-arrival policy: ${lateArrivalPolicy}.`,
+    noShowPolicy && `No-show and cancellation policy: ${noShowPolicy}.`,
+    specialReservationDays && `Special reservation days: ${specialReservationDays}`,
+  ]
     .filter(Boolean)
     .join(" ");
+}
+
+function buildReservationSettings(
+  draft: OnboardingDraft,
+  agentConfig?: SupabaseAgentConfigRow | null,
+): RestaurantReservationSettings {
+  const provider = normalizeReservationProvider(
+    stringValue(draft.reservationProvider) ?? agentConfig?.reservation_provider ?? "manual_request",
+  );
+  const handlingMode = normalizeReservationMode(
+    stringValue(draft.reservationHandlingMode) ?? agentConfig?.reservation_mode ?? undefined,
+    provider,
+    draft.takeReservations,
+  );
+
+  return {
+    autoConfirmPartyLimit: parsePositiveInteger(stringValue(draft.autoConfirmPartyLimit)) ?? parsePositiveInteger(stringValue(draft.partyRules)),
+    bookingUrl: stringValue(draft.reservationBookingUrl),
+    cutoffRules: stringValue(draft.reservationCutoffRules),
+    enabled: draft.takeReservations !== false && handlingMode !== "disabled",
+    handlingMode,
+    largePartyThreshold: parsePositiveInteger(stringValue(draft.largePartyThreshold)),
+    maxAdvance: stringValue(draft.reservationAdvanceWindow),
+    minNotice: stringValue(draft.reservationMinNotice),
+    provider,
+    sourceToday: stringValue(draft.reservationSourceToday),
+  };
+}
+
+function normalizeReservationMode(
+  value: string | undefined,
+  provider: string,
+  takeReservations: OnboardingDraftValue,
+): RestaurantReservationMode {
+  if (takeReservations === false) return "disabled";
+  const normalized = (value ?? "").toLowerCase();
+  if (normalized === "integration" || normalized.includes("connected reservation system")) {
+    return provider === "none" ? "manual_request" : "integration";
+  }
+  if (normalized === "booking_link" || normalized.includes("booking link") || normalized.includes("send caller")) return "booking_link";
+  if (normalized === "hostline_lite_request" || normalized.includes("pending request in hostline")) return "hostline_lite_request";
+  if (normalized === "hostline_lite_confirm" || normalized.includes("confirm in hostline")) return "hostline_lite_confirm";
+  if (normalized === "disabled" || normalized.includes("do not") || normalized.includes("no reservations")) return "disabled";
+  return "manual_request";
+}
+
+function normalizeReservationProvider(value: string) {
+  const normalized = value.toLowerCase();
+  if (normalized.includes("open")) return "opentable";
+  if (normalized.includes("yelp")) return "yelp_guest_manager";
+  if (normalized.includes("seven")) return "sevenrooms";
+  if (normalized.includes("resy")) return "resy";
+  if (normalized.includes("tock")) return "tock";
+  if (normalized.includes("google") || normalized.includes("booking link") || normalized.includes("manual") || normalized.includes("none") || normalized.includes("no reservations")) {
+    return "none";
+  }
+  return normalized.trim() || "none";
+}
+
+function reservationModeInstruction(mode: RestaurantReservationMode) {
+  if (mode === "integration") return "try the connected reservation provider first, and fall back to staff confirmation if not confirmed";
+  if (mode === "booking_link") return "offer to send the caller the booking link instead of promising a table";
+  if (mode === "hostline_lite_request") return "save a pending HostLine reservation request for staff review";
+  if (mode === "hostline_lite_confirm") return "confirm in HostLine only when configured rules allow it; otherwise use staff confirmation";
+  if (mode === "disabled") return "do not take reservations";
+  return "create a request for staff confirmation";
+}
+
+function labelProvider(provider: string) {
+  const labels: Record<string, string> = {
+    none: "No connected provider",
+    opentable: "OpenTable",
+    resy: "Resy",
+    sevenrooms: "SevenRooms",
+    tock: "Tock",
+    yelp_guest_manager: "Yelp Guest Manager",
+  };
+  return labels[provider] ?? provider;
 }
 
 function buildComplaintPolicy(draft: OnboardingDraft) {
@@ -491,7 +608,10 @@ function buildDraftKnowledgeSections(draft: OnboardingDraft): RestaurantKnowledg
   addDraftSection(sections, "Private events and catering", stringValue(draft.privateEvents));
   addDraftSection(sections, "Menu substitutions and off-menu requests", stringValue(draft.substitutionPolicy));
   addDraftSection(sections, "Order changes and cancellations", stringValue(draft.orderChangePolicy));
+  addDraftSection(sections, "Reservation operating model", buildReservationPolicy(draft, undefined));
   addDraftSection(sections, "Reservation changes and cancellations", stringValue(draft.reservationChangePolicy));
+  addDraftSection(sections, "Reservation seating and rooms", [stringValue(draft.seatingAreas), stringValue(draft.privateRoomPolicy)].filter(Boolean).join(" "));
+  addDraftSection(sections, "Reservation deposits and timing", [stringValue(draft.depositPolicy), stringValue(draft.lateArrivalPolicy), stringValue(draft.noShowPolicy)].filter(Boolean).join(" "));
   addDraftSection(sections, "Waitlist and walk-ins", stringValue(draft.waitlistPolicy));
   addDraftSection(sections, "Delivery drivers", stringValue(draft.deliveryDriverPolicy));
   addDraftSection(sections, "Delivery and third-party apps", stringValue(draft.deliveryPolicy));
@@ -528,6 +648,13 @@ function parseMinutes(value?: string) {
   if (!value) return undefined;
   const minutes = Number.parseInt(value, 10);
   return Number.isFinite(minutes) && minutes > 0 ? minutes : undefined;
+}
+
+function parsePositiveInteger(value?: string) {
+  if (!value) return undefined;
+  const match = value.match(/\d+/);
+  const parsed = match?.[0] ? Number.parseInt(match[0], 10) : undefined;
+  return parsed && Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
 function renderTemplate(template: string, values: { hostName: string; restaurantName: string }) {

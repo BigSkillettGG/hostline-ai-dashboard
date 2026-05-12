@@ -490,6 +490,7 @@ export function buildOpenAIRealtimeInstructions(
     ? `Caller phone number from SIP caller ID: ${callContext.callerPhone}. If the caller asks for a text or agrees to a confirmation, you may text this number. If offering a text, say the last four digits, not the full number.`
     : "Caller phone number is not available from SIP caller ID. Ask for the best mobile number before offering to text confirmations.";
   const openingGreeting = buildShortOpeningGreeting(context);
+  const reservationModeContext = buildRealtimeReservationModeInstruction(context);
 
   return [
     buildRestaurantInstructions(context),
@@ -524,6 +525,7 @@ export function buildOpenAIRealtimeInstructions(
     "When a caller needs staff, use request_staff_callback, then say you are sending the message to staff and someone will call them back shortly.",
     "If you do not know an answer after checking context, do not guess. Offer a staff callback and collect the missing name, callback number, and question.",
     "For severe allergies, never guarantee safety. Use request_staff_callback and say staff needs to confirm because cross-contact is possible.",
+    reservationModeContext,
     "For reservation requests, acknowledge any date, time, or party size already spoken, then ask only for missing details.",
     "When reservation date, time, party size, and guest name are known, use create_reservation_request to save the request. If the tool says provider_confirmed, tell the caller the reservation is confirmed. If the tool says staff confirmation is needed, tell the caller it is requested and staff will confirm.",
     "For pickup orders, collect items, quantities, name, and callback number. Payment is pay at pickup unless a POS integration says otherwise.",
@@ -533,6 +535,27 @@ export function buildOpenAIRealtimeInstructions(
     "If the send_guest_confirmation tool succeeds, tell the caller the text is sent. Do not mention backend setup, SMS providers, or placeholder mode.",
     "Close naturally only after the caller is done. Use finish_call, say a short goodbye, and do not ask another question after goodbye.",
   ].join("\n");
+}
+
+function buildRealtimeReservationModeInstruction(context: RestaurantVoiceContext) {
+  const settings = context.reservationSettings;
+  const base = `Reservation operating mode: ${settings.handlingMode}; provider: ${settings.provider}; current workflow: ${settings.sourceToday ?? "not specified"}.`;
+  if (!settings.enabled || settings.handlingMode === "disabled") {
+    return `${base} Do not book or request reservations unless staff configuration changes; explain the restaurant is not taking reservations through this line.`;
+  }
+  if (settings.handlingMode === "booking_link") {
+    return `${base} Offer to text the booking link${settings.bookingUrl ? ` (${settings.bookingUrl})` : ""}; do not collect full reservation details unless the caller wants staff follow-up.`;
+  }
+  if (settings.handlingMode === "integration") {
+    return `${base} Try the connected provider through create_reservation_request; only call it after date, time, party size, and guest name are known.`;
+  }
+  if (settings.handlingMode === "hostline_lite_confirm") {
+    return `${base} HostLine may confirm only within configured rules${settings.autoConfirmPartyLimit ? `, including parties up to ${settings.autoConfirmPartyLimit}` : ""}; otherwise the request needs staff confirmation.`;
+  }
+  if (settings.handlingMode === "hostline_lite_request") {
+    return `${base} Save a pending HostLine reservation request and tell the caller staff will confirm shortly.`;
+  }
+  return `${base} Create a staff-confirmed reservation request; never guarantee the table until staff confirms.`;
 }
 
 export function extractOpenAIRealtimeCallId(event: OpenAIRealtimeIncomingEvent) {
@@ -1388,18 +1411,77 @@ export async function createOpenAIRealtimeReservationRequest({
     };
   }
 
+  const reservationSettings = context.reservationSettings;
+  if (!reservationSettings.enabled || reservationSettings.handlingMode === "disabled") {
+    return {
+      ok: false,
+      error: "reservations_disabled",
+      message:
+        "Tell the caller the restaurant is not taking reservations through this line. Offer to answer other questions or take a staff callback message if needed.",
+      status: "disabled",
+    };
+  }
+
+  if (reservationSettings.handlingMode === "booking_link" && reservationSettings.bookingUrl) {
+    return {
+      ok: true,
+      bookingUrl: reservationSettings.bookingUrl,
+      confirmationMode: "booking_link",
+      message:
+        "Offer to text the booking link to the caller. Do not say the reservation is confirmed because the guest still needs to book through the link.",
+      provider: reservationSettings.provider,
+      restaurantName: context.restaurantName,
+      status: "booking_link_required",
+    };
+  }
+
   try {
-    const platformResult = await reservationPlatformService?.createReservation({
-      callId: callRecordId,
-      callerPhone: callbackPhone,
-      context,
-      date,
-      guestName,
-      locationId,
-      notes: stringValue(rawArguments.notes),
-      partySize,
-      time,
-    });
+    if (
+      reservationSettings.handlingMode === "hostline_lite_confirm" &&
+      reservationSettings.autoConfirmPartyLimit &&
+      partySize <= reservationSettings.autoConfirmPartyLimit
+    ) {
+      const result = await callStore?.createStaffReviewReservation({
+        callId: callRecordId,
+        callerPhone: callbackPhone,
+        confidence: 90,
+        date,
+        guestName,
+        locationId,
+        manualRequest: false,
+        notes: stringValue(rawArguments.notes),
+        partySize,
+        provider: "hostline_lite",
+        status: "confirmed",
+        time,
+      });
+
+      return {
+        ok: true,
+        confirmationMode: "hostline_lite_confirmed",
+        message:
+          "Reservation confirmed in HostLine. Tell the caller it is confirmed and offer to text the confirmation.",
+        provider: "hostline_lite",
+        reservationId: result?.reservationId,
+        restaurantName: context.restaurantName,
+        status: "confirmed",
+      };
+    }
+
+    const shouldTryProvider = reservationSettings.handlingMode === "integration";
+    const platformResult = shouldTryProvider
+      ? await reservationPlatformService?.createReservation({
+          callId: callRecordId,
+          callerPhone: callbackPhone,
+          context,
+          date,
+          guestName,
+          locationId,
+          notes: stringValue(rawArguments.notes),
+          partySize,
+          time,
+        })
+      : undefined;
     if (platformResult?.ok && platformResult.provider === "opentable" && platformResult.status === "confirmed") {
       const result = await callStore?.createStaffReviewReservation({
         callId: callRecordId,
@@ -1431,6 +1513,7 @@ export async function createOpenAIRealtimeReservationRequest({
       };
     }
 
+    const fallbackProvider = fallbackReservationProvider(reservationSettings.handlingMode, platformResult?.provider);
     const result = await callStore?.createStaffReviewReservation({
       callId: callRecordId,
       callerPhone: callbackPhone,
@@ -1438,23 +1521,24 @@ export async function createOpenAIRealtimeReservationRequest({
       date,
       guestName,
       locationId,
+      manualRequest: true,
       notes: buildReservationFallbackNotes({
         notes: stringValue(rawArguments.notes),
         platformResult,
       }),
       partySize,
-      provider: platformResult?.provider === "opentable" ? "opentable" : "manual_request",
+      provider: fallbackProvider,
       time,
     });
 
     return {
       ok: true,
-      confirmationMode: "staff_confirmed",
+      confirmationMode: reservationSettings.handlingMode === "hostline_lite_request" ? "hostline_lite_pending" : "staff_confirmed",
       message:
         platformResult?.status === "unavailable"
           ? "Requested time was unavailable in OpenTable. Tell the caller staff will review and confirm options shortly; do not guarantee the table."
           : "Reservation request saved. Tell the caller staff will confirm it shortly; do not guarantee the table until staff confirms.",
-      provider: platformResult?.provider ?? "manual_request",
+      provider: fallbackProvider,
       reservationId: result?.reservationId,
       restaurantName: context.restaurantName,
       status: "pending_staff_confirmation",
@@ -1466,6 +1550,12 @@ export async function createOpenAIRealtimeReservationRequest({
       message: error instanceof Error ? error.message : "Reservation request failed.",
     };
   }
+}
+
+function fallbackReservationProvider(mode: string, platformProvider?: string) {
+  if (platformProvider === "opentable") return "opentable";
+  if (mode === "hostline_lite_request" || mode === "hostline_lite_confirm") return "hostline_lite";
+  return "manual_request";
 }
 
 function buildReservationFallbackNotes({

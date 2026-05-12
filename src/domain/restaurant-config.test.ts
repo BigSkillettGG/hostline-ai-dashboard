@@ -16,6 +16,7 @@ describe("restaurant agent configuration", () => {
   it("keeps setup labels available for each core configuration group", () => {
     expect(callHandlingLabels.answer_after_rings).toBe("Answer after X rings");
     expect(orderDestinationLabels.kitchen_tablet).toBe("Kitchen tablet");
+    expect(reservationModeLabels.booking_link).toBe("Send booking link");
     expect(reservationModeLabels.manual_request).toBe("Create manual requests");
   });
 

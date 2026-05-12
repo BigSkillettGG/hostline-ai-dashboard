@@ -757,6 +757,7 @@ function createConfigFromOnboardingDraft(): RestaurantAgentConfig {
   const takeOrders = draft.takeOrders !== false;
   const takeReservations = draft.takeReservations !== false;
   const provider = mapReservationProvider(String(draft.reservationProvider ?? ""));
+  const reservationMode = takeReservations ? mapReservationMode(String(draft.reservationHandlingMode ?? ""), provider) : "disabled";
 
   return {
     ...defaultRestaurantAgentConfig,
@@ -772,7 +773,11 @@ function createConfigFromOnboardingDraft(): RestaurantAgentConfig {
     },
     reservations: {
       ...defaultRestaurantAgentConfig.reservations,
-      mode: takeReservations ? defaultRestaurantAgentConfig.reservations.mode : "disabled",
+      maxPartySizeWithoutConfirmation: parsePositiveInteger(
+        String(draft.autoConfirmPartyLimit ?? ""),
+        defaultRestaurantAgentConfig.reservations.maxPartySizeWithoutConfirmation,
+      ),
+      mode: reservationMode,
       provider,
     },
     tone: mapVoiceTone(String(draft.tone ?? "")),
@@ -791,13 +796,26 @@ function mapCallHandlingMode(value: string): CallHandlingMode {
   return "answer_after_rings";
 }
 
+function mapReservationMode(
+  value: string,
+  provider: RestaurantAgentConfig["reservations"]["provider"],
+): ReservationMode {
+  const normalized = value.toLowerCase();
+  if (normalized.includes("do not") || normalized.includes("no reservations")) return "disabled";
+  if (normalized.includes("booking link") || normalized.includes("send caller")) return "booking_link";
+  if (normalized.includes("pending request in hostline")) return "hostline_lite_request";
+  if (normalized.includes("confirm in hostline")) return "hostline_lite_confirm";
+  if (normalized.includes("connected reservation system")) return provider === "none" ? "manual_request" : "integration";
+  return "manual_request";
+}
+
 function mapReservationProvider(value: string): RestaurantAgentConfig["reservations"]["provider"] {
   const normalized = value.toLowerCase();
   if (normalized.includes("yelp")) return "yelp_guest_manager";
   if (normalized.includes("sevenrooms")) return "sevenrooms";
   if (normalized.includes("resy")) return "resy";
   if (normalized.includes("tock")) return "tock";
-  if (normalized.includes("manual") || normalized.includes("no reservations")) return "none";
+  if (normalized.includes("manual") || normalized.includes("google") || normalized.includes("booking link") || normalized.includes("no reservations")) return "none";
   return "opentable";
 }
 
@@ -809,8 +827,12 @@ function mapVoiceTone(value: string): RestaurantAgentConfig["tone"] {
 }
 
 function parsePickupEta(value: string) {
+  return parsePositiveInteger(value, defaultRestaurantAgentConfig.orders.defaultPickupEtaMinutes);
+}
+
+function parsePositiveInteger(value: string, fallback: number) {
   const minutes = Number.parseInt(value, 10);
-  return Number.isFinite(minutes) && minutes > 0 ? minutes : defaultRestaurantAgentConfig.orders.defaultPickupEtaMinutes;
+  return Number.isFinite(minutes) && minutes > 0 ? minutes : fallback;
 }
 
 const voiceGenderOptions: Array<{ label: string; value: HostlineVoiceGender }> = [

@@ -13,6 +13,7 @@ export interface RestaurantVoiceContext {
   menuHighlights: string[];
   menuItems: RestaurantMenuItem[];
   policies: Record<string, string>;
+  reservationSettings: RestaurantReservationSettings;
 }
 
 export interface RestaurantFaq {
@@ -30,6 +31,27 @@ export interface RestaurantMenuItem {
   priceCents: number;
   aliases?: string[];
   modifiers?: string[];
+}
+
+export type RestaurantReservationMode =
+  | "integration"
+  | "booking_link"
+  | "manual_request"
+  | "hostline_lite_request"
+  | "hostline_lite_confirm"
+  | "disabled";
+
+export interface RestaurantReservationSettings {
+  autoConfirmPartyLimit?: number;
+  bookingUrl?: string;
+  cutoffRules?: string;
+  enabled: boolean;
+  handlingMode: RestaurantReservationMode;
+  largePartyThreshold?: number;
+  maxAdvance?: string;
+  minNotice?: string;
+  provider: string;
+  sourceToday?: string;
 }
 
 export const demoRestaurantContext: RestaurantVoiceContext = {
@@ -160,6 +182,18 @@ export const demoRestaurantContext: RestaurantVoiceContext = {
     complaints: "For complaints, apologize, collect the caller name, callback number, order or visit details, and flag a manager. Do not promise refunds.",
     "private events": "Private events and catering inquiries should collect date, guest count, budget, contact info, and preferred follow-up time for the events manager.",
     "house rules": "Corkage is $25 per bottle with a two-bottle limit. Cake plating is $2 per guest. Service animals only. The main entrance and restroom are wheelchair accessible.",
+  },
+  reservationSettings: {
+    autoConfirmPartyLimit: 6,
+    bookingUrl: "https://www.opentable.com/r/olive-and-ember",
+    cutoffRules: "Same-day reservations after 4 PM on Friday and Saturday need staff confirmation.",
+    enabled: true,
+    handlingMode: "manual_request",
+    largePartyThreshold: 8,
+    maxAdvance: "Up to 60 days ahead.",
+    minNotice: "Same-day requests are okay, but staff confirms during busy services.",
+    provider: "opentable",
+    sourceToday: "OpenTable",
   },
 };
 

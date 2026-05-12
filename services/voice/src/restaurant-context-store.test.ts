@@ -9,6 +9,7 @@ describe("restaurant context store", () => {
         escalation_phone_number: "+15550101",
         greeting_template: "Thanks for calling {restaurant_name}, this is {host_name}. How can I help you?",
         host_name: "Maya",
+        reservation_mode: "manual_request",
         reservation_provider: "opentable",
         sms_confirmations_enabled: false,
       },
@@ -83,7 +84,9 @@ describe("restaurant context store", () => {
           paymentPolicy: "Pay at pickup.",
           privateEvents: "Collect event date, guest count, and phone number for the events manager.",
           regularHours: "Daily 11 AM to 9 PM.",
+          reservationHandlingMode: "Create request for staff confirmation",
           reservationChangePolicy: "Reservation changes need name, date, time, and requested update.",
+          reservationSourceToday: "Paper book",
           reservationProvider: "Manual requests only",
           restaurantName: "Saffron Table",
           specialsSchedule: "Chef's curry special is available Friday dinner only.",
@@ -121,6 +124,13 @@ describe("restaurant context store", () => {
     expect(context.policies.lost_and_found).toContain("seating area");
     expect(context.policies.order_changes).toContain("Pickup order changes");
     expect(context.policies.reservation_changes).toContain("Reservation changes");
+    expect(context.policies.reservations).toContain("Handling mode");
+    expect(context.reservationSettings).toMatchObject({
+      enabled: true,
+      handlingMode: "manual_request",
+      provider: "none",
+      sourceToday: "Paper book",
+    });
     expect(context.policies.sales).toContain("Vendors should leave");
     expect(context.policies.specials).toContain("Chef's curry special");
     expect(context.policies.substitutions).toContain("No off-menu noodles");
@@ -187,6 +197,7 @@ describe("restaurant context store", () => {
         escalation_phone_number: null,
         greeting_template: "Thanks for calling {restaurant_name}. This is {host_name}. How can I help you?",
         host_name: "Vera",
+        reservation_mode: null,
         reservation_provider: null,
         sms_confirmations_enabled: true,
       },

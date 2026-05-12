@@ -20,7 +20,10 @@ export type OrderDestination =
 
 export type ReservationMode =
   | "integration"
+  | "booking_link"
   | "manual_request"
+  | "hostline_lite_request"
+  | "hostline_lite_confirm"
   | "disabled";
 
 export type VoiceTone = "warm" | "professional" | "playful";
@@ -82,7 +85,10 @@ export const orderDestinationLabels: Record<OrderDestination, string> = {
 
 export const reservationModeLabels: Record<ReservationMode, string> = {
   integration: "Book through integration",
+  booking_link: "Send booking link",
   manual_request: "Create manual requests",
+  hostline_lite_request: "HostLine pending requests",
+  hostline_lite_confirm: "HostLine auto-confirm when rules allow",
   disabled: "Do not handle reservations",
 };
 
@@ -112,7 +118,7 @@ export const defaultRestaurantAgentConfig: RestaurantAgentConfig = {
     defaultPickupEtaMinutes: 25,
   },
   reservations: {
-    mode: "integration",
+    mode: "manual_request",
     provider: "opentable",
     requireStaffConfirmationWithoutIntegration: true,
     maxPartySizeWithoutConfirmation: 6,
