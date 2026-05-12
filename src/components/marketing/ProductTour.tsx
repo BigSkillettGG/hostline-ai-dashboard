@@ -16,30 +16,32 @@ export function ProductTour() {
 
   return (
     <div>
-      <div className="mb-6 flex flex-wrap gap-2">
-        {TABS.map((t) => {
-          const isActive = t.id === active;
-          return (
-            <button
-              key={t.id}
-              onClick={() => setActive(t.id)}
-              className={cn(
-                "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-all",
-                isActive
-                  ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                  : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
-              )}
-            >
-              <t.icon className="h-3.5 w-3.5" />
-              {t.label}
-            </button>
-          );
-        })}
+      <div className="mb-6 -mx-5 overflow-x-auto px-5 sm:mx-0 sm:overflow-visible sm:px-0">
+        <div className="flex gap-2 sm:flex-wrap">
+          {TABS.map((t) => {
+            const isActive = t.id === active;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setActive(t.id)}
+                className={cn(
+                  "inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border px-4 py-2 text-sm font-medium transition-all",
+                  isActive
+                    ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                    : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                )}
+              >
+                <t.icon className="h-3.5 w-3.5" />
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <Card className="overflow-hidden border-border/80 shadow-[0_1px_0_hsl(var(--border)),0_30px_60px_-30px_hsl(var(--foreground)/0.18)]">
         <div className="grid gap-0 md:grid-cols-2">
-          <div className="space-y-3 p-6 md:p-10">
+          <div className="space-y-3 p-5 sm:p-6 md:p-10">
             {active === "orders" && <Copy
               title="Pickup orders, captured cleanly."
               body="Vera reads from your live menu, handles modifiers and substitutions, confirms ETA, takes the customer's name, and sends the ticket straight to your POS."
@@ -68,7 +70,7 @@ export function ProductTour() {
           </div>
 
           {/* mock UI */}
-          <div className="bg-muted/30 p-6 md:p-10">
+          <div className="bg-muted/30 p-5 sm:p-6 md:p-10">
             <MockUI tab={active} />
           </div>
         </div>

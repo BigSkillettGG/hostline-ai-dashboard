@@ -40,23 +40,23 @@ export default function MarketingHome() {
             <Badge variant="outline" className="mb-5 gap-1.5 border-primary/30 bg-primary/10 text-primary">
               <Sparkles className="h-3 w-3" /> AI phone host for restaurants
             </Badge>
-            <h1 className="text-[44px] font-semibold leading-[1.02] tracking-tight md:text-6xl lg:text-[76px]">
+            <h1 className="text-[36px] font-semibold leading-[1.05] tracking-tight sm:text-5xl md:text-6xl lg:text-[76px] lg:leading-[1.02]">
               Answer every call.<br />
               <span className="text-primary">Capture every order.</span>
             </h1>
-            <p className="mt-6 max-w-xl text-base text-muted-foreground md:text-lg">
+            <p className="mt-5 max-w-xl text-base text-muted-foreground md:text-lg">
               HostLine AI is the always-on phone host for your restaurant — taking pickup orders,
               booking tables, and routing complaints to a manager, 24/7.
             </p>
-            <div className="mt-8 flex flex-wrap items-center gap-3">
-              <Button asChild size="lg" className="h-12 px-6 text-base">
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+              <Button asChild size="lg" className="h-12 w-full px-6 text-base sm:w-auto">
                 <Link to="/signup">Start free 14-day trial <ArrowRight className="ml-1 h-4 w-4" /></Link>
               </Button>
-              <Button asChild variant="outline" size="lg" className="h-12 px-6 text-base">
+              <Button asChild variant="outline" size="lg" className="h-12 w-full px-6 text-base sm:w-auto">
                 <a href="#live-demo"><Phone className="mr-1.5 h-4 w-4" /> Hear a sample call</a>
               </Button>
             </div>
-            <div className="mt-5 flex items-center gap-4 text-xs text-muted-foreground">
+            <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
               <span className="flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5 text-success" /> No credit card</span>
               <span className="flex items-center gap-1.5"><Zap className="h-3.5 w-3.5 text-warning" /> Live in under 1 hour</span>
               <span className="flex items-center gap-1.5"><Lock className="h-3.5 w-3.5 text-info" /> SOC 2 ready</span>
@@ -107,15 +107,15 @@ export default function MarketingHome() {
             subtitle="Independent restaurants miss 1 in 3 calls during peak hours. Most callers don't try again — they order from the place that picked up."
           />
 
-          <div className="mt-10 grid grid-cols-3 gap-4 md:gap-8">
+          <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-3 sm:gap-8">
             {[
               { v: "62%", l: "of restaurant calls go unanswered during dinner rush" },
               { v: "85%", l: "of callers won't leave a voicemail or call back" },
               { v: "$1,400", l: "lost per week for the average 60-seat restaurant" },
             ].map((s) => (
               <div key={s.l} className="border-l-2 border-primary/40 pl-4 md:pl-6">
-                <div className="text-3xl font-semibold tabular-nums tracking-tight md:text-5xl">{s.v}</div>
-                <div className="mt-2 text-xs text-muted-foreground md:text-sm">{s.l}</div>
+                <div className="text-4xl font-semibold tabular-nums tracking-tight md:text-5xl">{s.v}</div>
+                <div className="mt-2 text-sm text-muted-foreground">{s.l}</div>
               </div>
             ))}
           </div>
@@ -201,7 +201,7 @@ export default function MarketingHome() {
       {/* TESTIMONIALS */}
       <section className="border-b border-border">
         {/* photo banner */}
-        <div className="relative h-56 w-full overflow-hidden md:h-72">
+        <div className="relative h-40 w-full overflow-hidden sm:h-56 md:h-72">
           <img
             src={happyGuests}
             alt="Friends laughing together over dinner at a warm, candlelit restaurant"
@@ -212,7 +212,7 @@ export default function MarketingHome() {
         </div>
 
         <div className="mx-auto max-w-6xl px-5 pb-20 md:pb-28">
-          <div className="-mt-16 md:-mt-24">
+          <div className="mt-8 md:-mt-24">
             <SectionHeader
               eyebrow="What operators say"
               title="Operators who picked up the phone — and a lot more orders."

@@ -49,7 +49,7 @@ export function CallTranscriptCard({ className }: { className?: string }) {
         </div>
 
         {/* the two callers */}
-        <div className="px-6 pt-7 pb-5">
+        <div className="px-4 pt-5 pb-4 sm:px-6 sm:pt-7 sm:pb-5">
           <div className="flex items-center justify-between gap-3">
             <Caller
               name="Marco P."
@@ -113,7 +113,7 @@ function Caller({
   name: string; sub: string; icon: any; tone: "primary" | "neutral"; isActive: boolean;
 }) {
   return (
-    <div className="flex w-[34%] flex-col items-center text-center">
+    <div className="flex w-[34%] min-w-0 flex-col items-center text-center">
       <div className="relative">
         {isActive && (
           <>
@@ -128,17 +128,17 @@ function Caller({
           </>
         )}
         <div className={cn(
-          "relative flex h-14 w-14 items-center justify-center rounded-full ring-2 transition-transform",
+          "relative flex h-12 w-12 items-center justify-center rounded-full ring-2 transition-transform sm:h-14 sm:w-14",
           tone === "primary"
             ? "bg-primary text-primary-foreground ring-primary/40"
             : "bg-background/15 text-background ring-background/20",
           isActive && "scale-105",
         )}>
-          <Icon className="h-6 w-6" />
+          <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
         </div>
       </div>
-      <div className="mt-3 text-sm font-semibold text-background">{name}</div>
-      <div className="text-[11px] leading-tight text-background/60">{sub}</div>
+      <div className="mt-3 w-full truncate text-sm font-semibold text-background">{name}</div>
+      <div className="w-full truncate text-[11px] leading-tight text-background/60">{sub}</div>
     </div>
   );
 }
