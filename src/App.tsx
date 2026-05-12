@@ -9,6 +9,7 @@ import MarketingHome from "./pages/marketing/Home";
 import Pricing from "./pages/marketing/Pricing";
 import Login from "./pages/marketing/Login";
 import Signup from "./pages/marketing/Signup";
+import Solution from "./pages/marketing/Solution";
 
 import AppLayout from "./components/AppLayout";
 import { RequireRole } from "./components/RequireRole";
@@ -55,6 +56,7 @@ const App = () => (
           <Route element={<MarketingLayout />}>
             <Route path="/" element={<MarketingHome />} />
             <Route path="/pricing" element={<Pricing />} />
+            <Route path="/solutions/:industrySlug" element={<Solution />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
           </Route>

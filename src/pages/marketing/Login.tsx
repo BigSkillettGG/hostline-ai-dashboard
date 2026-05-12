@@ -58,7 +58,7 @@ export default function Login() {
           <form onSubmit={onSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@restaurant.com" />
+              <Input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@business.com" />
             </div>
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
@@ -80,7 +80,7 @@ export default function Login() {
             </p>
             {demoAuth && (
               <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
-                Demo: any email works. Use the demo workspace for a restaurant-owner sales walkthrough, or an email containing <code className="font-mono">staff</code> or <code className="font-mono">@hostline</code> for the internal console.
+                Demo: any email works. Use the demo workspace for an owner sales walkthrough, or an email containing <code className="font-mono">staff</code> or <code className="font-mono">@hostline</code> for the internal console.
               </p>
             )}
           </form>

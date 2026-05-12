@@ -7,6 +7,7 @@ import {
   productionWorkstreams,
   sampleOnboardingDraft,
 } from "./onboarding";
+import { businessTypeOptions } from "./business-templates";
 
 describe("restaurant onboarding scope", () => {
   it("covers the production onboarding interview areas", () => {
@@ -23,20 +24,31 @@ describe("restaurant onboarding scope", () => {
     ]);
   });
 
-  it("branches onboarding copy and variables for home services", () => {
-    const sections = getBusinessOnboardingSections({ businessType: "home_services" });
+  it("branches onboarding copy and variables for plumbing", () => {
+    const sections = getBusinessOnboardingSections({ businessType: "plumbing" });
     const basics = sections.find((section) => section.id === "basics");
     const services = sections.find((section) => section.id === "menus");
     const requests = sections.find((section) => section.id === "orders");
     const allFields = sections.flatMap((section) => section.fields);
 
-    expect(getOnboardingBusinessTemplate("home_services").workspaceLabel).toBe("Home Services");
+    expect(getOnboardingBusinessTemplate("plumbing").workspaceLabel).toBe("Plumbing");
     expect(basics?.title).toBe("Business basics");
     expect(services?.title).toBe("Services and pricing");
     expect(requests?.title).toBe("Service request workflow");
     expect(allFields.find((field) => field.id === "restaurantName")?.label).toBe("Business name");
     expect(allFields.find((field) => field.id === "quoteRequestUrl")?.label).toBe("Quote request link");
     expect(allFields.find((field) => field.id === "appointmentBookingUrl")?.label).toBe("Appointment booking link");
+  });
+
+  it("starts with the six launch industries", () => {
+    expect(businessTypeOptions.map((option) => option.value)).toEqual([
+      "restaurant",
+      "hvac",
+      "plumbing",
+      "roofing",
+      "electrical",
+      "salon_barber",
+    ]);
   });
 
   it("keeps restaurant-only setup from showing generic quote fields", () => {

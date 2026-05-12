@@ -221,7 +221,7 @@ describe("restaurant context store", () => {
       onboardingProfile: {
         draft: {
           appointmentBookingUrl: "https://harbor.example/book",
-          businessType: "home_services",
+          businessType: "plumbing",
           concept: "Plumbing repairs, water heaters, drains, and emergency leak calls.",
           intakeFormUrl: "https://harbor.example/intake",
           menuCategories: "Leaks, drains, water heaters, fixtures, emergency service.",
@@ -232,7 +232,7 @@ describe("restaurant context store", () => {
       },
     });
 
-    expect(context.businessType).toBe("home_services");
+    expect(context.businessType).toBe("plumbing");
     expect(context.restaurantName).toBe("Harbor Plumbing");
     expect(context.businessLinks).toEqual(
       expect.arrayContaining([

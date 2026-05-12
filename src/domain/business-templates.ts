@@ -1,9 +1,10 @@
 export type BusinessType =
-  | "home_services"
-  | "professional_services"
+  | "electrical"
+  | "hvac"
+  | "plumbing"
   | "restaurant"
-  | "retail"
-  | "salon_spa";
+  | "roofing"
+  | "salon_barber";
 
 export interface BusinessTypeOption {
   label: string;
@@ -24,37 +25,50 @@ export interface BusinessTemplate {
 }
 
 export const businessTypeOptions: BusinessTypeOption[] = [
-  { label: "Restaurant", value: "restaurant" },
-  { label: "Home services / trades", value: "home_services" },
-  { label: "Salon or spa", value: "salon_spa" },
-  { label: "Professional services", value: "professional_services" },
-  { label: "Retail or local shop", value: "retail" },
+  { label: "Restaurants", value: "restaurant" },
+  { label: "HVAC", value: "hvac" },
+  { label: "Plumbers", value: "plumbing" },
+  { label: "Roofers", value: "roofing" },
+  { label: "Electricians", value: "electrical" },
+  { label: "Hair salons and barbershops", value: "salon_barber" },
 ];
 
 export const businessTemplates: Record<BusinessType, BusinessTemplate> = {
-  home_services: {
+  electrical: {
     appointmentNoun: "appointment",
-    businessNoun: "service business",
+    businessNoun: "electrical contractor",
     customerNoun: "customer",
-    defaultName: "Harbor Plumbing",
-    defaultOffering: "Plumbing repairs, water heaters, leak detection, drains, and emergency service.",
-    id: "home_services",
-    label: "Home services / trades",
+    defaultName: "BrightWire Electric",
+    defaultOffering: "Electrical repairs, panel upgrades, EV chargers, generators, lighting, outlets, and urgent safety calls.",
+    id: "electrical",
+    label: "Electricians",
     offeringNoun: "service catalog",
     staffNoun: "dispatcher",
-    workspaceLabel: "Home Services",
+    workspaceLabel: "Electrical",
   },
-  professional_services: {
-    appointmentNoun: "consultation",
-    businessNoun: "professional services firm",
-    customerNoun: "client",
-    defaultName: "Northstar Advisory",
-    defaultOffering: "Consultations, intake calls, document collection, and client follow-up.",
-    id: "professional_services",
-    label: "Professional services",
-    offeringNoun: "service list",
-    staffNoun: "office team",
-    workspaceLabel: "Professional Services",
+  hvac: {
+    appointmentNoun: "appointment",
+    businessNoun: "HVAC company",
+    customerNoun: "customer",
+    defaultName: "Summit Air",
+    defaultOffering: "Heating, cooling, tune-ups, emergency service, indoor air quality, and system replacement estimates.",
+    id: "hvac",
+    label: "HVAC",
+    offeringNoun: "service catalog",
+    staffNoun: "dispatcher",
+    workspaceLabel: "HVAC",
+  },
+  plumbing: {
+    appointmentNoun: "appointment",
+    businessNoun: "plumbing company",
+    customerNoun: "customer",
+    defaultName: "Harbor Plumbing",
+    defaultOffering: "Plumbing repairs, water heaters, leak detection, drains, fixture installs, and emergency service.",
+    id: "plumbing",
+    label: "Plumbers",
+    offeringNoun: "service catalog",
+    staffNoun: "dispatcher",
+    workspaceLabel: "Plumbing",
   },
   restaurant: {
     appointmentNoun: "reservation",
@@ -63,51 +77,55 @@ export const businessTemplates: Record<BusinessType, BusinessTemplate> = {
     defaultName: "Olive & Ember",
     defaultOffering: "Neighborhood Italian restaurant with wood-fired pizza, handmade pasta, seasonal cocktails, and weekend brunch.",
     id: "restaurant",
-    label: "Restaurant",
+    label: "Restaurants",
     offeringNoun: "menu",
     staffNoun: "staff",
     workspaceLabel: "Restaurant",
   },
-  retail: {
-    appointmentNoun: "visit",
-    businessNoun: "local shop",
-    customerNoun: "customer",
-    defaultName: "Cedar & Finch",
-    defaultOffering: "Product questions, availability checks, pickups, returns, and special orders.",
-    id: "retail",
-    label: "Retail or local shop",
-    offeringNoun: "product catalog",
-    staffNoun: "store team",
-    workspaceLabel: "Retail",
+  roofing: {
+    appointmentNoun: "inspection",
+    businessNoun: "roofing company",
+    customerNoun: "homeowner",
+    defaultName: "RidgeLine Roofing",
+    defaultOffering: "Roof repairs, replacements, storm damage, inspections, gutters, skylights, and emergency tarping.",
+    id: "roofing",
+    label: "Roofers",
+    offeringNoun: "service catalog",
+    staffNoun: "office team",
+    workspaceLabel: "Roofing",
   },
-  salon_spa: {
+  salon_barber: {
     appointmentNoun: "appointment",
-    businessNoun: "salon or spa",
+    businessNoun: "salon or barbershop",
     customerNoun: "client",
     defaultName: "Luna Studio",
-    defaultOffering: "Haircuts, color, blowouts, facials, massage, packages, and product recommendations.",
-    id: "salon_spa",
-    label: "Salon or spa",
+    defaultOffering: "Haircuts, color, blowouts, barber services, treatments, product recommendations, and bridal appointments.",
+    id: "salon_barber",
+    label: "Hair salons and barbershops",
     offeringNoun: "service menu",
     staffNoun: "front desk",
-    workspaceLabel: "Salon & Spa",
+    workspaceLabel: "Salon & Barber",
   },
 };
 
 export function normalizeBusinessType(value: unknown): BusinessType {
   if (typeof value !== "string") return "restaurant";
   const normalized = value.toLowerCase().replace(/[\s-]+/g, "_");
-  if (normalized.includes("home") || normalized.includes("trade") || normalized.includes("plumb") || normalized.includes("hvac") || normalized.includes("electric")) {
-    return "home_services";
+
+  if (normalized.includes("hvac") || normalized.includes("heating") || normalized.includes("cooling") || normalized.includes("air_condition")) {
+    return "hvac";
   }
-  if (normalized.includes("salon") || normalized.includes("spa") || normalized.includes("beauty") || normalized.includes("hair")) {
-    return "salon_spa";
+  if (normalized.includes("plumb") || normalized === "home_services" || normalized.includes("trade")) {
+    return "plumbing";
   }
-  if (normalized.includes("professional") || normalized.includes("law") || normalized.includes("account") || normalized.includes("consult")) {
-    return "professional_services";
+  if (normalized.includes("roof")) {
+    return "roofing";
   }
-  if (normalized.includes("retail") || normalized.includes("shop") || normalized.includes("store")) {
-    return "retail";
+  if (normalized.includes("electric")) {
+    return "electrical";
+  }
+  if (normalized.includes("salon") || normalized.includes("spa") || normalized.includes("beauty") || normalized.includes("hair") || normalized.includes("barber")) {
+    return "salon_barber";
   }
   return "restaurant";
 }

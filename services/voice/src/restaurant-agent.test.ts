@@ -62,7 +62,7 @@ describe("restaurant fallback replies", () => {
   it("adapts model instructions for non-restaurant businesses", () => {
     const instructions = buildRestaurantInstructions({
       ...demoRestaurantContext,
-      businessType: "home_services",
+      businessType: "plumbing",
       restaurantName: "Harbor Plumbing",
     });
 

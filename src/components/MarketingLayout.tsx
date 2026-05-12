@@ -4,22 +4,23 @@ import { Flame, Menu, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useCurrentUser, signOut } from "@/lib/auth";
+import { industrySolutions } from "@/data/industry-solutions";
 
 export default function MarketingLayout() {
   const user = useCurrentUser();
   const [open, setOpen] = useState(false);
+
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      {/* announcement bar */}
       <div className="bg-foreground text-background">
         <div className="mx-auto flex max-w-6xl items-center justify-center gap-2 px-5 py-2 text-xs">
           <Sparkles className="h-3 w-3 shrink-0 text-primary-glow" />
           <span className="font-medium">New:</span>
           <span className="opacity-80">
-            <span className="hidden sm:inline">Toast & Square integrations now live — sync orders straight to your POS.</span>
-            <span className="sm:hidden">Toast & Square integrations are live.</span>
+            <span className="hidden sm:inline">AI phone plus website chat for restaurants, trades, and salons.</span>
+            <span className="sm:hidden">AI phone plus website chat.</span>
           </span>
-          <Link to="/pricing" className="ml-1 shrink-0 underline-offset-2 hover:underline">Learn more →</Link>
+          <Link to="/#solutions" className="ml-1 shrink-0 underline-offset-2 hover:underline">See solutions</Link>
         </div>
       </div>
 
@@ -29,15 +30,18 @@ export default function MarketingLayout() {
             <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
               <Flame className="h-4 w-4" />
             </span>
-            <span className="text-base font-semibold tracking-tight">HostLine AI</span>
+            <span className="text-base font-semibold">HostLine AI</span>
           </Link>
+
           <nav className="hidden items-center gap-5 text-sm md:flex">
-            <NavLink to="/" end className={({ isActive }) => isActive ? "text-foreground font-medium" : "text-muted-foreground hover:text-foreground"}>Product</NavLink>
-            <NavLink to="/pricing" className={({ isActive }) => isActive ? "text-foreground font-medium" : "text-muted-foreground hover:text-foreground"}>Pricing</NavLink>
+            <NavLink to="/" end className={({ isActive }) => isActive ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground"}>Product</NavLink>
+            <a href="/#solutions" className="text-muted-foreground hover:text-foreground">Solutions</a>
+            <NavLink to="/pricing" className={({ isActive }) => isActive ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground"}>Pricing</NavLink>
             <a href="/#live-demo" className="text-muted-foreground hover:text-foreground">Live demo</a>
             <a href="/#how" className="text-muted-foreground hover:text-foreground">How it works</a>
             <a href="mailto:sales@hostline.ai" className="text-muted-foreground hover:text-foreground">Talk to sales</a>
           </nav>
+
           <div className="ml-auto flex items-center gap-2">
             {user ? (
               <>
@@ -52,6 +56,7 @@ export default function MarketingLayout() {
                 <Button asChild size="sm"><Link to="/signup">Start free</Link></Button>
               </>
             )}
+
             <Sheet open={open} onOpenChange={setOpen}>
               <SheetTrigger asChild>
                 <Button variant="ghost" size="icon" className="md:hidden" aria-label="Open menu">
@@ -62,12 +67,13 @@ export default function MarketingLayout() {
                 <nav className="mt-8 flex flex-col gap-1 text-base">
                   {[
                     { to: "/", label: "Product" },
+                    { to: "/#solutions", label: "Solutions" },
                     { to: "/pricing", label: "Pricing" },
                     { to: "/#live-demo", label: "Live demo" },
                     { to: "/#how", label: "How it works" },
-                  ].map((l) => (
-                    <Link key={l.label} to={l.to} onClick={() => setOpen(false)} className="rounded-md px-3 py-2.5 text-foreground hover:bg-muted">
-                      {l.label}
+                  ].map((link) => (
+                    <Link key={link.label} to={link.to} onClick={() => setOpen(false)} className="rounded-md px-3 py-2.5 text-foreground hover:bg-muted">
+                      {link.label}
                     </Link>
                   ))}
                   <a href="mailto:sales@hostline.ai" onClick={() => setOpen(false)} className="rounded-md px-3 py-2.5 text-foreground hover:bg-muted">Talk to sales</a>
@@ -99,29 +105,29 @@ export default function MarketingLayout() {
 
       <footer className="border-t border-border bg-card">
         <div className="mx-auto max-w-6xl px-5 py-12">
-          <div className="grid grid-cols-2 gap-8 md:grid-cols-5 md:gap-10">
+          <div className="grid grid-cols-2 gap-8 md:grid-cols-6 md:gap-10">
             <div className="col-span-2 md:col-span-2">
               <div className="flex items-center gap-2">
                 <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
                   <Flame className="h-4 w-4" />
                 </span>
-                <span className="text-base font-semibold tracking-tight">HostLine AI</span>
+                <span className="text-base font-semibold">HostLine AI</span>
               </div>
               <p className="mt-3 max-w-sm text-sm text-muted-foreground">
-                The AI phone host built for independent restaurants. Answer every call, capture every order,
-                never miss a reservation.
+                The AI phone and website chat operator for local businesses. Answer every call, capture every request, and give staff clean follow-up.
               </p>
             </div>
 
             {[
-              { title: "Product", links: [["Overview", "/"], ["Pricing", "/pricing"], ["How it works", "/#how"], ["Integrations", "/#how"]] },
-              { title: "Company", links: [["Customers", "/"], ["Contact", "mailto:hello@hostline.ai"], ["Sales", "mailto:sales@hostline.ai"]] },
+              { title: "Product", links: [["Overview", "/"], ["Pricing", "/pricing"], ["How it works", "/#how"], ["Live demo", "/#live-demo"]] },
+              { title: "Solutions", links: industrySolutions.slice(0, 4).map((solution) => [solution.label, `/solutions/${solution.slug}`]) },
+              { title: "Company", links: [["Contact", "mailto:hello@hostline.ai"], ["Sales", "mailto:sales@hostline.ai"], ["Log in", "/login"]] },
               { title: "Legal", links: [["Privacy", "#"], ["Terms", "#"], ["Security", "#"], ["DPA", "#"]] },
-            ].map((col) => (
-              <div key={col.title}>
-                <div className="text-xs font-semibold uppercase tracking-wider text-foreground">{col.title}</div>
+            ].map((column) => (
+              <div key={column.title}>
+                <div className="text-xs font-semibold uppercase text-foreground">{column.title}</div>
                 <ul className="mt-3 space-y-2 text-sm">
-                  {col.links.map(([label, href]) => (
+                  {column.links.map(([label, href]) => (
                     <li key={label}>
                       <Link to={href} className="text-muted-foreground hover:text-foreground">{label}</Link>
                     </li>
@@ -132,7 +138,7 @@ export default function MarketingLayout() {
           </div>
 
           <div className="mt-10 flex flex-col gap-3 border-t border-border pt-6 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-            <span>© {new Date().getFullYear()} HostLine AI · Made for restaurants.</span>
+            <span>© {new Date().getFullYear()} HostLine AI · Built for local service teams.</span>
             <span>Built with care in Brooklyn, NY.</span>
           </div>
         </div>
