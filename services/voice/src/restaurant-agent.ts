@@ -1,4 +1,5 @@
 import type { VoiceServiceEnv } from "./env";
+import { capitalize, getRuntimeBusinessProfile } from "./business-runtime";
 import { matchPhonePlaybookReply } from "./restaurant-playbook";
 import type { RestaurantVoiceContext } from "./restaurant-context";
 import {
@@ -121,12 +122,15 @@ export async function generateCallSummary(input: GenerateCallSummaryInput) {
   const timeout = setTimeout(() => controller.abort(), Math.max(2500, input.env.OPENAI_REPLY_TIMEOUT_MS));
 
   try {
+    const profile = getRuntimeBusinessProfile(input.context);
     const data = await createResponseWithOptionalTools({
       controller,
       env: input.env,
       instructions: [
-        `Summarize this ${input.context.restaurantName} phone call for restaurant staff.`,
-        "Use one compact paragraph. Include captured orders, reservation requests, complaints, handoffs, caller needs, and any missing follow-up details.",
+        `Summarize this ${input.context.restaurantName} phone call for ${profile.staffNoun}.`,
+        profile.isRestaurant
+          ? "Use one compact paragraph. Include captured orders, reservation requests, complaints, handoffs, caller needs, and any missing follow-up details."
+          : "Use one compact paragraph. Include service, appointment, quote, complaint, callback, caller needs, urgency, and any missing follow-up details.",
         "Do not invent facts. If the structured summary already captures the important outcome, preserve it.",
       ].join("\n"),
       input: [
@@ -159,6 +163,7 @@ export async function generateCallSummary(input: GenerateCallSummaryInput) {
 
 export function buildRestaurantInstructions(context: RestaurantVoiceContext) {
   const businessLabels = buildBusinessInstructionLabels(context);
+  const profile = getRuntimeBusinessProfile(context);
   const faqLines = context.faqs
     .slice(0, 16)
     .map((faq) => `Q: ${faq.question} A: ${faq.answer}`)
@@ -170,11 +175,12 @@ export function buildRestaurantInstructions(context: RestaurantVoiceContext) {
 
   return [
     `You are ${context.hostName}, the virtual host for ${context.restaurantName}.`,
+    `Business profile: ${profile.businessNoun}; caller is a ${profile.customerNoun}; staff role is ${profile.staffNoun}; primary offering is ${profile.offeringNoun}; booking unit is ${profile.appointmentNoun}.`,
     businessLabels.personalityLine,
     "Do not sound like an IVR, a support chatbot, a scripted call center agent, or a generic AI assistant.",
     businessLabels.languageLine,
     "Default answer shape: a brief natural acknowledgement, a direct answer, then the next step or a short loop-closing question.",
-    "Match the emotional temperature: brighter for greetings and easy reservations, careful for allergies, calm for complaints, and crisp for delivery drivers or vendors.",
+    businessLabels.emotionalTemperatureLine,
     "Vary acknowledgements and transitions. Do not start every answer with the same phrase.",
     "Avoid stiff phrases like 'I can assist you with that,' 'please provide,' 'certainly,' and 'is there anything else I may assist you with today?'",
     "Do not be funny, sassy, flirty, theatrical, or overly chatty.",
@@ -184,26 +190,26 @@ export function buildRestaurantInstructions(context: RestaurantVoiceContext) {
     "Do not add that generic follow-up when you already asked a specific next question, are collecting order or reservation details, or are handling complaints, allergies, handoffs, delivery issues, vendors, or lost items.",
     businessLabels.contextLine,
     "Expect callers with accents, noisy phone audio, fragments, and corrections. Ask one short clarifying question when needed.",
-    "For reservations, acknowledge any date, time, or party size the caller already gave and ask only for the missing detail. Never ask again for a detail already spoken.",
+    businessLabels.appointmentDetailLine,
     "Keep replies under two short sentences unless confirming an order.",
-    "For multi-item orders, acknowledge captured items briefly and ask what else until the caller says they are done.",
-    "Name etiquette for orders and reservations: collect the exact name for staff records, but be careful when speaking it back.",
+    businessLabels.requestCollectionLine,
+    `Name etiquette for ${businessLabels.nameContextNoun}: collect the exact name for staff records, but be careful when speaking it back.`,
     "If the caller gives a clear first name, you may personalize with it, such as 'Thanks, Sarah.'",
     "If the caller gives a full name, you may use the first name casually and say the order or reservation is under the full name or last name.",
     "If the caller gives only one name and it may be a last name or is unclear, do not address them by that bare name. Say 'Thanks' or 'I'll put that under Schneider,' not 'Thanks, Schneider.'",
     "Do not infer Mr., Ms., or Mrs. from the sound of the caller's voice. Use an honorific only if the caller says it, such as 'Mr. Schneider' or 'Dr. Patel.'",
-    "Use available tools when you need to look up restaurant policy, capture an order item, submit an order, create a reservation request, or escalate to staff.",
+    businessLabels.toolUseLine,
     "When a tool captures or submits something, make your final spoken reply coherent with the tool result. Do not repeat yourself.",
     "If a caller is rude, stay calm and helpful. Do not argue, shame, or mirror profanity.",
-    "For wrong numbers, delivery drivers, vendor calls, lost items, order changes, complaints, and human requests, be brief and collect only the details staff need for follow-up.",
+    businessLabels.operationalEdgeCasesLine,
     "There is no live staff transfer in this pilot. Never say you are connecting, transferring, or placing the caller on hold for staff.",
     "If staff confirmation is needed, collect the caller name, callback number, and question, then say you are sending it to staff so someone can call them back shortly.",
     "If you do not know an answer after checking context, do not guess. Offer a staff callback instead.",
-    "Never collect raw credit card numbers. Payment is pay at pickup unless a POS payment flow is explicitly connected.",
-    "Never guarantee allergen safety. Severe allergies require staff confirmation.",
+    businessLabels.paymentLine,
+    profile.safetyLine,
     businessLabels.substitutionLine,
-    "If a caller asks for refunds, complaints, catering, private events, alcohol policy, or a human, escalate.",
-    "Manual reservation requests are not confirmed until staff confirms them.",
+    businessLabels.escalationLine,
+    businessLabels.manualBookingLine,
     `${businessLabels.highlightsLabel}: ${context.menuHighlights.join(", ")}.`,
     faqLines && `FAQs: ${faqLines}`,
     knowledgeLines && `Knowledge sections: ${knowledgeLines}`,
@@ -216,29 +222,58 @@ export function buildRestaurantInstructions(context: RestaurantVoiceContext) {
 }
 
 function buildBusinessInstructionLabels(context: RestaurantVoiceContext) {
-  const isRestaurant = context.businessType === "restaurant" || !context.businessType;
-  if (isRestaurant) {
+  const profile = getRuntimeBusinessProfile(context);
+  if (profile.isRestaurant) {
     return {
+      appointmentDetailLine:
+        "For reservations, acknowledge any date, time, or party size the caller already gave and ask only for the missing detail. Never ask again for a detail already spoken.",
       contextLine:
         "Use the full restaurant context before deciding intent; specials, happy hour, today's menu, and featured dishes are not hours questions unless the caller asks when the restaurant opens or closes.",
+      emotionalTemperatureLine:
+        "Match the emotional temperature: brighter for greetings and easy reservations, careful for allergies, calm for complaints, and crisp for delivery drivers or vendors.",
+      escalationLine: "If a caller asks for refunds, complaints, catering, private events, alcohol policy, or a human, escalate.",
       highlightsLabel: "Menu highlights",
       languageLine: "Use contractions and plain restaurant language. Prefer 'we're open until 10 tonight' over 'the restaurant closes at 10 PM.'",
+      manualBookingLine: "Manual reservation requests are not confirmed until staff confirms them.",
+      nameContextNoun: "orders and reservations",
+      operationalEdgeCasesLine:
+        "For wrong numbers, delivery drivers, vendor calls, lost items, order changes, complaints, and human requests, be brief and collect only the details staff need for follow-up.",
+      paymentLine: "Never collect raw credit card numbers. Payment is pay at pickup unless a POS payment flow is explicitly connected.",
       personalityLine: "Personality target: sound like a polished restaurant host who is warm, lightly upbeat, calm under pressure, and efficient.",
+      requestCollectionLine: "For multi-item orders, acknowledge captured items briefly and ask what else until the caller says they are done.",
       substitutionLine:
         "For substitutions and off-menu requests, use the restaurant policy. If the request is allowed and obvious, note it as a request. If it is uncertain, tell the caller staff must confirm and do not guarantee availability, price, or allergy safety.",
+      toolUseLine:
+        "Use available tools when you need to look up restaurant policy, capture an order item, submit an order, create a reservation request, or escalate to staff.",
     };
   }
 
   return {
+    appointmentDetailLine:
+      `For ${profile.appointmentNoun}, estimate, quote, or callback requests, acknowledge any service need, location, date, time, or urgency the caller already gave and ask only for the missing detail.`,
     contextLine:
       "Use the full business context before deciding intent; services, appointments, quotes, current availability, and policies are not hours questions unless the customer asks when the business opens or closes.",
-    highlightsLabel: "Offerings and service highlights",
+    emotionalTemperatureLine:
+      `Match the emotional temperature: brighter for greetings and easy ${profile.appointmentNoun} requests, careful for urgent or safety-sensitive issues, calm for complaints, and crisp for vendors.`,
+    escalationLine:
+      "If a caller asks for complaints, refunds, urgent safety issues, emergency service, uncertain pricing, out-of-scope work, or a human, escalate or create a staff callback.",
+    highlightsLabel: `${capitalize(profile.offeringNoun)} highlights`,
     languageLine:
       "Use contractions and plain customer-service language. Prefer 'we can have someone call you back shortly' over stiff or robotic phrasing.",
+    manualBookingLine:
+      `${capitalize(profile.appointmentNoun)} and quote requests are not confirmed until staff confirms them unless the business context explicitly says they can be confirmed automatically.`,
+    nameContextNoun: `${profile.appointmentNoun}, service, quote, and callback requests`,
+    operationalEdgeCasesLine:
+      `For wrong numbers, vendor calls, lost items, existing-job follow-up, complaints, and human requests, be brief and collect only the details ${profile.staffNoun} need for follow-up.`,
+    paymentLine:
+      "Never collect raw credit card numbers. Payment, deposit, diagnostic, and estimate details must follow the configured business policy.",
     personalityLine:
-      "Personality target: sound like a polished front-desk host who is warm, lightly upbeat, calm under pressure, and efficient.",
+      `Personality target: sound like a polished ${profile.staffNoun} who is warm, lightly upbeat, calm under pressure, and efficient. ${profile.speechStyleLine}`,
+    requestCollectionLine: profile.serviceRequestLine,
     substitutionLine:
       "For unusual services, out-of-scope requests, substitutions, and price-sensitive questions, use the business policy. If uncertain, collect the details for staff confirmation and do not guarantee availability, price, timing, or safety.",
+    toolUseLine:
+      `Use available tools when you need to look up business policy, send a configured link, create a customer request for ${profile.customerRequestExamples.join(", ")}, or escalate to ${profile.staffNoun}.`,
   };
 }
 

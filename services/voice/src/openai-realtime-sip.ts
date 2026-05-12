@@ -13,7 +13,8 @@ import {
   type CustomerRequestKind,
 } from "../../../src/domain/business-links";
 import { buildRestaurantInstructions, generateCallSummary } from "./restaurant-agent";
-import { toSpokenRestaurantName, type RestaurantVoiceContext } from "./restaurant-context";
+import { buildBusinessTranscriptionPrompt, capitalize, getRuntimeBusinessProfile } from "./business-runtime";
+import { demoRestaurantContext, toSpokenRestaurantName, type RestaurantVoiceContext } from "./restaurant-context";
 import type { RestaurantContextStore } from "./restaurant-context-store";
 import type { ReservationPlatformService } from "./reservation-platform-service";
 import type { TranscriptRole, TranscriptTurn } from "./types";
@@ -464,11 +465,7 @@ export function buildOpenAIRealtimeAcceptPayload({
         transcription: {
           language: "en",
           model: "gpt-4o-mini-transcribe",
-          prompt: [
-            `This is a phone call with ${context.restaurantName}, a restaurant.`,
-            "Expect restaurant words: reservations, pickup orders, specials, parking, allergies, delivery drivers, hours, waitlist.",
-            `Menu terms include: ${context.menuHighlights.slice(0, 16).join(", ")}.`,
-          ].join(" "),
+          prompt: buildBusinessTranscriptionPrompt(context),
         },
         turn_detection: resolveOpenAIRealtimeTurnDetection(env),
       },
@@ -482,7 +479,7 @@ export function buildOpenAIRealtimeAcceptPayload({
     model: resolveOpenAIRealtimeModel(env),
     output_modalities: ["audio"],
     tool_choice: "auto",
-    tools: buildOpenAIRealtimeTools(),
+    tools: buildOpenAIRealtimeTools(context),
     type: "realtime",
   };
 }
@@ -499,41 +496,42 @@ export function buildOpenAIRealtimeInstructions(
   const businessLinksContext = buildRealtimeBusinessLinksInstruction(context);
   const orderModeContext = buildRealtimeOrderModeInstruction(context);
   const reservationModeContext = buildRealtimeReservationModeInstruction(context);
-  const isRestaurant = context.businessType === "restaurant" || !context.businessType;
+  const profile = getRuntimeBusinessProfile(context);
+  const contextLookupTool = profile.isRestaurant ? "lookup_restaurant_context" : "lookup_business_context";
 
   return [
     buildRestaurantInstructions(context),
-    `Current ${isRestaurant ? "restaurant" : "business"} local time: ${localTimeContext}. Use this for today, tonight, tomorrow, open-now, specials-today, and booking-date questions.`,
+    `Current ${profile.businessNoun} local time: ${localTimeContext}. Use this for today, tonight, tomorrow, open-now, seasonal-priority, and booking-date questions.`,
     callerPhoneContext,
     "Realtime phone behavior:",
     "This is one continuous live phone call. Never restart the opening greeting in the middle of the call.",
     `Opening greeting to use when the call begins: "${openingGreeting}"`,
     "Say the opening greeting once at the start of the call. Do not introduce yourself by name and do not say you are virtual or AI in the opening.",
     "If the caller says 'hello' before you have greeted them, immediately give the full opening greeting instead of only saying hello back.",
-    isRestaurant
+    profile.isRestaurant
       ? "Voice style: warm, polished, friendly, and conversational. Avoid IVR cadence, monotone delivery, robotic precision, or over-enunciating the restaurant name."
       : "Voice style: warm, polished, friendly, and conversational. Avoid IVR cadence, monotone delivery, robotic precision, or over-enunciating the business name.",
     "Greeting energy: the opening should be friendly and lightly upbeat, but short and not theatrical.",
     "Pacing: speak briskly enough for a phone call, with varied intonation and short sentence chunks. Do not drag out 'Olive and Ember'.",
     "Voice color: let a small smile come through in the greeting and positive answers; use gentle concern for allergies or complaints; keep the warmth subtle and professional.",
     "Make answers feel specific to what the caller just said. For example, if they ask about a table for 6 tonight, say 'For 6 tonight...' before asking only for the missing detail.",
-    isRestaurant
+    profile.isRestaurant
       ? "Use 'we' when speaking for the restaurant, such as 'we're open until 10' or 'we have parking behind the building.'"
-      : "Use 'we' when speaking for the business, such as 'we can help with that' or 'we serve your area.'",
-    isRestaurant
+      : `Use 'we' when speaking for the ${profile.businessNoun}, such as 'we can help with that' or 'we serve your area.'`,
+    profile.isRestaurant
       ? "Use natural restaurant-host acknowledgements like 'Sure', 'Absolutely', 'Of course', 'One moment', and 'Let me check that' when they fit."
-      : "Use natural front-desk acknowledgements like 'Sure', 'Absolutely', 'Of course', 'One moment', and 'Let me check that' when they fit.",
+      : `Use natural ${profile.staffNoun} acknowledgements like 'Sure', 'Absolutely', 'Of course', 'One moment', and 'Let me check that' when they fit.`,
     "If the caller pauses, wait naturally. If silence continues, ask a gentle continuation question such as 'Take your time. What else can I help you with?'",
     "Speakerphone and car audio behavior: ignore faint echoes, background noise, room noise, and your own voice coming back through the caller's speaker. Only treat clear human speech as caller intent.",
     "Handle clear interruptions gracefully. If the caller clearly cuts you off with speech, answer their latest request. Do not restart the call because of a noise, echo, or short silence.",
     "If the caller is in a very loud place or the audio is too unclear to understand, do not guess. Say briefly that it is too noisy to hear clearly and ask them to move somewhere quieter, call back, or let staff follow up by text/callback.",
     "Before any lookup or task that may take a moment, say one short natural bridge such as 'Sure, let me check that' or 'One moment, I am checking now,' then use the tool. Vary the wording and do not sound like an IVR.",
-    isRestaurant
+    profile.isRestaurant
       ? "Use cached restaurant facts naturally. The facts are not a script; keep your wording warm, human, and specific to the caller's question."
-      : "Use cached business facts naturally. The facts are not a script; keep your wording warm, human, and specific to the caller's question.",
-    isRestaurant
-      ? "Use the lookup_restaurant_context tool for specials, hours, parking, directions, menu, reservation policy, pickup timing, payment, allergies, delivery drivers, lost items, complaints, or anything policy-like."
-      : "Use the lookup_restaurant_context tool for hours, service area, directions, service catalog, appointment policy, quote policy, payment, safety, lost items, complaints, or anything policy-like.",
+      : `Use cached ${profile.businessNoun} facts naturally. The facts are not a script; keep your wording warm, human, and specific to the caller's question.`,
+    profile.isRestaurant
+      ? `Use the ${contextLookupTool} tool for specials, hours, parking, directions, menu, reservation policy, pickup timing, payment, allergies, delivery drivers, lost items, complaints, or anything policy-like.`
+      : `Use the ${contextLookupTool} tool for hours, service area, directions, ${profile.offeringNoun}, ${profile.appointmentNoun} policy, quote policy, payment, safety, lost items, complaints, or anything policy-like.`,
     "After answering any normal question or completing any task, ask a short loop-closing question such as 'Can I help you with anything else?' unless the caller has already clearly said goodbye.",
     "Never end the call immediately after answering a question. The call should only close after the caller indicates they are done.",
     "If the caller says no, no thanks, that's all, that's it, I'm good, or similar after your anything-else question, call finish_call with a short closing line like 'Thanks for calling. Goodbye.' Do not ask another question.",
@@ -547,26 +545,47 @@ export function buildOpenAIRealtimeInstructions(
     "For severe allergies, never guarantee safety. Use request_staff_callback and say staff needs to confirm because cross-contact is possible.",
     reservationModeContext,
     orderModeContext,
-    "For reservation requests, acknowledge any date, time, or party size already spoken, then ask only for missing details.",
-    "When reservation date, time, party size, and guest name are known, use create_reservation_request to save the request. If the tool says provider_confirmed, tell the caller the reservation is confirmed. If the tool says staff confirmation is needed, tell the caller it is requested and staff will confirm.",
-    "For pickup orders, follow the configured order operating mode. If taking a manual request, collect items, quantities, name, and callback number. If link-first, offer to text the ordering link.",
-    isRestaurant
+    profile.isRestaurant
+      ? "For reservation requests, acknowledge any date, time, or party size already spoken, then ask only for missing details."
+      : `For ${profile.appointmentNoun}, estimate, quote, or service requests, acknowledge any need, location, timing, or urgency already spoken, then ask only for missing details.`,
+    profile.isRestaurant
+      ? "When reservation date, time, party size, and guest name are known, use create_reservation_request to save the request. If the tool says provider_confirmed, tell the caller the reservation is confirmed. If the tool says staff confirmation is needed, tell the caller it is requested and staff will confirm."
+      : `When customer name, callback number, request summary, urgency, and useful details are known, use create_customer_request with service_appointment, quote, lead, callback, or complaint. Tell the caller ${profile.staffNoun} will follow up; do not promise a confirmed ${profile.appointmentNoun} unless the context explicitly says it is confirmed.`,
+    profile.isRestaurant
+      ? "For pickup orders, follow the configured order operating mode. If taking a manual request, collect items, quantities, name, and callback number. If link-first, offer to text the ordering link."
+      : `For service requests, follow the configured request operating mode. If link-first, offer to text the booking, quote, or intake link. If staff-review, collect the details ${profile.staffNoun} need.`,
+    profile.isRestaurant
       ? "For menu substitutions or off-menu requests, use the restaurant substitution policy. If allowed and obvious, note it as a request; if uncertain, say you can include the request but staff must confirm. Never guarantee off-menu items, allergy accommodations, prices, or availability unless the menu context explicitly confirms them."
       : "For unusual services, substitutions, and out-of-scope requests, use the business policy. If uncertain, collect the details for staff confirmation. Never guarantee availability, price, timing, or safety unless the context explicitly confirms it.",
-    "For reservations and pickup orders, once the request is captured, naturally offer to text a confirmation. Example: 'Would you like me to text that confirmation to the number ending 1234?'",
+    profile.isRestaurant
+      ? "For reservations and pickup orders, once the request is captured, naturally offer to text a confirmation. Example: 'Would you like me to text that confirmation to the number ending 1234?'"
+      : `For ${profile.appointmentNoun}, quote, intake, and callback requests, once the request or link is captured, naturally offer to text a confirmation or helpful link. Example: 'Would you like me to text that to the number ending 1234?'`,
     "Only send a text after the caller agrees or asks for it. Use the send_guest_confirmation tool for reservation, order, or helpful follow-up texts.",
     "When the caller asks for a configured link, use send_business_link after they ask for it or agree to receive it by text.",
-    "For generic leads, service appointments, quote requests, or requests outside the restaurant-specific tools, use create_customer_request after collecting the name, callback number, and request summary.",
+    profile.isRestaurant
+      ? "For generic leads, service appointments, quote requests, or requests outside the restaurant-specific tools, use create_customer_request after collecting the name, callback number, and request summary."
+      : `For leads, ${profile.appointmentNoun}s, quote requests, and anything outside the specialized tools, use create_customer_request after collecting the name, callback number, request summary, urgency, and key details.`,
     "If the send_guest_confirmation tool succeeds, tell the caller the text is sent. Do not mention backend setup, SMS providers, or placeholder mode.",
     "Close naturally only after the caller is done. Use finish_call, say a short goodbye, and do not ask another question after goodbye.",
   ].join("\n");
 }
 
 function buildRealtimeReservationModeInstruction(context: RestaurantVoiceContext) {
+  const profile = getRuntimeBusinessProfile(context);
   const settings = context.reservationSettings;
-  const base = `Reservation operating mode: ${settings.handlingMode}; provider: ${settings.provider}; current workflow: ${settings.sourceToday ?? "not specified"}.`;
+  const label = profile.isRestaurant ? "Reservation" : `${capitalize(profile.appointmentNoun)} / booking`;
+  const base = `${label} operating mode: ${settings.handlingMode}; provider: ${settings.provider}; current workflow: ${settings.sourceToday ?? "not specified"}.`;
+  if (!profile.isRestaurant) {
+    if (!settings.enabled || settings.handlingMode === "disabled") {
+      return `${base} Do not book ${profile.appointmentNoun}s unless staff configuration changes; collect a callback request only if the customer wants follow-up.`;
+    }
+    if (settings.handlingMode === "booking_link") {
+      return `${base} Offer to text the booking link${settings.bookingUrl ? ` (${settings.bookingUrl})` : ""}; do not collect the full request unless the customer wants staff follow-up.`;
+    }
+    return `${base} For ${profile.appointmentNoun}, estimate, inspection, or service booking requests, use create_customer_request after collecting customer name, callback number, service need, address or service area, urgency, and preferred window. Never guarantee a confirmed ${profile.appointmentNoun} until ${profile.staffNoun} confirm it.`;
+  }
   if (!settings.enabled || settings.handlingMode === "disabled") {
-    return `${base} Do not book or request ${context.businessType === "restaurant" ? "reservations" : "appointments"} unless staff configuration changes; explain that this line is not taking booking requests right now.`;
+    return `${base} Do not book or request reservations unless staff configuration changes; explain that this line is not taking booking requests right now.`;
   }
   if (settings.handlingMode === "booking_link") {
     return `${base} Offer to text the booking link${settings.bookingUrl ? ` (${settings.bookingUrl})` : ""}; do not collect full reservation details unless the caller wants staff follow-up.`;
@@ -584,8 +603,23 @@ function buildRealtimeReservationModeInstruction(context: RestaurantVoiceContext
 }
 
 function buildRealtimeOrderModeInstruction(context: RestaurantVoiceContext) {
+  const profile = getRuntimeBusinessProfile(context);
   const settings = context.orderSettings;
-  const base = `Order operating mode: ${settings.handlingMode}.`;
+  const base = profile.isRestaurant
+    ? `Order operating mode: ${settings.handlingMode}.`
+    : `Service-request operating mode: ${settings.handlingMode}.`;
+  if (!profile.isRestaurant) {
+    if (!settings.enabled || settings.handlingMode === "disabled") {
+      return `${base} Do not capture service requests unless staff enables them; answer policy questions and offer staff follow-up if needed.`;
+    }
+    if (settings.handlingMode === "online_link") {
+      return `${base} Offer to text the configured request, booking, quote, or intake link${settings.onlineOrderingUrl ? ` (${settings.onlineOrderingUrl})` : ""}; do not manually capture the full request unless the customer wants staff follow-up.`;
+    }
+    if (settings.handlingMode === "staff_review_and_link") {
+      return `${base} Ask whether the customer wants a configured link or wants you to collect details for ${profile.staffNoun} review.`;
+    }
+    return `${base} Capture the request details for ${profile.staffNoun} review and never promise exact availability, price, or arrival time until staff confirms.`;
+  }
   if (!settings.enabled || settings.handlingMode === "disabled") {
     return `${base} Do not take pickup orders; answer menu questions and offer staff follow-up if needed.`;
   }
@@ -704,7 +738,8 @@ export function extractOpenAIRealtimeTranscriptTurn(event: unknown): RealtimeTra
   return null;
 }
 
-export function lookupRestaurantContext(context: RestaurantVoiceContext, rawTopic: unknown) {
+export function lookupBusinessContext(context: RestaurantVoiceContext, rawTopic: unknown) {
+  const profile = getRuntimeBusinessProfile(context);
   const topic = String(rawTopic ?? "").toLowerCase();
   const policyMatches = Object.entries(context.policies)
     .filter(([key]) => !topic || key.toLowerCase().includes(topic) || topic.includes(key.toLowerCase()))
@@ -716,29 +751,68 @@ export function lookupRestaurantContext(context: RestaurantVoiceContext, rawTopi
     .filter((section) => textMatchesTopic(`${section.title} ${section.body}`, topic))
     .slice(0, 4);
 
-  if (topic.includes("menu") || topic.includes("order") || topic.includes("special") || topic.includes("food")) {
+  if (
+    topic.includes("menu") ||
+    topic.includes("order") ||
+    topic.includes("special") ||
+    topic.includes("food") ||
+    topic.includes("service") ||
+    topic.includes("appointment") ||
+    topic.includes("quote") ||
+    topic.includes("estimate") ||
+    topic.includes("repair") ||
+    topic.includes("inspection")
+  ) {
     return {
-      menuHighlights: context.menuHighlights,
-      menuItems: context.menuItems.slice(0, 30).map((item) => ({
+      businessName: context.restaurantName,
+      businessType: profile.businessType,
+      currentBusinessTime: buildRestaurantLocalTimeContext(context),
+      offeringHighlights: context.menuHighlights,
+      offeringItems: context.menuItems.slice(0, 30).map((item) => ({
         aliases: item.aliases,
         modifiers: item.modifiers,
         name: item.name,
         price: formatPrice(item.priceCents),
       })),
-      policies: pickPolicies(context, ["menu", "substitutions", "specials", "pickup", "payment", "allergies"]),
-      currentRestaurantTime: buildRestaurantLocalTimeContext(context),
-      restaurantName: context.restaurantName,
+      policies: profile.isRestaurant
+        ? pickPolicies(context, ["menu", "substitutions", "specials", "pickup", "payment", "allergies"])
+        : pickPolicies(context, ["menu", "substitutions", "specials", "pickup", "payment", "allergies", "hours", "location", "reservations", "waitlist"]),
+      profile: {
+        appointmentNoun: profile.appointmentNoun,
+        businessNoun: profile.businessNoun,
+        customerNoun: profile.customerNoun,
+        offeringNoun: profile.offeringNoun,
+        staffNoun: profile.staffNoun,
+      },
       topic,
     };
   }
 
   return {
-    currentRestaurantTime: buildRestaurantLocalTimeContext(context),
+    businessName: context.restaurantName,
+    businessType: profile.businessType,
+    currentBusinessTime: buildRestaurantLocalTimeContext(context),
     faqs: faqMatches,
     knowledgeSections: knowledgeMatches,
     policies: policyMatches.length ? Object.fromEntries(policyMatches) : context.policies,
-    restaurantName: context.restaurantName,
+    profile: {
+      appointmentNoun: profile.appointmentNoun,
+      businessNoun: profile.businessNoun,
+      customerNoun: profile.customerNoun,
+      offeringNoun: profile.offeringNoun,
+      staffNoun: profile.staffNoun,
+    },
     topic,
+  };
+}
+
+export function lookupRestaurantContext(context: RestaurantVoiceContext, rawTopic: unknown) {
+  const result = lookupBusinessContext(context, rawTopic);
+  return {
+    ...result,
+    currentRestaurantTime: buildRestaurantLocalTimeContext(context),
+    menuHighlights: context.menuHighlights,
+    restaurantName: context.restaurantName,
   };
 }
 
@@ -863,7 +937,7 @@ function startSidebandSocket({
       session: {
         instructions: buildOpenAIRealtimeInstructions(context, { callerPhone }),
         tool_choice: "auto",
-        tools: buildOpenAIRealtimeTools(),
+        tools: buildOpenAIRealtimeTools(context),
         type: "realtime",
       },
       type: "session.update",
@@ -951,11 +1025,16 @@ function startSidebandSocket({
 
 export function buildOpeningGreetingInstructions(context: RestaurantVoiceContext) {
   const greeting = buildShortOpeningGreeting(context);
+  const profile = getRuntimeBusinessProfile(context);
   return [
     "Say this exact opening greeting once as soon as the call starts, then stop and listen:",
     greeting,
-    "Deliver it warmly, like a friendly restaurant host with a smile in your voice.",
-    "Do not add your name, do not say you are virtual or AI, and do not add menu, hours, or reservation information.",
+    profile.isRestaurant
+      ? "Deliver it warmly, like a friendly restaurant host with a smile in your voice."
+      : `Deliver it warmly, like a friendly ${profile.staffNoun} with a smile in your voice.`,
+    profile.isRestaurant
+      ? "Do not add your name, do not say you are virtual or AI, and do not add menu, hours, or reservation information."
+      : `Do not add your name, do not say you are virtual or AI, and do not add ${profile.offeringNoun}, hours, or ${profile.appointmentNoun} information.`,
   ].join(" ");
 }
 
@@ -1378,6 +1457,10 @@ async function handleOpenAIRealtimeToolCall({
 }) {
   if (toolCall.name === "lookup_restaurant_context") {
     return lookupRestaurantContext(context, toolCall.arguments.topic);
+  }
+
+  if (toolCall.name === "lookup_business_context") {
+    return lookupBusinessContext(context, toolCall.arguments.topic);
   }
 
   if (toolCall.name === "send_guest_confirmation") {
@@ -1996,18 +2079,22 @@ async function checkOpenAIRealtimeModel({
   }
 }
 
-function buildOpenAIRealtimeTools() {
-  return [
+function buildOpenAIRealtimeTools(context: RestaurantVoiceContext = demoRestaurantContext) {
+  const profile = getRuntimeBusinessProfile(context);
+  const lookupName = profile.isRestaurant ? "lookup_restaurant_context" : "lookup_business_context";
+  const tools = [
     {
-      description:
-        "Look up restaurant facts, policies, FAQs, menu highlights, specials, hours, parking, reservations, pickup, payment, allergy, delivery, lost item, complaint, vendor, or human handoff details before answering.",
-      name: "lookup_restaurant_context",
+      description: profile.isRestaurant
+        ? "Look up restaurant facts, policies, FAQs, menu highlights, specials, hours, parking, reservations, pickup, payment, allergy, delivery, lost item, complaint, vendor, or human handoff details before answering."
+        : `Look up ${profile.businessNoun} facts, policies, FAQs, ${profile.offeringNoun} highlights, service area, hours, ${profile.appointmentNoun}s, quote policy, payment, safety, complaint, vendor, or human handoff details before answering.`,
+      name: lookupName,
       parameters: {
         additionalProperties: false,
         properties: {
           topic: {
-            description:
-              "The restaurant topic the caller asked about, such as specials, hours, parking, reservations, pickup, payment, allergies, delivery drivers, lost item, complaint, vendor, or menu.",
+            description: profile.isRestaurant
+              ? "The restaurant topic the caller asked about, such as specials, hours, parking, reservations, pickup, payment, allergies, delivery drivers, lost item, complaint, vendor, or menu."
+              : `The ${profile.businessNoun} topic the caller asked about, such as hours, service area, ${profile.offeringNoun}, ${profile.appointmentNoun}s, quotes, payment, safety, complaints, vendors, or staff callback.`,
             type: "string",
           },
         },
@@ -2024,12 +2111,12 @@ function buildOpenAIRealtimeTools() {
         additionalProperties: false,
         properties: {
           guest_name: {
-            description: "Guest or order name, if known.",
+            description: `${capitalize(profile.customerNoun)}, guest, order, or request name, if known.`,
             type: "string",
           },
           kind: {
             description: "The type of text to send.",
-            enum: ["reservation", "order", "note"],
+            enum: ["appointment", "order", "quote", "request", "reservation", "note"],
             type: "string",
           },
           message: {
@@ -2059,11 +2146,13 @@ function buildOpenAIRealtimeTools() {
             type: "string",
           },
           reservation_date: {
-            description: "Reservation date in the restaurant's local context, preferably YYYY-MM-DD.",
+            description: profile.isRestaurant
+              ? "Reservation date in the restaurant's local context, preferably YYYY-MM-DD."
+              : `${capitalize(profile.appointmentNoun)} or request date in the business's local context, preferably YYYY-MM-DD.`,
             type: "string",
           },
           reservation_time: {
-            description: "Reservation time, such as 6 PM or 18:00.",
+            description: profile.isRestaurant ? "Reservation time, such as 6 PM or 18:00." : `${capitalize(profile.appointmentNoun)} or request time, such as 6 PM or 18:00.`,
             type: "string",
           },
         },
@@ -2136,7 +2225,7 @@ function buildOpenAIRealtimeTools() {
     },
     {
       description:
-        "Save a reservation request after collecting date, time, party size, and guest name. In the current pilot this creates a staff-confirmed request rather than guaranteeing a live table.",
+        "Save a restaurant reservation request after collecting date, time, party size, and guest name. In the current pilot this creates a staff-confirmed request rather than guaranteeing a live table.",
       name: "create_reservation_request",
       parameters: {
         additionalProperties: false,
@@ -2233,6 +2322,7 @@ function buildOpenAIRealtimeTools() {
       type: "function" as const,
     },
   ];
+  return profile.isRestaurant ? tools : tools.filter((tool) => tool.name !== "create_reservation_request");
 }
 
 function parseOpenAIRealtimeEvent(rawBody: string): OpenAIRealtimeIncomingEvent {

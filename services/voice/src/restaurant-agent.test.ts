@@ -66,10 +66,12 @@ describe("restaurant fallback replies", () => {
       restaurantName: "Harbor Plumbing",
     });
 
-    expect(instructions).toContain("polished front-desk host");
+    expect(instructions).toContain("Business profile: plumbing company");
+    expect(instructions).toContain("dispatcher");
     expect(instructions).toContain("Use the full business context");
-    expect(instructions).toContain("Offerings and service highlights");
+    expect(instructions).toContain("Service catalog highlights");
     expect(instructions).toContain("out-of-scope requests");
+    expect(instructions).not.toContain("polished restaurant host");
   });
 
   it("coaches the model not to address callers by a bare last name", () => {

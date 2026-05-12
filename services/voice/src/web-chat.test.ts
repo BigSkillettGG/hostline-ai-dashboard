@@ -156,6 +156,44 @@ describe("web chat service", () => {
     ]);
   });
 
+  it("carries service-business context into website chat instructions", async () => {
+    const hvacContextStore: RestaurantContextStore = {
+      async getContext() {
+        return {
+          ...demoRestaurantContext,
+          businessLinks: [
+            {
+              kind: "booking" as const,
+              label: "Book service",
+              url: "https://summit.example/book",
+            },
+          ],
+          businessType: "hvac",
+          restaurantName: "Summit Air",
+        };
+      },
+    };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ output_text: "We can help with no heat. What town are you in?" }), {
+        status: 200,
+      }),
+    );
+
+    const service = createWebChatService(env, hvacContextStore);
+    const result = await service.handleMessage({
+      message: "What towns do you serve for no heat calls?",
+      transcript: [],
+    });
+
+    expect(result.businessName).toBe("Summit Air");
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(body.instructions).toContain("Business type: HVAC company");
+    expect(body.instructions).toContain("service catalog");
+    expect(body.instructions).toContain("Staff role is dispatcher");
+    expect(body.instructions).toContain("service-area");
+    expect(body.instructions).toContain("Book service");
+  });
+
   it("requires a visitor message", async () => {
     const service = createWebChatService(env, contextStore);
     await expect(service.handleMessage({ message: "   " })).rejects.toThrow("message is required");

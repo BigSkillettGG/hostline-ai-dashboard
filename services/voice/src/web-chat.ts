@@ -1,6 +1,7 @@
 import type { CallStore, StaffTaskPriority } from "./call-store";
 import type { VoiceServiceEnv } from "./env";
 import { HttpRequestError } from "./http-safety";
+import { getRuntimeBusinessProfile } from "./business-runtime";
 import type { RestaurantVoiceContext } from "./restaurant-context";
 import type { RestaurantContextStore } from "./restaurant-context-store";
 import {
@@ -305,14 +306,21 @@ async function handleCustomerRequestTool({
 }
 
 function buildWebChatChannelInstructions(context: RestaurantVoiceContext) {
+  const profile = getRuntimeBusinessProfile(context);
   const linkLines = context.businessLinks.map((link) => `${businessLinkKindLabels[link.kind]}: ${link.label} (${link.url})`);
   return [
     "Channel: website chat, not a phone call.",
     "Use short chat-friendly replies: usually one to three compact sentences.",
     "Do not say anything about hearing the caller, phone audio, holds, transfers, speaking aloud, or texting unless the visitor asks.",
+    `Business type: ${profile.businessNoun}. Visitor is a ${profile.customerNoun}. Staff role is ${profile.staffNoun}.`,
+    profile.isRestaurant
+      ? "Restaurant chat focus: answer menu, hours, reservation, order, allergy, parking, event, and policy questions from the configured context."
+      : `Business chat focus: answer ${profile.offeringNoun}, service-area, ${profile.appointmentNoun}, quote, safety, payment, policy, and staff-follow-up questions from the configured context.`,
     "For links, use get_business_link and place the URL directly in the chat reply. Do not say you texted the link.",
     "If a visitor wants staff follow-up, collect their name plus best phone or email, then use create_customer_request.",
-    "For orders, reservations, quotes, and appointments, use a configured link when the business has one; otherwise collect details for staff follow-up.",
+    profile.isRestaurant
+      ? "For orders, reservations, quotes, and appointments, use a configured link when the business has one; otherwise collect details for staff follow-up."
+      : `For ${profile.appointmentNoun}s, quotes, service requests, and callbacks, use a configured link when the business has one; otherwise collect the details ${profile.staffNoun} need for follow-up.`,
     linkLines.length ? `Configured links available for this business: ${linkLines.join(" | ")}` : "No website links are configured yet.",
   ].join("\n");
 }

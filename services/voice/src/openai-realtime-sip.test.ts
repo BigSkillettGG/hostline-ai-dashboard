@@ -19,6 +19,7 @@ import {
   extractOpenAIRealtimeTranscriptTurn,
   extractOpenAIRealtimeToolCalls,
   finishOpenAIRealtimeCall,
+  lookupBusinessContext,
   lookupRestaurantContext,
   requestOpenAIRealtimeStaffCallback,
   resolveOpenAIRealtimeIdleTimeoutMs,
@@ -119,6 +120,49 @@ describe("OpenAI Realtime SIP", () => {
     expect(payload.tools.map((tool) => tool.name)).toContain("create_reservation_request");
     expect(payload.tools.map((tool) => tool.name)).toContain("request_staff_callback");
     expect(payload.tools.map((tool) => tool.name)).toContain("finish_call");
+  });
+
+  it("configures realtime payloads for service businesses without restaurant tooling", () => {
+    const context: RestaurantVoiceContext = {
+      ...demoRestaurantContext,
+      businessType: "hvac",
+      restaurantName: "Summit Air",
+      menuHighlights: ["No heat", "No AC", "Tune-ups", "Replacement estimates"],
+      reservationSettings: {
+        ...demoRestaurantContext.reservationSettings,
+        bookingUrl: "https://summit.example/book",
+        handlingMode: "booking_link",
+        provider: "ServiceTitan",
+        sourceToday: "ServiceTitan",
+      },
+      orderSettings: {
+        enabled: true,
+        handlingMode: "staff_review",
+      },
+      policies: {
+        ...demoRestaurantContext.policies,
+        hours: "Mon-Fri 8 AM to 6 PM, emergency callbacks after hours.",
+        menu: "Service catalog: no heat, no AC, tune-ups, indoor air quality, and replacement estimates.",
+        reservations: "Booking requests go to dispatch for confirmation.",
+      },
+    };
+
+    const payload = buildOpenAIRealtimeAcceptPayload({
+      context,
+      env: baseEnv,
+    });
+
+    expect(payload.audio.input.transcription.prompt).toContain("Summit Air, a HVAC company");
+    expect(payload.audio.input.transcription.prompt).toContain("no heat");
+    expect(payload.instructions).toContain("Business profile: HVAC company");
+    expect(payload.instructions).toContain("dispatcher");
+    expect(payload.instructions).toContain("service catalog");
+    expect(payload.instructions).toContain("Service-request operating mode");
+    expect(payload.instructions).toContain("use create_customer_request");
+    expect(payload.instructions).not.toContain("use create_reservation_request to save the request");
+    expect(payload.tools[0].name).toBe("lookup_business_context");
+    expect(payload.tools.map((tool) => tool.name)).not.toContain("create_reservation_request");
+    expect(payload.tools.map((tool) => tool.name)).toContain("create_customer_request");
   });
 
   it("adds restaurant-local time and caller phone context to realtime instructions", () => {
@@ -564,6 +608,43 @@ describe("OpenAI Realtime SIP", () => {
       phoneNumber: "+14155550123",
       sentToLastFour: "0123",
     });
+  });
+
+  it("looks up service-business context with neutral labels", () => {
+    const context: RestaurantVoiceContext = {
+      ...demoRestaurantContext,
+      businessType: "plumbing",
+      restaurantName: "Harbor Plumbing",
+      menuHighlights: ["Leaks", "Drains", "Water heaters"],
+      menuItems: [],
+      policies: {
+        ...demoRestaurantContext.policies,
+        hours: "Open weekdays 8 AM to 6 PM.",
+        location: "Serving Somerville and Cambridge.",
+        menu: "Service catalog includes leaks, drains, and water heaters.",
+        reservations: "Appointments are staff-confirmed.",
+      },
+    };
+
+    const result = lookupBusinessContext(context, "water heater appointment") as {
+      businessName?: string;
+      businessType?: string;
+      currentBusinessTime?: string;
+      offeringHighlights?: string[];
+      profile?: { businessNoun?: string; offeringNoun?: string; staffNoun?: string };
+      restaurantName?: string;
+    };
+
+    expect(result.businessName).toBe("Harbor Plumbing");
+    expect(result.businessType).toBe("plumbing");
+    expect(result.currentBusinessTime).toBeTruthy();
+    expect(result.offeringHighlights).toContain("Water heaters");
+    expect(result.profile).toMatchObject({
+      businessNoun: "plumbing company",
+      offeringNoun: "service catalog",
+      staffNoun: "dispatcher",
+    });
+    expect(result.restaurantName).toBeUndefined();
   });
 
   it("texts configured business links from realtime tool calls", async () => {

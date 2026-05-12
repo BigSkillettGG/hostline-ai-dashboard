@@ -1,7 +1,7 @@
 import type { VoiceServiceEnv } from "./env";
 import { normalizeSignalHostVoiceGender } from "../../../src/domain/voice-selection";
 import type { BusinessLink } from "../../../src/domain/business-links";
-import { normalizeBusinessType } from "../../../src/domain/business-templates";
+import { getBusinessTemplate, normalizeBusinessType, type BusinessTemplate, type BusinessType } from "../../../src/domain/business-templates";
 import {
   demoRestaurantContext,
   toSpokenRestaurantName,
@@ -114,11 +114,14 @@ export function buildRestaurantContext({
   onboardingProfile,
 }: BuildRestaurantContextInput): RestaurantVoiceContext {
   const draft = normalizeDraft(onboardingProfile?.draft);
+  const businessType = normalizeBusinessType(stringValue(draft.businessType));
+  const businessTemplate = getBusinessTemplate(businessType);
+  const isRestaurant = businessType === "restaurant";
   const restaurantName =
     stringValue(draft.restaurantName) ??
     stringValue(draft.businessName) ??
     location?.name?.trim() ??
-    demoRestaurantContext.restaurantName;
+    businessTemplate.defaultName;
   const hostName = stringValue(draft.hostName) ?? agentConfig?.host_name?.trim() ?? demoRestaurantContext.hostName;
   const timezone = stringValue(draft.timezone) ?? location?.timezone?.trim() ?? demoRestaurantContext.timezone;
   const greetingTemplate =
@@ -127,7 +130,7 @@ export function buildRestaurantContext({
   const orderSettings = buildOrderSettings(draft);
   const menuHighlights = menu.length
     ? menu.map((item) => item.name)
-    : splitList(stringValue(draft.menuCategories) ?? location?.cuisine ?? "").slice(0, 8);
+    : splitList(stringValue(draft.menuCategories) ?? location?.cuisine ?? businessTemplate.defaultOffering).slice(0, 8);
   const categoryNames = menuCategories.map((category) => category.name).filter(Boolean).join(", ");
   const mappedKnowledgeSections = [
     ...mapKnowledgeSections(knowledgeSections),
@@ -135,23 +138,25 @@ export function buildRestaurantContext({
   ];
   const mappedFaqs = mapFaqs(faqs);
   const locationPolicy =
-    location?.address?.trim() ?? stringValue(draft.primaryLocation) ?? "The restaurant address has not been configured yet.";
-  const parkingPolicy = stringValue(draft.parking) ?? demoRestaurantContext.policies.parking;
+    location?.address?.trim() ??
+    stringValue(draft.primaryLocation) ??
+    `The ${businessTemplate.businessNoun} address or service area has not been configured yet.`;
+  const parkingPolicy = stringValue(draft.parking) ?? defaultParkingOrServiceAreaPolicy(businessTemplate);
   const reservationSettings = buildReservationSettings(draft, agentConfig);
   const businessLinks = buildBusinessLinks(draft, orderSettings, reservationSettings);
 
   return {
     businessLinks,
-    businessType: normalizeBusinessType(stringValue(draft.businessType)),
+    businessType,
     defaultPickupEtaMinutes: parseMinutes(stringValue(draft.defaultPickupEta)) ?? demoRestaurantContext.defaultPickupEtaMinutes,
-    faqs: mappedFaqs.length ? mappedFaqs : demoRestaurantContext.faqs,
+    faqs: mappedFaqs.length ? mappedFaqs : defaultFaqsForBusiness(businessType),
     greeting: renderTemplate(greetingTemplate, { hostName, restaurantName }),
     hostName,
-    knowledgeSections: mappedKnowledgeSections.length ? mappedKnowledgeSections : demoRestaurantContext.knowledgeSections,
+    knowledgeSections: mappedKnowledgeSections.length ? mappedKnowledgeSections : defaultKnowledgeSectionsForBusiness(businessTemplate),
     menuHighlights: menuHighlights.length ? menuHighlights : demoRestaurantContext.menuHighlights,
-    menuItems: menu.length ? menu : demoRestaurantContext.menuItems,
+    menuItems: menu.length ? menu : isRestaurant ? demoRestaurantContext.menuItems : [],
     policies: {
-      allergies: stringValue(draft.allergyPolicy) ?? demoRestaurantContext.policies.allergies,
+      allergies: stringValue(draft.allergyPolicy) ?? defaultSafetyPolicy(businessTemplate),
       complaints: buildComplaintPolicy(draft),
       delivery: buildDeliveryPolicy(draft),
       delivery_drivers:
@@ -164,7 +169,7 @@ export function buildRestaurantContext({
       escalations: buildEscalationPolicy(draft, agentConfig),
       employment: stringValue(draft.hiringPolicy) ?? "Hiring inquiries should be sent to staff for follow-up.",
       human_handoff: buildHumanHandoffPolicy(draft, agentConfig),
-      hours: buildHoursPolicy(draft),
+      hours: buildHoursPolicy(draft, businessTemplate),
       location: locationPolicy,
       lost_and_found:
         stringValue(draft.lostAndFoundPolicy) ??
@@ -175,8 +180,8 @@ export function buildRestaurantContext({
         stringValue(draft.orderChangePolicy) ??
         "Order changes and cancellations need staff confirmation before they are promised.",
       parking: parkingPolicy,
-      payment: stringValue(draft.paymentPolicy) ?? "Payment is pay at pickup. Do not collect card numbers over the phone.",
-      pickup: buildPickupPolicy(draft, orderSettings),
+      payment: stringValue(draft.paymentPolicy) ?? defaultPaymentPolicy(businessTemplate),
+      pickup: buildPickupPolicy(draft, orderSettings, businessTemplate),
       private_events:
         stringValue(draft.privateEvents) ??
         "Private event, catering, and buyout inquiries should be collected for staff follow-up.",
@@ -186,9 +191,7 @@ export function buildRestaurantContext({
       reservations: buildReservationPolicy(draft, agentConfig, reservationSettings),
       sales: buildVendorPolicy(draft),
       specials: buildSpecialsPolicy(draft),
-      waitlist:
-        stringValue(draft.waitlistPolicy) ??
-        "Live wait times can change quickly, so staff should confirm the wait when the guest arrives.",
+      waitlist: stringValue(draft.waitlistPolicy) ?? defaultAvailabilityPolicy(businessTemplate),
     },
     orderSettings,
     restaurantName,
@@ -339,8 +342,10 @@ function stringValue(value: OnboardingDraftValue) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
-function buildHoursPolicy(draft: OnboardingDraft) {
-  const regularHours = stringValue(draft.regularHours) ?? demoRestaurantContext.policies.hours;
+function buildHoursPolicy(draft: OnboardingDraft, template = getBusinessTemplate(stringValue(draft.businessType))) {
+  const regularHours =
+    stringValue(draft.regularHours) ??
+    (template.id === "restaurant" ? demoRestaurantContext.policies.hours : `Hours for this ${template.businessNoun} have not been configured yet.`);
   const holidayExceptions = stringValue(draft.holidayExceptions);
   const servicePeriods = stringValue(draft.servicePeriods);
   const orderingCutoffs = stringValue(draft.orderingCutoffs);
@@ -349,27 +354,44 @@ function buildHoursPolicy(draft: OnboardingDraft) {
     .join(" ");
 }
 
-function buildPickupPolicy(draft: OnboardingDraft, settings = buildOrderSettings(draft)) {
-  const paymentPolicy = stringValue(draft.paymentPolicy) ?? "Pickup orders are pay at pickup.";
+function buildPickupPolicy(
+  draft: OnboardingDraft,
+  settings = buildOrderSettings(draft),
+  template = getBusinessTemplate(stringValue(draft.businessType)),
+) {
+  const isRestaurant = template.id === "restaurant";
+  const paymentPolicy = stringValue(draft.paymentPolicy) ?? defaultPaymentPolicy(template);
   const defaultPickupEta = stringValue(draft.defaultPickupEta);
   const orderDestination = stringValue(draft.orderDestination);
   return [
-    orderModeInstruction(settings),
+    orderModeInstruction(settings, template),
     settings.onlineOrderingUrl && `Online ordering link: ${settings.onlineOrderingUrl}.`,
     paymentPolicy,
-    defaultPickupEta && `Default pickup estimate is ${defaultPickupEta}.`,
-    orderDestination && `Orders route to ${orderDestination}.`,
+    defaultPickupEta && `Default ${isRestaurant ? "pickup" : "response"} estimate is ${defaultPickupEta}.`,
+    orderDestination && `${isRestaurant ? "Orders" : "Requests"} route to ${orderDestination}.`,
   ]
     .filter(Boolean)
     .join(" ");
 }
 
 function buildDeliveryPolicy(draft: OnboardingDraft) {
-  return stringValue(draft.deliveryPolicy) ?? "Direct delivery policy has not been configured yet.";
+  const template = getBusinessTemplate(stringValue(draft.businessType));
+  return stringValue(draft.deliveryPolicy) ?? (template.id === "restaurant"
+    ? "Direct delivery policy has not been configured yet."
+    : `Service area, dispatch, and existing-job policies for this ${template.businessNoun} have not been configured yet.`);
 }
 
 function buildDeliveryIssuePolicy(draft: OnboardingDraft) {
+  const template = getBusinessTemplate(stringValue(draft.businessType));
   const deliveryPolicy = stringValue(draft.deliveryPolicy);
+  if (template.id !== "restaurant") {
+    return [
+      deliveryPolicy ?? `For existing-job or service follow-up issues, collect the customer name, address or service area, issue, urgency, and callback number.`,
+      "Do not promise exact arrival times, warranty coverage, or price adjustments without staff confirmation.",
+    ]
+      .filter(Boolean)
+      .join(" ");
+  }
   return [
     deliveryPolicy ?? "For third-party delivery app issues, the fastest refund path is usually through the app.",
     "Collect the guest name, app, order details, issue, and callback number if staff review is needed.",
@@ -397,7 +419,15 @@ function normalizeOrderMode(value: string | undefined, takeOrders: OnboardingDra
   return "staff_review";
 }
 
-function orderModeInstruction(settings: RestaurantOrderSettings) {
+function orderModeInstruction(settings: RestaurantOrderSettings, template = getBusinessTemplate("restaurant")) {
+  if (template.id !== "restaurant") {
+    if (!settings.enabled || settings.handlingMode === "disabled") return `Do not capture service requests unless ${template.staffNoun} enable request capture.`;
+    if (settings.handlingMode === "online_link") return "For service, quote, or appointment requests, offer to text the configured link instead of manually taking the request.";
+    if (settings.handlingMode === "staff_review_and_link") {
+      return `For service, quote, or appointment requests, the host may either capture details for ${template.staffNoun} review or offer to text the configured link, based on caller preference.`;
+    }
+    return `For service, quote, or appointment requests, capture the details for ${template.staffNoun} review.`;
+  }
   if (!settings.enabled || settings.handlingMode === "disabled") return "Do not capture pickup orders unless staff enables ordering.";
   if (settings.handlingMode === "online_link") return "For pickup orders, offer to text the online ordering link instead of manually taking the order.";
   if (settings.handlingMode === "staff_review_and_link") {
@@ -481,12 +511,13 @@ function buildReservationPolicy(
   agentConfig: SupabaseAgentConfigRow | null | undefined,
   settings = buildReservationSettings(draft, agentConfig),
 ) {
+  const template = getBusinessTemplate(stringValue(draft.businessType));
   if (!settings.enabled || settings.handlingMode === "disabled") {
-    return "Reservations are disabled. Do not collect reservation requests unless staff configures reservations.";
+    return `${capitalize(template.appointmentNoun)} requests are disabled. Do not collect booking requests unless staff configuration changes.`;
   }
 
   const provider = labelProvider(settings.provider);
-  const partyRules = stringValue(draft.partyRules) ?? demoRestaurantContext.policies.reservations;
+  const partyRules = stringValue(draft.partyRules) ?? defaultBookingPolicy(template);
   const specialReservationDays = stringValue(draft.specialReservationDays);
   const bookingUrl = settings.bookingUrl;
   const seatingAreas = stringValue(draft.seatingAreas);
@@ -498,7 +529,7 @@ function buildReservationPolicy(
   const largePartyThreshold = settings.largePartyThreshold;
   const autoConfirmPartyLimit = settings.autoConfirmPartyLimit;
   return [
-    `Handling mode: ${reservationModeInstruction(settings.handlingMode)}.`,
+    `Handling mode: ${reservationModeInstruction(settings.handlingMode, template)}.`,
     `Current workflow: ${settings.sourceToday ?? provider}.`,
     `Provider or system: ${provider}.`,
     bookingUrl && `Booking link: ${bookingUrl}.`,
@@ -584,7 +615,15 @@ function normalizeReservationProvider(value: string) {
   return normalized.trim() || "none";
 }
 
-function reservationModeInstruction(mode: RestaurantReservationMode) {
+function reservationModeInstruction(mode: RestaurantReservationMode, template = getBusinessTemplate("restaurant")) {
+  if (template.id !== "restaurant") {
+    if (mode === "integration") return `try the connected booking or dispatch provider first, and fall back to ${template.staffNoun} confirmation if not confirmed`;
+    if (mode === "booking_link") return `offer to send the caller the booking link instead of promising a confirmed ${template.appointmentNoun}`;
+    if (mode === "hostline_lite_request") return `save a pending SignalHost ${template.appointmentNoun} request for ${template.staffNoun} review`;
+    if (mode === "hostline_lite_confirm") return `confirm in SignalHost only when configured rules allow it; otherwise use ${template.staffNoun} confirmation`;
+    if (mode === "disabled") return `do not take ${template.appointmentNoun} requests`;
+    return `create a request for ${template.staffNoun} confirmation`;
+  }
   if (mode === "integration") return "try the connected reservation provider first, and fall back to staff confirmation if not confirmed";
   if (mode === "booking_link") return "offer to send the caller the booking link instead of promising a table";
   if (mode === "hostline_lite_request") return "save a pending SignalHost reservation request for staff review";
@@ -687,13 +726,14 @@ function buildSubstitutionPolicy(draft: OnboardingDraft) {
 }
 
 function buildSpecialsPolicy(draft: OnboardingDraft) {
+  const template = getBusinessTemplate(stringValue(draft.businessType));
   return [
     stringValue(draft.specialsSchedule),
     stringValue(draft.timedPricing) && `Timed pricing: ${stringValue(draft.timedPricing)}.`,
     stringValue(draft.holidayExceptions) && `Special days: ${stringValue(draft.holidayExceptions)}.`,
   ]
     .filter(Boolean)
-    .join(" ") || demoRestaurantContext.policies.specials;
+    .join(" ") || (template.id === "restaurant" ? demoRestaurantContext.policies.specials : `${capitalize(template.offeringNoun)} promotions, seasonal priorities, and special availability have not been configured yet.`);
 }
 
 function mapMenuItems(rows: SupabaseMenuItemRow[]): RestaurantMenuItem[] {
@@ -775,6 +815,63 @@ function splitList(value: string) {
     .split(/[,;\n]/)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function defaultFaqsForBusiness(businessType: BusinessType): RestaurantFaq[] {
+  if (businessType === "restaurant") return demoRestaurantContext.faqs;
+  return [];
+}
+
+function defaultKnowledgeSectionsForBusiness(template: BusinessTemplate): RestaurantKnowledgeSection[] {
+  if (template.id === "restaurant") return demoRestaurantContext.knowledgeSections;
+  return [
+    {
+      body: template.defaultOffering,
+      title: `${capitalize(template.offeringNoun)} overview`,
+    },
+    {
+      body: `Collect the ${template.customerNoun} name, callback number, request summary, urgency, and any service-area or timing details ${template.staffNoun} need for follow-up.`,
+      title: "Default request intake",
+    },
+  ];
+}
+
+function defaultSafetyPolicy(template: BusinessTemplate) {
+  if (template.id === "restaurant") return demoRestaurantContext.policies.allergies;
+  if (template.id === "salon_barber") {
+    return "Skin sensitivities, allergies, chemical services, and complex corrections require front-desk or stylist confirmation before promising availability or safety.";
+  }
+  return "Safety-sensitive questions require staff confirmation. Do not give DIY repair instructions or guarantee safety, timing, or pricing without staff review.";
+}
+
+function defaultPaymentPolicy(template: BusinessTemplate) {
+  if (template.id === "restaurant") return "Payment is pay at pickup. Do not collect card numbers over the phone.";
+  if (template.id === "salon_barber") {
+    return "Deposits, cancellation fees, product purchases, and checkout are handled through the studio or configured booking link. Do not collect card numbers over the phone.";
+  }
+  return "Payment, diagnostic fees, deposits, and financing are confirmed by staff or through the configured business system. Do not collect card numbers over the phone.";
+}
+
+function defaultAvailabilityPolicy(template: BusinessTemplate) {
+  if (template.id === "restaurant") {
+    return "Live wait times can change quickly, so staff should confirm the wait when the guest arrives.";
+  }
+  return `${capitalize(template.appointmentNoun)} availability and response windows can change quickly, so ${template.staffNoun} must confirm exact timing.`;
+}
+
+function defaultParkingOrServiceAreaPolicy(template: BusinessTemplate) {
+  if (template.id === "restaurant") return demoRestaurantContext.policies.parking;
+  if (template.id === "salon_barber") return "Parking, arrival, and accessibility details have not been configured yet.";
+  return "Service area, travel, parking, access, and arrival details have not been configured yet.";
+}
+
+function defaultBookingPolicy(template: BusinessTemplate) {
+  if (template.id === "restaurant") return demoRestaurantContext.policies.reservations;
+  return `${capitalize(template.appointmentNoun)} and quote requests should be collected for ${template.staffNoun} review. Do not promise exact timing, pricing, or availability unless explicitly configured.`;
+}
+
+function capitalize(value: string) {
+  return value ? `${value[0].toUpperCase()}${value.slice(1)}` : value;
 }
 
 function parseMinutes(value?: string) {

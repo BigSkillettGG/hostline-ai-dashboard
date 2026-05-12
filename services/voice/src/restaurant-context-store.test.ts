@@ -234,6 +234,15 @@ describe("restaurant context store", () => {
 
     expect(context.businessType).toBe("plumbing");
     expect(context.restaurantName).toBe("Harbor Plumbing");
+    expect(context.menuHighlights).toEqual(["Leaks", "drains", "water heaters", "fixtures", "emergency service."]);
+    expect(context.menuItems).toEqual([]);
+    expect(context.faqs).toEqual([]);
+    expect(context.policies.payment).toContain("Payment, diagnostic fees, deposits, and financing");
+    expect(context.policies.specials).toContain("Service catalog promotions");
+    expect(context.policies.waitlist).toContain("Appointment availability");
+    expect(context.knowledgeSections).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ title: "Tonight's specials" }),
+    ]));
     expect(context.businessLinks).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ kind: "booking", url: "https://harbor.example/book" }),

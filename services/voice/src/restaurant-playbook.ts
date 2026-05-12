@@ -1,5 +1,6 @@
 import type { StaffAlertKind } from "./notification-service";
 import type { RestaurantVoiceContext } from "./restaurant-context";
+import { getRuntimeBusinessProfile } from "./business-runtime";
 
 export interface PhonePlaybookReply {
   staffAlertKind?: StaffAlertKind;
@@ -36,6 +37,8 @@ export function matchPhonePlaybookReply(
 ): PhonePlaybookReply | null {
   const normalized = normalize(utterance);
   if (!normalized) return null;
+  const profile = getRuntimeBusinessProfile(context);
+  const businessPossessive = profile.isRestaurant ? "restaurant's" : "business's";
 
   if (/\b(wrong number|mistake|sorry wrong)\b/.test(normalized)) {
     return reply("wrong_number", `No problem. This is ${context.restaurantName}. Have a good night.`);
@@ -48,7 +51,7 @@ export function matchPhonePlaybookReply(
         context,
         "complaints",
         "I am sorry about that. I can flag this for a manager to review; what name and best callback number should I include?",
-        "I am sorry about that. I will follow the restaurant's complaint process:",
+        `I am sorry about that. I will follow the ${businessPossessive} complaint process:`,
         "What name and callback number should I include?",
       ),
       "complaint",
@@ -90,7 +93,7 @@ export function matchPhonePlaybookReply(
         context,
         "donations_press",
         "I can pass that along for staff review. What organization, request, deadline, and callback info should I include?",
-        "I can pass that along. The restaurant's process is:",
+        `I can pass that along. The ${businessPossessive} process is:`,
         "What organization, request, deadline, and callback info should I include?",
       ),
       "handoff",
@@ -117,15 +120,15 @@ export function matchPhonePlaybookReply(
       policyBackedReply(
         context,
         "employment",
-        "For hiring, it is best to contact the restaurant outside peak service hours. I can also pass along your name, role of interest, and callback number.",
-        "For hiring, the restaurant's process is:",
+        `For hiring, it is best to contact the ${profile.businessNoun} outside peak hours. I can also pass along your name, role of interest, and callback number.`,
+        `For hiring, the ${businessPossessive} process is:`,
         "What role and callback number should I include?",
       ),
       "handoff",
     );
   }
 
-  if (/\b(delivery driver|doordash driver|uber eats driver|grubhub driver|pickup for)\b/.test(normalized)) {
+  if (profile.isRestaurant && /\b(delivery driver|doordash driver|uber eats driver|grubhub driver|pickup for)\b/.test(normalized)) {
     return reply(
       "delivery_driver",
       policy(context, "delivery_drivers") ??
@@ -133,7 +136,7 @@ export function matchPhonePlaybookReply(
     );
   }
 
-  if (/\b(doordash|uber eats|grubhub|delivery app).{0,60}\b(missing|wrong|late|never arrived|never delivered|not delivered|refund)\b/.test(normalized)) {
+  if (profile.isRestaurant && /\b(doordash|uber eats|grubhub|delivery app).{0,60}\b(missing|wrong|late|never arrived|never delivered|not delivered|refund)\b/.test(normalized)) {
     return reply(
       "delivery_issue",
       policyBackedReply(
@@ -147,16 +150,16 @@ export function matchPhonePlaybookReply(
     );
   }
 
-  if (/\b(cancel|change|modify|update|move|reschedule).{0,40}\b(order|reservation|table|booking)\b/.test(normalized)) {
+  if (/\b(cancel|change|modify|update|move|reschedule).{0,40}\b(order|reservation|table|booking|appointment|inspection|estimate|quote|service)\b/.test(normalized)) {
     const isReservationChange = /\b(reservation|table|booking)\b/.test(normalized);
     return reply(
       "change_or_cancel",
       policyBackedReply(
         context,
-        isReservationChange ? "reservation_changes" : "order_changes",
-        "I can flag that for staff because changes and cancellations need confirmation. What name is it under, and what should be changed?",
-        isReservationChange
-          ? "I can help get that reservation change to staff. The process is:"
+        isReservationChange || !profile.isRestaurant ? "reservation_changes" : "order_changes",
+        `I can flag that for ${profile.staffNoun} because changes and cancellations need confirmation. What name is it under, and what should be changed?`,
+        isReservationChange || !profile.isRestaurant
+          ? `I can help get that ${profile.isRestaurant ? "reservation" : profile.appointmentNoun} change to staff. The process is:`
           : "I can help get that order change to staff. The process is:",
         "What name is it under, and what should be changed?",
       ),
@@ -175,7 +178,7 @@ export function matchPhonePlaybookReply(
     );
   }
 
-  if (/\b(cater|catering|private event|buyout|wedding|corporate event|banquet)\b/.test(normalized)) {
+  if (profile.isRestaurant && /\b(cater|catering|private event|buyout|wedding|corporate event|banquet)\b/.test(normalized)) {
     return reply(
       "private_event",
       policyBackedReply(
@@ -189,7 +192,7 @@ export function matchPhonePlaybookReply(
     );
   }
 
-  if (/\b(large party|party of (?:[8-9]|[1-9][0-9])|group of (?:[8-9]|[1-9][0-9]))\b/.test(normalized)) {
+  if (profile.isRestaurant && /\b(large party|party of (?:[8-9]|[1-9][0-9])|group of (?:[8-9]|[1-9][0-9]))\b/.test(normalized)) {
     return reply(
       "large_party",
       policyBackedReply(
@@ -211,7 +214,7 @@ export function matchPhonePlaybookReply(
     );
   }
 
-  if (/\b(wait time|how long is the wait|waitlist|walk in|walk-in)\b/.test(normalized)) {
+  if (profile.isRestaurant && /\b(wait time|how long is the wait|waitlist|walk in|walk-in)\b/.test(normalized)) {
     return reply(
       "wait_time",
       policy(context, "waitlist") ??
@@ -219,15 +222,17 @@ export function matchPhonePlaybookReply(
     );
   }
 
-  if (/\b(special|specials|special menu|daily special|tonight's special|tonights special|happy hour|prix fixe|featured dish|features tonight)\b/.test(normalized)) {
+  if (/\b(special|specials|special menu|daily special|tonight's special|tonights special|happy hour|prix fixe|featured dish|features tonight|promotion|promo|seasonal)\b/.test(normalized)) {
     return reply(
       "specials",
       policy(context, "specials") ??
-        "I do not have tonight's specials in front of me yet. I can help with the regular menu, or staff can confirm current specials when you arrive.",
+        profile.isRestaurant
+          ? "I do not have tonight's specials in front of me yet. I can help with the regular menu, or staff can confirm current specials when you arrive."
+          : `I do not have current promotions in front of me yet. I can collect your question for ${profile.staffNoun} follow-up if you want.`,
     );
   }
 
-  if (/\b(reservation|reserve|book a table|table for)\b/.test(normalized)) {
+  if (profile.isRestaurant && /\b(reservation|reserve|book a table|table for)\b/.test(normalized)) {
     return reply(
       "reservation",
       policyBackedReply(
@@ -240,7 +245,7 @@ export function matchPhonePlaybookReply(
     );
   }
 
-  if (/\b(order status|is my order ready|how much longer|pickup ready)\b/.test(normalized)) {
+  if (profile.isRestaurant && /\b(order status|is my order ready|how much longer|pickup ready)\b/.test(normalized)) {
     return reply(
       "order_status",
       policyBackedReply(
@@ -251,6 +256,19 @@ export function matchPhonePlaybookReply(
         "What name is the order under?",
       ),
       "handoff",
+    );
+  }
+
+  if (!profile.isRestaurant && /\b(appointment|book|schedule|estimate|quote|inspection|service call|repair|install|consultation)\b/.test(normalized)) {
+    return reply(
+      "service_request",
+      policyBackedReply(
+        context,
+        "reservations",
+        `I can help collect that for ${profile.staffNoun}. What service do you need, what area are you in, and what is the best callback number?`,
+        `I can help with that ${profile.appointmentNoun} request. The process is:`,
+        "What service do you need, what area are you in, and what is the best callback number?",
+      ),
     );
   }
 
@@ -274,7 +292,7 @@ export function matchPhonePlaybookReply(
     if (dressCode) return reply("dress_code", dressCode);
   }
 
-  if (/\b(pickup|takeout|take out|to go)\b/.test(normalized)) {
+  if (profile.isRestaurant && /\b(pickup|takeout|take out|to go)\b/.test(normalized)) {
     const pickup = policy(context, "pickup");
     if (pickup && !/\b(order|can i get|i want|i would like|i'd like)\b/.test(normalized)) {
       return reply("pickup_policy", pickup);
