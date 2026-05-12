@@ -1,97 +1,116 @@
-# Mobile polish for the marketing site
+## Goal
+Confirm why the existing call logging/transcript pipeline is not surfacing the last two calls in the dashboard, using the current code and backend as-is.
 
-Tighten the marketing site on phones (≈360–414px) so nothing gets clipped, headlines scale down, and dense rows wrap cleanly. No content or copy changes — purely responsive class adjustments.
+## What I already verified
+- **Dashboard backend URL:** the frontend reads from `VITE_SUPABASE_URL`, currently `https://bzxueegzsxwrcybsrvhh.supabase.co`.
+- **Dashboard read paths:**
+  - `src/integrations/supabase/client.ts`
+  - `src/lib/supabase-rest.ts`
+- **Voice persistence code exists already:**
+  - `services/voice/src/call-store.ts`
+  - `services/voice/src/conversation-relay.ts`
+  - `services/voice/src/server.ts`
+  - `services/voice/src/notification-service.ts`
+- **Inbound call route exists already:** `POST /twilio/voice`
+- **Related callback routes exist already:**
+  - `POST /twilio/recording-status`
+  - `POST /twilio/conversation-ended`
+  - WebSocket `/twilio/conversation-relay`
+- **Current database state:** all relevant tables exist, but right now the live backend has **0 rows** in `calls`, `transcript_turns`, `call_feedback`, `staff_alert_events`, `orders`, `reservations`, and `phone_numbers`.
+- **Phone search in current backend:** no matches for `781-307-2672`, `7813072672`, `+17813072672`, or `17813072672` in the queried tables.
+- **Immediate DB error evidence:** no recent Postgres log evidence of RLS failures, permission errors, or inserts failing on those call tables.
 
-## Issues found
+## Current hypothesis
+The missing calls are most likely caused by **the deployed voice service not writing into this same backend**, or **Twilio not hitting the deployed `/twilio/voice` route**. The code itself already supports persistence.
 
-**Marketing layout / chrome**
-- Announcement bar text ("New: Toast & Square integrations now live — sync orders straight to your POS. Learn more →") wraps awkwardly into 3–4 lines on small screens. No hamburger menu — primary nav links (Product, Pricing, Live demo, How it works, Talk to sales) are completely hidden under `md:flex`.
-- Footer is a 1-column stack on mobile with lots of empty vertical space because `md:grid-cols-5` only kicks in at 768px+.
+## Investigation plan
+1. **Document the exact persistence map from code**
+   - Calls/transcripts/recordings:
+     - `createCallStore()` in `services/voice/src/call-store.ts`
+     - `startCall`, `addTranscriptTurn`, `completeCall`, `attachCallRecording`
+   - Call-triggered downstream writes:
+     - `createStaffReviewOrder`, `createStaffReviewReservation`, `createStaffTask`
+   - Dashboard-only feedback writes:
+     - `createCallFeedbackInSupabase()` in `src/lib/supabase-rest.ts`
 
-**Home — Hero**
-- H1 `text-[44px]` at base is too large at 360px — causes the awkward "Answer every / call." break and "Capture every / order." overflow risk.
-- Trust badges row ("No credit card · Live in under 1 hour · SOC 2 ready") uses `flex items-center gap-4` with no wrap → labels crash into each other on narrow phones.
-- Trust strip integration names are a flat row of 6 brand names — wraps but feels cramped.
+2. **Answer the write/read target question precisely**
+   - **Dashboard reads from:** `https://bzxueegzsxwrcybsrvhh.supabase.co`
+   - **Voice service code is designed to write to:** `env.SUPABASE_URL` using `env.SUPABASE_SECRET_KEY`
+   - Determine whether the **deployed** voice runtime is actually using that same URL, or whether it is pointing somewhere else / missing env entirely.
 
-**Home — "Cost of a missed call" stats**
-- `grid-cols-3` forced at all breakpoints with `text-3xl md:text-5xl` numbers + label below. At 360px the third column is squeezed and labels truncate.
+3. **Verify the exact tables and columns the existing pipeline writes**
+   - `calls`: `caller_name`, `caller_phone`, `external_call_sid`, `external_session_id`, `location_id`, `started_at`, `status`, `twilio_payload`, plus later `duration_seconds`, `intent`, `outcome`, `confidence`, `summary`, `recording_url`
+   - `transcript_turns`: `call_id`, `offset_seconds`, `speaker`, `text`
+   - `staff_alert_events`: `call_id`, `caller_phone`, `kind`, `severity`, `status`, `summary`, `message`, `location_id`, `recipients`, `channels`, `route_snapshot`, `error_message`, `sent_at`
+   - `staff_tasks`: `call_id`, `location_id`, `title`, `body`, `status`, `task_type`, `priority`, `due_at`
+   - `orders`, `order_items`, `order_delivery_attempts`
+   - `reservations`
+   - `call_feedback` is written by the dashboard, not by the voice call runtime
 
-**Home — Testimonials banner**
-- `-mt-16 md:-mt-24` pulls the section header up over the photo banner, but on mobile the eyebrow + h2 sit on a noisy image area and become hard to read.
+4. **Confirm schema alignment in the current backend**
+   - Check that all write-target tables and required columns above exist in the current database
+   - Confirm whether any required data such as `location_id` would be missing at runtime
 
-**Live demo (VoiceDemoPlayer)**
-- 7 tab pills + "Audio" sub-badges wrap to 3–4 rows and feel busy. The center play column (`lg:grid-cols-[1fr_260px_1fr]`) renders full-width at mobile, fine — but the per-person panels above/below get tall and the play button sits in the middle of a long scroll.
+5. **Verify failure mode instead of guessing**
+   - Check whether the voice service would fall back to **`NoopCallStore`** if any of these are missing:
+     - `SUPABASE_URL`
+     - `SUPABASE_SECRET_KEY`
+     - `SUPABASE_DEMO_LOCATION_ID`
+   - If so, the runtime would accept calls but persist nothing
+   - Cross-check for evidence of RLS/service-role/schema failures versus “not writing at all”
 
-**ProductTour**
-- 5 tabs wrap to 2 rows — OK but tight. Inside the card, `p-6` text + the mock UI panel each get full width and the section becomes very tall.
+6. **Verify webhook expectations end-to-end**
+   - Expected inbound route: `POST /twilio/voice?locationId=<location-id>`
+   - Expected Twilio continuation flow:
+     ```text
+     Twilio number
+       -> POST /twilio/voice
+       -> TwiML with ConversationRelay websocket
+       -> /twilio/conversation-relay
+       -> transcript + call persistence
+       -> /twilio/conversation-ended
+       -> /twilio/recording-status
+     ```
+   - Confirm whether the provisioned phone number/webhook is expected to hit that route
 
-**Comparison tables (Home + Pricing)**
-- Both rely on `overflow-x-auto` only. On a 360px screen users see 1.5 columns and have to scroll horizontally inside a section that already scrolls vertically. Easy to miss.
+7. **Check deployed runtime configuration, not just repo code**
+   - Inspect the live voice service health/config endpoints to determine whether it is actually configured for backend writes
+   - Compare its live backend target with the dashboard backend target
+   - If the live voice service URL is unavailable or unset, identify that as the blocker
 
-**MissedCallCalculator**
-- Result panel `text-4xl md:text-5xl` currency value can clip on 360px when number is e.g. "$10,824".
+## Technical details
+- **Key files / functions already identified**
+  - `services/voice/src/call-store.ts`
+    - `createCallStore`
+    - `startCall`
+    - `startRealtimeCall`
+    - `addTranscriptTurn`
+    - `attachCallRecording`
+    - `completeCall`
+    - `createStaffReviewOrder`
+    - `createStaffReviewReservation`
+    - `createStaffTask`
+  - `services/voice/src/conversation-relay.ts`
+    - `persistCallerTurn`
+    - `persistAgentTurn`
+    - `completeSessionCall`
+    - `maybeAdvanceStaffReviewOrder`
+    - `maybeCreateStaffReviewReservation`
+    - `maybeCreateStaffFollowUpTask`
+  - `services/voice/src/server.ts`
+    - `/twilio/voice`
+    - `/twilio/recording-status`
+    - `/twilio/conversation-ended`
+  - `src/lib/supabase-rest.ts`
+    - `fetchCallsFromSupabase`
+    - `fetchCallFeedbackFromSupabase`
+    - `createCallFeedbackInSupabase`
 
-**CallTranscriptCard**
-- Two callers each `w-[34%]` with center waveform → at 390px the phone number `+1 (917) 555-0142` and "AI host · Trattoria" subtitles wrap to 2 lines; overall card looks cramped.
+## Expected outcome
+A definitive answer on whether the issue is:
+- live voice service env mismatch,
+- missing `SUPABASE_DEMO_LOCATION_ID`,
+- Twilio webhook misrouting,
+- or a real insert failure.
 
-**Pricing page**
-- H1 `text-4xl md:text-6xl` OK, but the toggle row (`Monthly · Switch · Annual [Save 2 months]`) overflows on 360px because the badge sits on the same line.
-- Tier card "Most popular" badge with `-top-3` is fine; price `text-5xl` OK.
-
-## Changes (frontend / Tailwind only)
-
-1. **MarketingLayout.tsx**
-   - Announcement bar: hide the long subtext under `hidden sm:inline`, keep "New: Toast & Square integrations live →" on mobile.
-   - Footer grid: add `grid-cols-2 sm:grid-cols-2 md:grid-cols-5` so Product/Company/Legal sit side by side on phones.
-   - Add a simple Sheet-based hamburger (Menu icon) on `<md` showing the same nav links + auth buttons, using existing `@/components/ui/sheet`.
-
-2. **Home.tsx — Hero**
-   - H1: `text-[34px] sm:text-[40px] md:text-6xl lg:text-[76px]` and `leading-[1.05]`.
-   - Trust badges row: add `flex-wrap gap-y-2`.
-   - Sub-paragraph: tighten `mt-5 max-w-md sm:max-w-xl`.
-   - CTA buttons: stack with `w-full sm:w-auto` so they don't squeeze.
-
-3. **Home.tsx — missed-call stats**
-   - Switch to `grid-cols-1 sm:grid-cols-3 gap-6`. On mobile, full-width rows with the orange left border read better than 3 squeezed columns.
-   - Number sizes: `text-4xl sm:text-3xl md:text-5xl`.
-
-4. **Home.tsx — Testimonials banner**
-   - Reduce banner height on mobile: `h-40 sm:h-56 md:h-72`.
-   - Drop the `-mt-16` pull-up on mobile (`md:-mt-24` only) so the section header sits cleanly below the image.
-
-5. **VoiceDemoPlayer.tsx**
-   - Tab row: replace `flex flex-wrap justify-center` with horizontally scrollable strip on `<sm` (`-mx-5 px-5 overflow-x-auto flex-nowrap snap-x`); pills `whitespace-nowrap`.
-   - Caller PersonPanel min height reduced on mobile.
-   - Hide the small "Audio" badge text under `hidden sm:inline`, keep the green dot.
-
-6. **ProductTour.tsx**
-   - Tab row: same scroll-on-mobile treatment.
-   - Card: reduce mobile padding `p-5` (was `p-6`).
-
-7. **ComparisonTable.tsx + Pricing comparison**
-   - On `<md`, render a stacked card layout: one card per row with feature label as title and 4 mini key/value rows for HostLine/Voicemail/IVR/Service. Keep the full table behind `hidden md:block`.
-
-8. **MissedCallCalculator.tsx**
-   - Result number: `text-3xl sm:text-4xl md:text-5xl` and `break-words`.
-   - Add `min-w-0` on the inner flex containers so labels don't push the value off-screen.
-
-9. **CallTranscriptCard.tsx**
-   - Caller name/sub: allow shrink (`min-w-0`, `truncate` on phone number sub-line).
-   - Reduce avatar to `h-12 w-12` on `<sm`, padding `px-4 pt-5 pb-4`.
-   - Caption text: `text-sm sm:text-[15px]`.
-
-10. **Pricing.tsx**
-    - Billing toggle: wrap row with `flex-wrap justify-center gap-2` and move "Save 2 months" badge under the toggle on `<sm`.
-    - H1: `text-3xl sm:text-4xl md:text-6xl`.
-
-## Verification
-
-After edits:
-- Reload `/` and `/pricing` at 360, 390, and 414 wide via the preview viewport.
-- Confirm: no horizontal page scroll; no clipped headlines; tap targets ≥40px; comparison tables readable without horizontal scrolling on phones.
-- Spot-check tablet (768px) and desktop (1280px) to make sure nothing regressed.
-
-## Out of scope
-
-- Copy changes, new sections, or color/theme changes.
-- Backend, voice service, or auth code.
+If you approve, I’ll use the live service/backend checks next to prove which of those is happening.
