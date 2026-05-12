@@ -49,7 +49,7 @@ export function ProductTour() {
             />}
             {active === "reservations" && <Copy
               title="Bookings without the back-and-forth."
-              body="Quotes availability live from OpenTable or Resy, confirms party size and special requests, then texts the guest a confirmation."
+              body="Collects reservation details, routes staff-confirmed requests now, and can quote live availability once OpenTable or another provider is connected."
               bullets={["Waitlist offered when full", "Group & private dining routed to manager", "Cancellation reminders"]}
             />}
             {active === "faq" && <Copy

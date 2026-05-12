@@ -9,6 +9,7 @@ import {
   buildOpenAIRealtimePreflight,
   buildRestaurantLocalTimeContext,
   buildShortOpeningGreeting,
+  createOpenAIRealtimeReservationRequest,
   createOpenAIRealtimeSipService,
   extractOpenAIRealtimeCallId,
   extractOpenAIRealtimeCallerPhone,
@@ -79,8 +80,10 @@ describe("OpenAI Realtime SIP", () => {
     expect(payload.instructions).toContain("Avoid IVR cadence");
     expect(payload.instructions).toContain("There is no live staff transfer");
     expect(payload.instructions).toContain("substitutions or off-menu requests");
+    expect(payload.instructions).toContain("create_reservation_request");
     expect(payload.tools[0].name).toBe("lookup_restaurant_context");
     expect(payload.tools.map((tool) => tool.name)).toContain("send_guest_confirmation");
+    expect(payload.tools.map((tool) => tool.name)).toContain("create_reservation_request");
     expect(payload.tools.map((tool) => tool.name)).toContain("request_staff_callback");
   });
 
@@ -406,6 +409,60 @@ describe("OpenAI Realtime SIP", () => {
       message: "Text confirmation sent.",
       phoneNumber: "+14155550123",
       sentToLastFour: "0123",
+    });
+  });
+
+  it("creates staff-confirmed reservation requests from realtime tool calls", async () => {
+    const savedReservations: unknown[] = [];
+    const result = await createOpenAIRealtimeReservationRequest({
+      callRecordId: "call_uuid",
+      callerPhone: "+14155550123",
+      context: demoRestaurantContext,
+      locationId: "location_uuid",
+      rawArguments: {
+        guest_name: "Tim Schneider",
+        notes: "Birthday",
+        party_size: 4,
+        reservation_date: "2026-05-12",
+        reservation_time: "6 PM",
+      },
+      callStore: {
+        async addTranscriptTurn() {},
+        async attachCallRecording() {},
+        async completeCall() {},
+        async createStaffReviewOrder() {
+          return {};
+        },
+        async createStaffReviewReservation(input) {
+          savedReservations.push(input);
+          return { reservationId: "res_uuid" };
+        },
+        async createStaffTask() {
+          return {};
+        },
+        async startCall() {
+          return {};
+        },
+        async startRealtimeCall() {
+          return {};
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      confirmationMode: "staff_confirmed",
+      reservationId: "res_uuid",
+      status: "pending_staff_confirmation",
+    });
+    expect(savedReservations[0]).toMatchObject({
+      callId: "call_uuid",
+      callerPhone: "+14155550123",
+      date: "2026-05-12",
+      guestName: "Tim Schneider",
+      partySize: 4,
+      provider: "manual_request",
+      time: "18:00",
     });
   });
 

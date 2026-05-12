@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PageHeader, PageBody } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,13 +10,21 @@ import {
 } from "@/components/ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { calls as sampleCalls, type Call } from "@/data/mock";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { calls as sampleCalls, type Call, type CallFeedback, type CallFeedbackCategory } from "@/data/mock";
 import { formatTime, formatDuration } from "@/lib/format";
-import { Search, Download, Play, FileText, MessageSquare, UserCheck, Send, Phone, Filter, RefreshCw, AlertTriangle, Mail } from "lucide-react";
+import { Search, Download, Play, FileText, MessageSquare, UserCheck, Send, Phone, Filter, RefreshCw, AlertTriangle, Mail, Sparkles, ThumbsUp, BookOpen, CheckCircle2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { fetchCallsFromSupabase, isSupabaseConfigured } from "@/lib/supabase-rest";
+import {
+  createCallFeedbackInSupabase,
+  fetchCallFeedbackFromSupabase,
+  fetchCallsFromSupabase,
+  isCallFeedbackPersistenceConfigured,
+  isSupabaseConfigured,
+} from "@/lib/supabase-rest";
 
 const intentColor: Record<string, string> = {
   order: "bg-primary/10 text-primary border-primary/20",
@@ -33,21 +41,62 @@ const statusColor: Record<string, string> = {
   needs_review: "bg-destructive/10 text-destructive border-destructive/20",
   new: "bg-info/10 text-info border-info/20",
 };
+const reviewOptions: Array<{ description: string; label: string; value: CallFeedbackCategory }> = [
+  { description: "Vera nailed it. Keep this behavior.", label: "Good answer", value: "good_answer" },
+  { description: "Factually wrong or misleading.", label: "Wrong answer", value: "wrong_answer" },
+  { description: "Technically okay, but sounded clunky.", label: "Awkward", value: "awkward" },
+  { description: "Restaurant knowledge is missing.", label: "Missing knowledge", value: "missing_knowledge" },
+  { description: "Staff should have handled this.", label: "Should escalate", value: "should_have_escalated" },
+  { description: "Something else to tune.", label: "Other", value: "other" },
+];
+const reviewLabelByCategory = reviewOptions.reduce<Record<CallFeedbackCategory, string>>((acc, option) => {
+  acc[option.value] = option.label;
+  return acc;
+}, {} as Record<CallFeedbackCategory, string>);
 
 export default function Calls() {
   const [selected, setSelected] = useState<Call | null>(null);
   const [intent, setIntent] = useState<string>("all");
   const [status, setStatus] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const [reviewCategory, setReviewCategory] = useState<CallFeedbackCategory>("good_answer");
+  const [reviewNote, setReviewNote] = useState("");
+  const [suggestedAnswer, setSuggestedAnswer] = useState("");
+  const [addToKnowledge, setAddToKnowledge] = useState(false);
+  const [localFeedback, setLocalFeedback] = useState<Record<string, CallFeedback[]>>({});
+  const queryClient = useQueryClient();
   const supabaseConfigured = isSupabaseConfigured();
+  const feedbackConfigured = isCallFeedbackPersistenceConfigured();
+  const selectedCallId = selected?.id;
   const callQuery = useQuery({
     enabled: supabaseConfigured,
     queryFn: fetchCallsFromSupabase,
     queryKey: ["calls", "supabase"],
     refetchInterval: 30_000,
   });
+  const feedbackQuery = useQuery({
+    enabled: feedbackConfigured && Boolean(selectedCallId),
+    queryFn: () => fetchCallFeedbackFromSupabase(selectedCallId!),
+    queryKey: ["call-feedback", selectedCallId],
+  });
+  const feedbackMutation = useMutation({
+    mutationFn: createCallFeedbackInSupabase,
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Could not save feedback");
+    },
+    onSuccess: (savedFeedback) => {
+      resetFeedbackForm();
+      void queryClient.invalidateQueries({ queryKey: ["call-feedback", savedFeedback.callId] });
+      toast.success(savedFeedback.addedToKnowledge ? "Feedback saved and added to the knowledge base" : "Feedback saved");
+    },
+  });
   const usingSupabase = Boolean(supabaseConfigured && callQuery.isSuccess);
   const calls = usingSupabase ? callQuery.data : sampleCalls;
+  const selectedFeedback = selected
+    ? feedbackConfigured
+      ? feedbackQuery.data ?? []
+      : localFeedback[selected.id] ?? []
+    : [];
 
   const filtered = calls.filter(c => {
     if (intent !== "all" && c.intent !== intent) return false;
@@ -55,6 +104,47 @@ export default function Calls() {
     if (search && !c.caller.toLowerCase().includes(search.toLowerCase()) && !c.phone.includes(search)) return false;
     return true;
   });
+  const reviewCanSave = Boolean(selected && (reviewCategory === "good_answer" || reviewNote.trim() || suggestedAnswer.trim()));
+
+  function resetFeedbackForm() {
+    setReviewCategory("good_answer");
+    setReviewNote("");
+    setSuggestedAnswer("");
+    setAddToKnowledge(false);
+  }
+
+  function saveFeedback() {
+    if (!selected || !reviewCanSave) return;
+
+    const input = {
+      addToKnowledge,
+      callId: selected.id,
+      category: reviewCategory,
+      note: reviewNote,
+      suggestedAnswer,
+    };
+
+    if (feedbackConfigured) {
+      feedbackMutation.mutate(input);
+      return;
+    }
+
+    const localEntry: CallFeedback = {
+      addedToKnowledge: addToKnowledge,
+      callId: selected.id,
+      category: reviewCategory,
+      createdAt: new Date().toISOString(),
+      id: crypto.randomUUID(),
+      note: reviewNote.trim() || undefined,
+      suggestedAnswer: suggestedAnswer.trim() || undefined,
+    };
+    setLocalFeedback((current) => ({
+      ...current,
+      [selected.id]: [localEntry, ...(current[selected.id] ?? [])],
+    }));
+    resetFeedbackForm();
+    toast.success(addToKnowledge ? "Demo feedback saved with a knowledge-base note" : "Demo feedback saved");
+  }
 
   return (
     <>
@@ -225,10 +315,11 @@ export default function Calls() {
               )}
 
               <Tabs defaultValue="transcript" className="mt-5">
-                <TabsList className="grid w-full grid-cols-4">
+                <TabsList className="grid w-full grid-cols-5">
                   <TabsTrigger value="transcript">Transcript</TabsTrigger>
                   <TabsTrigger value="summary">Summary</TabsTrigger>
                   <TabsTrigger value="extracted">Extracted</TabsTrigger>
+                  <TabsTrigger value="review">Review</TabsTrigger>
                   <TabsTrigger value="followup">Follow-up</TabsTrigger>
                 </TabsList>
 
@@ -308,6 +399,123 @@ export default function Calls() {
                       No structured data was extracted from this call.
                     </div>
                   )}
+                </TabsContent>
+
+                <TabsContent value="review" className="mt-4 space-y-4">
+                  <Card className="p-4">
+                    <div className="mb-3 flex items-start gap-2">
+                      <Sparkles className="mt-0.5 h-4 w-4 text-primary" />
+                      <div>
+                        <div className="text-sm font-semibold">Tune Vera from this call</div>
+                        <p className="text-xs text-muted-foreground">
+                          Capture what went well, what sounded odd, and what Vera should know next time.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {reviewOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setReviewCategory(option.value)}
+                          className={`rounded-md border p-3 text-left transition-colors ${
+                            reviewCategory === option.value
+                              ? "border-primary bg-primary/10 text-foreground"
+                              : "border-border bg-background hover:bg-muted/40"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 text-sm font-medium">
+                            {option.value === "good_answer" ? <ThumbsUp className="h-3.5 w-3.5" /> : <MessageSquare className="h-3.5 w-3.5" />}
+                            {option.label}
+                          </div>
+                          <div className="mt-1 text-xs text-muted-foreground">{option.description}</div>
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="mt-4 space-y-2">
+                      <Label className="text-xs font-medium text-muted-foreground">What happened?</Label>
+                      <Textarea
+                        value={reviewNote}
+                        onChange={(event) => setReviewNote(event.target.value)}
+                        placeholder="Example: Caller asked about patio heaters and Vera did not know the answer."
+                        rows={3}
+                      />
+                    </div>
+
+                    <div className="mt-3 space-y-2">
+                      <Label className="text-xs font-medium text-muted-foreground">Preferred answer or behavior</Label>
+                      <Textarea
+                        value={suggestedAnswer}
+                        onChange={(event) => setSuggestedAnswer(event.target.value)}
+                        placeholder="Example: Yes, the patio has heaters, but seating depends on weather."
+                        rows={3}
+                      />
+                    </div>
+
+                    <div className="mt-3 flex items-start gap-2 rounded-md border border-border bg-muted/30 p-3">
+                      <Checkbox
+                        checked={addToKnowledge}
+                        id="add-to-knowledge"
+                        onCheckedChange={(checked) => setAddToKnowledge(checked === true)}
+                      />
+                      <div className="space-y-1">
+                        <Label htmlFor="add-to-knowledge" className="text-sm font-medium">Add this to the knowledge base</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Use this when the answer should become restaurant knowledge, not just a review note.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex justify-end">
+                      <Button size="sm" onClick={saveFeedback} disabled={!reviewCanSave || feedbackMutation.isPending}>
+                        <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                        {feedbackMutation.isPending ? "Saving..." : "Save feedback"}
+                      </Button>
+                    </div>
+                  </Card>
+
+                  <Card className="p-4">
+                    <div className="mb-3 flex items-center justify-between">
+                      <div className="text-sm font-semibold">Review history</div>
+                      <Badge variant="secondary" className="text-[10px]">{selectedFeedback.length}</Badge>
+                    </div>
+                    {feedbackQuery.isFetching && feedbackConfigured && (
+                      <div className="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
+                        Loading feedback...
+                      </div>
+                    )}
+                    {!feedbackQuery.isFetching && selectedFeedback.length === 0 && (
+                      <div className="rounded-md border border-dashed border-border p-5 text-center text-sm text-muted-foreground">
+                        <BookOpen className="mx-auto h-5 w-5 opacity-50" />
+                        <p className="mt-2">No tuning notes yet for this call.</p>
+                      </div>
+                    )}
+                    <div className="space-y-2">
+                      {selectedFeedback.map((feedback) => (
+                        <div key={feedback.id} className="rounded-md border border-border p-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <Badge variant="outline">{reviewLabelByCategory[feedback.category]}</Badge>
+                            <span className="text-xs text-muted-foreground tabular-nums">
+                              {feedback.createdAt ? formatTime(feedback.createdAt) : "Just now"}
+                            </span>
+                          </div>
+                          {feedback.note && <p className="mt-2 text-sm">{feedback.note}</p>}
+                          {feedback.suggestedAnswer && (
+                            <p className="mt-2 rounded-md bg-muted/40 p-2 text-sm text-muted-foreground">
+                              {feedback.suggestedAnswer}
+                            </p>
+                          )}
+                          {feedback.addedToKnowledge && (
+                            <div className="mt-2 inline-flex items-center gap-1 text-xs text-primary">
+                              <BookOpen className="h-3 w-3" />Added to knowledge base
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
                 </TabsContent>
 
                 <TabsContent value="followup" className="mt-4 space-y-3">

@@ -19,7 +19,7 @@ describe("HostLine voice selection", () => {
 
   it("formats Twilio ConversationRelay voice strings", () => {
     expect(buildTwilioElevenLabsVoice({ gender: "male" })).toBe(
-      "ljX1ZrXuDIIRVcmiVSyR-flash_v2_5-1.0_0.5_0.8",
+      "ljX1ZrXuDIIRVcmiVSyR-flash_v2_5-0.95_0.35_0.85",
     );
   });
 });

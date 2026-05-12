@@ -4,6 +4,13 @@ export type CallIntent = "order" | "reservation" | "faq" | "hours" | "complaint"
 export type CallOutcome = "resolved" | "order_placed" | "reservation_booked" | "escalated" | "manager_alerted" | "message_taken" | "voicemail" | "missed" | "unknown";
 export type CallStatus = "new" | "reviewed" | "needs_review" | "resolved";
 export type TranscriptSpeaker = "agent" | "caller" | "staff";
+export type CallFeedbackCategory =
+  | "good_answer"
+  | "wrong_answer"
+  | "awkward"
+  | "missing_knowledge"
+  | "should_have_escalated"
+  | "other";
 
 export type EscalationType = "complaint" | "sales";
 export type EscalationSeverity = "low" | "medium" | "high";
@@ -19,6 +26,17 @@ export interface CallEscalation {
   channels: AlertChannel[];
   status: EscalationStatus;
   callerCallback?: boolean;
+}
+
+export interface CallFeedback {
+  id: string;
+  callId: string;
+  category: CallFeedbackCategory;
+  note?: string;
+  suggestedAnswer?: string;
+  addedToKnowledge?: boolean;
+  createdAt: string;
+  createdBy?: string;
 }
 
 export interface Call {
@@ -464,8 +482,8 @@ export const integrations = [
   { id: "toast", name: "Toast", desc: "Primary target for pickup order injection.", status: "connected" as const, category: "POS", requiredEnv: ["TOAST_CLIENT_ID", "TOAST_CLIENT_SECRET", "TOAST_RESTAURANT_GUID"] },
   { id: "square", name: "Square", desc: "Send orders to Square for Restaurants.", status: "not_connected" as const, category: "POS", requiredEnv: ["SQUARE_ACCESS_TOKEN", "SQUARE_LOCATION_ID"] },
   { id: "clover", name: "Clover", desc: "Push orders to Clover merchants.", status: "not_connected" as const, category: "POS", requiredEnv: ["CLOVER_ACCESS_TOKEN", "CLOVER_MERCHANT_ID"] },
-  { id: "opentable", name: "OpenTable", desc: "Primary target for reservation availability and booking.", status: "connected" as const, category: "Reservations", requiredEnv: ["OPENTABLE_CLIENT_ID", "OPENTABLE_CLIENT_SECRET", "OPENTABLE_RESTAURANT_ID"] },
-  { id: "resy", name: "Resy", desc: "Sync reservations with Resy venues.", status: "needs_attention" as const, category: "Reservations", requiredEnv: ["RESY_API_KEY", "RESY_VENUE_ID"] },
+  { id: "opentable", name: "OpenTable", desc: "Preferred first path for live availability and booking once API access is approved.", status: "not_connected" as const, category: "Reservations", requiredEnv: ["OPENTABLE_CLIENT_ID", "OPENTABLE_CLIENT_SECRET", "OPENTABLE_RESTAURANT_ID"] },
+  { id: "resy", name: "Resy", desc: "Reservation sync target after partner access is available.", status: "not_connected" as const, category: "Reservations", requiredEnv: ["RESY_API_KEY", "RESY_VENUE_ID"] },
   { id: "tock", name: "Tock", desc: "Send reservation and event bookings to Tock.", status: "not_connected" as const, category: "Reservations", requiredEnv: ["TOCK_API_KEY", "TOCK_BUSINESS_ID"] },
   { id: "sevenrooms", name: "SevenRooms", desc: "Guest profiles, reservations, and hospitality notes.", status: "not_connected" as const, category: "Reservations", requiredEnv: ["SEVENROOMS_CLIENT_ID", "SEVENROOMS_CLIENT_SECRET", "SEVENROOMS_VENUE_ID"] },
   { id: "yelp", name: "Yelp Guest Manager", desc: "Sync waitlist and reservation requests.", status: "not_connected" as const, category: "Reservations", requiredEnv: ["YELP_GUEST_MANAGER_API_KEY", "YELP_BUSINESS_ID"] },

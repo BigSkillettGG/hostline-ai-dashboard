@@ -165,6 +165,7 @@ alter table menu_sources enable row level security;
 alter table ingestion_jobs enable row level security;
 alter table calls enable row level security;
 alter table transcript_turns enable row level security;
+alter table call_feedback enable row level security;
 alter table orders enable row level security;
 alter table order_items enable row level security;
 alter table order_delivery_attempts enable row level security;
@@ -347,6 +348,15 @@ with check (public.can_operate_location(location_id));
 create policy transcript_turns_read on transcript_turns
 for select to authenticated
 using (public.can_access_location(public.call_location_id(call_id)));
+
+create policy call_feedback_read on call_feedback
+for select to authenticated
+using (public.can_access_location(location_id));
+
+create policy call_feedback_operate on call_feedback
+for all to authenticated
+using (public.can_operate_location(location_id))
+with check (public.can_operate_location(location_id));
 
 create policy orders_read on orders
 for select to authenticated

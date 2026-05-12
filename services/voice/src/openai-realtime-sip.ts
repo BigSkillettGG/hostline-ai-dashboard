@@ -478,6 +478,7 @@ export function buildOpenAIRealtimeInstructions(
     "If you do not know an answer after checking context, do not guess. Offer a staff callback and collect the missing name, callback number, and question.",
     "For severe allergies, never guarantee safety. Use request_staff_callback and say staff needs to confirm because cross-contact is possible.",
     "For reservation requests, acknowledge any date, time, or party size already spoken, then ask only for missing details.",
+    "When reservation date, time, party size, and guest name are known, use create_reservation_request to save the request. If the tool says staff confirmation is needed, tell the caller it is requested and staff will confirm.",
     "For pickup orders, collect items, quantities, name, and callback number. Payment is pay at pickup unless a POS integration says otherwise.",
     "For menu substitutions or off-menu requests, use the restaurant substitution policy. If allowed and obvious, note it as a request; if uncertain, say you can include the request but staff must confirm. Never guarantee off-menu items, allergy accommodations, prices, or availability unless the menu context explicitly confirms them.",
     "For reservations and pickup orders, once the request is captured, naturally offer to text a confirmation. Example: 'Would you like me to text that confirmation to the number ending 1234?'",
@@ -773,6 +774,7 @@ function startSidebandSocket({
     if (!toolCalls.length) return;
     markRealtimeToolCalls(session, toolCalls);
     void handleOpenAIRealtimeToolCalls({
+      callStore,
       callerPhone,
       callRecordId: session.callRecordId,
       context,
@@ -868,7 +870,7 @@ async function persistOpenAIRealtimeTranscriptTurn({
 function markRealtimeToolCalls(session: OpenAIRealtimeSidebandSession, toolCalls: OpenAIRealtimeToolCall[]) {
   for (const toolCall of toolCalls) {
     session.toolEvents.push({
-      kind: stringValue(toolCall.arguments.kind),
+      kind: toolCall.name === "create_reservation_request" ? "reservation" : stringValue(toolCall.arguments.kind),
       name: toolCall.name,
     });
     if (toolCall.name === "request_staff_callback") {
@@ -954,6 +956,8 @@ function classifyOpenAIRealtimeCall(session: OpenAIRealtimeSidebandSession): {
   const needsReview = session.staffCallbackRequested || toolNames.has("request_staff_callback");
   const outcome = needsReview
     ? "escalated"
+    : toolNames.has("create_reservation_request")
+      ? "message_taken"
     : toolNames.has("send_guest_confirmation")
       ? "resolved"
       : intent === "order"
@@ -993,6 +997,7 @@ function buildOpenAIRealtimeStructuredSummary(
 }
 
 async function handleOpenAIRealtimeToolCalls({
+  callStore,
   callerPhone,
   callRecordId,
   context,
@@ -1002,6 +1007,7 @@ async function handleOpenAIRealtimeToolCalls({
   staffNotificationService,
   toolCalls,
 }: {
+  callStore?: CallStore;
   callerPhone?: string;
   callRecordId?: string;
   context: RestaurantVoiceContext;
@@ -1013,6 +1019,7 @@ async function handleOpenAIRealtimeToolCalls({
 }) {
   for (const toolCall of toolCalls) {
     const output = await handleOpenAIRealtimeToolCall({
+      callStore,
       callerPhone,
       callRecordId,
       context,
@@ -1034,6 +1041,7 @@ async function handleOpenAIRealtimeToolCalls({
 }
 
 async function handleOpenAIRealtimeToolCall({
+  callStore,
   callerPhone,
   callRecordId,
   context,
@@ -1042,6 +1050,7 @@ async function handleOpenAIRealtimeToolCall({
   staffNotificationService,
   toolCall,
 }: {
+  callStore?: CallStore;
   callerPhone?: string;
   callRecordId?: string;
   context: RestaurantVoiceContext;
@@ -1063,6 +1072,17 @@ async function handleOpenAIRealtimeToolCall({
     });
   }
 
+  if (toolCall.name === "create_reservation_request") {
+    return createOpenAIRealtimeReservationRequest({
+      callRecordId,
+      callStore,
+      callerPhone,
+      context,
+      locationId,
+      rawArguments: toolCall.arguments,
+    });
+  }
+
   if (toolCall.name === "request_staff_callback") {
     return requestOpenAIRealtimeStaffCallback({
       callRecordId,
@@ -1077,6 +1097,75 @@ async function handleOpenAIRealtimeToolCall({
   return {
     error: `Unknown tool: ${toolCall.name}`,
   };
+}
+
+export async function createOpenAIRealtimeReservationRequest({
+  callRecordId,
+  callStore,
+  callerPhone,
+  context,
+  locationId,
+  rawArguments,
+}: {
+  callRecordId?: string;
+  callStore?: CallStore;
+  callerPhone?: string;
+  context: RestaurantVoiceContext;
+  locationId?: string;
+  rawArguments: Record<string, unknown>;
+}) {
+  const date = stringValue(rawArguments.reservation_date);
+  const time = normalizeRealtimeReservationTime(stringValue(rawArguments.reservation_time));
+  const partySize = numberValue(rawArguments.party_size);
+  const guestName = stringValue(rawArguments.guest_name);
+  const callbackPhone = normalizeCallerPhone(stringValue(rawArguments.phone_number) ?? callerPhone);
+  if (!date || !time || !partySize || !guestName) {
+    const missing = [
+      !date && "reservation_date",
+      !time && "reservation_time",
+      !partySize && "party_size",
+      !guestName && "guest_name",
+    ].filter((item): item is string => Boolean(item));
+
+    return {
+      ok: false,
+      error: "missing_reservation_details",
+      message: `Ask only for the missing reservation detail${missing.length === 1 ? "" : "s"}: ${missing.join(", ")}.`,
+      missing,
+    };
+  }
+
+  try {
+    const result = await callStore?.createStaffReviewReservation({
+      callId: callRecordId,
+      callerPhone: callbackPhone,
+      confidence: 88,
+      date,
+      guestName,
+      locationId,
+      notes: stringValue(rawArguments.notes),
+      partySize,
+      provider: "manual_request",
+      time,
+    });
+
+    return {
+      ok: true,
+      confirmationMode: "staff_confirmed",
+      message:
+        "Reservation request saved. Tell the caller staff will confirm it shortly; do not guarantee the table until staff confirms.",
+      provider: "manual_request",
+      reservationId: result?.reservationId,
+      restaurantName: context.restaurantName,
+      status: "pending_staff_confirmation",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: "reservation_request_failed",
+      message: error instanceof Error ? error.message : "Reservation request failed.",
+    };
+  }
 }
 
 export async function sendOpenAIRealtimeGuestConfirmation({
@@ -1372,6 +1461,43 @@ function buildOpenAIRealtimeTools() {
     },
     {
       description:
+        "Save a reservation request after collecting date, time, party size, and guest name. In the current pilot this creates a staff-confirmed request rather than guaranteeing a live table.",
+      name: "create_reservation_request",
+      parameters: {
+        additionalProperties: false,
+        properties: {
+          guest_name: {
+            description: "Guest name for the reservation.",
+            type: "string",
+          },
+          notes: {
+            description: "Special occasion, seating preference, accessibility need, or other short notes.",
+            type: "string",
+          },
+          party_size: {
+            description: "Number of guests.",
+            type: "number",
+          },
+          phone_number: {
+            description: "Caller phone number. Omit this to use SIP caller ID when available.",
+            type: "string",
+          },
+          reservation_date: {
+            description: "Reservation date in the restaurant's local calendar, preferably YYYY-MM-DD.",
+            type: "string",
+          },
+          reservation_time: {
+            description: "Reservation time in 24-hour HH:mm format, such as 18:00.",
+            type: "string",
+          },
+        },
+        required: ["guest_name", "party_size", "reservation_date", "reservation_time"],
+        type: "object",
+      },
+      type: "function" as const,
+    },
+    {
+      description:
         "Create a staff callback request for severe allergies, unknown answers, complaints, human requests, unusual substitutions, unavailable items, or any situation staff must confirm. This does not transfer the live call.",
       name: "request_staff_callback",
       parameters: {
@@ -1569,6 +1695,26 @@ function parseReservationConfirmationArguments(args: Record<string, unknown>) {
   const partySize = numberValue(args.party_size);
   if (!date || !time || !partySize) return null;
   return { date, partySize, time };
+}
+
+function normalizeRealtimeReservationTime(value?: string) {
+  if (!value) return undefined;
+  const normalized = value.trim().toLowerCase().replace(/\s+/g, " ");
+  const twentyFourHour = normalized.match(/^([01]?\d|2[0-3]):([0-5]\d)$/);
+  if (twentyFourHour) {
+    return `${twentyFourHour[1].padStart(2, "0")}:${twentyFourHour[2]}`;
+  }
+
+  const meridiem = normalized.match(/^(\d{1,2})(?::([0-5]\d))?\s*(a\.?m\.?|p\.?m\.?)$/);
+  if (!meridiem) return undefined;
+
+  let hour = Number(meridiem[1]);
+  const minutes = meridiem[2] ?? "00";
+  const isPm = meridiem[3].startsWith("p");
+  if (hour < 1 || hour > 12) return undefined;
+  if (isPm && hour < 12) hour += 12;
+  if (!isPm && hour === 12) hour = 0;
+  return `${String(hour).padStart(2, "0")}:${minutes}`;
 }
 
 function parseOrderItems(value: unknown): CapturedOrderItem[] {

@@ -1,5 +1,7 @@
 import type {
   Call,
+  CallFeedback,
+  CallFeedbackCategory,
   CallIntent,
   CallOutcome,
   CallStatus,
@@ -72,6 +74,14 @@ const callOutcomes: CallOutcome[] = [
   "unknown",
 ];
 const callStatuses: CallStatus[] = ["new", "reviewed", "needs_review", "resolved"];
+const callFeedbackCategories: CallFeedbackCategory[] = [
+  "good_answer",
+  "wrong_answer",
+  "awkward",
+  "missing_knowledge",
+  "should_have_escalated",
+  "other",
+];
 const transcriptSpeakers: TranscriptSpeaker[] = ["agent", "caller", "staff"];
 const orderStatuses: OrderStatus[] = ["new", "accepted", "in_progress", "completed", "canceled"];
 const orderDeliveryStatuses: OrderDeliveryStatus[] = ["pending", "sent", "failed", "not_configured"];
@@ -102,6 +112,17 @@ interface SupabaseTranscriptTurnRow {
   speaker: string;
   text: string;
   offset_seconds: number | null;
+}
+
+interface SupabaseCallFeedbackRow {
+  add_to_knowledge: boolean | null;
+  call_id: string;
+  category: string | null;
+  created_at: string | null;
+  created_by: string | null;
+  id: string;
+  note: string | null;
+  suggested_answer: string | null;
 }
 
 interface SupabaseOrderRow {
@@ -377,6 +398,14 @@ export interface CreateStaffTaskInput {
   type?: StaffTaskType;
 }
 
+export interface CreateCallFeedbackInput {
+  addToKnowledge?: boolean;
+  callId: string;
+  category: CallFeedbackCategory;
+  note?: string;
+  suggestedAnswer?: string;
+}
+
 export interface CreateMenuSourceInput {
   frequency: SyncFrequency;
   label?: string;
@@ -417,6 +446,10 @@ export function isStaffAlertEventPersistenceConfigured() {
 }
 
 export function isStaffTaskPersistenceConfigured() {
+  return Boolean(isSupabaseConfigured() && supabaseDemoLocationId);
+}
+
+export function isCallFeedbackPersistenceConfigured() {
   return Boolean(isSupabaseConfigured() && supabaseDemoLocationId);
 }
 
@@ -535,6 +568,66 @@ export async function fetchCallsFromSupabase(): Promise<Call[]> {
     : [[], [], []];
 
   return mapSupabaseCalls(calls, transcriptTurns, { orderLinks, reservationLinks });
+}
+
+export async function fetchCallFeedbackFromSupabase(callId: string): Promise<CallFeedback[]> {
+  if (!isCallFeedbackPersistenceConfigured()) {
+    throw new Error("Supabase call feedback persistence is not configured.");
+  }
+
+  const rows = await supabaseRequest<SupabaseCallFeedbackRow[]>(
+    "call_feedback",
+    new URLSearchParams({
+      call_id: `eq.${callId}`,
+      order: "created_at.desc",
+      select: callFeedbackSelectColumns,
+    }),
+  );
+
+  return rows.map(mapSupabaseCallFeedback);
+}
+
+export async function createCallFeedbackInSupabase(
+  input: CreateCallFeedbackInput,
+  locationId = supabaseDemoLocationId,
+): Promise<CallFeedback> {
+  if (!isSupabaseConfigured() || !locationId) {
+    throw new Error("Supabase call feedback persistence is not configured.");
+  }
+
+  const payload = buildCallFeedbackInsertPayload(input, locationId);
+  const rows = await supabaseRequest<SupabaseCallFeedbackRow[]>(
+    "call_feedback",
+    new URLSearchParams({
+      select: callFeedbackSelectColumns,
+    }),
+    {
+      body: payload,
+      headers: { Prefer: "return=representation" },
+      method: "POST",
+    },
+  );
+
+  const savedFeedback = rows?.[0]
+    ? mapSupabaseCallFeedback(rows[0])
+    : mapSupabaseCallFeedback({
+        add_to_knowledge: payload.add_to_knowledge,
+        call_id: payload.call_id,
+        category: payload.category,
+        created_at: new Date().toISOString(),
+        created_by: null,
+        id: crypto.randomUUID(),
+        note: payload.note,
+        suggested_answer: payload.suggested_answer,
+      });
+
+  if (input.addToKnowledge) {
+    await createKnowledgeSectionFromCallFeedback(savedFeedback, locationId).catch((error) => {
+      console.error("[supabase-rest] knowledge section creation failed", error);
+    });
+  }
+
+  return savedFeedback;
 }
 
 export async function fetchOrdersFromSupabase(): Promise<Order[]> {
@@ -1332,6 +1425,50 @@ export function buildStaffTaskInsertPayload(input: CreateStaffTaskInput, locatio
   };
 }
 
+export function buildCallFeedbackInsertPayload(input: CreateCallFeedbackInput, locationId: string) {
+  return {
+    add_to_knowledge: Boolean(input.addToKnowledge),
+    call_id: input.callId,
+    category: normalizeEnum(input.category, callFeedbackCategories, "other"),
+    location_id: locationId,
+    note: input.note?.trim() || null,
+    suggested_answer: input.suggestedAnswer?.trim() || null,
+  };
+}
+
+async function createKnowledgeSectionFromCallFeedback(feedback: CallFeedback, locationId: string) {
+  const title = callFeedbackCategoryLabels[feedback.category] ?? "Call feedback";
+  const body = [
+    feedback.note && `Feedback: ${feedback.note}`,
+    feedback.suggestedAnswer && `Preferred answer: ${feedback.suggestedAnswer}`,
+    `Source call: ${feedback.callId}`,
+  ]
+    .filter((item): item is string => Boolean(item))
+    .join("\n\n");
+
+  if (!body.trim()) return;
+
+  await supabaseRequest("knowledge_sections", new URLSearchParams(), {
+    body: {
+      body,
+      is_active: true,
+      location_id: locationId,
+      title: `Call tuning - ${title}`,
+      updated_at: new Date().toISOString(),
+    },
+    method: "POST",
+  });
+}
+
+const callFeedbackCategoryLabels: Record<CallFeedbackCategory, string> = {
+  awkward: "Awkward answer",
+  good_answer: "Good answer",
+  missing_knowledge: "Missing knowledge",
+  other: "Other feedback",
+  should_have_escalated: "Should have escalated",
+  wrong_answer: "Wrong answer",
+};
+
 export function mapSupabaseAgentConfig(
   row: SupabaseAgentConfigRow,
   fallbackConfig: RestaurantAgentConfig,
@@ -1600,6 +1737,19 @@ export function mapSupabaseStaffTask(row: SupabaseStaffTaskRow): StaffTask {
     status: normalizeStaffTaskStatus(row.status),
     title: row.title?.trim() || "Staff follow-up",
     type: normalizeStaffTaskType(row.task_type),
+  };
+}
+
+export function mapSupabaseCallFeedback(row: SupabaseCallFeedbackRow): CallFeedback {
+  return {
+    addedToKnowledge: Boolean(row.add_to_knowledge),
+    callId: row.call_id,
+    category: normalizeEnum(row.category, callFeedbackCategories, "other"),
+    createdAt: row.created_at ?? "",
+    createdBy: row.created_by ?? undefined,
+    id: row.id,
+    note: row.note?.trim() || undefined,
+    suggestedAnswer: row.suggested_answer?.trim() || undefined,
   };
 }
 
@@ -1929,3 +2079,6 @@ const staffAlertEventSelectColumns =
 
 const staffTaskSelectColumns =
   "id,call_id,order_id,reservation_id,title,body,status,task_type,priority,assigned_to,due_at,completed_at,created_at";
+
+const callFeedbackSelectColumns =
+  "id,call_id,category,note,suggested_answer,add_to_knowledge,created_by,created_at";

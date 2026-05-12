@@ -243,6 +243,18 @@ create table transcript_turns (
   created_at timestamptz not null default now()
 );
 
+create table call_feedback (
+  id uuid primary key default gen_random_uuid(),
+  location_id uuid not null references locations(id) on delete cascade,
+  call_id uuid not null references calls(id) on delete cascade,
+  category text not null check (category in ('good_answer', 'wrong_answer', 'awkward', 'missing_knowledge', 'should_have_escalated', 'other')),
+  note text,
+  suggested_answer text,
+  add_to_knowledge boolean not null default false,
+  created_by uuid references auth.users(id) on delete set null default auth.uid(),
+  created_at timestamptz not null default now()
+);
+
 create table orders (
   id uuid primary key default gen_random_uuid(),
   location_id uuid not null references locations(id) on delete cascade,

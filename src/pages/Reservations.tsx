@@ -294,7 +294,7 @@ export default function Reservations() {
               <div>
                 <div className="text-sm font-semibold">OpenTable path</div>
                 <div className="mt-1 text-xs text-muted-foreground">
-                  Provider and provider ID fields are stored now. API sync can attach to the same rows later.
+                  Staff-confirmed requests are saved now. OpenTable is the preferred first live-availability integration once API access is approved.
                 </div>
               </div>
             </div>

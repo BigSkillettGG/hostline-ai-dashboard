@@ -4,6 +4,7 @@ import { sampleOnboardingDraft } from "@/domain/onboarding";
 import {
   buildAgentConfigPayload,
   buildAlertRoutingConfigPayload,
+  buildCallFeedbackInsertPayload,
   buildIngestionJobInsertPayload,
   buildMenuCategoryInsertRows,
   buildMenuItemInsertRows,
@@ -14,6 +15,7 @@ import {
   buildReservationInsertPayload,
   calculateForwardingStatus,
   mapSupabaseCalls,
+  mapSupabaseCallFeedback,
   mapSupabaseAgentConfig,
   mapSupabaseIngestionJob,
   mapSupabaseMenu,
@@ -105,6 +107,54 @@ describe("Supabase call mapping", () => {
     expect(calls[0].intent).toBe("other");
     expect(calls[0].outcome).toBe("unknown");
     expect(calls[0].status).toBe("new");
+  });
+});
+
+describe("Supabase call feedback", () => {
+  it("builds call feedback payloads for tuning Vera", () => {
+    expect(
+      buildCallFeedbackInsertPayload(
+        {
+          addToKnowledge: true,
+          callId: "call_1",
+          category: "missing_knowledge",
+          note: "Caller asked about patio heaters.",
+          suggestedAnswer: "Yes, the patio has heaters on chilly nights.",
+        },
+        "location_1",
+      ),
+    ).toEqual({
+      add_to_knowledge: true,
+      call_id: "call_1",
+      category: "missing_knowledge",
+      location_id: "location_1",
+      note: "Caller asked about patio heaters.",
+      suggested_answer: "Yes, the patio has heaters on chilly nights.",
+    });
+  });
+
+  it("maps persisted call feedback back into review history", () => {
+    expect(
+      mapSupabaseCallFeedback({
+        add_to_knowledge: true,
+        call_id: "call_1",
+        category: "awkward",
+        created_at: "2026-05-11T20:00:00.000Z",
+        created_by: "user_1",
+        id: "feedback_1",
+        note: " Too stiff. ",
+        suggested_answer: "Say it more naturally.",
+      }),
+    ).toEqual({
+      addedToKnowledge: true,
+      callId: "call_1",
+      category: "awkward",
+      createdAt: "2026-05-11T20:00:00.000Z",
+      createdBy: "user_1",
+      id: "feedback_1",
+      note: "Too stiff.",
+      suggestedAnswer: "Say it more naturally.",
+    });
   });
 });
 
