@@ -14,10 +14,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { calls as sampleCalls, type Call, type CallFeedback, type CallFeedbackCategory } from "@/data/mock";
 import { formatTime, formatDuration } from "@/lib/format";
-import { Search, Download, Play, FileText, MessageSquare, UserCheck, Send, Phone, Filter, RefreshCw, AlertTriangle, Mail, Sparkles, ThumbsUp, BookOpen, CheckCircle2 } from "lucide-react";
+import { Search, Download, Play, FileText, MessageSquare, UserCheck, Send, Phone, Filter, RefreshCw, AlertTriangle, Mail, Sparkles, ThumbsUp, BookOpen, CheckCircle2, Copy } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { isDemoWorkspace, isPlatformAdminUser, useCurrentUser } from "@/lib/auth";
 import {
   createCallFeedbackInSupabase,
   fetchCallFeedbackFromSupabase,
@@ -55,6 +56,7 @@ const reviewLabelByCategory = reviewOptions.reduce<Record<CallFeedbackCategory, 
 }, {} as Record<CallFeedbackCategory, string>);
 
 export default function Calls() {
+  const user = useCurrentUser();
   const [selected, setSelected] = useState<Call | null>(null);
   const [intent, setIntent] = useState<string>("all");
   const [status, setStatus] = useState<string>("all");
@@ -65,6 +67,9 @@ export default function Calls() {
   const [addToKnowledge, setAddToKnowledge] = useState(false);
   const [localFeedback, setLocalFeedback] = useState<Record<string, CallFeedback[]>>({});
   const queryClient = useQueryClient();
+  const platformAdmin = isPlatformAdminUser(user);
+  const demoWorkspace = isDemoWorkspace(user);
+  const allowSampleCalls = Boolean(demoWorkspace && !platformAdmin);
   const supabaseConfigured = isSupabaseConfigured();
   const feedbackConfigured = isCallFeedbackPersistenceConfigured();
   const selectedCallId = selected?.id;
@@ -91,7 +96,8 @@ export default function Calls() {
     },
   });
   const usingSupabase = Boolean(supabaseConfigured && callQuery.isSuccess);
-  const calls = usingSupabase ? callQuery.data : sampleCalls;
+  const calls = usingSupabase ? callQuery.data : allowSampleCalls ? sampleCalls : [];
+  const sourceLabel = usingSupabase ? "Live Supabase" : allowSampleCalls ? "Sample data" : "Live data unavailable";
   const selectedFeedback = selected
     ? feedbackConfigured
       ? feedbackQuery.data ?? []
@@ -146,6 +152,34 @@ export default function Calls() {
     toast.success(addToKnowledge ? "Demo feedback saved with a knowledge-base note" : "Demo feedback saved");
   }
 
+  async function copyTranscript() {
+    if (!selected) return;
+
+    const transcript = selected.transcript.length
+      ? selected.transcript.map((turn) => `${turn.speaker === "agent" ? "Vera" : turn.speaker === "staff" ? "Staff" : "Caller"}: ${turn.text}`).join("\n")
+      : "Transcript not available.";
+    const text = [
+      `Call ID: ${selected.id}`,
+      `Caller: ${selected.caller}`,
+      `Phone: ${selected.phone}`,
+      `Time: ${formatTime(selected.time)}`,
+      `Duration: ${formatDuration(selected.duration)}`,
+      `Intent: ${selected.intent}`,
+      `Outcome: ${selected.outcome}`,
+      `Status: ${selected.status}`,
+      `Summary: ${selected.summary}`,
+      "",
+      transcript,
+    ].join("\n");
+
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Transcript copied");
+    } catch {
+      toast.error("Could not copy transcript");
+    }
+  }
+
   return (
     <>
       <PageHeader
@@ -153,8 +187,17 @@ export default function Calls() {
         description={`${filtered.length} calls in the last 24 hours`}
         actions={
           <>
-            <Badge variant="outline" className={usingSupabase ? "border-success/20 bg-success/10 text-success" : "bg-muted text-muted-foreground"}>
-              {usingSupabase ? "Live Supabase" : "Sample data"}
+            <Badge
+              variant="outline"
+              className={
+                usingSupabase
+                  ? "border-success/20 bg-success/10 text-success"
+                  : allowSampleCalls
+                    ? "bg-muted text-muted-foreground"
+                    : "border-warning/30 bg-warning/10 text-warning"
+              }
+            >
+              {sourceLabel}
             </Badge>
             {supabaseConfigured && (
               <Button variant="outline" size="sm" onClick={() => callQuery.refetch()} disabled={callQuery.isFetching}>
@@ -167,14 +210,25 @@ export default function Calls() {
         }
       />
       <PageBody className="space-y-4">
+        {platformAdmin && !usingSupabase && (
+          <Card className="border-warning/30 bg-warning/10 p-4 text-sm text-muted-foreground">
+            <div className="font-medium text-foreground">Super admin is live-only.</div>
+            <p className="mt-1">
+              This view will not show demo calls. It needs the deployed dashboard to use Supabase Auth with a platform admin account before real test-call transcripts can appear here.
+            </p>
+          </Card>
+        )}
         {callQuery.isError && (
           <Card className="border-warning/30 bg-warning/10 p-3 text-sm text-muted-foreground">
-            Supabase calls could not be loaded, so this page is showing sample data. {callQuery.error instanceof Error ? callQuery.error.message : ""}
+            {platformAdmin
+              ? "Live calls could not be loaded. "
+              : "Supabase calls could not be loaded, so this page is showing sample data. "}
+            {callQuery.error instanceof Error ? callQuery.error.message : ""}
           </Card>
         )}
         {!supabaseConfigured && (
           <Card className="border-dashed bg-muted/20 p-3 text-sm text-muted-foreground">
-            Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to show real calls from Supabase.
+            Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY to show real calls from Supabase.
           </Card>
         )}
         <div className="flex flex-wrap items-center gap-2">
@@ -224,8 +278,12 @@ export default function Calls() {
               {filtered.length === 0 && (
                 <TableRow><TableCell colSpan={7} className="py-12 text-center">
                   <Phone className="mx-auto h-8 w-8 text-muted-foreground/50" />
-                  <p className="mt-2 text-sm font-medium">No calls match these filters</p>
-                  <p className="text-xs text-muted-foreground">Try adjusting your filters above</p>
+                  <p className="mt-2 text-sm font-medium">
+                    {platformAdmin && !usingSupabase ? "Live calls are not connected yet" : "No calls match these filters"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {platformAdmin && !usingSupabase ? "Once Supabase Auth/RLS is connected, real test calls and transcripts will appear here." : "Try adjusting your filters above"}
+                  </p>
                 </TableCell></TableRow>
               )}
               {filtered.map(c => (
@@ -347,6 +405,9 @@ export default function Calls() {
                         <div key={i} className="w-0.5 rounded-full bg-primary/40" style={{ height: `${20 + Math.sin(i) * 10 + (i % 5) * 4}%` }} />
                       ))}
                     </div>
+                    <Button size="sm" variant="outline" className="h-8" onClick={copyTranscript}>
+                      <Copy className="mr-1.5 h-3.5 w-3.5" />Copy transcript
+                    </Button>
                     <span className="text-xs text-muted-foreground tabular-nums">{formatDuration(selected.duration)}</span>
                   </div>
                   {selected.transcript.length === 0 && (

@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useLocation } from "react-router-dom";
-import { Bell, ChevronDown, Flame, LayoutDashboard, Building2, Bot, Phone, CreditCard, FileText } from "lucide-react";
+import { Bell, ChevronDown, Flame, LayoutDashboard, Building2, Bot, Phone, CreditCard, FileText, PhoneCall } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, SidebarFooter,
@@ -18,6 +18,7 @@ import { useNavigate } from "react-router-dom";
 const items = [
   { title: "Overview", url: "/super", icon: LayoutDashboard, end: true },
   { title: "Tenants", url: "/super/tenants", icon: Building2 },
+  { title: "Calls", url: "/super/calls", icon: PhoneCall },
   { title: "Voice Agent", url: "/super/voice-agent", icon: Bot },
   { title: "Telephony", url: "/super/telephony", icon: Phone },
   { title: "Billing", url: "/super/billing", icon: CreditCard },

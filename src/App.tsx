@@ -84,6 +84,7 @@ const App = () => (
           <Route path="/super" element={<RequireRole role="superadmin"><SuperLayout /></RequireRole>}>
             <Route index element={<SuperOverview />} />
             <Route path="tenants" element={<SuperTenants />} />
+            <Route path="calls" element={<Calls />} />
             <Route path="voice-agent" element={<VoiceAgentAdvanced />} />
             <Route path="telephony" element={<Telephony />} />
             <Route path="billing" element={<SuperBilling />} />
