@@ -31,6 +31,7 @@ export interface RestaurantToolCall {
 
 export interface GenerateRestaurantReplyInput {
   callerUtterance: string;
+  channelInstructions?: string;
   context: RestaurantVoiceContext;
   env: Pick<VoiceServiceEnv, "OPENAI_API_KEY" | "OPENAI_MODEL" | "OPENAI_REPLY_TIMEOUT_MS">;
   handleToolCall?: (toolCall: RestaurantToolCall) => Promise<unknown>;
@@ -80,7 +81,10 @@ export async function generateRestaurantReply(input: GenerateRestaurantReplyInpu
       controller,
       env: input.env,
       handleToolCall: input.handleToolCall,
-      instructions: buildRestaurantInstructions(input.context),
+      instructions: [
+        buildRestaurantInstructions(input.context),
+        input.channelInstructions,
+      ].filter(Boolean).join("\n"),
       input: buildConversationInput(input.callerUtterance, input.transcript),
       maxOutputTokens: 220,
       tools: input.tools,

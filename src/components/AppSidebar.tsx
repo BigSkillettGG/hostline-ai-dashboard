@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Phone, ShoppingBag, CalendarDays, BookOpen,
   Bot, Plug, Settings as SettingsIcon, UtensilsCrossed, Flame,
   CreditCard, Users, Building2, ChevronDown, AlertTriangle, BellRing,
-  ChefHat, ListTodo,
+  ChefHat, ListTodo, MessageCircle,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
@@ -30,6 +30,7 @@ const content = [
 const settings = [
   { title: "Voice Agent", url: "/app/voice-agent", icon: Bot },
   { title: "Integrations", url: "/app/integrations", icon: Plug },
+  { title: "Website Chat", url: "/app/website-chat", icon: MessageCircle },
   { title: "Phone & Hours", url: "/app/settings", icon: Phone },
   { title: "Alerts & Routing", url: "/app/settings/alerts", icon: BellRing },
   { title: "Team", url: "/app/team", icon: Users },

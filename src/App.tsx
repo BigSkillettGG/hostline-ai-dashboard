@@ -25,6 +25,7 @@ import MenuPage from "./pages/Menu";
 import Knowledge from "./pages/Knowledge";
 import VoiceAgent from "./pages/VoiceAgent";
 import Integrations from "./pages/Integrations";
+import WebsiteChat from "./pages/WebsiteChat";
 import PhoneHours from "./pages/settings/PhoneHours";
 import Alerts from "./pages/settings/Alerts";
 import Team from "./pages/settings/Team";
@@ -73,6 +74,7 @@ const App = () => (
             <Route path="knowledge" element={<Knowledge />} />
             <Route path="voice-agent" element={<VoiceAgent />} />
             <Route path="integrations" element={<Integrations />} />
+            <Route path="website-chat" element={<WebsiteChat />} />
             <Route path="settings" element={<PhoneHours />} />
             <Route path="settings/alerts" element={<Alerts />} />
             <Route path="team" element={<Team />} />

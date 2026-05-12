@@ -8,6 +8,7 @@ This service is the production path for inbound restaurant phone calls.
 - Connects calls to Twilio ConversationRelay over `wss://.../twilio/conversation-relay`.
 - Searches and provisions Twilio numbers through internal telephony endpoints when Twilio credentials are configured.
 - Processes queued menu URL/text ingestion jobs through `POST /ingestion/run-next`.
+- Handles website chat messages at `POST /web-chat/message` using the same business context, configured links, and customer request fallback as the phone agent.
 - Configures ConversationRelay to use ElevenLabs TTS by default.
 - Receives ConversationRelay setup, prompt, DTMF, interrupt, and error messages.
 - Generates restaurant-host replies with OpenAI Responses API when `OPENAI_API_KEY` is set.
@@ -105,6 +106,7 @@ When Supabase is configured, Twilio requests can include `locationId` in the web
 - `POST /ingestion/run-next` processes one queued menu ingestion job, fetches URL/text content, parses menu items, replaces `menu_categories` and `menu_items`, and updates `ingestion_jobs` plus `menu_sources`.
 - Staff alert routing is loaded from `alert_routing_configs` per location when Supabase is configured. If no route exists, the service falls back to `STAFF_ALERT_SMS_TO`.
 - Staff alert outcomes are logged to `staff_alert_events` when Supabase is configured. Logging failures are warned but do not block the live call.
+- `POST /web-chat/message` accepts `{ message, locationId, transcript, visitorName, visitorPhone, visitorEmail }` and returns a chat-friendly reply plus any created business-link or staff-request actions. This endpoint is public for embedded site widgets and is IP rate-limited.
 
 In production, provisioning, menu ingestion, TwiML preview, live-call config, and hosted voice preview requests require a Supabase bearer token for a platform admin or a restaurant owner/admin. `HOSTLINE_INTERNAL_API_KEY` remains a server-side-only legacy path for deployment checks.
 

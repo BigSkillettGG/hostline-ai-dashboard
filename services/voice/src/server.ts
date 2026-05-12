@@ -28,6 +28,7 @@ import { generateRestaurantReply } from "./restaurant-agent";
 import { validateTwilioSignature } from "./twilio-signature";
 import { buildConversationRelayTwiML, buildEmptyTwiML, buildHangupTwiML, buildUnavailableTwiML } from "./twiml";
 import { resolveConversationRelayTtsVoice } from "./voice-selection";
+import { createWebChatService, type WebChatMessageInput } from "./web-chat";
 
 const env = loadEnv();
 const callStore = createCallStore(env);
@@ -45,10 +46,12 @@ const openAIRealtimeSipService = createOpenAIRealtimeSipService(env, restaurantC
   reservationPlatformService,
   staffNotificationService,
 });
+const webChatService = createWebChatService(env, restaurantContextStore, { callStore });
 const ADMIN_BODY_LIMIT_BYTES = 16 * 1024;
 const OPENAI_WEBHOOK_BODY_LIMIT_BYTES = 32 * 1024;
 const PREVIEW_BODY_LIMIT_BYTES = 4 * 1024;
 const TWILIO_BODY_LIMIT_BYTES = 16 * 1024;
+const WEB_CHAT_BODY_LIMIT_BYTES = 16 * 1024;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const server = createServer((req, res) => {
   void handleRequest(req, res, env);
@@ -541,6 +544,19 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       res.end(preview.audio);
     } catch (error) {
       sendCaughtError(res, error, "Voice preview failed");
+    }
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/web-chat/message") {
+    if (!allowRateLimitedRequest(req, res, "web-chat", 60)) return;
+
+    try {
+      const body = parseJsonRequestBody(await readLimitedRequestBody(req, WEB_CHAT_BODY_LIMIT_BYTES)) as WebChatMessageInput;
+      const result = await webChatService.handleMessage(body);
+      sendJson(res, 200, result);
+    } catch (error) {
+      sendCaughtError(res, error, "Web chat message failed");
     }
     return;
   }

@@ -43,6 +43,7 @@ The first implementation is in `services/voice`:
 - `wss://.../twilio/conversation-relay` receives ConversationRelay setup, prompt, DTMF, interrupt, and error messages.
 - ConversationRelay is configured for ElevenLabs TTS by default.
 - `POST /voice/preview` calls the ElevenLabs Text to Speech API directly for dashboard previews.
+- `POST /web-chat/message` gives the website chat widget the same core intelligence without phone-specific language, returning chat-safe replies, configured links, and staff follow-up actions.
 - OpenAI Responses API powers the restaurant-host reply path when an API key is configured.
 - A deterministic fallback responds safely without OpenAI during local development.
 - Clear pickup-order language with recognized menu items creates a staff-review, pay-at-pickup order in Supabase.
