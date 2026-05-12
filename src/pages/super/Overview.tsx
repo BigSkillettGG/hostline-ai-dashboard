@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { tenants } from "@/data/tenants";
+import { fetchTenantDirectoryFromSupabase, isSupabaseConfigured } from "@/lib/supabase-rest";
 import { fetchVoiceServiceHealth, isVoiceServiceConfigured } from "@/lib/voice-service";
 
 function MiniStat({ label, value, icon: Icon, tone = "default" }: { label: string; value: string; icon: LucideIcon; tone?: "default" | "warning" }) {
@@ -34,9 +35,25 @@ function MiniStat({ label, value, icon: Icon, tone = "default" }: { label: strin
 }
 
 export default function SuperOverview() {
-  const totalCalls = tenants.reduce((sum, tenant) => sum + tenant.callsThisMonth, 0);
-  const mrr = tenants.reduce((sum, tenant) => sum + tenant.mrrCents, 0) / 100;
-  const alerts = tenants.filter((tenant) => tenant.status !== "healthy").length;
+  const tenantQuery = useQuery({
+    enabled: isSupabaseConfigured(),
+    queryFn: fetchTenantDirectoryFromSupabase,
+    queryKey: ["tenant-directory"],
+    refetchInterval: 60_000,
+  });
+  const tenantRows = tenantQuery.data?.length
+    ? tenantQuery.data
+    : tenants.map((tenant) => ({
+        callsThisMonth: tenant.callsThisMonth,
+        locationId: tenant.id,
+        locationName: tenant.name,
+        monthlyPrice: tenant.mrrCents / 100,
+        planName: tenant.plan,
+        status: tenant.status,
+      }));
+  const totalCalls = tenantRows.reduce((sum, tenant) => sum + tenant.callsThisMonth, 0);
+  const mrr = tenantRows.reduce((sum, tenant) => sum + tenant.monthlyPrice, 0);
+  const alerts = tenantRows.filter((tenant) => tenant.status !== "healthy").length;
   const voiceConfigured = isVoiceServiceConfigured();
   const healthQuery = useQuery({
     enabled: voiceConfigured,
@@ -52,7 +69,7 @@ export default function SuperOverview() {
       <PageHeader title="SignalHost Operations" description="Internal overview across all tenants" />
       <PageBody>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <MiniStat label="Active tenants" value={tenants.length.toString()} icon={Building2} />
+          <MiniStat label="Active tenants" value={tenantRows.length.toString()} icon={Building2} />
           <MiniStat label="Calls this month" value={totalCalls.toLocaleString()} icon={PhoneCall} />
           <MiniStat label="MRR" value={`$${mrr.toLocaleString()}`} icon={DollarSign} />
           <MiniStat label="Needs attention" value={alerts.toString()} icon={AlertTriangle} tone={alerts > 0 ? "warning" : "default"} />
@@ -124,11 +141,11 @@ export default function SuperOverview() {
           <CardHeader className="pb-3"><CardTitle className="text-base">Recent tenant activity</CardTitle></CardHeader>
           <CardContent>
             <div className="divide-y divide-border rounded-md border border-border">
-              {tenants.slice(0, 6).map((tenant) => (
-                <div key={tenant.id} className="flex items-center justify-between p-3">
+              {tenantRows.slice(0, 6).map((tenant) => (
+                <div key={tenant.locationId} className="flex items-center justify-between p-3">
                   <div>
-                    <div className="text-sm font-medium">{tenant.name}</div>
-                    <div className="text-xs text-muted-foreground">{tenant.plan} - {tenant.callsThisMonth.toLocaleString()} calls</div>
+                    <div className="text-sm font-medium">{tenant.locationName}</div>
+                    <div className="text-xs text-muted-foreground">{tenant.planName} - {tenant.callsThisMonth.toLocaleString()} calls</div>
                   </div>
                   <Badge variant="outline" className={
                     tenant.status === "healthy" ? "border-success/30 bg-success/10 text-success"

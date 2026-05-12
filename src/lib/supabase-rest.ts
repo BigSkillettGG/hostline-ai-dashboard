@@ -16,6 +16,7 @@ import type {
 import { getActiveLocationId, getActiveOrganizationId, getSupabaseAccessToken } from "@/lib/auth";
 import type { ParsedMenuCategory } from "@/domain/menu-ingestion";
 import { calculateOnboardingProgress, type OnboardingDraft } from "@/domain/onboarding";
+import { getBusinessTemplate, normalizeBusinessType, type BusinessType } from "@/domain/business-templates";
 import {
   defaultAlertRoutingConfig,
   normalizeAlertRoutingConfig,
@@ -100,11 +101,46 @@ interface SupabaseCallRow {
   started_at: string;
   duration_seconds: number | null;
   intent: string | null;
+  location_id?: string | null;
   outcome: string | null;
   confidence: number | null;
   status: string | null;
   summary: string | null;
   recording_url: string | null;
+}
+
+interface SupabaseOrganizationRow {
+  created_at: string | null;
+  id: string;
+  name: string;
+}
+
+interface SupabaseLocationDirectoryRow {
+  address: string | null;
+  ai_host_phone: string | null;
+  created_at: string | null;
+  cuisine: string | null;
+  id: string;
+  name: string | null;
+  organization_id: string | null;
+  phone: string | null;
+  timezone: string | null;
+}
+
+interface SupabaseMembershipDirectoryRow {
+  created_at: string | null;
+  member_email: string | null;
+  member_name: string | null;
+  organization_id: string | null;
+  role: string | null;
+}
+
+interface SupabasePhoneNumberDirectoryRow {
+  forwarding_status: string | null;
+  location_id: string | null;
+  phone_number: string;
+  status: string | null;
+  voice_webhook_url: string | null;
 }
 
 interface SupabaseTranscriptTurnRow {
@@ -358,6 +394,32 @@ export interface ForwardingVerification {
   updatedAt?: string;
 }
 
+export type TenantDirectoryStatus = "attention" | "critical" | "healthy";
+
+export interface TenantDirectoryRecord {
+  addressOrArea: string;
+  aiHostPhone?: string;
+  businessLabel: string;
+  businessType: BusinessType;
+  callsThisMonth: number;
+  createdAt: string;
+  includedInteractions: number;
+  locationId: string;
+  locationName: string;
+  mainPhone?: string;
+  monthlyPrice: number;
+  onboardingProgressPercent: number;
+  onboardingStatus: string;
+  organizationId: string;
+  organizationName: string;
+  ownerEmail: string;
+  ownerName: string;
+  planName: string;
+  status: TenantDirectoryStatus;
+  timezone: string;
+  voiceWebhookUrl?: string;
+}
+
 export interface MenuCategoryRecord {
   id: string;
   items: MenuItem[];
@@ -572,6 +634,82 @@ export async function fetchCallsFromSupabase(): Promise<Call[]> {
     : [[], [], []];
 
   return mapSupabaseCalls(calls, transcriptTurns, { orderLinks, reservationLinks });
+}
+
+export async function fetchTenantDirectoryFromSupabase(): Promise<TenantDirectoryRecord[]> {
+  if (!isSupabaseConfigured()) {
+    throw new Error("Supabase tenant directory is not configured.");
+  }
+
+  const organizations = await supabaseRequest<SupabaseOrganizationRow[]>(
+    "organizations",
+    new URLSearchParams({
+      order: "created_at.desc",
+      select: "id,name,created_at",
+    }),
+  );
+
+  const organizationIds = organizations.map((organization) => organization.id);
+  if (!organizationIds.length) return [];
+
+  const locations = await supabaseRequest<SupabaseLocationDirectoryRow[]>(
+    "locations",
+    new URLSearchParams({
+      order: "created_at.desc",
+      organization_id: `in.(${organizationIds.join(",")})`,
+      select: "id,organization_id,name,cuisine,timezone,phone,ai_host_phone,address,created_at",
+    }),
+  );
+
+  const locationIds = locations.map((location) => location.id);
+  const [memberships, onboardingProfiles, phoneNumbers, monthlyCalls] = await Promise.all([
+    supabaseRequest<SupabaseMembershipDirectoryRow[]>(
+      "user_memberships",
+      new URLSearchParams({
+        organization_id: `in.(${organizationIds.join(",")})`,
+        order: "created_at.asc",
+        select: "organization_id,role,member_name,member_email,created_at",
+      }),
+    ),
+    locationIds.length
+      ? supabaseRequest<SupabaseOnboardingProfileRow[]>(
+          "onboarding_profiles",
+          new URLSearchParams({
+            location_id: `in.(${locationIds.join(",")})`,
+            select: "location_id,draft,progress_percent,completed_required,total_required,status,updated_at",
+          }),
+        )
+      : Promise.resolve([]),
+    locationIds.length
+      ? supabaseRequest<SupabasePhoneNumberDirectoryRow[]>(
+          "phone_numbers",
+          new URLSearchParams({
+            location_id: `in.(${locationIds.join(",")})`,
+            order: "created_at.desc",
+            select: "location_id,phone_number,status,forwarding_status,voice_webhook_url",
+          }),
+        )
+      : Promise.resolve([]),
+    locationIds.length
+      ? supabaseRequest<Array<Pick<SupabaseCallRow, "id" | "location_id">>>(
+          "calls",
+          new URLSearchParams({
+            location_id: `in.(${locationIds.join(",")})`,
+            select: "id,location_id",
+            started_at: `gte.${firstDayOfCurrentMonthIso()}`,
+          }),
+        ).catch(() => [])
+      : Promise.resolve([]),
+  ]);
+
+  return mapSupabaseTenantDirectory({
+    locations,
+    memberships,
+    monthlyCalls,
+    onboardingProfiles,
+    organizations,
+    phoneNumbers,
+  });
 }
 
 export async function fetchCallFeedbackFromSupabase(callId: string): Promise<CallFeedback[]> {
@@ -1795,6 +1933,164 @@ export function mapSupabaseCalls(
       t: formatOffset(turn.offset_seconds ?? 0),
     })),
   }));
+}
+
+export function mapSupabaseTenantDirectory(input: {
+  locations: SupabaseLocationDirectoryRow[];
+  memberships: SupabaseMembershipDirectoryRow[];
+  monthlyCalls: Array<Pick<SupabaseCallRow, "id" | "location_id">>;
+  onboardingProfiles: SupabaseOnboardingProfileRow[];
+  organizations: SupabaseOrganizationRow[];
+  phoneNumbers: SupabasePhoneNumberDirectoryRow[];
+}): TenantDirectoryRecord[] {
+  const membershipsByOrganizationId = groupBy(input.memberships, (membership) => membership.organization_id);
+  const locationsByOrganizationId = groupBy(input.locations, (location) => location.organization_id);
+  const onboardingByLocationId = new Map(input.onboardingProfiles.map((profile) => [profile.location_id, profile]));
+  const callsByLocationId = groupBy(input.monthlyCalls, (call) => call.location_id);
+  const phoneNumbersByLocationId = groupBy(input.phoneNumbers, (phoneNumber) => phoneNumber.location_id);
+
+  return input.organizations.flatMap((organization) => {
+    const organizationLocations = locationsByOrganizationId.get(organization.id) ?? [];
+
+    if (!organizationLocations.length) {
+      return [buildTenantDirectoryRecord({
+        callsThisMonth: 0,
+        location: null,
+        memberships: membershipsByOrganizationId.get(organization.id) ?? [],
+        onboarding: null,
+        organization,
+        phoneNumber: null,
+      })];
+    }
+
+    return organizationLocations.map((location) => buildTenantDirectoryRecord({
+      callsThisMonth: callsByLocationId.get(location.id)?.length ?? 0,
+      location,
+      memberships: membershipsByOrganizationId.get(organization.id) ?? [],
+      onboarding: onboardingByLocationId.get(location.id) ?? null,
+      organization,
+      phoneNumber: phoneNumbersByLocationId.get(location.id)?.[0] ?? null,
+    }));
+  });
+}
+
+function buildTenantDirectoryRecord(input: {
+  callsThisMonth: number;
+  location: SupabaseLocationDirectoryRow | null;
+  memberships: SupabaseMembershipDirectoryRow[];
+  onboarding: SupabaseOnboardingProfileRow | null;
+  organization: SupabaseOrganizationRow;
+  phoneNumber: SupabasePhoneNumberDirectoryRow | null;
+}): TenantDirectoryRecord {
+  const draft = isObjectRecord(input.onboarding?.draft) ? input.onboarding.draft : {};
+  const businessType = normalizeBusinessType(draft.businessType ?? input.location?.cuisine);
+  const template = getBusinessTemplate(businessType);
+  const owner =
+    input.memberships.find((membership) => membership.role === "owner") ??
+    input.memberships[0] ??
+    null;
+  const businessName =
+    stringValue(input.location?.name) ??
+    stringValue(draft.restaurantName) ??
+    input.organization.name;
+  const progress = input.onboarding?.progress_percent ?? 0;
+  const aiHostPhone = stringValue(input.location?.ai_host_phone) ?? stringValue(input.phoneNumber?.phone_number);
+  const status = deriveTenantDirectoryStatus({
+    aiHostPhone,
+    onboardingStatus: input.onboarding?.status,
+    progress,
+  });
+
+  return {
+    addressOrArea:
+      stringValue(input.location?.address) ??
+      stringValue(draft.primaryLocation) ??
+      "Location not set",
+    aiHostPhone,
+    businessLabel: template.label,
+    businessType,
+    callsThisMonth: input.callsThisMonth,
+    createdAt: input.location?.created_at ?? input.organization.created_at ?? "",
+    includedInteractions: readInteger(draft.selectedPlanIncludedInteractions) ?? defaultIncludedInteractions(draft.selectedPlanName),
+    locationId: input.location?.id ?? "not-created",
+    locationName: businessName,
+    mainPhone: stringValue(input.location?.phone) ?? stringValue(draft.mainPhone),
+    monthlyPrice: readInteger(draft.selectedPlanMonthly) ?? defaultMonthlyPrice(draft.selectedPlanName),
+    onboardingProgressPercent: progress,
+    onboardingStatus: input.onboarding?.status ?? "not_started",
+    organizationId: input.organization.id,
+    organizationName: input.organization.name,
+    ownerEmail: stringValue(owner?.member_email) ?? "Unknown",
+    ownerName: stringValue(owner?.member_name) ?? "Owner",
+    planName: stringValue(draft.selectedPlanName) ?? "Unassigned",
+    status,
+    timezone:
+      stringValue(input.location?.timezone) ??
+      stringValue(draft.timezone) ??
+      "America/New_York",
+    voiceWebhookUrl: stringValue(input.phoneNumber?.voice_webhook_url),
+  };
+}
+
+function deriveTenantDirectoryStatus({
+  aiHostPhone,
+  onboardingStatus,
+  progress,
+}: {
+  aiHostPhone?: string;
+  onboardingStatus?: string | null;
+  progress: number;
+}): TenantDirectoryStatus {
+  if (!onboardingStatus) return "attention";
+  if (progress < 35) return "critical";
+  if (!aiHostPhone || progress < 80) return "attention";
+  return "healthy";
+}
+
+function defaultIncludedInteractions(planName: unknown) {
+  const normalized = String(planName ?? "").toLowerCase();
+  if (normalized.includes("pro") || normalized.includes("premium")) return 2000;
+  if (normalized.includes("growth") || normalized.includes("standard")) return 800;
+  if (normalized.includes("starter") || normalized.includes("basic")) return 200;
+  return 0;
+}
+
+function defaultMonthlyPrice(planName: unknown) {
+  const normalized = String(planName ?? "").toLowerCase();
+  if (normalized.includes("pro") || normalized.includes("premium")) return 549;
+  if (normalized.includes("growth") || normalized.includes("standard")) return 249;
+  if (normalized.includes("starter") || normalized.includes("basic")) return 99;
+  return 0;
+}
+
+function firstDayOfCurrentMonthIso() {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+}
+
+function groupBy<T>(items: T[], keyFn: (item: T) => string | null | undefined) {
+  const grouped = new Map<string, T[]>();
+
+  for (const item of items) {
+    const key = keyFn(item);
+    if (!key) continue;
+    const current = grouped.get(key) ?? [];
+    current.push(item);
+    grouped.set(key, current);
+  }
+
+  return grouped;
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function readInteger(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.round(value);
+  if (typeof value !== "string") return undefined;
+  const parsed = Number.parseInt(value.replace(/[^\d-]/g, ""), 10);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 function mapFirstLinkByCallId(rows: Array<{ id: string; source_call_id: string | null }>) {

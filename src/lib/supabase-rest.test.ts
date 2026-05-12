@@ -25,6 +25,7 @@ import {
   mapSupabaseReservations,
   mapSupabaseStaffAlertEvent,
   mapSupabaseStaffTask,
+  mapSupabaseTenantDirectory,
 } from "./supabase-rest";
 import { defaultAlertRoutingConfig } from "@/domain/alert-routing";
 
@@ -478,6 +479,88 @@ describe("Supabase onboarding profile payload", () => {
     expect(payload.completed_required).toBe(payload.total_required);
     expect(payload.progress_percent).toBe(100);
     expect(new Date(payload.updated_at).toString()).not.toBe("Invalid Date");
+  });
+});
+
+describe("Supabase tenant directory mapping", () => {
+  it("combines organizations, locations, onboarding, phone numbers, owners, and usage", () => {
+    const rows = mapSupabaseTenantDirectory({
+      locations: [{
+        address: "Waltham, MA",
+        ai_host_phone: "+17815550100",
+        created_at: "2026-05-12T12:00:00.000Z",
+        cuisine: "HVAC",
+        id: "loc_1",
+        name: "Summit Air",
+        organization_id: "org_1",
+        phone: "+17815550199",
+        timezone: "America/New_York",
+      }],
+      memberships: [{
+        created_at: "2026-05-12T11:59:00.000Z",
+        member_email: "owner@summitair.test",
+        member_name: "Owner Example",
+        organization_id: "org_1",
+        role: "owner",
+      }],
+      monthlyCalls: [
+        { id: "call_1", location_id: "loc_1" },
+        { id: "call_2", location_id: "loc_1" },
+      ],
+      onboardingProfiles: [{
+        completed_required: 12,
+        draft: {
+          businessType: "hvac",
+          selectedPlanIncludedInteractions: "800",
+          selectedPlanMonthly: "249",
+          selectedPlanName: "Growth",
+        },
+        location_id: "loc_1",
+        progress_percent: 100,
+        status: "ready_for_test_call",
+        total_required: 12,
+        updated_at: "2026-05-12T12:01:00.000Z",
+      }],
+      organizations: [{ created_at: "2026-05-12T11:58:00.000Z", id: "org_1", name: "Summit Air" }],
+      phoneNumbers: [{
+        forwarding_status: "pending_verification",
+        location_id: "loc_1",
+        phone_number: "+17815550100",
+        status: "provisioned",
+        voice_webhook_url: "https://voice.signalhost.ai/twilio/voice?locationId=loc_1",
+      }],
+    });
+
+    expect(rows[0]).toMatchObject({
+      aiHostPhone: "+17815550100",
+      businessLabel: "HVAC",
+      businessType: "hvac",
+      callsThisMonth: 2,
+      includedInteractions: 800,
+      locationId: "loc_1",
+      monthlyPrice: 249,
+      onboardingProgressPercent: 100,
+      ownerEmail: "owner@summitair.test",
+      planName: "Growth",
+      status: "healthy",
+    });
+  });
+
+  it("surfaces incomplete tenant setup as attention or critical", () => {
+    const rows = mapSupabaseTenantDirectory({
+      locations: [],
+      memberships: [],
+      monthlyCalls: [],
+      onboardingProfiles: [],
+      organizations: [{ created_at: "2026-05-12T11:58:00.000Z", id: "org_1", name: "No Location Yet" }],
+      phoneNumbers: [],
+    });
+
+    expect(rows[0]).toMatchObject({
+      locationId: "not-created",
+      onboardingStatus: "not_started",
+      status: "attention",
+    });
   });
 });
 
