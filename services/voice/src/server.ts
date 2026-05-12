@@ -38,6 +38,7 @@ const guestConfirmationService = createGuestConfirmationService(env);
 const menuIngestionService = createMenuIngestionService(env);
 const platformIntegrationRegistry = createPlatformIntegrationRegistry(env);
 const openAIRealtimeSipService = createOpenAIRealtimeSipService(env, restaurantContextStore, {
+  callStore,
   guestConfirmationService,
   staffNotificationService,
 });
@@ -389,6 +390,43 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
     return;
   }
 
+  if (req.method === "POST" && url.pathname === "/twilio/recording-status") {
+    try {
+      const rawBody = await readLimitedRequestBody(req, TWILIO_BODY_LIMIT_BYTES);
+      const params = Object.fromEntries(new URLSearchParams(rawBody));
+
+      if (!isValidTwilioWebhook(req, currentEnv, params)) {
+        sendText(res, 401, "Invalid Twilio signature");
+        return;
+      }
+
+      const recordingUrl = normalizeRecordingUrl(firstNonEmpty(params.RecordingUrl, params.recordingUrl));
+      const externalCallSid = firstNonEmpty(
+        params.CallSid,
+        params.callSid,
+        params.ParentCallSid,
+        params.parentCallSid,
+        url.searchParams.get("externalCallSid"),
+      );
+      if (!recordingUrl || !externalCallSid) {
+        sendJson(res, 400, { error: "RecordingUrl and CallSid are required." });
+        return;
+      }
+
+      await callStore.attachCallRecording({
+        durationSeconds: parseOptionalSeconds(firstNonEmpty(params.RecordingDuration, params.recordingDuration)),
+        externalCallSid,
+        providerPayload: params,
+        recordingSid: firstNonEmpty(params.RecordingSid, params.recordingSid),
+        recordingUrl,
+      });
+      sendJson(res, 200, { ok: true });
+    } catch (error) {
+      sendCaughtError(res, error, "Recording callback failed");
+    }
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/twilio/conversation-ended") {
     try {
       const rawBody = await readLimitedRequestBody(req, TWILIO_BODY_LIMIT_BYTES);
@@ -602,6 +640,19 @@ function getStableCallSessionKey(params: Record<string, string>, fallback?: stri
 
 function firstNonEmpty(...values: Array<string | undefined | null>) {
   return values.find((value) => value?.trim())?.trim();
+}
+
+function normalizeRecordingUrl(value?: string) {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return /\.(?:mp3|wav)$/i.test(trimmed) ? trimmed : `${trimmed}.mp3`;
+}
+
+function parseOptionalSeconds(value?: string) {
+  if (!value) return undefined;
+  const seconds = Number.parseInt(value, 10);
+  return Number.isFinite(seconds) ? seconds : undefined;
 }
 
 function parseConversationRelayHandoffData(value?: string) {

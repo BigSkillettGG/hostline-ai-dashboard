@@ -60,7 +60,17 @@ const supabasePublishableKey =
 const supabaseDemoLocationId = import.meta.env.VITE_SUPABASE_DEMO_LOCATION_ID ?? "";
 
 const callIntents: CallIntent[] = ["order", "reservation", "faq", "hours", "other"];
-const callOutcomes: CallOutcome[] = ["resolved", "order_placed", "reservation_booked", "escalated", "voicemail", "missed", "unknown"];
+const callOutcomes: CallOutcome[] = [
+  "resolved",
+  "order_placed",
+  "reservation_booked",
+  "escalated",
+  "manager_alerted",
+  "message_taken",
+  "voicemail",
+  "missed",
+  "unknown",
+];
 const callStatuses: CallStatus[] = ["new", "reviewed", "needs_review", "resolved"];
 const transcriptSpeakers: TranscriptSpeaker[] = ["agent", "caller", "staff"];
 const orderStatuses: OrderStatus[] = ["new", "accepted", "in_progress", "completed", "canceled"];
@@ -84,6 +94,7 @@ interface SupabaseCallRow {
   confidence: number | null;
   status: string | null;
   summary: string | null;
+  recording_url: string | null;
 }
 
 interface SupabaseTranscriptTurnRow {
@@ -491,7 +502,7 @@ export async function fetchCallsFromSupabase(): Promise<Call[]> {
     new URLSearchParams({
       limit: "100",
       order: "started_at.desc",
-      select: "id,caller_name,caller_phone,started_at,duration_seconds,intent,outcome,confidence,status,summary",
+      select: "id,caller_name,caller_phone,started_at,duration_seconds,intent,outcome,confidence,status,summary,recording_url",
     }),
   );
 
@@ -1621,6 +1632,7 @@ export function mapSupabaseCalls(
     confidence: call.confidence ?? 0,
     status: normalizeEnum(call.status, callStatuses, "new"),
     summary: call.summary?.trim() || "No summary available yet.",
+    recordingUrl: call.recording_url?.trim() || undefined,
     orderId: orderIdByCallId.get(call.id),
     reservationId: reservationIdByCallId.get(call.id),
     transcript: (turnsByCallId.get(call.id) ?? []).map((turn) => ({

@@ -9,6 +9,14 @@ export interface StartCallInput {
   locationId?: string;
 }
 
+export interface StartRealtimeCallInput {
+  callerPhone?: string;
+  externalCallId: string;
+  externalSessionId?: string;
+  locationId?: string;
+  providerPayload?: Record<string, unknown>;
+}
+
 export interface AddTranscriptTurnInput {
   callId?: string;
   speaker: TranscriptRole;
@@ -18,9 +26,22 @@ export interface AddTranscriptTurnInput {
 
 export interface CompleteCallInput {
   callId?: string;
+  confidence?: number;
   durationSeconds: number;
+  intent?: "order" | "reservation" | "faq" | "hours" | "other";
+  outcome?: string;
+  recordingUrl?: string;
   summary?: string;
   status?: "new" | "reviewed" | "needs_review" | "resolved";
+}
+
+export interface AttachCallRecordingInput {
+  callId?: string;
+  durationSeconds?: number;
+  externalCallSid?: string;
+  providerPayload?: Record<string, unknown>;
+  recordingSid?: string;
+  recordingUrl: string;
 }
 
 export interface CreateStaffReviewOrderInput {
@@ -62,7 +83,9 @@ export interface CreateStaffTaskInput {
 
 export interface CallStore {
   startCall(input: StartCallInput): Promise<{ callId?: string }>;
+  startRealtimeCall(input: StartRealtimeCallInput): Promise<{ callId?: string }>;
   addTranscriptTurn(input: AddTranscriptTurnInput): Promise<void>;
+  attachCallRecording(input: AttachCallRecordingInput): Promise<void>;
   completeCall(input: CompleteCallInput): Promise<void>;
   createStaffTask(input: CreateStaffTaskInput): Promise<{ taskId?: string }>;
   createStaffReviewOrder(input: CreateStaffReviewOrderInput): Promise<{ orderId?: string }>;
@@ -89,6 +112,13 @@ class NoopCallStore implements CallStore {
     return {};
   }
 
+  async startRealtimeCall(input: StartRealtimeCallInput) {
+    console.info("[call-store] Supabase not configured; realtime call start not persisted", {
+      externalCallId: input.externalCallId,
+    });
+    return {};
+  }
+
   async addTranscriptTurn(input: AddTranscriptTurnInput) {
     console.info("[call-store] Supabase not configured; transcript turn not persisted", {
       speaker: input.speaker,
@@ -99,6 +129,14 @@ class NoopCallStore implements CallStore {
   async completeCall(input: CompleteCallInput) {
     console.info("[call-store] Supabase not configured; call close not persisted", {
       durationSeconds: input.durationSeconds,
+    });
+  }
+
+  async attachCallRecording(input: AttachCallRecordingInput) {
+    console.info("[call-store] Supabase not configured; recording not persisted", {
+      callId: input.callId,
+      externalCallSid: input.externalCallSid,
+      recordingSid: input.recordingSid,
     });
   }
 
@@ -164,6 +202,31 @@ class SupabaseCallStore implements CallStore {
     return { callId: rows?.[0]?.id };
   }
 
+  async startRealtimeCall(input: StartRealtimeCallInput) {
+    const startedAt = new Date().toISOString();
+    const rows = await this.request<Array<{ id: string }>>("calls", {
+      body: {
+        caller_phone: input.callerPhone ?? null,
+        external_call_sid: input.externalCallId,
+        external_session_id: input.externalSessionId ?? null,
+        location_id: normalizeLocationId(input.locationId) ?? this.locationId,
+        started_at: startedAt,
+        status: "new",
+        twilio_payload: {
+          provider: "openai_realtime_sip",
+          ...(input.providerPayload ?? {}),
+        },
+      },
+      headers: {
+        Prefer: "return=representation,resolution=merge-duplicates",
+      },
+      method: "POST",
+      query: "on_conflict=external_call_sid&select=id",
+    });
+
+    return { callId: rows?.[0]?.id };
+  }
+
   async addTranscriptTurn(input: AddTranscriptTurnInput) {
     if (!input.callId) return;
 
@@ -181,14 +244,39 @@ class SupabaseCallStore implements CallStore {
   async completeCall(input: CompleteCallInput) {
     if (!input.callId) return;
 
+    const body: Record<string, unknown> = {
+      duration_seconds: Math.max(0, Math.round(input.durationSeconds)),
+      status: input.status ?? "resolved",
+      summary: input.summary ?? null,
+    };
+    if (input.confidence !== undefined) body.confidence = clampConfidence(input.confidence);
+    if (input.intent) body.intent = input.intent;
+    if (input.outcome) body.outcome = input.outcome;
+    if (input.recordingUrl) body.recording_url = input.recordingUrl;
+
     await this.request("calls", {
-      body: {
-        duration_seconds: Math.max(0, Math.round(input.durationSeconds)),
-        status: input.status ?? "resolved",
-        summary: input.summary ?? null,
-      },
+      body,
       method: "PATCH",
       query: `id=eq.${encodeURIComponent(input.callId)}`,
+    });
+  }
+
+  async attachCallRecording(input: AttachCallRecordingInput) {
+    if (!input.callId && !input.externalCallSid) return;
+
+    const body: Record<string, unknown> = {
+      recording_url: input.recordingUrl,
+    };
+    if (input.durationSeconds !== undefined) body.duration_seconds = Math.max(0, Math.round(input.durationSeconds));
+
+    const query = input.callId
+      ? `id=eq.${encodeURIComponent(input.callId)}`
+      : `external_call_sid=eq.${encodeURIComponent(input.externalCallSid ?? "")}`;
+
+    await this.request("calls", {
+      body,
+      method: "PATCH",
+      query,
     });
   }
 
@@ -347,6 +435,10 @@ class SupabaseCallStore implements CallStore {
 function normalizeLocationId(locationId?: string) {
   if (!locationId || locationId === "demo-location") return undefined;
   return locationId;
+}
+
+function clampConfidence(value: number) {
+  return Math.min(100, Math.max(0, Math.round(value)));
 }
 
 function buildReservationNotes(input: CreateStaffReviewReservationInput) {

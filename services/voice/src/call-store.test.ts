@@ -65,6 +65,32 @@ describe("Supabase call store", () => {
     expect(headers.Authorization).toBeUndefined();
   });
 
+  it("persists an OpenAI Realtime SIP call start", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify([{ id: "call_uuid" }]), { status: 201 }),
+    );
+    const store = createCallStore(env);
+
+    const result = await store.startRealtimeCall({
+      callerPhone: "+15551234567",
+      externalCallId: "CA123",
+      externalSessionId: "rtc_123",
+      locationId: "00000000-0000-4000-8000-000000000002",
+      providerPayload: { openaiCallId: "rtc_123" },
+    });
+
+    expect(result.callId).toBe("call_uuid");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://example.supabase.co/rest/v1/calls?on_conflict=external_call_sid&select=id",
+      expect.objectContaining({
+        body: expect.stringContaining('"provider":"openai_realtime_sip"'),
+        method: "POST",
+      }),
+    );
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain('"external_call_sid":"CA123"');
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain('"external_session_id":"rtc_123"');
+  });
+
   it("skips transcript writes until a call id exists", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
     const store = createCallStore(env);
@@ -166,6 +192,27 @@ describe("Supabase call store", () => {
       '"location_id":"00000000-0000-4000-8000-000000000002"',
     );
     expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain('"call_id":"call_uuid"');
+  });
+
+  it("attaches a recording URL to a call by provider call id", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 204 }));
+    const store = createCallStore(env);
+
+    await store.attachCallRecording({
+      durationSeconds: 32,
+      externalCallSid: "CA123",
+      recordingSid: "RE123",
+      recordingUrl: "https://api.twilio.com/recordings/RE123.mp3",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://example.supabase.co/rest/v1/calls?external_call_sid=eq.CA123",
+      expect.objectContaining({
+        body: expect.stringContaining('"recording_url":"https://api.twilio.com/recordings/RE123.mp3"'),
+        method: "PATCH",
+      }),
+    );
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain('"duration_seconds":32');
   });
 
   it("creates a staff-confirmed reservation request", async () => {

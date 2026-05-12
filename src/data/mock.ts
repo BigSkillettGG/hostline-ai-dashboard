@@ -33,6 +33,7 @@ export interface Call {
   status: CallStatus;
   summary: string;
   transcript: { speaker: TranscriptSpeaker; text: string; t: string }[];
+  recordingUrl?: string;
   orderId?: string;
   reservationId?: string;
   escalation?: CallEscalation;

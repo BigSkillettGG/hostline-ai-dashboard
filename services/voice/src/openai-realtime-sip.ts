@@ -1,13 +1,15 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { IncomingHttpHeaders } from "node:http";
 import WebSocket, { type RawData } from "ws";
+import type { CallStore } from "./call-store";
 import type { VoiceServiceEnv } from "./env";
 import type { GuestConfirmationService } from "./guest-confirmation-service";
 import type { StaffAlertKind, StaffNotificationService } from "./notification-service";
 import type { CapturedOrderItem } from "./order-intake";
-import { buildRestaurantInstructions } from "./restaurant-agent";
+import { buildRestaurantInstructions, generateCallSummary } from "./restaurant-agent";
 import { toSpokenRestaurantName, type RestaurantVoiceContext } from "./restaurant-context";
 import type { RestaurantContextStore } from "./restaurant-context-store";
+import type { TranscriptRole, TranscriptTurn } from "./types";
 
 const OPENAI_REALTIME_DEFAULT_MODEL = "gpt-realtime";
 const OPENAI_REALTIME_DEFAULT_FEMALE_VOICE = "marin";
@@ -18,7 +20,9 @@ const OPENAI_REALTIME_WEBSOCKET_URL = "wss://api.openai.com/v1/realtime";
 type OpenAIRealtimeEnv = Pick<
   VoiceServiceEnv,
   | "OPENAI_API_KEY"
+  | "OPENAI_MODEL"
   | "OPENAI_PROJECT_ID"
+  | "OPENAI_REPLY_TIMEOUT_MS"
   | "OPENAI_REALTIME_FEMALE_VOICE"
   | "OPENAI_REALTIME_MALE_VOICE"
   | "OPENAI_REALTIME_MODEL"
@@ -30,6 +34,7 @@ type OpenAIRealtimeEnv = Pick<
 >;
 
 interface OpenAIRealtimeSipServiceOptions {
+  callStore?: CallStore;
   fetchImpl?: typeof fetch;
   guestConfirmationService?: GuestConfirmationService;
   staffNotificationService?: StaffNotificationService;
@@ -78,6 +83,7 @@ export interface OpenAIRealtimePreflight {
 }
 
 interface OpenAIRealtimeIncomingEvent {
+  created_at?: unknown;
   data?: {
     call?: {
       id?: unknown;
@@ -93,6 +99,7 @@ interface OpenAIRealtimeIncomingEvent {
       location_id?: unknown;
     };
     sip_headers?: Array<{ name?: unknown; value?: unknown }>;
+    to?: unknown;
   };
   id?: unknown;
   object?: unknown;
@@ -103,6 +110,26 @@ interface OpenAIRealtimeToolCall {
   arguments: Record<string, unknown>;
   callId: string;
   name: string;
+}
+
+interface RealtimeTranscriptTurn {
+  itemId?: string;
+  role: TranscriptRole;
+  text: string;
+}
+
+interface OpenAIRealtimeSidebandSession {
+  callRecordId?: string;
+  callerPhone?: string;
+  completed: boolean;
+  context: RestaurantVoiceContext;
+  externalCallId: string;
+  locationId: string;
+  staffCallbackRequested: boolean;
+  startedAt: number;
+  toolEvents: Array<{ kind?: string; name: string }>;
+  transcript: TranscriptTurn[];
+  transcriptKeys: Set<string>;
 }
 
 interface BuildOpenAIRealtimeAcceptPayloadInput {
@@ -153,6 +180,7 @@ export function createOpenAIRealtimeSipService(
   options: OpenAIRealtimeSipServiceOptions = {},
 ) {
   const fetchImpl = options.fetchImpl ?? fetch;
+  const callStore = options.callStore;
   const guestConfirmationService = options.guestConfirmationService;
   const staffNotificationService = options.staffNotificationService;
   const websocketFactory =
@@ -223,6 +251,25 @@ export function createOpenAIRealtimeSipService(
         "demo-location";
       const context = await restaurantContextStore.getContext(resolvedLocationId);
       const callerPhone = extractOpenAIRealtimeCallerPhone(event);
+      const externalCallId = extractOpenAIRealtimeExternalCallId(event) ?? callId;
+      const externalSessionId = extractOpenAIRealtimeSipCallId(event) ?? callId;
+      let callRecordId: string | undefined;
+      try {
+        const result = await callStore?.startRealtimeCall({
+          callerPhone,
+          externalCallId,
+          externalSessionId,
+          locationId: resolvedLocationId,
+          providerPayload: {
+            openaiCallId: callId,
+            sipHeaders: event.data?.sip_headers ?? [],
+            webhookEventId: event.id,
+          },
+        });
+        callRecordId = result?.callId;
+      } catch (error) {
+        console.error("[openai-realtime] call start persistence failed", { callId, error });
+      }
       const payload = buildOpenAIRealtimeAcceptPayload({ callerPhone, context, env });
 
       await acceptOpenAIRealtimeCall({
@@ -234,10 +281,13 @@ export function createOpenAIRealtimeSipService(
 
       startSidebandSocket({
         activeSockets,
+        callRecordId,
+        callStore,
         callId,
         callerPhone,
         context,
         env,
+        externalCallId,
         guestConfirmationService,
         locationId: resolvedLocationId,
         staffNotificationService,
@@ -451,6 +501,20 @@ export function extractOpenAIRealtimeCallerPhone(event: OpenAIRealtimeIncomingEv
   );
 }
 
+export function extractOpenAIRealtimeExternalCallId(event: OpenAIRealtimeIncomingEvent) {
+  return extractSipHeader(event.data?.sip_headers, [
+    "x-twilio-callsid",
+    "x-twilio-call-sid",
+    "twilio-callsid",
+    "twilio-call-sid",
+    "x-call-sid",
+  ]);
+}
+
+export function extractOpenAIRealtimeSipCallId(event: OpenAIRealtimeIncomingEvent) {
+  return extractSipHeader(event.data?.sip_headers, ["call-id", "callid"]);
+}
+
 export function extractOpenAIRealtimeToolCalls(event: unknown): OpenAIRealtimeToolCall[] {
   if (!event || typeof event !== "object") return [];
   const candidate = event as {
@@ -477,6 +541,45 @@ export function extractOpenAIRealtimeToolCalls(event: unknown): OpenAIRealtimeTo
       };
     })
     .filter((item): item is OpenAIRealtimeToolCall => Boolean(item));
+}
+
+export function extractOpenAIRealtimeTranscriptTurn(event: unknown): RealtimeTranscriptTurn | null {
+  if (!event || typeof event !== "object") return null;
+  const candidate = event as {
+    content_index?: unknown;
+    item?: unknown;
+    item_id?: unknown;
+    output_index?: unknown;
+    transcript?: unknown;
+    type?: unknown;
+  };
+  const type = stringValue(candidate.type);
+
+  if (type === "conversation.item.input_audio_transcription.completed") {
+    const text = stringValue(candidate.transcript);
+    if (!text) return null;
+    return {
+      itemId: stringValue(candidate.item_id),
+      role: "caller",
+      text,
+    };
+  }
+
+  if (type === "response.output_audio_transcript.done") {
+    const text = stringValue(candidate.transcript);
+    if (!text) return null;
+    return {
+      itemId: [
+        stringValue(candidate.item_id),
+        stringValue(candidate.output_index),
+        stringValue(candidate.content_index),
+      ].filter(Boolean).join(":") || undefined,
+      role: "agent",
+      text,
+    };
+  }
+
+  return null;
 }
 
 export function lookupRestaurantContext(context: RestaurantVoiceContext, rawTopic: unknown) {
@@ -580,20 +683,26 @@ async function acceptOpenAIRealtimeCall({
 
 function startSidebandSocket({
   activeSockets,
+  callRecordId,
+  callStore,
   callId,
   callerPhone,
   context,
   env,
+  externalCallId,
   guestConfirmationService,
   locationId,
   staffNotificationService,
   websocketFactory,
 }: {
   activeSockets: Map<string, RealtimeSocket>;
+  callRecordId?: string;
+  callStore?: CallStore;
   callId: string;
   callerPhone?: string;
   context: RestaurantVoiceContext;
   env: OpenAIRealtimeEnv;
+  externalCallId: string;
   guestConfirmationService?: GuestConfirmationService;
   locationId: string;
   staffNotificationService?: StaffNotificationService;
@@ -608,6 +717,19 @@ function startSidebandSocket({
     },
   });
   activeSockets.set(callId, socket);
+  const session: OpenAIRealtimeSidebandSession = {
+    callRecordId,
+    callerPhone,
+    completed: false,
+    context,
+    externalCallId,
+    locationId,
+    staffCallbackRequested: false,
+    startedAt: Date.now(),
+    toolEvents: [],
+    transcript: [],
+    transcriptKeys: new Set(),
+  };
 
   socket.on("open", () => {
     console.info("[openai-realtime] sideband connected", { callId, locationId });
@@ -638,12 +760,24 @@ function startSidebandSocket({
       return;
     }
 
+    const transcriptTurn = extractOpenAIRealtimeTranscriptTurn(event);
+    if (transcriptTurn) {
+      void persistOpenAIRealtimeTranscriptTurn({
+        callStore,
+        session,
+        turn: transcriptTurn,
+      });
+    }
+
     const toolCalls = extractOpenAIRealtimeToolCalls(event);
     if (!toolCalls.length) return;
+    markRealtimeToolCalls(session, toolCalls);
     void handleOpenAIRealtimeToolCalls({
       callerPhone,
+      callRecordId: session.callRecordId,
       context,
       guestConfirmationService,
+      locationId,
       socket,
       staffNotificationService,
       toolCalls,
@@ -652,6 +786,13 @@ function startSidebandSocket({
 
   socket.on("close", (code, reason) => {
     activeSockets.delete(callId);
+    void completeOpenAIRealtimeLoggedCall({
+      callStore,
+      closeCode: code,
+      closeReason: reason.toString("utf8"),
+      env,
+      session,
+    });
     console.info("[openai-realtime] sideband closed", {
       callId,
       code,
@@ -661,6 +802,12 @@ function startSidebandSocket({
 
   socket.on("error", (error) => {
     activeSockets.delete(callId);
+    void completeOpenAIRealtimeLoggedCall({
+      callStore,
+      closeReason: error.message,
+      env,
+      session,
+    });
     console.error("[openai-realtime] sideband failed", { callId, error });
   });
 }
@@ -679,17 +826,187 @@ export function buildShortOpeningGreeting(context: RestaurantVoiceContext) {
   return `Hi, thank you for calling ${toSpokenRestaurantName(context.restaurantName)}. How can I help you?`;
 }
 
+async function persistOpenAIRealtimeTranscriptTurn({
+  callStore,
+  session,
+  turn,
+}: {
+  callStore?: CallStore;
+  session: OpenAIRealtimeSidebandSession;
+  turn: RealtimeTranscriptTurn;
+}) {
+  const text = turn.text.trim();
+  if (!text) return;
+
+  const key = `${turn.role}:${turn.itemId ?? text}`;
+  if (session.transcriptKeys.has(key)) return;
+  session.transcriptKeys.add(key);
+
+  const transcriptTurn = {
+    at: new Date().toISOString(),
+    role: turn.role,
+    text,
+  } satisfies TranscriptTurn;
+  session.transcript.push(transcriptTurn);
+
+  try {
+    await callStore?.addTranscriptTurn({
+      callId: session.callRecordId,
+      offsetSeconds: getRealtimeSessionOffsetSeconds(session),
+      speaker: turn.role,
+      text,
+    });
+  } catch (error) {
+    console.error("[openai-realtime] transcript persistence failed", {
+      error,
+      externalCallId: session.externalCallId,
+      role: turn.role,
+    });
+  }
+}
+
+function markRealtimeToolCalls(session: OpenAIRealtimeSidebandSession, toolCalls: OpenAIRealtimeToolCall[]) {
+  for (const toolCall of toolCalls) {
+    session.toolEvents.push({
+      kind: stringValue(toolCall.arguments.kind),
+      name: toolCall.name,
+    });
+    if (toolCall.name === "request_staff_callback") {
+      session.staffCallbackRequested = true;
+    }
+  }
+}
+
+async function completeOpenAIRealtimeLoggedCall({
+  callStore,
+  closeCode,
+  closeReason,
+  env,
+  session,
+}: {
+  callStore?: CallStore;
+  closeCode?: number;
+  closeReason?: string;
+  env: OpenAIRealtimeEnv;
+  session: OpenAIRealtimeSidebandSession;
+}) {
+  if (!callStore || !session.callRecordId) return;
+  if (session.completed) return;
+  session.completed = true;
+
+  const durationSeconds = getRealtimeSessionOffsetSeconds(session);
+  const classification = classifyOpenAIRealtimeCall(session);
+  const structuredSummary = buildOpenAIRealtimeStructuredSummary(session, classification, closeCode, closeReason);
+  const summary = await generateCallSummary({
+    context: session.context,
+    env,
+    structuredSummary,
+    transcript: session.transcript,
+  }).catch((error) => {
+    console.error("[openai-realtime] call summary generation failed", {
+      error,
+      externalCallId: session.externalCallId,
+    });
+    return structuredSummary;
+  });
+
+  try {
+    await callStore.completeCall({
+      callId: session.callRecordId,
+      confidence: classification.confidence,
+      durationSeconds,
+      intent: classification.intent,
+      outcome: classification.outcome,
+      status: classification.status,
+      summary,
+    });
+  } catch (error) {
+    console.error("[openai-realtime] call completion persistence failed", {
+      error,
+      externalCallId: session.externalCallId,
+    });
+  }
+}
+
+function getRealtimeSessionOffsetSeconds(session: OpenAIRealtimeSidebandSession) {
+  return Math.max(0, Math.round((Date.now() - session.startedAt) / 1000));
+}
+
+function classifyOpenAIRealtimeCall(session: OpenAIRealtimeSidebandSession): {
+  confidence: number;
+  intent: "order" | "reservation" | "faq" | "hours" | "other";
+  outcome: string;
+  status: "new" | "reviewed" | "needs_review" | "resolved";
+} {
+  const combinedText = session.transcript.map((turn) => turn.text).join(" ").toLowerCase();
+  const toolNames = new Set(session.toolEvents.map((event) => event.name));
+  const toolKinds = new Set(session.toolEvents.map((event) => event.kind).filter(Boolean));
+  const intent = toolKinds.has("order") || /\b(order|pickup|takeout|to go|pizza|salad|pasta)\b/.test(combinedText)
+    ? "order"
+    : toolKinds.has("reservation") || /\b(reservation|reserve|book|table for|party of)\b/.test(combinedText)
+      ? "reservation"
+      : /\b(hour|open|close|closing|tonight)\b/.test(combinedText)
+        ? "hours"
+        : session.transcript.length
+          ? "faq"
+          : "other";
+
+  const needsReview = session.staffCallbackRequested || toolNames.has("request_staff_callback");
+  const outcome = needsReview
+    ? "escalated"
+    : toolNames.has("send_guest_confirmation")
+      ? "resolved"
+      : intent === "order"
+        ? "message_taken"
+        : "resolved";
+
+  return {
+    confidence: session.transcript.length ? (needsReview ? 78 : 88) : 20,
+    intent,
+    outcome,
+    status: needsReview || !session.transcript.length ? "needs_review" : "resolved",
+  };
+}
+
+function buildOpenAIRealtimeStructuredSummary(
+  session: OpenAIRealtimeSidebandSession,
+  classification: ReturnType<typeof classifyOpenAIRealtimeCall>,
+  closeCode?: number,
+  closeReason?: string,
+) {
+  const callerTurns = session.transcript.filter((turn) => turn.role === "caller").map((turn) => turn.text);
+  const agentTurns = session.transcript.filter((turn) => turn.role === "agent").map((turn) => turn.text);
+  const actionSummary = session.toolEvents.length
+    ? `Tools used: ${session.toolEvents.map((event) => event.kind ? `${event.name}:${event.kind}` : event.name).join(", ")}.`
+    : "No tools were used.";
+  const closeSummary = closeCode || closeReason ? `Call close: ${[closeCode, closeReason].filter(Boolean).join(" ")}.` : "";
+
+  return [
+    `OpenAI Realtime call classified as ${classification.intent}; outcome ${classification.outcome}.`,
+    callerTurns.length ? `Caller said: ${callerTurns.slice(-3).join(" / ")}.` : "No caller transcript was captured.",
+    agentTurns.length ? `Vera replied: ${agentTurns.slice(-2).join(" / ")}.` : "",
+    actionSummary,
+    closeSummary,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 async function handleOpenAIRealtimeToolCalls({
   callerPhone,
+  callRecordId,
   context,
   guestConfirmationService,
+  locationId,
   socket,
   staffNotificationService,
   toolCalls,
 }: {
   callerPhone?: string;
+  callRecordId?: string;
   context: RestaurantVoiceContext;
   guestConfirmationService?: GuestConfirmationService;
+  locationId?: string;
   socket: RealtimeSocket;
   staffNotificationService?: StaffNotificationService;
   toolCalls: OpenAIRealtimeToolCall[];
@@ -697,8 +1014,10 @@ async function handleOpenAIRealtimeToolCalls({
   for (const toolCall of toolCalls) {
     const output = await handleOpenAIRealtimeToolCall({
       callerPhone,
+      callRecordId,
       context,
       guestConfirmationService,
+      locationId,
       staffNotificationService,
       toolCall,
     });
@@ -716,14 +1035,18 @@ async function handleOpenAIRealtimeToolCalls({
 
 async function handleOpenAIRealtimeToolCall({
   callerPhone,
+  callRecordId,
   context,
   guestConfirmationService,
+  locationId,
   staffNotificationService,
   toolCall,
 }: {
   callerPhone?: string;
+  callRecordId?: string;
   context: RestaurantVoiceContext;
   guestConfirmationService?: GuestConfirmationService;
+  locationId?: string;
   staffNotificationService?: StaffNotificationService;
   toolCall: OpenAIRealtimeToolCall;
 }) {
@@ -742,8 +1065,10 @@ async function handleOpenAIRealtimeToolCall({
 
   if (toolCall.name === "request_staff_callback") {
     return requestOpenAIRealtimeStaffCallback({
+      callRecordId,
       callerPhone,
       context,
+      locationId,
       rawArguments: toolCall.arguments,
       staffNotificationService,
     });
@@ -851,13 +1176,17 @@ export async function sendOpenAIRealtimeGuestConfirmation({
 }
 
 export async function requestOpenAIRealtimeStaffCallback({
+  callRecordId,
   callerPhone,
   context,
+  locationId,
   rawArguments,
   staffNotificationService,
 }: {
+  callRecordId?: string;
   callerPhone?: string;
   context: RestaurantVoiceContext;
+  locationId?: string;
   rawArguments: Record<string, unknown>;
   staffNotificationService?: StaffNotificationService;
 }) {
@@ -885,9 +1214,11 @@ export async function requestOpenAIRealtimeStaffCallback({
   try {
     if (staffNotificationService) {
       await staffNotificationService.sendStaffAlert({
+        callId: callRecordId,
         callerPhone: callbackPhone,
         details,
         kind,
+        locationId,
         restaurantName: context.restaurantName,
         severity,
         summary: buildStaffCallbackSummary(kind, callerName, reason),
@@ -1207,11 +1538,16 @@ function buildStaffCallbackSummary(kind: StaffAlertKind, callerName: string | un
 function extractCallerPhoneFromSipHeaders(headers: Array<{ name?: unknown; value?: unknown }> | undefined) {
   const priority = ["p-asserted-identity", "remote-party-id", "from", "x-twilio-from", "contact"];
   for (const name of priority) {
-    const match = headers?.find((header) => String(header.name ?? "").toLowerCase() === name);
-    const value = stringValue(match?.value);
+    const value = extractSipHeader(headers, [name]);
     if (value) return value;
   }
   return undefined;
+}
+
+function extractSipHeader(headers: Array<{ name?: unknown; value?: unknown }> | undefined, names: string[]) {
+  const normalizedNames = new Set(names.map((name) => name.toLowerCase()));
+  const match = headers?.find((header) => normalizedNames.has(String(header.name ?? "").toLowerCase()));
+  return stringValue(match?.value);
 }
 
 function normalizeCallerPhone(value?: string) {

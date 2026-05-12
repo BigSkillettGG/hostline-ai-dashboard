@@ -234,7 +234,23 @@ export default function Calls() {
 
                 <TabsContent value="transcript" className="mt-4 space-y-3">
                   <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 p-3">
-                    <Button size="icon" variant="outline" className="h-8 w-8 rounded-full"><Play className="h-3.5 w-3.5" /></Button>
+                    {selected.recordingUrl ? (
+                      <Button size="sm" variant="outline" asChild className="h-8">
+                        <a href={selected.recordingUrl} target="_blank" rel="noreferrer">
+                          <Play className="mr-1.5 h-3.5 w-3.5" />Recording
+                        </a>
+                      </Button>
+                    ) : (
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        className="h-8 w-8 rounded-full"
+                        disabled
+                        title="Recording not available"
+                      >
+                        <Play className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
                     <div className="flex-1 h-8 flex items-center gap-0.5">
                       {Array.from({ length: 40 }).map((_, i) => (
                         <div key={i} className="w-0.5 rounded-full bg-primary/40" style={{ height: `${20 + Math.sin(i) * 10 + (i % 5) * 4}%` }} />

@@ -16,6 +16,8 @@ This service is the production path for inbound restaurant phone calls.
 - Times out slow OpenAI replies using `OPENAI_REPLY_TIMEOUT_MS` and falls back safely instead of leaving dead air.
 - Handles unclear audio, bad connections, and rude callers with short recovery replies and staff-review tasks when needed.
 - Persists calls and transcript turns to Supabase when the server has a secret key and location ID.
+- Persists OpenAI Realtime SIP calls to Supabase, including caller/agent transcript turns, call summary, intent/outcome, and staff-review status.
+- Accepts Twilio recording status callbacks at `POST /twilio/recording-status` and attaches the recording URL to the matching call row.
 - Loads the onboarded restaurant profile from Supabase for greetings, policies, hours, parking, reservation rules, menu items, FAQs, and knowledge sections.
 - Creates staff-review pickup orders when the caller clearly asks for pickup/takeout and mentions recognized menu items.
 - Accumulates multi-turn pickup order drafts, so callers can pause between items before saying they are done.
@@ -99,6 +101,7 @@ When Supabase is configured, Twilio requests can include `locationId` in the web
 - `POST /telephony/provision-number` purchases a selected number, sets its voice webhook to `/twilio/voice?locationId=...`, writes `phone_numbers`, and updates `locations.ai_host_phone`.
 - `GET /twilio/live-call-config?locationId=...` returns the generated live call URLs.
 - `GET /twilio/twiml-preview?locationId=...` renders the TwiML preview used to verify ConversationRelay before calling.
+- `POST /twilio/recording-status` receives Twilio recording callbacks. Configure Twilio call/SIP recording to send completed recording events to `https://your-voice-service/twilio/recording-status`; the service stores the MP3 URL on `calls.recording_url`.
 - `POST /ingestion/run-next` processes one queued menu ingestion job, fetches URL/text content, parses menu items, replaces `menu_categories` and `menu_items`, and updates `ingestion_jobs` plus `menu_sources`.
 - Staff alert routing is loaded from `alert_routing_configs` per location when Supabase is configured. If no route exists, the service falls back to `STAFF_ALERT_SMS_TO`.
 - Staff alert outcomes are logged to `staff_alert_events` when Supabase is configured. Logging failures are warned but do not block the live call.

@@ -38,6 +38,7 @@ describe("Supabase call mapping", () => {
           id: "call_1",
           intent: "faq",
           outcome: "unknown",
+          recording_url: "https://api.twilio.com/recording.mp3",
           started_at: "2026-05-04T20:00:00.000Z",
           status: "new",
           summary: null,
@@ -72,6 +73,7 @@ describe("Supabase call mapping", () => {
       outcome: "unknown",
       phone: "+15551234567",
       reservationId: "reservation_1",
+      recordingUrl: "https://api.twilio.com/recording.mp3",
       status: "new",
     });
     expect(calls[0].transcript).toEqual([
@@ -91,6 +93,7 @@ describe("Supabase call mapping", () => {
           id: "call_2",
           intent: "weird",
           outcome: "also_weird",
+          recording_url: null,
           started_at: "2026-05-04T20:00:00.000Z",
           status: "strange",
           summary: "Imported from provider",
