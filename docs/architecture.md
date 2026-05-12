@@ -1,6 +1,14 @@
 # HostLine AI Architecture
 
-This app is the admin and operations dashboard. The real-time phone agent should run as a separate service because phone audio needs long-lived WebSockets, low latency, retries, and provider-specific event handling.
+HostLine is a customer communication platform for local businesses. Restaurants are the first vertical, but the core system should support multiple channels and industries.
+
+The architecture has three layers:
+
+- Core platform: conversations, knowledge lookup, business links, customer requests, staff tasks, transcripts, alerts, analytics, and account setup.
+- Channel adapters: phone voice today, website chat next, SMS follow-up now, and later email or social inboxes.
+- Vertical playbooks: restaurant-specific onboarding and policies first, with home services, salons, hotels, and other call-heavy businesses added as industry templates.
+
+The dashboard is the admin and operations app. The real-time phone agent runs as a separate service because phone audio needs long-lived WebSockets, low latency, retries, and provider-specific event handling.
 
 ## Recommended Stack
 
@@ -39,6 +47,8 @@ The first implementation is in `services/voice`:
 - A deterministic fallback responds safely without OpenAI during local development.
 - Clear pickup-order language with recognized menu items creates a staff-review, pay-at-pickup order in Supabase.
 - Reservation requests with date, time, party size, and guest name create staff-confirmed reservation rows in Supabase.
+- Configured business links let the agent text ordering, reservation, booking, menu, quote, or intake links instead of forcing deep integrations.
+- Generic customer requests support cross-industry workflows such as service appointments, estimates, leads, callbacks, and order/reservation requests. Until the `customer_requests` table is migrated, these safely fall back to staff tasks.
 - Human handoff, complaint, and low-confidence special-handling prompts create staff task rows so managers have a follow-up queue even when the SMS alert succeeds.
 - If SMS confirmations are enabled for the location and Twilio SMS is configured, captured phone orders and reservation requests send concise confirmations to the caller.
 - `GET /health` returns production readiness checks for public URLs, CORS, internal API key, Supabase, OpenAI, ElevenLabs, Twilio credentials, and Twilio signature enforcement.
@@ -61,6 +71,8 @@ Own POS, reservation, SMS, printing, and kitchen tablet delivery. Integration fa
 - Menu category.
 - Menu item.
 - Modifier group.
+- Business link.
+- Customer request.
 - Order.
 - Order item.
 - Reservation.
@@ -87,11 +99,11 @@ Own POS, reservation, SMS, printing, and kitchen tablet delivery. Integration fa
 The dashboard can be deployed independently from the voice service.
 
 ```
-Caller -> Twilio -> Voice Service -> LLM + tools
-                       |             |
-                       |             -> POS / reservation / SMS / printer APIs
-                       |
-                       -> Supabase -> Dashboard
+Caller / website visitor -> Channel Adapter -> LLM + tools
+                                  |             |
+                                  |             -> SMS / staff tasks / optional vertical integrations
+                                  |
+                                  -> Supabase -> Dashboard
 ```
 
 ## First Working Milestone

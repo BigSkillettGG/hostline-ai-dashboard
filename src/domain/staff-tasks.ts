@@ -1,6 +1,7 @@
 export type StaffTaskPriority = "low" | "normal" | "high" | "urgent";
 export type StaffTaskStatus = "open" | "in_progress" | "done" | "dismissed";
 export type StaffTaskType =
+  | "customer_request"
   | "delivery_issue"
   | "general"
   | "low_confidence_review"
@@ -27,6 +28,7 @@ export interface StaffTask {
 const taskStatuses: StaffTaskStatus[] = ["open", "in_progress", "done", "dismissed"];
 const taskPriorities: StaffTaskPriority[] = ["low", "normal", "high", "urgent"];
 const taskTypes: StaffTaskType[] = [
+  "customer_request",
   "delivery_issue",
   "general",
   "low_confidence_review",

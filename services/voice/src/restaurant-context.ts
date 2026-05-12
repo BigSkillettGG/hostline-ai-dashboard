@@ -1,6 +1,9 @@
 import type { HostlineVoiceGender } from "../../../src/domain/voice-selection";
+import type { BusinessLink } from "../../../src/domain/business-links";
 
 export interface RestaurantVoiceContext {
+  businessLinks: BusinessLink[];
+  businessType: string;
   restaurantName: string;
   hostName: string;
   voiceGender: HostlineVoiceGender;
@@ -13,6 +16,7 @@ export interface RestaurantVoiceContext {
   menuHighlights: string[];
   menuItems: RestaurantMenuItem[];
   policies: Record<string, string>;
+  orderSettings: RestaurantOrderSettings;
   reservationSettings: RestaurantReservationSettings;
 }
 
@@ -31,6 +35,14 @@ export interface RestaurantMenuItem {
   priceCents: number;
   aliases?: string[];
   modifiers?: string[];
+}
+
+export type RestaurantOrderMode = "disabled" | "online_link" | "staff_review" | "staff_review_and_link";
+
+export interface RestaurantOrderSettings {
+  enabled: boolean;
+  handlingMode: RestaurantOrderMode;
+  onlineOrderingUrl?: string;
 }
 
 export type RestaurantReservationMode =
@@ -55,6 +67,27 @@ export interface RestaurantReservationSettings {
 }
 
 export const demoRestaurantContext: RestaurantVoiceContext = {
+  businessLinks: [
+    {
+      description: "Full menu, online ordering, and pickup checkout.",
+      kind: "ordering",
+      label: "Online ordering",
+      url: "https://oliveandember.example/order",
+    },
+    {
+      description: "Guest-facing reservation booking page.",
+      kind: "reservation",
+      label: "Reservations",
+      url: "https://www.opentable.com/r/olive-and-ember",
+    },
+    {
+      description: "Current menu.",
+      kind: "menu",
+      label: "Menu",
+      url: "https://oliveandember.example/menu",
+    },
+  ],
+  businessType: "restaurant",
   restaurantName: "Olive & Ember",
   hostName: "Vera",
   voiceGender: "female",
@@ -182,6 +215,11 @@ export const demoRestaurantContext: RestaurantVoiceContext = {
     complaints: "For complaints, apologize, collect the caller name, callback number, order or visit details, and flag a manager. Do not promise refunds.",
     "private events": "Private events and catering inquiries should collect date, guest count, budget, contact info, and preferred follow-up time for the events manager.",
     "house rules": "Corkage is $25 per bottle with a two-bottle limit. Cake plating is $2 per guest. Service animals only. The main entrance and restroom are wheelchair accessible.",
+  },
+  orderSettings: {
+    enabled: true,
+    handlingMode: "staff_review_and_link",
+    onlineOrderingUrl: "https://oliveandember.example/order",
   },
   reservationSettings: {
     autoConfirmPartyLimit: 6,

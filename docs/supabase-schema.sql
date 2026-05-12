@@ -128,6 +128,19 @@ create table onboarding_profiles (
   unique(location_id)
 );
 
+create table business_links (
+  id uuid primary key default gen_random_uuid(),
+  location_id uuid not null references locations(id) on delete cascade,
+  link_type text not null,
+  label text not null,
+  url text not null,
+  description text,
+  is_active boolean not null default true,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table phone_numbers (
   id uuid primary key default gen_random_uuid(),
   location_id uuid not null references locations(id) on delete cascade,
@@ -308,6 +321,23 @@ create table reservations (
   manual_request boolean not null default true,
   notes text,
   created_at timestamptz not null default now()
+);
+
+create table customer_requests (
+  id uuid primary key default gen_random_uuid(),
+  location_id uuid not null references locations(id) on delete cascade,
+  source_call_id uuid references calls(id) on delete set null,
+  request_type text not null default 'general',
+  title text not null,
+  summary text not null,
+  customer_name text,
+  customer_phone text,
+  status text not null default 'new',
+  priority text not null default 'normal',
+  source text not null default 'ai_host',
+  details jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 create table integration_connections (

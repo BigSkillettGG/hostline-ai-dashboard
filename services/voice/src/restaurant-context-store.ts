@@ -1,11 +1,14 @@
 import type { VoiceServiceEnv } from "./env";
 import { normalizeHostlineVoiceGender } from "../../../src/domain/voice-selection";
+import type { BusinessLink } from "../../../src/domain/business-links";
 import {
   demoRestaurantContext,
   toSpokenRestaurantName,
   type RestaurantFaq,
   type RestaurantKnowledgeSection,
   type RestaurantMenuItem,
+  type RestaurantOrderMode,
+  type RestaurantOrderSettings,
   type RestaurantReservationMode,
   type RestaurantReservationSettings,
   type RestaurantVoiceContext,
@@ -116,6 +119,7 @@ export function buildRestaurantContext({
   const greetingTemplate =
     stringValue(draft.greeting) ?? agentConfig?.greeting_template?.trim() ?? demoRestaurantContext.greeting;
   const menu = mapMenuItems(menuItems);
+  const orderSettings = buildOrderSettings(draft);
   const menuHighlights = menu.length
     ? menu.map((item) => item.name)
     : splitList(stringValue(draft.menuCategories) ?? location?.cuisine ?? "").slice(0, 8);
@@ -129,8 +133,11 @@ export function buildRestaurantContext({
     location?.address?.trim() ?? stringValue(draft.primaryLocation) ?? "The restaurant address has not been configured yet.";
   const parkingPolicy = stringValue(draft.parking) ?? demoRestaurantContext.policies.parking;
   const reservationSettings = buildReservationSettings(draft, agentConfig);
+  const businessLinks = buildBusinessLinks(draft, orderSettings, reservationSettings);
 
   return {
+    businessLinks,
+    businessType: stringValue(draft.businessType) ?? "restaurant",
     defaultPickupEtaMinutes: parseMinutes(stringValue(draft.defaultPickupEta)) ?? demoRestaurantContext.defaultPickupEtaMinutes,
     faqs: mappedFaqs.length ? mappedFaqs : demoRestaurantContext.faqs,
     greeting: renderTemplate(greetingTemplate, { hostName, restaurantName }),
@@ -164,7 +171,7 @@ export function buildRestaurantContext({
         "Order changes and cancellations need staff confirmation before they are promised.",
       parking: parkingPolicy,
       payment: stringValue(draft.paymentPolicy) ?? "Payment is pay at pickup. Do not collect card numbers over the phone.",
-      pickup: buildPickupPolicy(draft),
+      pickup: buildPickupPolicy(draft, orderSettings),
       private_events:
         stringValue(draft.privateEvents) ??
         "Private event, catering, and buyout inquiries should be collected for staff follow-up.",
@@ -178,6 +185,7 @@ export function buildRestaurantContext({
         stringValue(draft.waitlistPolicy) ??
         "Live wait times can change quickly, so staff should confirm the wait when the guest arrives.",
     },
+    orderSettings,
     restaurantName,
     reservationSettings,
     smsConfirmationsEnabled: agentConfig?.sms_confirmations_enabled ?? true,
@@ -336,11 +344,17 @@ function buildHoursPolicy(draft: OnboardingDraft) {
     .join(" ");
 }
 
-function buildPickupPolicy(draft: OnboardingDraft) {
+function buildPickupPolicy(draft: OnboardingDraft, settings = buildOrderSettings(draft)) {
   const paymentPolicy = stringValue(draft.paymentPolicy) ?? "Pickup orders are pay at pickup.";
   const defaultPickupEta = stringValue(draft.defaultPickupEta);
   const orderDestination = stringValue(draft.orderDestination);
-  return [paymentPolicy, defaultPickupEta && `Default pickup estimate is ${defaultPickupEta}.`, orderDestination && `Orders route to ${orderDestination}.`]
+  return [
+    orderModeInstruction(settings),
+    settings.onlineOrderingUrl && `Online ordering link: ${settings.onlineOrderingUrl}.`,
+    paymentPolicy,
+    defaultPickupEta && `Default pickup estimate is ${defaultPickupEta}.`,
+    orderDestination && `Orders route to ${orderDestination}.`,
+  ]
     .filter(Boolean)
     .join(" ");
 }
@@ -357,6 +371,74 @@ function buildDeliveryIssuePolicy(draft: OnboardingDraft) {
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+function buildOrderSettings(draft: OnboardingDraft): RestaurantOrderSettings {
+  const handlingMode = normalizeOrderMode(stringValue(draft.orderHandlingMode), draft.takeOrders);
+
+  return {
+    enabled: draft.takeOrders !== false && handlingMode !== "disabled",
+    handlingMode,
+    onlineOrderingUrl: stringValue(draft.onlineOrderingUrl),
+  };
+}
+
+function normalizeOrderMode(value: string | undefined, takeOrders: OnboardingDraftValue): RestaurantOrderMode {
+  if (takeOrders === false) return "disabled";
+  const normalized = (value ?? "").toLowerCase();
+  if (normalized.includes("do not")) return "disabled";
+  if (normalized.includes("also offer") || normalized.includes("capture order and")) return "staff_review_and_link";
+  if (normalized.includes("send online") || normalized.includes("ordering link") || normalized.includes("link only")) return "online_link";
+  return "staff_review";
+}
+
+function orderModeInstruction(settings: RestaurantOrderSettings) {
+  if (!settings.enabled || settings.handlingMode === "disabled") return "Do not capture pickup orders unless staff enables ordering.";
+  if (settings.handlingMode === "online_link") return "For pickup orders, offer to text the online ordering link instead of manually taking the order.";
+  if (settings.handlingMode === "staff_review_and_link") {
+    return "For pickup orders, the host may either capture the order for staff review or offer to text the online ordering link, based on caller preference.";
+  }
+  return "For pickup orders, capture the order details for staff review.";
+}
+
+function buildBusinessLinks(
+  draft: OnboardingDraft,
+  orderSettings: RestaurantOrderSettings,
+  reservationSettings: RestaurantReservationSettings,
+): BusinessLink[] {
+  const links: BusinessLink[] = [];
+  const onlineOrderingUrl = orderSettings.onlineOrderingUrl;
+  const reservationBookingUrl = reservationSettings.bookingUrl;
+  const menuUrl = stringValue(draft.menuUrl);
+
+  if (onlineOrderingUrl) {
+    links.push({
+      description: "Use this when a caller or chat visitor wants to place an order online.",
+      kind: "ordering",
+      label: "Online ordering",
+      url: onlineOrderingUrl,
+    });
+  }
+
+  if (reservationBookingUrl) {
+    links.push({
+      description: "Use this when a caller or chat visitor wants to book or manage a reservation online.",
+      kind: "reservation",
+      label: "Reservations",
+      url: reservationBookingUrl,
+    });
+  }
+
+  if (menuUrl) {
+    links.push({
+      description: "Use this when a caller or chat visitor wants the menu link.",
+      kind: "menu",
+      label: "Menu",
+      url: menuUrl,
+    });
+  }
+
+  return links;
 }
 
 function buildReservationPolicy(
@@ -607,6 +689,11 @@ function buildDraftKnowledgeSections(draft: OnboardingDraft): RestaurantKnowledg
 
   addDraftSection(sections, "Private events and catering", stringValue(draft.privateEvents));
   addDraftSection(sections, "Menu substitutions and off-menu requests", stringValue(draft.substitutionPolicy));
+  addDraftSection(
+    sections,
+    "Ordering operating model",
+    buildPickupPolicy(draft),
+  );
   addDraftSection(sections, "Order changes and cancellations", stringValue(draft.orderChangePolicy));
   addDraftSection(sections, "Reservation operating model", buildReservationPolicy(draft, undefined));
   addDraftSection(sections, "Reservation changes and cancellations", stringValue(draft.reservationChangePolicy));

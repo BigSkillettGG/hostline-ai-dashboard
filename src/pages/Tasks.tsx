@@ -116,6 +116,7 @@ const tabLabels: Record<TabKey, string> = {
 const tabs: TabKey[] = ["active", "open", "in_progress", "done", "dismissed", "all"];
 
 const taskTypeLabels: Record<StaffTaskType, string> = {
+  customer_request: "Customer request",
   delivery_issue: "Delivery issue",
   general: "General",
   low_confidence_review: "Low confidence",
@@ -139,6 +140,7 @@ function statusBadgeClass(status: StaffTaskStatus) {
 }
 
 function typeAccent(type: StaffTaskType) {
+  if (type === "customer_request") return "border-l-primary";
   if (type === "delivery_issue") return "border-l-destructive";
   if (type === "manager_callback") return "border-l-warning";
   if (type === "reservation_review") return "border-l-success";

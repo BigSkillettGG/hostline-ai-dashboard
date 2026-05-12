@@ -18,6 +18,8 @@ export type OrderDestination =
   | "printer"
   | "staff_review";
 
+export type OrderMode = "disabled" | "online_link" | "staff_review" | "staff_review_and_link";
+
 export type ReservationMode =
   | "integration"
   | "booking_link"
@@ -49,6 +51,8 @@ export interface RestaurantAgentConfig {
   };
   orders: {
     enabled: boolean;
+    mode: OrderMode;
+    onlineOrderingUrl?: string;
     paymentMode: PaymentMode;
     destinations: OrderDestination[];
     requireStaffAcceptance: boolean;
@@ -83,6 +87,13 @@ export const orderDestinationLabels: Record<OrderDestination, string> = {
   staff_review: "Staff review queue",
 };
 
+export const orderModeLabels: Record<OrderMode, string> = {
+  disabled: "Do not handle orders",
+  online_link: "Send online ordering link",
+  staff_review: "Capture for staff review",
+  staff_review_and_link: "Capture or send link",
+};
+
 export const reservationModeLabels: Record<ReservationMode, string> = {
   integration: "Book through integration",
   booking_link: "Send booking link",
@@ -112,6 +123,8 @@ export const defaultRestaurantAgentConfig: RestaurantAgentConfig = {
   },
   orders: {
     enabled: true,
+    mode: "staff_review",
+    onlineOrderingUrl: "",
     paymentMode: "pay_at_pickup",
     destinations: ["staff_review", "kitchen_tablet"],
     requireStaffAcceptance: true,

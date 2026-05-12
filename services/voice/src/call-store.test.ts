@@ -202,6 +202,71 @@ describe("Supabase call store", () => {
     expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain('"call_id":"call_uuid"');
   });
 
+  it("creates a generic customer request and staff task", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ id: "request_uuid" }]), { status: 201 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ id: "task_uuid" }]), { status: 201 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const store = createCallStore(env);
+
+    const result = await store.createCustomerRequest({
+      callId: "call_uuid",
+      customerName: "Sam",
+      customerPhone: "+15551234567",
+      details: { issue: "Water heater leaking", service_area: "Newton" },
+      locationId: "00000000-0000-4000-8000-000000000002",
+      priority: "high",
+      requestType: "service_appointment",
+      summary: "Sam needs help with a leaking water heater in Newton.",
+    });
+
+    expect(result).toEqual({ requestId: "request_uuid", taskId: "task_uuid" });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://example.supabase.co/rest/v1/customer_requests?select=id",
+      expect.objectContaining({
+        body: expect.stringContaining('"request_type":"service_appointment"'),
+        method: "POST",
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://example.supabase.co/rest/v1/staff_tasks?select=id",
+      expect.objectContaining({
+        body: expect.stringContaining('"task_type":"customer_request"'),
+        method: "POST",
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "https://example.supabase.co/rest/v1/calls?id=eq.call_uuid",
+      expect.objectContaining({
+        body: expect.stringContaining('"outcome":"customer_request_created"'),
+        method: "PATCH",
+      }),
+    );
+  });
+
+  it("falls back to staff tasks when customer request table is not migrated yet", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response("relation customer_requests does not exist", { status: 404 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ id: "task_uuid" }]), { status: 201 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const store = createCallStore(env);
+
+    const result = await store.createCustomerRequest({
+      callId: "call_uuid",
+      customerPhone: "+15551234567",
+      requestType: "quote",
+      summary: "Caller wants a quote.",
+    });
+
+    expect(result).toEqual({ requestId: undefined, taskId: "task_uuid" });
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("https://example.supabase.co/rest/v1/staff_tasks?select=id");
+  });
+
   it("attaches a recording URL to a call by provider call id", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 204 }));
     const store = createCallStore(env);

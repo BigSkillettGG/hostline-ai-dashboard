@@ -79,9 +79,11 @@ describe("restaurant context store", () => {
           hostName: "Nina",
           humanHandoffPolicy: "Take the caller name, phone, topic, and urgency for callback.",
           lostAndFoundPolicy: "Collect item, visit time, seating area, and callback number.",
+          onlineOrderingUrl: "https://saffron.example/order",
           orderChangePolicy: "Pickup order changes require the order name, phone, and requested update.",
           parking: "Parking behind the building.",
           paymentPolicy: "Pay at pickup.",
+          orderHandlingMode: "Send online ordering link",
           privateEvents: "Collect event date, guest count, and phone number for the events manager.",
           regularHours: "Daily 11 AM to 9 PM.",
           reservationHandlingMode: "Create request for staff confirmation",
@@ -115,6 +117,20 @@ describe("restaurant context store", () => {
     ]);
     expect(context.policies.hours).toContain("Closed July 4");
     expect(context.policies.pickup).toContain("20 minutes");
+    expect(context.policies.pickup).toContain("online ordering link");
+    expect(context.orderSettings).toMatchObject({
+      enabled: true,
+      handlingMode: "online_link",
+      onlineOrderingUrl: "https://saffron.example/order",
+    });
+    expect(context.businessLinks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "ordering",
+          url: "https://saffron.example/order",
+        }),
+      ]),
+    );
     expect(context.policies.parking).toBe("Parking behind the building.");
     expect(context.policies.complaints).toContain("manager review");
     expect(context.policies.delivery_drivers).toContain("side pickup window");

@@ -3,12 +3,14 @@ import {
   callHandlingLabels,
   defaultRestaurantAgentConfig,
   orderDestinationLabels,
+  orderModeLabels,
   reservationModeLabels,
 } from "./restaurant-config";
 
 describe("restaurant agent configuration", () => {
   it("defaults to the MVP-safe order and payment workflow", () => {
     expect(defaultRestaurantAgentConfig.orders.enabled).toBe(true);
+    expect(defaultRestaurantAgentConfig.orders.mode).toBe("staff_review");
     expect(defaultRestaurantAgentConfig.orders.paymentMode).toBe("pay_at_pickup");
     expect(defaultRestaurantAgentConfig.orders.destinations).toContain("staff_review");
   });
@@ -16,6 +18,7 @@ describe("restaurant agent configuration", () => {
   it("keeps setup labels available for each core configuration group", () => {
     expect(callHandlingLabels.answer_after_rings).toBe("Answer after X rings");
     expect(orderDestinationLabels.kitchen_tablet).toBe("Kitchen tablet");
+    expect(orderModeLabels.online_link).toBe("Send online ordering link");
     expect(reservationModeLabels.booking_link).toBe("Send booking link");
     expect(reservationModeLabels.manual_request).toBe("Create manual requests");
   });

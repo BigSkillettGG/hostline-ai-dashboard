@@ -24,6 +24,7 @@ describe("staff tasks", () => {
     expect(normalizeStaffTaskStatus("stuck")).toBe("open");
     expect(normalizeStaffTaskPriority("urgent")).toBe("urgent");
     expect(normalizeStaffTaskPriority("medium")).toBe("normal");
+    expect(normalizeStaffTaskType("customer_request")).toBe("customer_request");
     expect(normalizeStaffTaskType("reservation_review")).toBe("reservation_review");
     expect(normalizeStaffTaskType("mystery")).toBe("general");
   });

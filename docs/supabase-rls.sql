@@ -158,6 +158,7 @@ alter table staff_alert_events enable row level security;
 alter table knowledge_sections enable row level security;
 alter table faqs enable row level security;
 alter table onboarding_profiles enable row level security;
+alter table business_links enable row level security;
 alter table phone_numbers enable row level security;
 alter table menu_categories enable row level security;
 alter table menu_items enable row level security;
@@ -170,6 +171,7 @@ alter table orders enable row level security;
 alter table order_items enable row level security;
 alter table order_delivery_attempts enable row level security;
 alter table reservations enable row level security;
+alter table customer_requests enable row level security;
 alter table integration_connections enable row level security;
 alter table staff_tasks enable row level security;
 
@@ -291,6 +293,15 @@ for all to authenticated
 using (public.can_manage_location(location_id))
 with check (public.can_manage_location(location_id));
 
+create policy business_links_read on business_links
+for select to authenticated
+using (public.can_access_location(location_id));
+
+create policy business_links_manage on business_links
+for all to authenticated
+using (public.can_manage_location(location_id))
+with check (public.can_manage_location(location_id));
+
 create policy phone_numbers_read on phone_numbers
 for select to authenticated
 using (public.can_access_location(location_id));
@@ -390,6 +401,15 @@ for select to authenticated
 using (public.can_access_location(location_id));
 
 create policy reservations_operate on reservations
+for all to authenticated
+using (public.can_operate_location(location_id))
+with check (public.can_operate_location(location_id));
+
+create policy customer_requests_read on customer_requests
+for select to authenticated
+using (public.can_access_location(location_id));
+
+create policy customer_requests_operate on customer_requests
 for all to authenticated
 using (public.can_operate_location(location_id))
 with check (public.can_operate_location(location_id));

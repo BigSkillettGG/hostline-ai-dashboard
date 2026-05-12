@@ -6,6 +6,12 @@ import type { VoiceServiceEnv } from "./env";
 import type { GuestConfirmationService } from "./guest-confirmation-service";
 import type { StaffAlertKind, StaffNotificationService } from "./notification-service";
 import type { CapturedOrderItem } from "./order-intake";
+import {
+  businessLinkKindLabels,
+  findBusinessLink,
+  normalizeCustomerRequestKind,
+  type CustomerRequestKind,
+} from "../../../src/domain/business-links";
 import { buildRestaurantInstructions, generateCallSummary } from "./restaurant-agent";
 import { toSpokenRestaurantName, type RestaurantVoiceContext } from "./restaurant-context";
 import type { RestaurantContextStore } from "./restaurant-context-store";
@@ -490,6 +496,8 @@ export function buildOpenAIRealtimeInstructions(
     ? `Caller phone number from SIP caller ID: ${callContext.callerPhone}. If the caller asks for a text or agrees to a confirmation, you may text this number. If offering a text, say the last four digits, not the full number.`
     : "Caller phone number is not available from SIP caller ID. Ask for the best mobile number before offering to text confirmations.";
   const openingGreeting = buildShortOpeningGreeting(context);
+  const businessLinksContext = buildRealtimeBusinessLinksInstruction(context);
+  const orderModeContext = buildRealtimeOrderModeInstruction(context);
   const reservationModeContext = buildRealtimeReservationModeInstruction(context);
 
   return [
@@ -521,17 +529,21 @@ export function buildOpenAIRealtimeInstructions(
     "Do not call finish_call until the caller clearly indicates they are done or says goodbye.",
     "When finish_call returns ok, say only the closing line, then stop speaking. The call will end.",
     "If the caller says yes after your anything-else question, say 'Of course, what else can I help with?' and continue.",
+    businessLinksContext,
     "There is no live staff transfer in this pilot. Never say you are connecting, transferring, or placing the caller on hold for staff.",
     "When a caller needs staff, use request_staff_callback, then say you are sending the message to staff and someone will call them back shortly.",
     "If you do not know an answer after checking context, do not guess. Offer a staff callback and collect the missing name, callback number, and question.",
     "For severe allergies, never guarantee safety. Use request_staff_callback and say staff needs to confirm because cross-contact is possible.",
     reservationModeContext,
+    orderModeContext,
     "For reservation requests, acknowledge any date, time, or party size already spoken, then ask only for missing details.",
     "When reservation date, time, party size, and guest name are known, use create_reservation_request to save the request. If the tool says provider_confirmed, tell the caller the reservation is confirmed. If the tool says staff confirmation is needed, tell the caller it is requested and staff will confirm.",
-    "For pickup orders, collect items, quantities, name, and callback number. Payment is pay at pickup unless a POS integration says otherwise.",
+    "For pickup orders, follow the configured order operating mode. If taking a manual request, collect items, quantities, name, and callback number. If link-first, offer to text the ordering link.",
     "For menu substitutions or off-menu requests, use the restaurant substitution policy. If allowed and obvious, note it as a request; if uncertain, say you can include the request but staff must confirm. Never guarantee off-menu items, allergy accommodations, prices, or availability unless the menu context explicitly confirms them.",
     "For reservations and pickup orders, once the request is captured, naturally offer to text a confirmation. Example: 'Would you like me to text that confirmation to the number ending 1234?'",
     "Only send a text after the caller agrees or asks for it. Use the send_guest_confirmation tool for reservation, order, or helpful follow-up texts.",
+    "When the caller asks for a configured link, use send_business_link after they ask for it or agree to receive it by text.",
+    "For generic leads, service appointments, quote requests, or requests outside the restaurant-specific tools, use create_customer_request after collecting the name, callback number, and request summary.",
     "If the send_guest_confirmation tool succeeds, tell the caller the text is sent. Do not mention backend setup, SMS providers, or placeholder mode.",
     "Close naturally only after the caller is done. Use finish_call, say a short goodbye, and do not ask another question after goodbye.",
   ].join("\n");
@@ -556,6 +568,32 @@ function buildRealtimeReservationModeInstruction(context: RestaurantVoiceContext
     return `${base} Save a pending HostLine reservation request and tell the caller staff will confirm shortly.`;
   }
   return `${base} Create a staff-confirmed reservation request; never guarantee the table until staff confirms.`;
+}
+
+function buildRealtimeOrderModeInstruction(context: RestaurantVoiceContext) {
+  const settings = context.orderSettings;
+  const base = `Order operating mode: ${settings.handlingMode}.`;
+  if (!settings.enabled || settings.handlingMode === "disabled") {
+    return `${base} Do not take pickup orders; answer menu questions and offer staff follow-up if needed.`;
+  }
+  if (settings.handlingMode === "online_link") {
+    return `${base} Offer to text the online ordering link${settings.onlineOrderingUrl ? ` (${settings.onlineOrderingUrl})` : ""}; do not manually capture the full order unless the caller needs staff follow-up.`;
+  }
+  if (settings.handlingMode === "staff_review_and_link") {
+    return `${base} Ask whether the caller wants the online ordering link or wants you to take the order for staff review.`;
+  }
+  return `${base} Take the order details for staff review and never promise kitchen production until staff accepts it.`;
+}
+
+function buildRealtimeBusinessLinksInstruction(context: RestaurantVoiceContext) {
+  if (!context.businessLinks.length) {
+    return "No business links are configured yet.";
+  }
+
+  const links = context.businessLinks
+    .map((link) => `${businessLinkKindLabels[link.kind]}: ${link.label} (${link.url})`)
+    .join("; ");
+  return `Configured business links for phone, website chat, and text follow-up: ${links}.`;
 }
 
 export function extractOpenAIRealtimeCallId(event: OpenAIRealtimeIncomingEvent) {
@@ -1017,7 +1055,14 @@ async function persistOpenAIRealtimeTranscriptTurn({
 function markRealtimeToolCalls(session: OpenAIRealtimeSidebandSession, toolCalls: OpenAIRealtimeToolCall[]) {
   for (const toolCall of toolCalls) {
     session.toolEvents.push({
-      kind: toolCall.name === "create_reservation_request" ? "reservation" : stringValue(toolCall.arguments.kind),
+      kind:
+        toolCall.name === "create_reservation_request"
+          ? "reservation"
+          : toolCall.name === "create_customer_request"
+            ? stringValue(toolCall.arguments.request_type)
+            : toolCall.name === "send_business_link"
+              ? stringValue(toolCall.arguments.link_kind)
+              : stringValue(toolCall.arguments.kind),
       name: toolCall.name,
     });
     if (toolCall.name === "request_staff_callback") {
@@ -1133,9 +1178,11 @@ function classifyOpenAIRealtimeCall(session: OpenAIRealtimeSidebandSession): {
   const needsReview = session.staffCallbackRequested || toolNames.has("request_staff_callback") || qualityNeedsReview;
   const outcome = needsReview
     ? "escalated"
+    : toolNames.has("create_customer_request")
+      ? "message_taken"
     : toolNames.has("create_reservation_request")
       ? "message_taken"
-    : toolNames.has("send_guest_confirmation")
+    : toolNames.has("send_guest_confirmation") || toolNames.has("send_business_link")
       ? "resolved"
       : intent === "order"
         ? "message_taken"
@@ -1325,6 +1372,26 @@ async function handleOpenAIRealtimeToolCall({
       callerPhone,
       context,
       guestConfirmationService,
+      rawArguments: toolCall.arguments,
+    });
+  }
+
+  if (toolCall.name === "send_business_link") {
+    return sendOpenAIRealtimeBusinessLink({
+      callerPhone,
+      context,
+      guestConfirmationService,
+      rawArguments: toolCall.arguments,
+    });
+  }
+
+  if (toolCall.name === "create_customer_request") {
+    return createOpenAIRealtimeCustomerRequest({
+      callRecordId,
+      callStore,
+      callerPhone,
+      context,
+      locationId,
       rawArguments: toolCall.arguments,
     });
   }
@@ -1671,6 +1738,132 @@ export async function sendOpenAIRealtimeGuestConfirmation({
   }
 }
 
+export async function sendOpenAIRealtimeBusinessLink({
+  callerPhone,
+  context,
+  guestConfirmationService,
+  rawArguments,
+}: {
+  callerPhone?: string;
+  context: RestaurantVoiceContext;
+  guestConfirmationService?: GuestConfirmationService;
+  rawArguments: Record<string, unknown>;
+}) {
+  const phoneNumber = normalizeCallerPhone(stringValue(rawArguments.phone_number) ?? callerPhone);
+  if (!phoneNumber) {
+    return {
+      ok: false,
+      error: "missing_phone_number",
+      message: "Ask the caller for the best mobile number before offering to text this link.",
+    };
+  }
+
+  const link = findBusinessLink(context.businessLinks, rawArguments.link_kind);
+  if (!link) {
+    return {
+      ok: false,
+      error: "missing_business_link",
+      message: "No configured link matches that request. Offer staff follow-up instead of inventing a URL.",
+    };
+  }
+
+  const message = `${link.label}: ${link.url}`;
+  try {
+    if (guestConfirmationService) {
+      await guestConfirmationService.sendTextMessage({
+        message,
+        restaurantName: context.restaurantName,
+        to: phoneNumber,
+      });
+    } else {
+      console.info("[openai-realtime] placeholder business link text recorded", {
+        kind: link.kind,
+        to: phoneNumber,
+        url: link.url,
+      });
+    }
+
+    return {
+      ok: true,
+      link,
+      message: `Texted ${link.label}. Tell the caller it is sent.`,
+      phoneNumber,
+      sentToLastFour: phoneNumber.slice(-4),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: "send_link_failed",
+      message: error instanceof Error ? error.message : "Business link text failed.",
+      phoneNumber,
+    };
+  }
+}
+
+export async function createOpenAIRealtimeCustomerRequest({
+  callRecordId,
+  callerPhone,
+  callStore,
+  context,
+  locationId,
+  rawArguments,
+}: {
+  callRecordId?: string;
+  callerPhone?: string;
+  callStore?: CallStore;
+  context: RestaurantVoiceContext;
+  locationId?: string;
+  rawArguments: Record<string, unknown>;
+}) {
+  const customerPhone = normalizeCallerPhone(stringValue(rawArguments.callback_phone) ?? callerPhone);
+  if (!customerPhone) {
+    return {
+      ok: false,
+      error: "missing_callback_phone",
+      message: "Ask the caller for the best callback number before saving this request.",
+    };
+  }
+
+  const requestType = normalizeCustomerRequestKind(rawArguments.request_type);
+  const summary = stringValue(rawArguments.summary);
+  if (!summary) {
+    return {
+      ok: false,
+      error: "missing_summary",
+      message: "Summarize what the customer needs in one staff-facing sentence before saving.",
+    };
+  }
+
+  try {
+    const result = await callStore?.createCustomerRequest({
+      callId: callRecordId,
+      customerName: stringValue(rawArguments.caller_name),
+      customerPhone,
+      details: normalizeCustomerRequestDetails(rawArguments.details),
+      locationId,
+      priority: normalizeCustomerRequestPriority(rawArguments.urgency, requestType),
+      requestType,
+      summary,
+    });
+
+    return {
+      ok: true,
+      message: "Customer request saved. Tell the caller staff will follow up shortly.",
+      requestId: result?.requestId,
+      requestType,
+      status: "customer_request_saved",
+      taskId: result?.taskId,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: "customer_request_failed",
+      message: error instanceof Error ? error.message : "Customer request could not be saved.",
+      requestType,
+    };
+  }
+}
+
 export async function requestOpenAIRealtimeStaffCallback({
   callRecordId,
   callerPhone,
@@ -1862,6 +2055,68 @@ function buildOpenAIRealtimeTools() {
           },
         },
         required: ["kind"],
+        type: "object",
+      },
+      type: "function" as const,
+    },
+    {
+      description:
+        "Send a configured business link, such as online ordering, reservations, booking, menu, quote, or intake. Use after the caller asks for the link or agrees to receive it by text.",
+      name: "send_business_link",
+      parameters: {
+        additionalProperties: false,
+        properties: {
+          link_kind: {
+            description: "Which configured link to send.",
+            enum: ["booking", "custom", "intake", "menu", "ordering", "quote", "reservation"],
+            type: "string",
+          },
+          phone_number: {
+            description: "Caller mobile number. Omit this to use SIP caller ID when available.",
+            type: "string",
+          },
+        },
+        required: ["link_kind"],
+        type: "object",
+      },
+      type: "function" as const,
+    },
+    {
+      description:
+        "Create a generic staff-facing customer request for leads, service appointments, quotes, order requests, reservation requests, callbacks, or other business workflows not handled by a specialized tool.",
+      name: "create_customer_request",
+      parameters: {
+        additionalProperties: false,
+        properties: {
+          callback_phone: {
+            description: "Best callback number. Omit to use SIP caller ID when available.",
+            type: "string",
+          },
+          caller_name: {
+            description: "Customer name, if known.",
+            type: "string",
+          },
+          details: {
+            additionalProperties: true,
+            description: "Short structured details such as requested date, service area, issue, budget, or notes.",
+            type: "object",
+          },
+          request_type: {
+            description: "The category of request.",
+            enum: ["callback", "complaint", "general", "lead", "order", "quote", "reservation", "service_appointment"],
+            type: "string",
+          },
+          summary: {
+            description: "One concise staff-facing sentence summarizing what the customer needs.",
+            type: "string",
+          },
+          urgency: {
+            description: "How urgent this request is.",
+            enum: ["low", "normal", "high", "urgent"],
+            type: "string",
+          },
+        },
+        required: ["request_type", "summary"],
         type: "object",
       },
       type: "function" as const,
@@ -2131,6 +2386,24 @@ function normalizeStaffCallbackKind(value: unknown): StaffAlertKind {
   if (kind === "sales") return "sales";
   if (kind === "allergy" || kind === "low_confidence") return "low_confidence";
   return "handoff";
+}
+
+function normalizeCustomerRequestPriority(value: unknown, requestType: CustomerRequestKind) {
+  if (value === "urgent" || value === "high" || value === "normal" || value === "low") return value;
+  if (requestType === "complaint") return "high";
+  if (requestType === "service_appointment") return "normal";
+  return "normal";
+}
+
+function normalizeCustomerRequestDetails(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const details: Record<string, string | number | boolean> = {};
+  for (const [key, rawValue] of Object.entries(value)) {
+    if (typeof rawValue === "string" || typeof rawValue === "number" || typeof rawValue === "boolean") {
+      details[key] = rawValue;
+    }
+  }
+  return Object.keys(details).length ? details : undefined;
 }
 
 function normalizeStaffCallbackSeverity(value: unknown, kind: StaffAlertKind) {

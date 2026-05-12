@@ -9,6 +9,7 @@ import {
   buildOpenAIRealtimePreflight,
   buildRestaurantLocalTimeContext,
   buildShortOpeningGreeting,
+  createOpenAIRealtimeCustomerRequest,
   createOpenAIRealtimeReservationRequest,
   createOpenAIRealtimeSipService,
   extractOpenAIRealtimeCallId,
@@ -28,6 +29,7 @@ import {
   resolveOpenAIRealtimeServerVadThreshold,
   resolveOpenAIRealtimeSpeed,
   resolveOpenAIRealtimeTurnDetection,
+  sendOpenAIRealtimeBusinessLink,
   sendOpenAIRealtimeGuestConfirmation,
   verifyOpenAIWebhookSignature,
 } from "./openai-realtime-sip";
@@ -104,12 +106,16 @@ describe("OpenAI Realtime SIP", () => {
     expect(payload.instructions).toContain("Use 'we' when speaking for the restaurant");
     expect(payload.instructions).toContain("There is no live staff transfer");
     expect(payload.instructions).toContain("substitutions or off-menu requests");
+    expect(payload.instructions).toContain("Configured business links");
+    expect(payload.instructions).toContain("Order operating mode");
     expect(payload.instructions).toContain("create_reservation_request");
     expect(payload.instructions).toContain("Speakerphone and car audio behavior");
     expect(payload.instructions).toContain("Can I help you with anything else?");
     expect(payload.instructions).toContain("finish_call");
     expect(payload.tools[0].name).toBe("lookup_restaurant_context");
     expect(payload.tools.map((tool) => tool.name)).toContain("send_guest_confirmation");
+    expect(payload.tools.map((tool) => tool.name)).toContain("send_business_link");
+    expect(payload.tools.map((tool) => tool.name)).toContain("create_customer_request");
     expect(payload.tools.map((tool) => tool.name)).toContain("create_reservation_request");
     expect(payload.tools.map((tool) => tool.name)).toContain("request_staff_callback");
     expect(payload.tools.map((tool) => tool.name)).toContain("finish_call");
@@ -176,6 +182,9 @@ describe("OpenAI Realtime SIP", () => {
           async attachCallRecording() {},
           async completeCall(input) {
             completedCalls.push(input);
+          },
+          async createCustomerRequest() {
+            return {};
           },
           async createStaffReviewOrder() {
             return {};
@@ -557,6 +566,88 @@ describe("OpenAI Realtime SIP", () => {
     });
   });
 
+  it("texts configured business links from realtime tool calls", async () => {
+    const sentMessages: unknown[] = [];
+    const result = await sendOpenAIRealtimeBusinessLink({
+      callerPhone: "+14155550123",
+      context: demoRestaurantContext,
+      guestConfirmationService: {
+        configured: true,
+        async sendOrderConfirmation() {},
+        async sendReservationConfirmation() {},
+        async sendTextMessage(input) {
+          sentMessages.push(input);
+        },
+      },
+      rawArguments: {
+        link_kind: "ordering",
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      sentToLastFour: "0123",
+    });
+    expect(sentMessages[0]).toMatchObject({
+      message: expect.stringContaining("https://oliveandember.example/order"),
+      to: "+14155550123",
+    });
+  });
+
+  it("creates generic customer requests for cross-industry workflows", async () => {
+    const requests: unknown[] = [];
+    const result = await createOpenAIRealtimeCustomerRequest({
+      callRecordId: "call_uuid",
+      callerPhone: "+14155550123",
+      context: demoRestaurantContext,
+      locationId: "location_uuid",
+      rawArguments: {
+        caller_name: "Sam",
+        details: { issue: "water heater leaking", service_area: "Newton" },
+        request_type: "service appointment",
+        summary: "Sam needs help with a leaking water heater in Newton.",
+        urgency: "high",
+      },
+      callStore: {
+        async addTranscriptTurn() {},
+        async attachCallRecording() {},
+        async completeCall() {},
+        async createCustomerRequest(input) {
+          requests.push(input);
+          return { requestId: "request_uuid", taskId: "task_uuid" };
+        },
+        async createStaffReviewOrder() {
+          return {};
+        },
+        async createStaffReviewReservation() {
+          return {};
+        },
+        async createStaffTask() {
+          return {};
+        },
+        async startCall() {
+          return {};
+        },
+        async startRealtimeCall() {
+          return {};
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      requestId: "request_uuid",
+      requestType: "service_appointment",
+      taskId: "task_uuid",
+    });
+    expect(requests[0]).toMatchObject({
+      customerName: "Sam",
+      customerPhone: "+14155550123",
+      priority: "high",
+      requestType: "service_appointment",
+    });
+  });
+
   it("creates staff-confirmed reservation requests from realtime tool calls", async () => {
     const savedReservations: unknown[] = [];
     const result = await createOpenAIRealtimeReservationRequest({
@@ -575,6 +666,9 @@ describe("OpenAI Realtime SIP", () => {
         async addTranscriptTurn() {},
         async attachCallRecording() {},
         async completeCall() {},
+        async createCustomerRequest() {
+          return {};
+        },
         async createStaffReviewOrder() {
           return {};
         },
@@ -650,6 +744,9 @@ describe("OpenAI Realtime SIP", () => {
         async addTranscriptTurn() {},
         async attachCallRecording() {},
         async completeCall() {},
+        async createCustomerRequest() {
+          return {};
+        },
         async createStaffReviewOrder() {
           return {};
         },
@@ -740,6 +837,9 @@ describe("OpenAI Realtime SIP", () => {
         async addTranscriptTurn() {},
         async attachCallRecording() {},
         async completeCall() {},
+        async createCustomerRequest() {
+          return {};
+        },
         async createStaffReviewOrder() {
           return {};
         },

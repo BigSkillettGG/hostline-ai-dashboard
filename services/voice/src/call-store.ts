@@ -1,6 +1,7 @@
 import type { VoiceServiceEnv } from "./env";
 import type { CapturedOrderItem } from "./order-intake";
 import type { CapturedReservationRequest } from "./reservation-intake";
+import type { CustomerRequestKind } from "../../../src/domain/business-links";
 import { buildSupabaseServiceHeaders } from "./supabase-headers";
 import type { ConversationRelaySetupMessage, TranscriptRole } from "./types";
 
@@ -66,6 +67,7 @@ export interface CreateStaffReviewReservationInput extends CapturedReservationRe
 
 export type StaffTaskPriority = "low" | "normal" | "high" | "urgent";
 export type StaffTaskType =
+  | "customer_request"
   | "delivery_issue"
   | "general"
   | "low_confidence_review"
@@ -84,6 +86,18 @@ export interface CreateStaffTaskInput {
   type?: StaffTaskType;
 }
 
+export interface CreateCustomerRequestInput {
+  callId?: string;
+  customerName?: string;
+  customerPhone?: string;
+  details?: Record<string, unknown>;
+  locationId?: string;
+  priority?: StaffTaskPriority;
+  requestType: CustomerRequestKind;
+  summary: string;
+  title?: string;
+}
+
 export interface CallStore {
   startCall(input: StartCallInput): Promise<{ callId?: string }>;
   startRealtimeCall(input: StartRealtimeCallInput): Promise<{ callId?: string }>;
@@ -91,6 +105,7 @@ export interface CallStore {
   attachCallRecording(input: AttachCallRecordingInput): Promise<void>;
   completeCall(input: CompleteCallInput): Promise<void>;
   createStaffTask(input: CreateStaffTaskInput): Promise<{ taskId?: string }>;
+  createCustomerRequest(input: CreateCustomerRequestInput): Promise<{ requestId?: string; taskId?: string }>;
   createStaffReviewOrder(input: CreateStaffReviewOrderInput): Promise<{ orderId?: string }>;
   createStaffReviewReservation(input: CreateStaffReviewReservationInput): Promise<{ reservationId?: string }>;
 }
@@ -156,6 +171,15 @@ class NoopCallStore implements CallStore {
       callId: input.callId,
       title: input.title,
       type: input.type,
+    });
+    return {};
+  }
+
+  async createCustomerRequest(input: CreateCustomerRequestInput) {
+    console.info("[call-store] Supabase not configured; customer request not persisted", {
+      callId: input.callId,
+      requestType: input.requestType,
+      title: input.title,
     });
     return {};
   }
@@ -304,6 +328,66 @@ class SupabaseCallStore implements CallStore {
     });
 
     return { taskId: rows?.[0]?.id };
+  }
+
+  async createCustomerRequest(input: CreateCustomerRequestInput) {
+    const locationId = normalizeLocationId(input.locationId) ?? this.locationId;
+    const title = input.title?.trim() || customerRequestTitle(input.requestType);
+    const summary = input.summary.trim();
+    let requestId: string | undefined;
+
+    try {
+      const rows = await this.request<Array<{ id: string }>>("customer_requests", {
+        body: {
+          customer_name: input.customerName?.trim() || null,
+          customer_phone: input.customerPhone?.trim() || null,
+          details: input.details ?? {},
+          location_id: locationId,
+          priority: input.priority ?? "normal",
+          request_type: input.requestType,
+          source: "ai_host",
+          source_call_id: input.callId ?? null,
+          status: "new",
+          summary,
+          title,
+        },
+        headers: {
+          Prefer: "return=representation",
+        },
+        method: "POST",
+        query: "select=id",
+      });
+      requestId = rows?.[0]?.id;
+    } catch (error) {
+      if (!isMissingCustomerRequestsTableError(error)) throw error;
+      console.warn("[call-store] customer_requests table missing; falling back to staff_tasks", {
+        requestType: input.requestType,
+      });
+    }
+
+    const task = await this.createStaffTask({
+      body: buildCustomerRequestTaskBody(input),
+      callId: input.callId,
+      dueMinutes: input.priority === "urgent" ? 5 : input.priority === "high" ? 15 : 30,
+      locationId,
+      priority: input.priority,
+      title,
+      type: "customer_request",
+    });
+
+    if (input.callId) {
+      await this.request("calls", {
+        body: {
+          intent: input.requestType === "reservation" ? "reservation" : input.requestType === "order" ? "order" : "other",
+          outcome: "customer_request_created",
+          summary,
+        },
+        method: "PATCH",
+        query: `id=eq.${encodeURIComponent(input.callId)}`,
+      });
+    }
+
+    return { requestId, taskId: task.taskId };
   }
 
   async createStaffReviewOrder(input: CreateStaffReviewOrderInput) {
@@ -457,6 +541,48 @@ function buildReservationNotes(input: CreateStaffReviewReservationInput) {
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+function customerRequestTitle(requestType: CustomerRequestKind) {
+  if (requestType === "service_appointment") return "Service appointment request";
+  if (requestType === "quote") return "Quote request";
+  if (requestType === "lead") return "New customer lead";
+  if (requestType === "reservation") return "Reservation request";
+  if (requestType === "order") return "Order request";
+  if (requestType === "complaint") return "Complaint follow-up";
+  if (requestType === "callback") return "Customer callback request";
+  return "Customer request";
+}
+
+function buildCustomerRequestTaskBody(input: CreateCustomerRequestInput) {
+  const details = input.details
+    ? Object.entries(input.details)
+        .filter(([, value]) => value !== undefined && value !== null && value !== "")
+        .map(([key, value]) => `${formatDetailKey(key)}: ${String(value)}`)
+    : [];
+
+  return [
+    `Type: ${input.requestType}`,
+    input.customerName && `Customer: ${input.customerName}`,
+    input.customerPhone && `Phone: ${input.customerPhone}`,
+    `Summary: ${input.summary}`,
+    ...details,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function formatDetailKey(value: string) {
+  return value
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function isMissingCustomerRequestsTableError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  return /customer_requests|relation .* does not exist|404|42P01/i.test(error.message);
 }
 
 function providerLabel(provider?: string) {

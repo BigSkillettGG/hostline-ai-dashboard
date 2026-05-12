@@ -15,10 +15,12 @@ import {
   callHandlingLabels,
   defaultRestaurantAgentConfig,
   orderDestinationLabels,
+  orderModeLabels,
   reservationModeLabels,
   type AfterHoursBehavior,
   type CallHandlingMode,
   type OrderDestination,
+  type OrderMode,
   type RestaurantAgentConfig,
   type ReservationMode,
 } from "@/domain/restaurant-config";
@@ -450,6 +452,30 @@ export default function VoiceAgent() {
 
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-1.5">
+                      <Label>Order handling</Label>
+                      <Select
+                        value={config.orders.mode}
+                        onValueChange={(mode) =>
+                          setConfig({
+                            ...config,
+                            orders: { ...config.orders, mode: mode as OrderMode, enabled: mode !== "disabled" },
+                            capabilities: { ...config.capabilities, takeOrders: mode !== "disabled" },
+                          })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(orderModeLabels).map(([value, label]) => (
+                            <SelectItem key={value} value={value}>
+                              {label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
                       <Label>Payment</Label>
                       <Select value={config.orders.paymentMode}>
                         <SelectTrigger>
@@ -474,6 +500,20 @@ export default function VoiceAgent() {
                         }
                       />
                     </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label>Online ordering link</Label>
+                    <Input
+                      value={config.orders.onlineOrderingUrl ?? ""}
+                      placeholder="https://restaurant.example/order"
+                      onChange={(event) =>
+                        setConfig({
+                          ...config,
+                          orders: { ...config.orders, onlineOrderingUrl: event.target.value },
+                        })
+                      }
+                    />
                   </div>
 
                   <Separator />
@@ -737,7 +777,7 @@ export default function VoiceAgent() {
               <CardContent className="space-y-3">
                 <ReadinessRow icon={PhoneCall} label="Call mode" value={callHandlingLabels[config.callHandlingMode]} />
                 <ReadinessRow icon={Bot} label="Voice" value={hostlineVoiceProfiles[config.voiceGender].shortLabel} />
-                <ReadinessRow icon={ShoppingBag} label="Orders" value={config.orders.enabled ? "Enabled" : "Disabled"} />
+                <ReadinessRow icon={ShoppingBag} label="Orders" value={orderModeLabels[config.orders.mode]} />
                 <ReadinessRow icon={CreditCard} label="Payment" value="Pay at pickup" />
                 <ReadinessRow icon={Printer} label="Order routing" value={`${config.orders.destinations.length} destinations`} />
                 <ReadinessRow icon={CalendarDays} label="Reservations" value={reservationModeLabels[config.reservations.mode]} />
@@ -756,6 +796,7 @@ function createConfigFromOnboardingDraft(): RestaurantAgentConfig {
   const callHandlingMode = mapCallHandlingMode(String(draft.callHandling ?? ""));
   const takeOrders = draft.takeOrders !== false;
   const takeReservations = draft.takeReservations !== false;
+  const orderMode = takeOrders ? mapOrderMode(String(draft.orderHandlingMode ?? "")) : "disabled";
   const provider = mapReservationProvider(String(draft.reservationProvider ?? ""));
   const reservationMode = takeReservations ? mapReservationMode(String(draft.reservationHandlingMode ?? ""), provider) : "disabled";
 
@@ -769,7 +810,9 @@ function createConfigFromOnboardingDraft(): RestaurantAgentConfig {
     orders: {
       ...defaultRestaurantAgentConfig.orders,
       defaultPickupEtaMinutes: parsePickupEta(String(draft.defaultPickupEta ?? "")),
-      enabled: takeOrders,
+      enabled: orderMode !== "disabled",
+      mode: orderMode,
+      onlineOrderingUrl: String(draft.onlineOrderingUrl ?? ""),
     },
     reservations: {
       ...defaultRestaurantAgentConfig.reservations,
@@ -794,6 +837,14 @@ function mapCallHandlingMode(value: string): CallHandlingMode {
   if (value === "After-hours only") return "after_hours_only";
   if (value === "Manual on/off") return "manually_enabled";
   return "answer_after_rings";
+}
+
+function mapOrderMode(value: string): OrderMode {
+  const normalized = value.toLowerCase();
+  if (normalized.includes("do not")) return "disabled";
+  if (normalized.includes("also offer") || normalized.includes("capture order and")) return "staff_review_and_link";
+  if (normalized.includes("send online") || normalized.includes("ordering link")) return "online_link";
+  return "staff_review";
 }
 
 function mapReservationMode(
