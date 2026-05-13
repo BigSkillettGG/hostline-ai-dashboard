@@ -19,27 +19,32 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import { restaurant } from "@/data/mock";
+import { getOnboardingBusinessTemplate } from "@/domain/onboarding";
+import { loadOnboardingDraft } from "@/lib/onboarding-draft";
+import { getActiveSupabaseLocationId } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
 import { isVoiceServiceConfigured, voiceServiceBaseUrl } from "@/lib/voice-service";
-import { sendWebChatMessage, type WebChatUiMessage } from "@/lib/web-chat";
+import { sendWebChatMessage, type WebChatAction, type WebChatUiMessage } from "@/lib/web-chat";
 
 interface ChatMessage extends WebChatUiMessage {
+  actions?: WebChatAction[];
   id: string;
 }
 
-const demoLocationId = "78d8053b-631d-4811-939f-61f0efe1d82a";
-const starterMessages: ChatMessage[] = [
-  {
-    at: new Date().toISOString(),
-    id: "assistant-start",
-    role: "assistant",
-    text: "Hi, thanks for reaching out to Olive & Ember. How can I help?",
-  },
-];
-
 export default function WebsiteChat() {
-  const [messages, setMessages] = useState<ChatMessage[]>(starterMessages);
+  const activeLocationId = getActiveSupabaseLocationId();
+  const draftProfile = loadOnboardingDraft();
+  const businessTemplate = getOnboardingBusinessTemplate(draftProfile);
+  const businessName = String(draftProfile.restaurantName || businessTemplate.defaultName);
+  const starterGreeting = `Hi, thanks for reaching out to ${businessName}. How can I help?`;
+  const [messages, setMessages] = useState<ChatMessage[]>(() => [
+    {
+      at: new Date().toISOString(),
+      id: "assistant-start",
+      role: "assistant",
+      text: starterGreeting,
+    },
+  ]);
   const [draft, setDraft] = useState("Do you have a link for reservations tonight?");
   const [visitorName, setVisitorName] = useState("");
   const [visitorPhone, setVisitorPhone] = useState("");
@@ -54,13 +59,17 @@ export default function WebsiteChat() {
     return (
     `<script
   src="${widgetUrl}"
-  data-location-id="${demoLocationId}"
-  data-title="Olive & Ember"
+  data-location-id="${activeLocationId || "YOUR_LOCATION_ID"}"
+  data-title="${escapeHtmlAttribute(businessName)}"
+  data-subtitle="Answers right away"
   data-voice-service-url="${serviceUrl}"
+  data-primary-color="#211713"
+  data-accent-color="#d84824"
+  data-prompts="What are your hours?|Can I book?|Can I get a link?"
   async
 ></script>`
   );
-  }, []);
+  }, [activeLocationId, businessName]);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -80,7 +89,7 @@ export default function WebsiteChat() {
 
     try {
       const result = await sendWebChatMessage({
-        locationId: demoLocationId,
+        locationId: activeLocationId,
         message: messageText,
         transcript,
         visitorEmail: visitorEmail.trim() || undefined,
@@ -91,6 +100,7 @@ export default function WebsiteChat() {
       setMessages((current) => [
         ...current,
         {
+          actions: result.actions,
           at: new Date().toISOString(),
           id: `assistant-${Date.now()}`,
           role: "assistant",
@@ -220,7 +230,7 @@ export default function WebsiteChat() {
                     <MessageCircle className="h-5 w-5" />
                   </div>
                   <div>
-                    <div className="font-semibold">{restaurant.name}</div>
+                    <div className="font-semibold">{businessName}</div>
                     <div className="text-xs text-muted-foreground">Website chat preview</div>
                   </div>
                 </div>
@@ -279,6 +289,14 @@ function StatusTile({ icon: Icon, label, value }: {
   );
 }
 
+function escapeHtmlAttribute(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 function ChatBubble({ message }: { message: ChatMessage }) {
   const isAssistant = message.role === "assistant";
   return (
@@ -296,6 +314,26 @@ function ChatBubble({ message }: { message: ChatMessage }) {
           {isAssistant && <ExternalLink className="h-3 w-3 opacity-0" aria-hidden="true" />}
         </div>
         <div className="whitespace-pre-wrap leading-relaxed">{message.text}</div>
+        {isAssistant && message.actions?.length ? (
+          <div className="mt-3 space-y-2">
+            {message.actions.map((action, index) => (
+              action.type === "business_link" && action.link ? (
+                <a
+                  key={`${action.link.url}-${index}`}
+                  className="block rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs font-medium text-primary"
+                  href={action.link.url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {action.link.label}
+                  <span className="mt-0.5 block truncate text-[11px] font-normal text-muted-foreground">
+                    {action.link.description || action.link.url}
+                  </span>
+                </a>
+              ) : null
+            ))}
+          </div>
+        ) : null}
       </div>
     </div>
   );
