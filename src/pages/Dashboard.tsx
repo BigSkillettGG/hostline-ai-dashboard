@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { PageBody } from "@/components/PageHeader";
 import { StatCard } from "@/components/StatCard";
 import {
@@ -46,6 +46,7 @@ import {
   getActiveSupabaseLocationId,
   isSupabaseConfigured,
 } from "@/lib/supabase-rest";
+import { generateOwnerDailyReport, isVoiceServiceConfigured } from "@/lib/voice-service";
 import { toast } from "sonner";
 
 const intentColor: Record<string, string> = {
@@ -166,6 +167,15 @@ export default function Dashboard() {
   ]);
   const hasLiveError = callQuery.isError || orderQuery.isError || reservationQuery.isError || taskQuery.isError;
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+  const saveReportMutation = useMutation({
+    mutationFn: () => generateOwnerDailyReport(activeLocationId),
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Could not save owner report");
+    },
+    onSuccess: (result) => {
+      toast.success(result.reportId ? "Owner report saved" : "Owner report generated");
+    },
+  });
 
   async function copyDailyBrief() {
     try {
@@ -221,7 +231,14 @@ export default function Dashboard() {
                   </a>
                 </div>
               </div>
-              <Button variant="outline" size="sm">Export report</Button>
+              <Button
+                disabled={!isVoiceServiceConfigured() || saveReportMutation.isPending}
+                onClick={() => saveReportMutation.mutate()}
+                size="sm"
+                variant="outline"
+              >
+                {saveReportMutation.isPending ? "Saving..." : "Save report"}
+              </Button>
               <Button size="sm" asChild>
                 <Link to="/app/calls">View calls<ArrowRight className="ml-1.5 h-3.5 w-3.5" /></Link>
               </Button>

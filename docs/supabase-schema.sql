@@ -143,6 +143,28 @@ create table business_live_updates (
   cleared_at timestamptz
 );
 
+create table owner_reports (
+  id uuid primary key default gen_random_uuid(),
+  location_id uuid not null references locations(id) on delete cascade,
+  report_type text not null default 'daily' check (report_type in ('daily', 'weekly')),
+  period_start timestamptz not null,
+  period_end timestamptz not null,
+  title text not null,
+  owner_message text not null,
+  copy_text text not null,
+  totals jsonb not null default '{}'::jsonb,
+  metrics jsonb not null default '[]'::jsonb,
+  follow_ups jsonb not null default '[]'::jsonb,
+  suggested_updates jsonb not null default '[]'::jsonb,
+  delivery_channels jsonb not null default '[]'::jsonb,
+  status text not null default 'ready' check (status in ('draft', 'ready', 'sent', 'failed')),
+  generated_at timestamptz not null default now(),
+  sent_at timestamptz,
+  error_message text,
+  created_at timestamptz not null default now(),
+  unique(location_id, report_type, period_start)
+);
+
 create table faqs (
   id uuid primary key default gen_random_uuid(),
   location_id uuid not null references locations(id) on delete cascade,

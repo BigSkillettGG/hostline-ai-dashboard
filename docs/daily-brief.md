@@ -21,8 +21,17 @@ The daily brief is the first owner-facing assistant layer. It turns SignalHost a
 
 ## Current Scope
 
-The dashboard generates the brief client-side from already-loaded data. This keeps it safe while we iterate.
+The dashboard generates the brief client-side from already-loaded data for fast display. The voice service can also generate the same daily report server-side through `POST /owner-reports/daily`.
+
+Server-side generation:
+
+- Reads the location, calls, orders, reservations, and staff tasks from Supabase.
+- Builds the same narrative brief used by the dashboard.
+- Upserts the result into `owner_reports` for the current business day in the location timezone.
+- Returns the generated report so the dashboard can confirm it was saved.
+
+The Dashboard `Save report` button calls this endpoint. This is the foundation for a scheduled daily email/SMS digest.
 
 ## Next Step
 
-Move brief generation into the voice/backend service so SignalHost can send daily email/SMS digests and answer owner questions like, "What happened today?"
+Add a scheduled worker that calls the same report service near each location's closing time, then sends the saved report to owner contacts by email or SMS.

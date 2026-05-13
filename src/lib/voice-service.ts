@@ -10,6 +10,7 @@ export interface VoiceServiceHealth {
   elevenLabsConfigured: boolean;
   menuIngestionConfigured?: boolean;
   onboardedContextConfigured?: boolean;
+  ownerReportsConfigured?: boolean;
   staffAlertsConfigured?: boolean;
   sharedSmsRoutingConfigured?: boolean;
   stripeBillingConfigured?: boolean;
@@ -161,6 +162,22 @@ export interface BillingAccountStatus {
   stripeSubscriptionId?: string;
   trialEnd?: string;
   updatedAt?: string;
+}
+
+export interface GeneratedOwnerDailyReport {
+  configured: boolean;
+  locationId: string;
+  periodEnd: string;
+  periodStart: string;
+  report: {
+    copyText: string;
+    dateLabel: string;
+    headline: string;
+    ownerMessage: string;
+    totals: Record<string, number>;
+  };
+  reportId?: string;
+  timezone: string;
 }
 
 export const voiceServiceBaseUrl = (import.meta.env.VITE_VOICE_SERVICE_URL ?? "").replace(/\/$/, "");
@@ -444,6 +461,28 @@ export async function createBillingPortalSession(input: {
   }
 
   return (await response.json()) as { id: string; url: string };
+}
+
+export async function generateOwnerDailyReport(locationId = getActiveLocationId()) {
+  if (!voiceServiceBaseUrl) {
+    throw new Error("VITE_VOICE_SERVICE_URL is not configured.");
+  }
+
+  const response = await fetch(`${voiceServiceBaseUrl}/owner-reports/daily`, {
+    body: JSON.stringify({ locationId }),
+    headers: {
+      "Content-Type": "application/json",
+      ...buildVoiceAdminHeaders(),
+    },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(body || `Owner daily report failed with ${response.status}.`);
+  }
+
+  return (await response.json()) as GeneratedOwnerDailyReport;
 }
 
 export async function runNextMenuIngestionJob(input: { jobId?: string; locationId?: string } = {}) {

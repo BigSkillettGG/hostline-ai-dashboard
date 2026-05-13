@@ -1,4 +1,4 @@
-import type { Call, CallFeedback } from "@/data/mock";
+import type { Call, CallFeedback } from "../data/mock";
 
 export type InteractionWorkflowStatus =
   | "new"

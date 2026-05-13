@@ -158,6 +158,7 @@ alter table staff_alert_events enable row level security;
 alter table knowledge_sections enable row level security;
 alter table business_live_settings enable row level security;
 alter table business_live_updates enable row level security;
+alter table owner_reports enable row level security;
 alter table faqs enable row level security;
 alter table onboarding_profiles enable row level security;
 alter table billing_accounts enable row level security;
@@ -292,6 +293,15 @@ for select to authenticated
 using (public.can_access_location(location_id));
 
 create policy business_live_updates_manage on business_live_updates
+for all to authenticated
+using (public.can_manage_location(location_id))
+with check (public.can_manage_location(location_id));
+
+create policy owner_reports_read on owner_reports
+for select to authenticated
+using (public.can_access_location(location_id));
+
+create policy owner_reports_manage on owner_reports
 for all to authenticated
 using (public.can_manage_location(location_id))
 with check (public.can_manage_location(location_id));

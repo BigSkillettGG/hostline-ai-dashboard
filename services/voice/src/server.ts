@@ -22,6 +22,7 @@ import { createMenuIngestionService } from "./menu-ingestion-service";
 import { buildSmsTwiML, createMessageThreadStore } from "./message-thread-store";
 import { createStaffNotificationService } from "./notification-service";
 import { createOpenAIRealtimeSipService } from "./openai-realtime-sip";
+import { createOwnerReportService } from "./owner-report-service";
 import { createPlatformIntegrationRegistry } from "./platform-integrations";
 import { createPhoneNumberStore } from "./phone-number-store";
 import { createRestaurantContextStore } from "./restaurant-context-store";
@@ -46,6 +47,7 @@ const staffNotificationService = createStaffNotificationService(env);
 const guestConfirmationService = createGuestConfirmationService(env);
 const messageThreadStore = createMessageThreadStore(env);
 const menuIngestionService = createMenuIngestionService(env);
+const ownerReportService = createOwnerReportService(env);
 const platformIntegrationRegistry = createPlatformIntegrationRegistry(env);
 const reservationPlatformService = createReservationPlatformService(env);
 const tenantProvisioningService = createTenantProvisioningService(env);
@@ -141,6 +143,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       ),
       menuIngestionConfigured: menuIngestionService.configured,
       openAIRealtimeSipConfigured: openAIRealtimeSipService.configured,
+      ownerReportsConfigured: ownerReportService.configured,
       platformIntegrations: platformIntegrationRegistry.summary,
       tenantProvisioningConfigured: tenantProvisioningService.configured,
       stripeBillingConfigured: billingService.configured,
@@ -271,6 +274,28 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       sendJson(res, 200, result);
     } catch (error) {
       sendCaughtError(res, error, "Stripe webhook failed");
+    }
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/owner-reports/daily") {
+    if (!allowRateLimitedRequest(req, res, "owner-daily-report", 20)) return;
+
+    try {
+      const body = parseJsonRequestBody(await readLimitedRequestBody(req, ADMIN_BODY_LIMIT_BYTES)) as {
+        locationId?: string;
+      };
+      const locationId = body.locationId ?? url.searchParams.get("locationId") ?? currentEnv.SUPABASE_DEMO_LOCATION_ID;
+      const authorization = await authorizeVoiceAdminRequest({ currentEnv, locationId, req });
+      if (!authorization.authorized) {
+        sendJson(res, authorization.status, { error: authorization.reason ?? "Unauthorized" });
+        return;
+      }
+
+      const result = await ownerReportService.generateDailyReport({ locationId: locationId ?? undefined });
+      sendJson(res, 200, result);
+    } catch (error) {
+      sendCaughtError(res, error, "Owner daily report failed");
     }
     return;
   }

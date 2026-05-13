@@ -1,6 +1,6 @@
-import type { Call, Order, Reservation } from "@/data/mock";
-import { buildInteractionInsight, interactionValueLabels, type InteractionInsight } from "@/domain/interaction-status";
-import { isActiveStaffTask, type StaffTask } from "@/domain/staff-tasks";
+import type { Call, Order, Reservation } from "../data/mock";
+import { buildInteractionInsight, interactionValueLabels, type InteractionInsight } from "./interaction-status";
+import { isActiveStaffTask, type StaffTask } from "./staff-tasks";
 
 export interface DailyBriefMetric {
   label: string;

@@ -202,6 +202,77 @@ export type Database = {
           },
         ]
       }
+      owner_reports: {
+        Row: {
+          copy_text: string
+          created_at: string
+          delivery_channels: Json
+          error_message: string | null
+          follow_ups: Json
+          generated_at: string
+          id: string
+          location_id: string
+          metrics: Json
+          owner_message: string
+          period_end: string
+          period_start: string
+          report_type: string
+          sent_at: string | null
+          status: string
+          suggested_updates: Json
+          title: string
+          totals: Json
+        }
+        Insert: {
+          copy_text: string
+          created_at?: string
+          delivery_channels?: Json
+          error_message?: string | null
+          follow_ups?: Json
+          generated_at?: string
+          id?: string
+          location_id: string
+          metrics?: Json
+          owner_message: string
+          period_end: string
+          period_start: string
+          report_type?: string
+          sent_at?: string | null
+          status?: string
+          suggested_updates?: Json
+          title: string
+          totals?: Json
+        }
+        Update: {
+          copy_text?: string
+          created_at?: string
+          delivery_channels?: Json
+          error_message?: string | null
+          follow_ups?: Json
+          generated_at?: string
+          id?: string
+          location_id?: string
+          metrics?: Json
+          owner_message?: string
+          period_end?: string
+          period_start?: string
+          report_type?: string
+          sent_at?: string | null
+          status?: string
+          suggested_updates?: Json
+          title?: string
+          totals?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "owner_reports_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       call_feedback: {
         Row: {
           add_to_knowledge: boolean
