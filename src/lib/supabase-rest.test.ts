@@ -6,6 +6,7 @@ import {
   buildAlertRoutingConfigPayload,
   buildCallFeedbackInsertPayload,
   buildIngestionJobInsertPayload,
+  buildKnowledgeSectionUpdatePayload,
   buildMenuCategoryInsertRows,
   buildMenuItemInsertRows,
   buildMenuSourceInsertPayload,
@@ -18,6 +19,7 @@ import {
   mapSupabaseCallFeedback,
   mapSupabaseAgentConfig,
   mapSupabaseIngestionJob,
+  mapSupabaseKnowledgeSection,
   mapSupabaseMenu,
   mapSupabaseMenuSource,
   mapSupabaseOrders,
@@ -196,6 +198,55 @@ describe("Supabase call feedback", () => {
       id: "feedback_1",
       note: "Too stiff.",
       suggestedAnswer: "Say it more naturally.",
+    });
+  });
+});
+
+describe("Supabase knowledge sections", () => {
+  it("maps call tuning notes separately from normal knowledge", () => {
+    expect(
+      mapSupabaseKnowledgeSection({
+        body: "Feedback: Caller asked about specials.\n\nPreferred answer: Answer specials directly.\n\nSource call: call_1",
+        id: "section_1",
+        is_active: true,
+        location_id: "location_1",
+        title: "Call tuning - Wrong answer",
+        updated_at: "2026-05-12T20:00:00.000Z",
+      }),
+    ).toEqual({
+      body: "Feedback: Caller asked about specials.\n\nPreferred answer: Answer specials directly.\n\nSource call: call_1",
+      id: "section_1",
+      isActive: true,
+      isBehaviorTuning: true,
+      locationId: "location_1",
+      title: "Call tuning - Wrong answer",
+      updatedAt: "2026-05-12T20:00:00.000Z",
+    });
+
+    expect(
+      mapSupabaseKnowledgeSection({
+        body: "Metered street parking is available nearby.",
+        id: "section_2",
+        is_active: true,
+        location_id: "location_1",
+        title: "Parking",
+        updated_at: null,
+      }).isBehaviorTuning,
+    ).toBe(false);
+  });
+
+  it("builds knowledge section update payloads", () => {
+    expect(
+      buildKnowledgeSectionUpdatePayload({
+        body: " Updated body. ",
+        id: "section_1",
+        isActive: false,
+        title: " Updated title ",
+      }),
+    ).toMatchObject({
+      body: "Updated body.",
+      is_active: false,
+      title: "Updated title",
     });
   });
 });

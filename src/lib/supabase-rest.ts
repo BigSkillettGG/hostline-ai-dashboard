@@ -161,6 +161,15 @@ interface SupabaseCallFeedbackRow {
   suggested_answer: string | null;
 }
 
+interface SupabaseKnowledgeSectionRow {
+  body: string;
+  id: string;
+  is_active: boolean | null;
+  location_id: string;
+  title: string;
+  updated_at: string | null;
+}
+
 interface SupabaseOrderRow {
   destination: string | null;
   id: string;
@@ -473,6 +482,23 @@ export interface UpdateCallStatusInput {
   status: CallStatus;
 }
 
+export interface KnowledgeSectionRecord {
+  body: string;
+  id: string;
+  isActive: boolean;
+  isBehaviorTuning: boolean;
+  locationId: string;
+  title: string;
+  updatedAt: string;
+}
+
+export interface UpdateKnowledgeSectionInput {
+  body?: string;
+  id: string;
+  isActive?: boolean;
+  title?: string;
+}
+
 export interface CreateMenuSourceInput {
   frequency: SyncFrequency;
   label?: string;
@@ -521,6 +547,10 @@ export function isStaffTaskPersistenceConfigured() {
 }
 
 export function isCallFeedbackPersistenceConfigured() {
+  return Boolean(isSupabaseConfigured() && getActiveSupabaseLocationId());
+}
+
+export function isKnowledgePersistenceConfigured() {
   return Boolean(isSupabaseConfigured() && getActiveSupabaseLocationId());
 }
 
@@ -780,6 +810,52 @@ export async function createCallFeedbackInSupabase(
   }
 
   return savedFeedback;
+}
+
+export async function fetchKnowledgeSectionsFromSupabase(
+  locationId = getActiveSupabaseLocationId(),
+): Promise<KnowledgeSectionRecord[]> {
+  if (!isSupabaseConfigured() || !locationId) {
+    throw new Error("Supabase knowledge persistence is not configured.");
+  }
+
+  const rows = await supabaseRequest<SupabaseKnowledgeSectionRow[]>(
+    "knowledge_sections",
+    new URLSearchParams({
+      location_id: `eq.${locationId}`,
+      order: "updated_at.desc",
+      select: knowledgeSectionSelectColumns,
+    }),
+  );
+
+  return rows.map(mapSupabaseKnowledgeSection);
+}
+
+export async function updateKnowledgeSectionInSupabase(
+  input: UpdateKnowledgeSectionInput,
+  locationId = getActiveSupabaseLocationId(),
+): Promise<KnowledgeSectionRecord> {
+  if (!isSupabaseConfigured() || !locationId) {
+    throw new Error("Supabase knowledge persistence is not configured.");
+  }
+
+  const payload = buildKnowledgeSectionUpdatePayload(input);
+  const rows = await supabaseRequest<SupabaseKnowledgeSectionRow[]>(
+    "knowledge_sections",
+    new URLSearchParams({
+      id: `eq.${input.id}`,
+      location_id: `eq.${locationId}`,
+      select: knowledgeSectionSelectColumns,
+    }),
+    {
+      body: payload,
+      headers: { Prefer: "return=representation" },
+      method: "PATCH",
+    },
+  );
+
+  if (!rows?.[0]) throw new Error("Knowledge section was not returned after update.");
+  return mapSupabaseKnowledgeSection(rows[0]);
 }
 
 export async function updateCallStatusInSupabase(input: UpdateCallStatusInput): Promise<void> {
@@ -1606,6 +1682,15 @@ export function buildCallFeedbackInsertPayload(input: CreateCallFeedbackInput, l
   };
 }
 
+export function buildKnowledgeSectionUpdatePayload(input: UpdateKnowledgeSectionInput) {
+  return {
+    ...(input.body !== undefined ? { body: input.body.trim() } : {}),
+    ...(input.isActive !== undefined ? { is_active: input.isActive } : {}),
+    ...(input.title !== undefined ? { title: input.title.trim() } : {}),
+    updated_at: new Date().toISOString(),
+  };
+}
+
 async function createKnowledgeSectionFromCallFeedback(feedback: CallFeedback, locationId: string) {
   const title = callFeedbackCategoryLabels[feedback.category] ?? "Call feedback";
   const body = [
@@ -1920,6 +2005,18 @@ export function mapSupabaseCallFeedback(row: SupabaseCallFeedbackRow): CallFeedb
     id: row.id,
     note: row.note?.trim() || undefined,
     suggestedAnswer: row.suggested_answer?.trim() || undefined,
+  };
+}
+
+export function mapSupabaseKnowledgeSection(row: SupabaseKnowledgeSectionRow): KnowledgeSectionRecord {
+  return {
+    body: row.body?.trim() || "",
+    id: row.id,
+    isActive: row.is_active !== false,
+    isBehaviorTuning: isBehaviorTuningKnowledgeSection(row.title, row.body),
+    locationId: row.location_id,
+    title: row.title?.trim() || "Untitled knowledge",
+    updatedAt: row.updated_at ?? "",
   };
 }
 
@@ -2352,6 +2449,10 @@ function normalizeInviteStatus(status: string | null): TeamInviteStatus {
   return "pending";
 }
 
+function isBehaviorTuningKnowledgeSection(title: string, body: string) {
+  return /^call tuning\s*-/i.test(title.trim()) || /\b(preferred answer|source call):/i.test(body);
+}
+
 function formatShortDate(value: string) {
   try {
     return new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(new Date(value));
@@ -2411,3 +2512,6 @@ const staffTaskSelectColumns =
 
 const callFeedbackSelectColumns =
   "id,call_id,category,note,suggested_answer,add_to_knowledge,created_by,created_at";
+
+const knowledgeSectionSelectColumns =
+  "id,location_id,title,body,is_active,updated_at";
