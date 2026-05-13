@@ -23,6 +23,7 @@ import { buildSmsTwiML, createMessageThreadStore } from "./message-thread-store"
 import { createStaffNotificationService } from "./notification-service";
 import { createOpenAIRealtimeSipService } from "./openai-realtime-sip";
 import { createOwnerCommandRuntime } from "./owner-command-runtime";
+import { createOwnerEmailCommandService, type OwnerEmailCommandInput } from "./owner-email-command-service";
 import { createOwnerReportService } from "./owner-report-service";
 import { createPlatformIntegrationRegistry } from "./platform-integrations";
 import { createPhoneNumberStore } from "./phone-number-store";
@@ -49,6 +50,7 @@ const guestConfirmationService = createGuestConfirmationService(env);
 const menuIngestionService = createMenuIngestionService(env);
 const ownerReportService = createOwnerReportService(env);
 const ownerCommandRuntime = createOwnerCommandRuntime(env, ownerReportService);
+const ownerEmailCommandService = createOwnerEmailCommandService(env, ownerCommandRuntime);
 const messageThreadStore = createMessageThreadStore(env, { ownerCommandRuntime });
 const platformIntegrationRegistry = createPlatformIntegrationRegistry(env);
 const reservationPlatformService = createReservationPlatformService(env);
@@ -64,6 +66,7 @@ const webChatService = createWebChatService(env, restaurantContextStore, { callS
 const ADMIN_BODY_LIMIT_BYTES = 16 * 1024;
 const BILLING_BODY_LIMIT_BYTES = 32 * 1024;
 const OPENAI_WEBHOOK_BODY_LIMIT_BYTES = 32 * 1024;
+const OWNER_EMAIL_BODY_LIMIT_BYTES = 64 * 1024;
 const PREVIEW_BODY_LIMIT_BYTES = 4 * 1024;
 const TENANT_BOOTSTRAP_BODY_LIMIT_BYTES = 64 * 1024;
 const TWILIO_BODY_LIMIT_BYTES = 16 * 1024;
@@ -148,6 +151,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       openAIRealtimeSipConfigured: openAIRealtimeSipService.configured,
       ownerReportDeliveryConfigured: ownerReportService.deliveryConfigured,
       ownerReportsConfigured: ownerReportService.configured,
+      ownerEmailCommandsConfigured: ownerEmailCommandService.configured,
       platformIntegrations: platformIntegrationRegistry.summary,
       tenantProvisioningConfigured: tenantProvisioningService.configured,
       stripeBillingConfigured: billingService.configured,
@@ -866,6 +870,41 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       sendJson(res, 200, result);
     } catch (error) {
       sendCaughtError(res, error, "Web chat message failed");
+    }
+    return;
+  }
+
+  if (req.method === "POST" && (url.pathname === "/owner/email-command" || url.pathname === "/email/owner-command")) {
+    if (!allowRateLimitedRequest(req, res, "owner-email-command", 60)) return;
+
+    try {
+      const body = parseJsonRequestBody(await readLimitedRequestBody(req, OWNER_EMAIL_BODY_LIMIT_BYTES)) as OwnerEmailCommandInput;
+      const locationId = body.locationId?.trim() || url.searchParams.get("locationId") || undefined;
+      const authorization = await authorizeVoiceAdminRequest({
+        currentEnv,
+        locationId,
+        req,
+      });
+      if (!authorization.authorized) {
+        sendJson(res, authorization.status, { error: authorization.reason ?? "Unauthorized" });
+        return;
+      }
+
+      const result = await ownerEmailCommandService.handleInboundEmail({
+        ...body,
+        locationId: locationId ?? body.locationId,
+      });
+
+      const statusCode = result.status === "processed"
+        ? 200
+        : result.status === "ambiguous"
+          ? 409
+          : result.status === "not_found"
+            ? 404
+            : 400;
+      sendJson(res, statusCode, result);
+    } catch (error) {
+      sendCaughtError(res, error, "Owner email command failed");
     }
     return;
   }

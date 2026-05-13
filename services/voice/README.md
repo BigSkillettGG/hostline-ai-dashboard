@@ -26,6 +26,7 @@ This service is the production path for inbound restaurant phone calls.
 - Records a staff-review order delivery attempt for each captured phone order.
 - Creates staff-confirmed reservation requests when a caller provides date, time, party size, and guest details.
 - Generates owner daily reports and can deliver them through SMS or an owner-report webhook.
+- Accepts provider-neutral owner email command webhooks at `POST /owner/email-command`, matching trusted owner/manager email addresses before applying live updates, report questions, or permanent knowledge updates.
 - Sends staff alerts by Supabase-configured route for captured orders, reservation requests, complaints, human handoffs, delivery failures, low-confidence reviews, and sales/vendor messages. If no route is configured yet, the service falls back to trusted owner/manager/front-desk contacts with `can_receive_alerts` enabled before using environment-variable SMS fallback.
 - Writes staff alert delivery audit rows to `staff_alert_events` for sent, skipped, and failed alerts.
 - Provides a direct ElevenLabs preview endpoint at `POST /voice/preview`.
@@ -129,10 +130,11 @@ When Supabase is configured, Twilio requests can include `locationId` in the web
 - `GET /twilio/live-call-config?locationId=...` returns the generated live call URLs.
 - `GET /twilio/twiml-preview?locationId=...` renders the TwiML preview used to verify ConversationRelay before calling.
 - `POST /twilio/sms` receives inbound SMS replies for the shared SignalHost sender. Trusted owner/manager numbers are routed into owner-assistant commands first; customer replies still route to the most recent open message thread, ask for disambiguation if needed, and create a staff task for routed replies.
+- `POST /owner/email-command` accepts provider-neutral email webhook JSON such as `{ "fromEmail": "owner@example.com", "toEmail": "updates@signalhost.ai", "subject": "Closed tomorrow", "text": "We're closed tomorrow", "locationId": "..." }`. It requires Supabase admin auth or `SIGNALHOST_INTERNAL_API_KEY`, matches `business_contacts.email`, runs the owner command runtime with channel `email`, and returns a reply body your email provider can send back.
 - `POST /agent/test-reply` accepts `{ message, locationId, channel, transcript, scenarioId }` and returns Vera's reply plus simulated tool actions. It is admin-protected and does not create real texts, orders, reservations, or staff callbacks.
 - `POST /twilio/recording-status` receives Twilio recording callbacks. Configure Twilio call/SIP recording to send completed recording events to `https://your-voice-service/twilio/recording-status`; the service stores the MP3 URL on `calls.recording_url`.
 - `POST /ingestion/run-next` processes one queued menu ingestion job, fetches URL/text content, parses menu items, replaces `menu_categories` and `menu_items`, and updates `ingestion_jobs` plus `menu_sources`.
-- Staff alert routing is loaded from `alert_routing_configs` per location when Supabase is configured. If no route exists, the service falls back to `STAFF_ALERT_SMS_TO`.
+- Staff alert routing is loaded from `alert_routing_configs` per location when Supabase is configured. If no route exists, the service falls back to trusted contacts with `can_receive_alerts`, then `STAFF_ALERT_SMS_TO`.
 - Staff alert outcomes are logged to `staff_alert_events` when Supabase is configured. Logging failures are warned but do not block the live call.
 - `POST /web-chat/message` accepts `{ message, locationId, transcript, visitorName, visitorPhone, visitorEmail }` and returns a chat-friendly reply plus any created business-link or staff-request actions. This endpoint is public for embedded site widgets and is IP rate-limited.
 
