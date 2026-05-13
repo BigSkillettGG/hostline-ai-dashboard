@@ -204,7 +204,11 @@ export type Database = {
       }
       business_contacts: {
         Row: {
+          can_add_live_updates: boolean
+          can_approve_permanent_knowledge: boolean
+          can_manage_alert_preferences: boolean
           can_receive_alerts: boolean
+          can_resolve_customer_requests: boolean
           can_use_owner_assistant: boolean
           contact_type: string
           created_at: string
@@ -214,10 +218,16 @@ export type Database = {
           name: string
           phone: string | null
           preferred_channel: string
+          requires_owner_approval: boolean
+          trusted_identity_enabled: boolean
           updated_at: string
         }
         Insert: {
+          can_add_live_updates?: boolean
+          can_approve_permanent_knowledge?: boolean
+          can_manage_alert_preferences?: boolean
           can_receive_alerts?: boolean
+          can_resolve_customer_requests?: boolean
           can_use_owner_assistant?: boolean
           contact_type?: string
           created_at?: string
@@ -227,10 +237,16 @@ export type Database = {
           name: string
           phone?: string | null
           preferred_channel?: string
+          requires_owner_approval?: boolean
+          trusted_identity_enabled?: boolean
           updated_at?: string
         }
         Update: {
+          can_add_live_updates?: boolean
+          can_approve_permanent_knowledge?: boolean
+          can_manage_alert_preferences?: boolean
           can_receive_alerts?: boolean
+          can_resolve_customer_requests?: boolean
           can_use_owner_assistant?: boolean
           contact_type?: string
           created_at?: string
@@ -240,6 +256,8 @@ export type Database = {
           name?: string
           phone?: string | null
           preferred_channel?: string
+          requires_owner_approval?: boolean
+          trusted_identity_enabled?: boolean
           updated_at?: string
         }
         Relationships: [

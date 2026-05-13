@@ -1,6 +1,6 @@
 import { FormEvent, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Clock, MailPlus, ShieldCheck, UserRoundPlus, Users } from "lucide-react";
+import { Clock, KeyRound, MailPlus, ShieldCheck, UserRoundPlus, Users } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader, PageBody } from "@/components/PageHeader";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -23,9 +23,13 @@ import { Switch } from "@/components/ui/switch";
 import { canCurrentUserManageTeam, getRestaurantRoleLabel, isDemoWorkspace, useCurrentUser } from "@/lib/auth";
 import {
   createTeamInvitationInSupabase,
+  createTrustedContactInSupabase,
   fetchTeamInvitationsFromSupabase,
   fetchTeamMembersFromSupabase,
+  fetchTrustedContactsFromSupabase,
   isTeamPersistenceConfigured,
+  isTrustedContactPersistenceConfigured,
+  updateTrustedContactInSupabase,
 } from "@/lib/supabase-rest";
 import { users } from "@/data/mock";
 import {
@@ -36,6 +40,18 @@ import {
   type TeamMember,
 } from "@/domain/team";
 import type { RestaurantMembershipRole } from "@/domain/access-control";
+import {
+  createTrustedContactDraft,
+  trustedContactPermissionDescriptions,
+  trustedContactPermissionKeys,
+  trustedContactPermissionLabels,
+  trustedContactTypeLabels,
+  trustedContactTypes,
+  type CreateTrustedContactInput,
+  type TrustedContact,
+  type TrustedContactPermissionKey,
+  type TrustedContactType,
+} from "@/domain/trusted-contacts";
 
 const LOCAL_INVITES_KEY = "signalhost.demoTeamInvites";
 const roleOptions: RestaurantMembershipRole[] = ["owner", "admin", "manager", "staff"];
@@ -55,6 +71,22 @@ const sampleMembers: TeamMember[] = users.map((user) => ({
   name: user.name,
   role: user.role.toLowerCase() as RestaurantMembershipRole,
 }));
+const sampleTrustedContacts: TrustedContact[] = [
+  createTrustedContactDraft({
+    contactType: "owner",
+    email: "maria@oliveandember.com",
+    name: "Maria Lombardi",
+    phone: "+14155550148",
+    preferredChannel: "both",
+  }, new Date("2026-05-13T12:00:00.000Z")),
+  createTrustedContactDraft({
+    contactType: "manager",
+    email: "alex@oliveandember.com",
+    name: "Alex Tran",
+    phone: "+14155550149",
+    preferredChannel: "sms",
+  }, new Date("2026-05-13T12:00:00.000Z")),
+];
 
 export default function Team() {
   const user = useCurrentUser();
@@ -62,9 +94,16 @@ export default function Team() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<RestaurantMembershipRole>("staff");
+  const [trustedContactOpen, setTrustedContactOpen] = useState(false);
+  const [trustedContactName, setTrustedContactName] = useState("");
+  const [trustedContactPhone, setTrustedContactPhone] = useState("");
+  const [trustedContactEmail, setTrustedContactEmail] = useState("");
+  const [trustedContactType, setTrustedContactType] = useState<TrustedContactType>("manager");
   const [localInvites, setLocalInvites] = useState<TeamInvitation[]>(() => loadLocalInvites());
+  const [localTrustedContacts, setLocalTrustedContacts] = useState<TrustedContact[]>(sampleTrustedContacts);
   const canManageTeam = canCurrentUserManageTeam(user);
   const persistenceConfigured = isTeamPersistenceConfigured(user?.activeOrganizationId);
+  const trustedContactPersistenceConfigured = isTrustedContactPersistenceConfigured();
 
   const memberQuery = useQuery({
     enabled: persistenceConfigured,
@@ -76,6 +115,11 @@ export default function Team() {
     enabled: persistenceConfigured,
     queryFn: () => fetchTeamInvitationsFromSupabase(user?.activeOrganizationId),
     queryKey: ["team-invitations", user?.activeOrganizationId],
+  });
+  const trustedContactQuery = useQuery({
+    enabled: trustedContactPersistenceConfigured,
+    queryFn: () => fetchTrustedContactsFromSupabase(),
+    queryKey: ["trusted-contacts"],
   });
 
   const inviteMutation = useMutation({
@@ -92,6 +136,19 @@ export default function Team() {
       await queryClient.invalidateQueries({ queryKey: ["team-invitations", user?.activeOrganizationId] });
     },
   });
+  const createTrustedContactMutation = useMutation({
+    mutationFn: (input: CreateTrustedContactInput) => createTrustedContactInSupabase(input),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["trusted-contacts"] });
+    },
+  });
+  const updateTrustedContactMutation = useMutation({
+    mutationFn: ({ id, input }: { id: string; input: Partial<TrustedContact> }) =>
+      updateTrustedContactInSupabase(id, input),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["trusted-contacts"] });
+    },
+  });
 
   const usingSupabase = Boolean(persistenceConfigured && memberQuery.isSuccess);
   const members = useMemo(
@@ -99,6 +156,8 @@ export default function Team() {
     [memberQuery.data, usingSupabase],
   );
   const invitations = usingSupabase ? (inviteQuery.data ?? []) : localInvites;
+  const usingTrustedContacts = Boolean(trustedContactPersistenceConfigured && trustedContactQuery.isSuccess);
+  const trustedContacts = usingTrustedContacts ? (trustedContactQuery.data ?? []) : localTrustedContacts;
   const workspaceLabel = isDemoWorkspace(user) ? "Demo workspace" : usingSupabase ? "Live Supabase" : "Sample data";
 
   const roleCounts = useMemo(() => {
@@ -135,6 +194,56 @@ export default function Team() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not create invitation");
     }
+  };
+
+  const submitTrustedContact = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!canManageTeam) {
+      toast.error("Only owners and admins can manage trusted contacts.");
+      return;
+    }
+
+    try {
+      const input: CreateTrustedContactInput = {
+        contactType: trustedContactType,
+        email: trustedContactEmail,
+        name: trustedContactName,
+        phone: trustedContactPhone,
+        preferredChannel: trustedContactPhone && trustedContactEmail ? "both" : trustedContactPhone ? "sms" : "email",
+      };
+
+      if (usingTrustedContacts) {
+        await createTrustedContactMutation.mutateAsync(input);
+      } else {
+        setLocalTrustedContacts((current) => [createTrustedContactDraft(input), ...current].slice(0, 12));
+      }
+      setTrustedContactName("");
+      setTrustedContactPhone("");
+      setTrustedContactEmail("");
+      setTrustedContactType("manager");
+      setTrustedContactOpen(false);
+      toast.success("Trusted contact saved");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save trusted contact");
+    }
+  };
+
+  const toggleTrustedContactPermission = async (
+    contact: TrustedContact,
+    key: TrustedContactPermissionKey | "requiresOwnerApproval",
+    value: boolean,
+  ) => {
+    if (!canManageTeam) {
+      toast.error("Only owners and admins can change trusted-contact permissions.");
+      return;
+    }
+
+    if (usingTrustedContacts) {
+      await updateTrustedContactMutation.mutateAsync({ id: contact.id, input: { [key]: value } });
+      return;
+    }
+
+    setLocalTrustedContacts((current) => current.map((item) => item.id === contact.id ? { ...item, [key]: value } : item));
   };
 
   return (
@@ -307,6 +416,103 @@ export default function Team() {
             </Card>
 
             <Card>
+              <CardHeader className="flex flex-row items-start justify-between gap-3 pb-3">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <KeyRound className="h-4 w-4 text-primary" />
+                    Trusted contacts
+                  </CardTitle>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    These people can be recognized by phone, text, email, or dashboard login for owner commands.
+                  </p>
+                </div>
+                <Dialog open={trustedContactOpen} onOpenChange={setTrustedContactOpen}>
+                  <DialogTrigger asChild>
+                    <Button size="sm" variant="outline" disabled={!canManageTeam}>Add</Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <form onSubmit={submitTrustedContact}>
+                      <DialogHeader>
+                        <DialogTitle>Add trusted contact</DialogTitle>
+                        <DialogDescription>
+                          Use owner and manager contacts for future phone, text, email, and owner-assistant command identity.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="grid gap-4 py-4">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="trusted-name">Name</Label>
+                          <Input
+                            id="trusted-name"
+                            placeholder="Jill Manager"
+                            value={trustedContactName}
+                            onChange={(event) => setTrustedContactName(event.target.value)}
+                          />
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="space-y-1.5">
+                            <Label htmlFor="trusted-phone">Phone</Label>
+                            <Input
+                              id="trusted-phone"
+                              placeholder="+1 781 307 2672"
+                              value={trustedContactPhone}
+                              onChange={(event) => setTrustedContactPhone(event.target.value)}
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="trusted-email">Email</Label>
+                            <Input
+                              id="trusted-email"
+                              placeholder="jill@business.com"
+                              type="email"
+                              value={trustedContactEmail}
+                              onChange={(event) => setTrustedContactEmail(event.target.value)}
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="trusted-role">Command role</Label>
+                          <Select value={trustedContactType} onValueChange={(value) => setTrustedContactType(value as TrustedContactType)}>
+                            <SelectTrigger id="trusted-role"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {trustedContactTypes.map((type) => (
+                                <SelectItem key={type} value={type}>{trustedContactTypeLabels[type]}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button type="submit" disabled={createTrustedContactMutation.isPending}>
+                          {createTrustedContactMutation.isPending ? "Saving..." : "Save trusted contact"}
+                        </Button>
+                      </DialogFooter>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {trustedContactPersistenceConfigured && trustedContactQuery.isError && (
+                  <div className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
+                    Trusted contacts could not be loaded, so this page is showing sample contacts.
+                  </div>
+                )}
+                {trustedContacts.length ? trustedContacts.map((contact) => (
+                  <TrustedContactRow
+                    canManage={canManageTeam}
+                    contact={contact}
+                    key={contact.id}
+                    onToggle={(key, value) => void toggleTrustedContactPermission(contact, key, value)}
+                    updating={updateTrustedContactMutation.isPending}
+                  />
+                )) : (
+                  <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
+                    Add an owner or manager contact before enabling phone, SMS, or email command mode.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Clock className="h-4 w-4 text-primary" />
@@ -340,6 +546,76 @@ export default function Team() {
         </div>
       </PageBody>
     </>
+  );
+}
+
+function TrustedContactRow({
+  canManage,
+  contact,
+  onToggle,
+  updating,
+}: {
+  canManage: boolean;
+  contact: TrustedContact;
+  onToggle: (key: TrustedContactPermissionKey | "requiresOwnerApproval", value: boolean) => void;
+  updating: boolean;
+}) {
+  return (
+    <div className="rounded-md border border-border p-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-sm font-medium">{contact.name}</div>
+            <Badge variant="outline">{trustedContactTypeLabels[contact.contactType]}</Badge>
+          </div>
+          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            <span>{contact.phone || "No phone"}</span>
+            <span>{contact.email || "No email"}</span>
+          </div>
+        </div>
+        <Badge variant="secondary" className="capitalize">{contact.preferredChannel}</Badge>
+      </div>
+      <div className="mt-3 grid gap-2">
+        {trustedContactPermissionKeys().map((key) => (
+          <TrustedPermissionSwitch
+            checked={Boolean(contact[key])}
+            disabled={!canManage || updating}
+            key={key}
+            label={trustedContactPermissionLabels[key]}
+            onCheckedChange={(value) => onToggle(key, value)}
+            title={trustedContactPermissionDescriptions[key]}
+          />
+        ))}
+        <TrustedPermissionSwitch
+          checked={contact.requiresOwnerApproval}
+          disabled={!canManage || updating}
+          label="Owner approval required"
+          onCheckedChange={(value) => onToggle("requiresOwnerApproval", value)}
+          title="When on, this contact can propose sensitive changes, but an owner must approve before they become permanent."
+        />
+      </div>
+    </div>
+  );
+}
+
+function TrustedPermissionSwitch({
+  checked,
+  disabled,
+  label,
+  onCheckedChange,
+  title,
+}: {
+  checked: boolean;
+  disabled: boolean;
+  label: string;
+  onCheckedChange: (value: boolean) => void;
+  title: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md bg-muted/30 px-2 py-1.5" title={title}>
+      <span className="min-w-0 text-xs">{label}</span>
+      <Switch checked={checked} disabled={disabled} onCheckedChange={onCheckedChange} />
+    </div>
   );
 }
 

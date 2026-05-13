@@ -16,6 +16,8 @@ import {
   buildOnboardingProfilePayload,
   buildOrderDeliveryAttemptPayload,
   buildStaffTaskInsertPayload,
+  buildTrustedContactInsertPayload,
+  buildTrustedContactUpdatePayload,
   buildReservationInsertPayload,
   calculateForwardingStatus,
   mapSupabaseCalls,
@@ -34,6 +36,7 @@ import {
   mapSupabaseStaffAlertEvent,
   mapSupabaseStaffTask,
   mapSupabaseTenantDirectory,
+  mapSupabaseTrustedContact,
 } from "./supabase-rest";
 import { defaultAlertRoutingConfig } from "@/domain/alert-routing";
 
@@ -646,6 +649,79 @@ describe("Supabase staff task mapping", () => {
       status: "open",
       task_type: "manager_callback",
       title: "Call guest",
+    });
+  });
+});
+
+describe("Supabase trusted contacts", () => {
+  it("builds insert and update payloads for trusted owner command contacts", () => {
+    expect(
+      buildTrustedContactInsertPayload(
+        {
+          contactType: "manager",
+          email: "Jill@Example.com",
+          name: "Jill Manager",
+          phone: "(781) 307-2672",
+          preferredChannel: "both",
+        },
+        "location_1",
+      ),
+    ).toMatchObject({
+      can_add_live_updates: true,
+      can_approve_permanent_knowledge: false,
+      can_receive_alerts: true,
+      can_resolve_customer_requests: true,
+      can_use_owner_assistant: true,
+      contact_type: "manager",
+      email: "jill@example.com",
+      location_id: "location_1",
+      name: "Jill Manager",
+      phone: "+17813072672",
+      preferred_channel: "both",
+      requires_owner_approval: true,
+    });
+
+    expect(
+      buildTrustedContactUpdatePayload({
+        canApprovePermanentKnowledge: true,
+        canManageAlertPreferences: true,
+        requiresOwnerApproval: false,
+      }),
+    ).toMatchObject({
+      can_approve_permanent_knowledge: true,
+      can_manage_alert_preferences: true,
+      requires_owner_approval: false,
+    });
+  });
+
+  it("maps trusted contact rows with safe defaults", () => {
+    expect(
+      mapSupabaseTrustedContact({
+        can_add_live_updates: null,
+        can_approve_permanent_knowledge: null,
+        can_manage_alert_preferences: null,
+        can_receive_alerts: true,
+        can_resolve_customer_requests: null,
+        can_use_owner_assistant: true,
+        contact_type: "owner",
+        created_at: "2026-05-13T20:00:00.000Z",
+        email: "owner@example.com",
+        id: "contact_1",
+        location_id: "location_1",
+        name: "Owner",
+        phone: "+17813072672",
+        preferred_channel: "sms",
+        requires_owner_approval: null,
+        trusted_identity_enabled: true,
+        updated_at: "2026-05-13T20:00:00.000Z",
+      }),
+    ).toMatchObject({
+      canApprovePermanentKnowledge: true,
+      canManageAlertPreferences: true,
+      canUseOwnerAssistant: true,
+      contactType: "owner",
+      email: "owner@example.com",
+      requiresOwnerApproval: false,
     });
   });
 });

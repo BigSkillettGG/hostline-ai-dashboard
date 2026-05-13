@@ -46,6 +46,21 @@ import {
   type TeamInviteStatus,
   type TeamMember,
 } from "@/domain/team";
+import {
+  createTrustedContactDraft,
+  defaultTrustedContactPermissions,
+  normalizeContactName,
+  normalizeOptionalEmail,
+  normalizeOptionalPhone,
+  normalizeTrustedContactPreferredChannel,
+  normalizeTrustedContactType,
+  trustedContactTypeLabels,
+  type CreateTrustedContactInput,
+  type TrustedContact,
+  type TrustedContactPreferredChannel,
+  type TrustedContactType,
+  type UpdateTrustedContactPermissionsInput,
+} from "@/domain/trusted-contacts";
 import type { RestaurantAgentConfig } from "@/domain/restaurant-config";
 import type {
   BusinessMode,
@@ -473,6 +488,26 @@ interface SupabaseTeamInvitationRow {
   status: string | null;
 }
 
+interface SupabaseTrustedContactRow {
+  can_add_live_updates?: boolean | null;
+  can_approve_permanent_knowledge?: boolean | null;
+  can_manage_alert_preferences?: boolean | null;
+  can_receive_alerts: boolean | null;
+  can_resolve_customer_requests?: boolean | null;
+  can_use_owner_assistant: boolean | null;
+  contact_type: string | null;
+  created_at: string | null;
+  email: string | null;
+  id: string;
+  location_id: string;
+  name: string | null;
+  phone: string | null;
+  preferred_channel: string | null;
+  requires_owner_approval?: boolean | null;
+  trusted_identity_enabled?: boolean | null;
+  updated_at: string | null;
+}
+
 export interface PhoneNumberRecord {
   createdAt?: string;
   forwardingMode: string;
@@ -713,6 +748,10 @@ export function isTeamPersistenceConfigured(organizationId = getActiveOrganizati
   return Boolean(isSupabaseConfigured() && organizationId);
 }
 
+export function isTrustedContactPersistenceConfigured(locationId = getActiveSupabaseLocationId()) {
+  return Boolean(isSupabaseConfigured() && locationId);
+}
+
 export async function fetchTeamMembersFromSupabase(
   organizationId = getActiveOrganizationId(),
 ): Promise<TeamMember[]> {
@@ -779,6 +818,74 @@ export async function createTeamInvitationInSupabase(
 
   if (!rows?.[0]) throw new Error("Supabase did not return the created invitation.");
   return mapSupabaseTeamInvitation(rows[0]);
+}
+
+export async function fetchTrustedContactsFromSupabase(
+  locationId = getActiveSupabaseLocationId(),
+): Promise<TrustedContact[]> {
+  if (!isTrustedContactPersistenceConfigured(locationId)) {
+    throw new Error("Supabase trusted contact persistence is not configured.");
+  }
+
+  const rows = await supabaseRequest<SupabaseTrustedContactRow[]>(
+    "business_contacts",
+    new URLSearchParams({
+      location_id: `eq.${locationId}`,
+      order: "contact_type.asc,name.asc",
+      select: trustedContactSelectColumns,
+    }),
+  );
+
+  return rows.map(mapSupabaseTrustedContact);
+}
+
+export async function createTrustedContactInSupabase(
+  input: CreateTrustedContactInput,
+  locationId = getActiveSupabaseLocationId(),
+): Promise<TrustedContact> {
+  if (!isTrustedContactPersistenceConfigured(locationId)) {
+    throw new Error("Supabase trusted contact persistence is not configured.");
+  }
+
+  const rows = await supabaseRequest<SupabaseTrustedContactRow[]>(
+    "business_contacts",
+    new URLSearchParams({ select: trustedContactSelectColumns }),
+    {
+      body: buildTrustedContactInsertPayload(input, locationId),
+      headers: { Prefer: "return=representation" },
+      method: "POST",
+    },
+  );
+
+  if (!rows?.[0]) throw new Error("Trusted contact was not returned after insert.");
+  return mapSupabaseTrustedContact(rows[0]);
+}
+
+export async function updateTrustedContactInSupabase(
+  id: string,
+  input: UpdateTrustedContactPermissionsInput,
+  locationId = getActiveSupabaseLocationId(),
+): Promise<TrustedContact> {
+  if (!isTrustedContactPersistenceConfigured(locationId)) {
+    throw new Error("Supabase trusted contact persistence is not configured.");
+  }
+
+  const rows = await supabaseRequest<SupabaseTrustedContactRow[]>(
+    "business_contacts",
+    new URLSearchParams({
+      id: `eq.${id}`,
+      location_id: `eq.${locationId}`,
+      select: trustedContactSelectColumns,
+    }),
+    {
+      body: buildTrustedContactUpdatePayload(input),
+      headers: { Prefer: "return=representation" },
+      method: "PATCH",
+    },
+  );
+
+  if (!rows?.[0]) throw new Error("Trusted contact was not returned after update.");
+  return mapSupabaseTrustedContact(rows[0]);
 }
 
 export async function fetchCallsFromSupabase(
@@ -2084,6 +2191,54 @@ export function buildStaffTaskInsertPayload(input: CreateStaffTaskInput, locatio
   };
 }
 
+export function buildTrustedContactInsertPayload(input: CreateTrustedContactInput, locationId: string) {
+  const draft = createTrustedContactDraft(input);
+
+  return {
+    can_add_live_updates: draft.canAddLiveUpdates,
+    can_approve_permanent_knowledge: draft.canApprovePermanentKnowledge,
+    can_manage_alert_preferences: draft.canManageAlertPreferences,
+    can_receive_alerts: draft.canReceiveAlerts,
+    can_resolve_customer_requests: draft.canResolveCustomerRequests,
+    can_use_owner_assistant: draft.canUseOwnerAssistant,
+    contact_type: draft.contactType,
+    email: draft.email ?? null,
+    location_id: locationId,
+    name: draft.name,
+    phone: draft.phone ?? null,
+    preferred_channel: draft.preferredChannel,
+    requires_owner_approval: draft.requiresOwnerApproval,
+    trusted_identity_enabled: true,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+export function buildTrustedContactUpdatePayload(input: UpdateTrustedContactPermissionsInput) {
+  return {
+    ...(input.canAddLiveUpdates !== undefined ? { can_add_live_updates: input.canAddLiveUpdates } : {}),
+    ...(input.canApprovePermanentKnowledge !== undefined
+      ? { can_approve_permanent_knowledge: input.canApprovePermanentKnowledge }
+      : {}),
+    ...(input.canManageAlertPreferences !== undefined
+      ? { can_manage_alert_preferences: input.canManageAlertPreferences }
+      : {}),
+    ...(input.canReceiveAlerts !== undefined ? { can_receive_alerts: input.canReceiveAlerts } : {}),
+    ...(input.canResolveCustomerRequests !== undefined
+      ? { can_resolve_customer_requests: input.canResolveCustomerRequests }
+      : {}),
+    ...(input.canUseOwnerAssistant !== undefined ? { can_use_owner_assistant: input.canUseOwnerAssistant } : {}),
+    ...(input.contactType !== undefined ? { contact_type: normalizeTrustedContactType(input.contactType) } : {}),
+    ...(input.email !== undefined ? { email: normalizeOptionalEmail(input.email) ?? null } : {}),
+    ...(input.name !== undefined ? { name: normalizeContactName(input.name) } : {}),
+    ...(input.phone !== undefined ? { phone: normalizeOptionalPhone(input.phone) ?? null } : {}),
+    ...(input.preferredChannel !== undefined
+      ? { preferred_channel: normalizeTrustedContactPreferredChannel(input.preferredChannel) }
+      : {}),
+    ...(input.requiresOwnerApproval !== undefined ? { requires_owner_approval: input.requiresOwnerApproval } : {}),
+    updated_at: new Date().toISOString(),
+  };
+}
+
 export function buildCallFeedbackInsertPayload(input: CreateCallFeedbackInput, locationId: string) {
   return {
     add_to_knowledge: Boolean(input.addToKnowledge),
@@ -3123,6 +3278,30 @@ function mapSupabaseTeamInvitation(row: SupabaseTeamInvitationRow): TeamInvitati
   };
 }
 
+export function mapSupabaseTrustedContact(row: SupabaseTrustedContactRow): TrustedContact {
+  const contactType = normalizeTrustedContactType(row.contact_type);
+  const defaults = defaultTrustedContactPermissions(contactType);
+
+  return {
+    canAddLiveUpdates: row.can_add_live_updates ?? defaults.canAddLiveUpdates,
+    canApprovePermanentKnowledge: row.can_approve_permanent_knowledge ?? defaults.canApprovePermanentKnowledge,
+    canManageAlertPreferences: row.can_manage_alert_preferences ?? defaults.canManageAlertPreferences,
+    canReceiveAlerts: row.can_receive_alerts ?? defaults.canReceiveAlerts,
+    canResolveCustomerRequests: row.can_resolve_customer_requests ?? defaults.canResolveCustomerRequests,
+    canUseOwnerAssistant: row.can_use_owner_assistant ?? defaults.canUseOwnerAssistant,
+    contactType,
+    createdAt: row.created_at ?? undefined,
+    email: row.email?.trim() || undefined,
+    id: row.id,
+    locationId: row.location_id,
+    name: row.name?.trim() || trustedContactTypeLabels[contactType],
+    phone: row.phone?.trim() || undefined,
+    preferredChannel: normalizeTrustedContactPreferredChannel(row.preferred_channel),
+    requiresOwnerApproval: row.requires_owner_approval ?? defaults.requiresOwnerApproval,
+    updatedAt: row.updated_at ?? undefined,
+  };
+}
+
 function normalizeInviteStatus(status: string | null): TeamInviteStatus {
   if (status === "accepted" || status === "revoked" || status === "expired") return status;
   return "pending";
@@ -3206,3 +3385,6 @@ const businessLiveSettingsSelectColumns =
 
 const businessLiveUpdateSelectColumns =
   "id,location_id,update_type,title,body,mode,expiration,expires_at,source,created_at,cleared_at";
+
+const trustedContactSelectColumns =
+  "id,location_id,contact_type,name,phone,email,preferred_channel,can_receive_alerts,can_use_owner_assistant,can_add_live_updates,can_approve_permanent_knowledge,can_resolve_customer_requests,can_manage_alert_preferences,requires_owner_approval,trusted_identity_enabled,created_at,updated_at";

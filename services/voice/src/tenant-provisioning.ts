@@ -157,6 +157,9 @@ class SupabaseTenantProvisioningService implements TenantProvisioningService {
 
     const onboarding = await this.upsertOnboardingProfile(draft, location.id);
     await this.upsertAgentConfig(draft, location.id, businessType);
+    await this.upsertOwnerBusinessContact({ draft, locationId: location.id, user }).catch((error) => {
+      console.warn("[tenant-provisioning] owner trusted contact was not saved", error);
+    });
 
     return {
       businessType,
@@ -324,6 +327,59 @@ class SupabaseTenantProvisioningService implements TenantProvisioningService {
         on_conflict: "location_id",
         select: "id,location_id",
       }),
+    });
+  }
+
+  private async upsertOwnerBusinessContact(input: {
+    draft: OnboardingDraft;
+    locationId: string;
+    user: SupabaseAuthUser;
+  }) {
+    const draftRecord = input.draft as Record<string, unknown>;
+    const email = stringValue(draftRecord.ownerEmail) ?? input.user.email ?? null;
+    const phone = stringValue(draftRecord.ownerPhone) ?? null;
+    if (!email && !phone) return;
+
+    const existing = await this.request<Array<{ id: string }>>("business_contacts", {
+      method: "GET",
+      query: new URLSearchParams({
+        contact_type: "eq.owner",
+        limit: "1",
+        location_id: `eq.${input.locationId}`,
+        select: "id",
+      }),
+    });
+    const payload = {
+      can_add_live_updates: true,
+      can_approve_permanent_knowledge: true,
+      can_manage_alert_preferences: true,
+      can_receive_alerts: true,
+      can_resolve_customer_requests: true,
+      can_use_owner_assistant: true,
+      contact_type: "owner",
+      email,
+      location_id: input.locationId,
+      name: stringValue(draftRecord.ownerName) ?? stringValue(input.user.user_metadata?.name) ?? "Owner",
+      phone,
+      preferred_channel: phone && email ? "both" : phone ? "sms" : "email",
+      requires_owner_approval: false,
+      trusted_identity_enabled: true,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (existing[0]?.id) {
+      await this.request("business_contacts", {
+        body: payload,
+        method: "PATCH",
+        query: new URLSearchParams({ id: `eq.${existing[0].id}` }),
+      });
+      return;
+    }
+
+    await this.request("business_contacts", {
+      body: payload,
+      method: "POST",
+      query: new URLSearchParams(),
     });
   }
 
