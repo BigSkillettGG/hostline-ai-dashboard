@@ -202,6 +202,56 @@ export type Database = {
           },
         ]
       }
+      business_contacts: {
+        Row: {
+          can_receive_alerts: boolean
+          can_use_owner_assistant: boolean
+          contact_type: string
+          created_at: string
+          email: string | null
+          id: string
+          location_id: string
+          name: string
+          phone: string | null
+          preferred_channel: string
+          updated_at: string
+        }
+        Insert: {
+          can_receive_alerts?: boolean
+          can_use_owner_assistant?: boolean
+          contact_type?: string
+          created_at?: string
+          email?: string | null
+          id?: string
+          location_id: string
+          name: string
+          phone?: string | null
+          preferred_channel?: string
+          updated_at?: string
+        }
+        Update: {
+          can_receive_alerts?: boolean
+          can_use_owner_assistant?: boolean
+          contact_type?: string
+          created_at?: string
+          email?: string | null
+          id?: string
+          location_id?: string
+          name?: string
+          phone?: string | null
+          preferred_channel?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_contacts_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       owner_reports: {
         Row: {
           copy_text: string

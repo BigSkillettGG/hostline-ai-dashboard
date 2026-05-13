@@ -143,6 +143,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       ),
       menuIngestionConfigured: menuIngestionService.configured,
       openAIRealtimeSipConfigured: openAIRealtimeSipService.configured,
+      ownerReportDeliveryConfigured: ownerReportService.deliveryConfigured,
       ownerReportsConfigured: ownerReportService.configured,
       platformIntegrations: platformIntegrationRegistry.summary,
       tenantProvisioningConfigured: tenantProvisioningService.configured,
@@ -296,6 +297,28 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       sendJson(res, 200, result);
     } catch (error) {
       sendCaughtError(res, error, "Owner daily report failed");
+    }
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/owner-reports/daily/deliver") {
+    if (!allowRateLimitedRequest(req, res, "owner-daily-report-deliver", 10)) return;
+
+    try {
+      const body = parseJsonRequestBody(await readLimitedRequestBody(req, ADMIN_BODY_LIMIT_BYTES)) as {
+        locationId?: string;
+      };
+      const locationId = body.locationId ?? url.searchParams.get("locationId") ?? currentEnv.SUPABASE_DEMO_LOCATION_ID;
+      const authorization = await authorizeVoiceAdminRequest({ currentEnv, locationId, req });
+      if (!authorization.authorized) {
+        sendJson(res, authorization.status, { error: authorization.reason ?? "Unauthorized" });
+        return;
+      }
+
+      const result = await ownerReportService.deliverDailyReport({ locationId: locationId ?? undefined });
+      sendJson(res, 200, result);
+    } catch (error) {
+      sendCaughtError(res, error, "Owner daily report delivery failed");
     }
     return;
   }

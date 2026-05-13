@@ -10,6 +10,7 @@ export interface VoiceServiceHealth {
   elevenLabsConfigured: boolean;
   menuIngestionConfigured?: boolean;
   onboardedContextConfigured?: boolean;
+  ownerReportDeliveryConfigured?: boolean;
   ownerReportsConfigured?: boolean;
   staffAlertsConfigured?: boolean;
   sharedSmsRoutingConfigured?: boolean;
@@ -166,6 +167,15 @@ export interface BillingAccountStatus {
 
 export interface GeneratedOwnerDailyReport {
   configured: boolean;
+  delivery?: {
+    attempts: Array<{
+      channel?: string;
+      recipient?: string;
+      reason?: string;
+      status: string;
+    }>;
+    status: string;
+  };
   locationId: string;
   periodEnd: string;
   periodStart: string;
@@ -480,6 +490,28 @@ export async function generateOwnerDailyReport(locationId = getActiveLocationId(
   if (!response.ok) {
     const body = await response.text();
     throw new Error(body || `Owner daily report failed with ${response.status}.`);
+  }
+
+  return (await response.json()) as GeneratedOwnerDailyReport;
+}
+
+export async function deliverOwnerDailyReport(locationId = getActiveLocationId()) {
+  if (!voiceServiceBaseUrl) {
+    throw new Error("VITE_VOICE_SERVICE_URL is not configured.");
+  }
+
+  const response = await fetch(`${voiceServiceBaseUrl}/owner-reports/daily/deliver`, {
+    body: JSON.stringify({ locationId }),
+    headers: {
+      "Content-Type": "application/json",
+      ...buildVoiceAdminHeaders(),
+    },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(body || `Owner daily report delivery failed with ${response.status}.`);
   }
 
   return (await response.json()) as GeneratedOwnerDailyReport;

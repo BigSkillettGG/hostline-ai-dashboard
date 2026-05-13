@@ -152,6 +152,7 @@ alter table user_memberships enable row level security;
 alter table team_invitations enable row level security;
 alter table platform_admins enable row level security;
 alter table locations enable row level security;
+alter table business_contacts enable row level security;
 alter table agent_configs enable row level security;
 alter table alert_routing_configs enable row level security;
 alter table staff_alert_events enable row level security;
@@ -251,6 +252,15 @@ with check (public.can_manage_organization(organization_id));
 create policy locations_delete_admins on locations
 for delete to authenticated
 using (public.can_manage_location(id));
+
+create policy business_contacts_read on business_contacts
+for select to authenticated
+using (public.can_access_location(location_id));
+
+create policy business_contacts_manage on business_contacts
+for all to authenticated
+using (public.can_manage_location(location_id))
+with check (public.can_manage_location(location_id));
 
 create policy direct_location_read on agent_configs
 for select to authenticated

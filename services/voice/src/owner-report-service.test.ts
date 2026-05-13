@@ -152,6 +152,69 @@ describe("owner report service", () => {
     expect(service.configured).toBe(false);
     await expect(service.generateDailyReport()).rejects.toThrow("Owner reports need");
   });
+
+  it("delivers a daily owner report by SMS and records delivery status", async () => {
+    const ownerReportUpdates: unknown[] = [];
+    const smsBodies: URLSearchParams[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+      const requestUrl = String(url);
+
+      if (requestUrl.includes("/locations?")) {
+        return json([{ id: env.SUPABASE_DEMO_LOCATION_ID, name: "Summit Air", timezone: "America/New_York" }]);
+      }
+
+      if (requestUrl.includes("/calls?") || requestUrl.includes("/orders?") || requestUrl.includes("/reservations?") || requestUrl.includes("/staff_tasks?")) {
+        return json([]);
+      }
+
+      if (requestUrl.includes("/owner_reports?") && init?.method === "POST") {
+        return json([{ id: "report_1" }]);
+      }
+
+      if (requestUrl.includes("/business_contacts?")) {
+        return json([
+          {
+            can_receive_alerts: true,
+            contact_type: "owner",
+            email: "owner@summitair.test",
+            name: "Sam Owner",
+            phone: "+15550123",
+            preferred_channel: "sms",
+          },
+        ]);
+      }
+
+      if (requestUrl.includes("/Messages.json")) {
+        smsBodies.push(init?.body as URLSearchParams);
+        return json({ sid: "SM123" });
+      }
+
+      if (requestUrl.includes("/owner_reports?") && init?.method === "PATCH") {
+        ownerReportUpdates.push(JSON.parse(String(init.body)));
+        return new Response(null, { status: 204 });
+      }
+
+      throw new Error(`Unexpected request: ${requestUrl}`);
+    });
+    const service = createOwnerReportService({
+      ...env,
+      TWILIO_ACCOUNT_SID: "AC123",
+      TWILIO_AUTH_TOKEN: "auth-token",
+      TWILIO_MESSAGING_SERVICE_SID: "MG123",
+    });
+
+    const result = await service.deliverDailyReport({ now: new Date("2026-05-13T20:00:00.000Z") });
+
+    expect(result.delivery.status).toBe("sent");
+    expect(result.delivery.attempts).toContainEqual({ channel: "sms", recipient: "+15550123", status: "sent" });
+    expect(smsBodies[0]?.get("MessagingServiceSid")).toBe("MG123");
+    expect(smsBodies[0]?.get("To")).toBe("+15550123");
+    expect(smsBodies[0]?.get("Body")).toContain("Summit Air");
+    expect(ownerReportUpdates[0]).toMatchObject({
+      status: "sent",
+      error_message: null,
+    });
+  });
 });
 
 function json(body: unknown) {

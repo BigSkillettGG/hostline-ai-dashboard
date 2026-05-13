@@ -28,6 +28,20 @@ export interface OwnerReportResult {
   timezone: string;
 }
 
+export interface OwnerReportDeliveryAttempt {
+  channel?: "email" | "sms" | "webhook";
+  recipient?: string;
+  reason?: string;
+  status: "failed" | "sent" | "skipped";
+}
+
+export interface OwnerReportDeliveryResult extends OwnerReportResult {
+  delivery: {
+    attempts: OwnerReportDeliveryAttempt[];
+    status: "failed" | "sent" | "skipped";
+  };
+}
+
 interface SupabaseLocationRow {
   id: string;
   name: string | null;
@@ -102,8 +116,31 @@ interface SupabaseOwnerReportRow {
   id: string;
 }
 
+interface SupabaseBusinessContactRow {
+  can_receive_alerts: boolean | null;
+  contact_type: string | null;
+  email: string | null;
+  name: string | null;
+  phone: string | null;
+  preferred_channel: string | null;
+}
+
+interface SupabaseOnboardingProfileRow {
+  draft: unknown;
+}
+
+interface OwnerReportRecipient {
+  email?: string;
+  name: string;
+  phone?: string;
+  preferredChannel: "email" | "sms" | "both";
+  source: "business_contacts" | "onboarding";
+}
+
 export interface OwnerReportService {
   configured: boolean;
+  deliveryConfigured: boolean;
+  deliverDailyReport(input?: { locationId?: string; now?: Date }): Promise<OwnerReportDeliveryResult>;
   generateDailyReport(input?: { locationId?: string; now?: Date }): Promise<OwnerReportResult>;
 }
 
@@ -117,6 +154,11 @@ export function createOwnerReportService(env: VoiceServiceEnv): OwnerReportServi
 
 class NoopOwnerReportService implements OwnerReportService {
   configured = false;
+  deliveryConfigured = false;
+
+  async deliverDailyReport(): Promise<OwnerReportDeliveryResult> {
+    throw new Error("Owner report delivery needs Supabase service credentials.");
+  }
 
   async generateDailyReport(): Promise<OwnerReportResult> {
     throw new Error("Owner reports need SUPABASE_URL, SUPABASE_SECRET_KEY, and SUPABASE_DEMO_LOCATION_ID.");
@@ -125,14 +167,76 @@ class NoopOwnerReportService implements OwnerReportService {
 
 class SupabaseOwnerReportService implements OwnerReportService {
   configured = true;
+  deliveryConfigured: boolean;
+  private readonly accountSid?: string;
+  private readonly authToken?: string;
+  private readonly baseUrl: string;
   private readonly defaultLocationId: string;
+  private readonly messagingServiceSid?: string;
+  private readonly ownerReportWebhookUrl?: string;
+  private readonly smsFromNumber?: string;
   private readonly key: string;
   private readonly restUrl: string;
 
   constructor(env: VoiceServiceEnv) {
+    this.accountSid = env.TWILIO_ACCOUNT_SID;
+    this.authToken = env.TWILIO_AUTH_TOKEN;
+    this.baseUrl = env.TWILIO_API_BASE_URL.replace(/\/$/, "");
     this.defaultLocationId = env.SUPABASE_DEMO_LOCATION_ID ?? "";
+    this.deliveryConfigured = Boolean(
+      env.OWNER_REPORT_WEBHOOK_URL ||
+        (env.TWILIO_ACCOUNT_SID &&
+          env.TWILIO_AUTH_TOKEN &&
+          (env.TWILIO_SMS_FROM_NUMBER || env.TWILIO_MESSAGING_SERVICE_SID)),
+    );
     this.key = env.SUPABASE_SECRET_KEY ?? "";
+    this.messagingServiceSid = env.TWILIO_MESSAGING_SERVICE_SID;
+    this.ownerReportWebhookUrl = env.OWNER_REPORT_WEBHOOK_URL;
     this.restUrl = `${env.SUPABASE_URL?.replace(/\/$/, "")}/rest/v1`;
+    this.smsFromNumber = env.TWILIO_SMS_FROM_NUMBER;
+  }
+
+  async deliverDailyReport(input: { locationId?: string; now?: Date } = {}): Promise<OwnerReportDeliveryResult> {
+    const generated = await this.generateDailyReport(input);
+    const recipients = await this.fetchOwnerReportRecipients(generated.locationId);
+    const attempts: OwnerReportDeliveryAttempt[] = [];
+
+    for (const recipient of recipients) {
+      attempts.push(...await this.deliverToRecipient(generated, recipient));
+    }
+
+    if (this.ownerReportWebhookUrl) {
+      attempts.push(await this.sendWebhook(generated, recipients));
+    }
+
+    if (!attempts.length) {
+      attempts.push({
+        reason: recipients.length ? "No supported delivery channels are configured." : "No owner report recipients are configured.",
+        status: "skipped",
+      });
+    }
+
+    const status = attempts.some((attempt) => attempt.status === "sent")
+      ? "sent"
+      : attempts.some((attempt) => attempt.status === "failed")
+        ? "failed"
+        : "skipped";
+
+    if (generated.reportId) {
+      await this.updateReportDeliveryStatus({
+        attempts,
+        reportId: generated.reportId,
+        status,
+      });
+    }
+
+    return {
+      ...generated,
+      delivery: {
+        attempts,
+        status,
+      },
+    };
   }
 
   async generateDailyReport(input: { locationId?: string; now?: Date } = {}): Promise<OwnerReportResult> {
@@ -274,12 +378,201 @@ class SupabaseOwnerReportService implements OwnerReportService {
     return rows[0]?.id;
   }
 
+  private async fetchOwnerReportRecipients(locationId: string): Promise<OwnerReportRecipient[]> {
+    const contacts = await this.fetchBusinessContacts(locationId);
+    if (contacts.length) return contacts;
+
+    return this.fetchOnboardingOwnerContact(locationId);
+  }
+
+  private async fetchBusinessContacts(locationId: string): Promise<OwnerReportRecipient[]> {
+    try {
+      const rows = await this.request<SupabaseBusinessContactRow[]>("business_contacts", {
+        method: "GET",
+        query: [
+          `location_id=eq.${encodeURIComponent(locationId)}`,
+          "can_receive_alerts=eq.true",
+          "contact_type=in.(owner,manager)",
+          "order=created_at.asc",
+          "select=contact_type,name,phone,email,preferred_channel,can_receive_alerts",
+        ].join("&"),
+      });
+
+      return rows
+        .map(mapBusinessContactRecipient)
+        .filter((recipient): recipient is OwnerReportRecipient => Boolean(recipient));
+    } catch (error) {
+      if (!isMissingOptionalTableError(error, "business_contacts")) throw error;
+      return [];
+    }
+  }
+
+  private async fetchOnboardingOwnerContact(locationId: string): Promise<OwnerReportRecipient[]> {
+    const rows = await this.request<SupabaseOnboardingProfileRow[]>("onboarding_profiles", {
+      method: "GET",
+      query: `location_id=eq.${encodeURIComponent(locationId)}&limit=1&select=draft`,
+    });
+    const draft = isObjectRecord(rows[0]?.draft) ? rows[0].draft : {};
+    const recipient = mapOnboardingRecipient(draft);
+    return recipient ? [recipient] : [];
+  }
+
+  private async deliverToRecipient(
+    report: OwnerReportResult,
+    recipient: OwnerReportRecipient,
+  ): Promise<OwnerReportDeliveryAttempt[]> {
+    const attempts: OwnerReportDeliveryAttempt[] = [];
+    const wantsSms = recipient.preferredChannel === "sms" || recipient.preferredChannel === "both";
+    const wantsEmail = recipient.preferredChannel === "email" || recipient.preferredChannel === "both";
+
+    if (wantsSms) {
+      attempts.push(await this.sendSms(recipient.phone, formatOwnerReportSms(report), recipient));
+    }
+
+    if (wantsEmail) {
+      attempts.push({
+        channel: "email",
+        reason: recipient.email ? "Email delivery provider is not configured yet." : "Recipient has no email address.",
+        recipient: recipient.email,
+        status: "skipped",
+      });
+    }
+
+    return attempts;
+  }
+
+  private async sendSms(
+    to: string | undefined,
+    message: string,
+    recipient: OwnerReportRecipient,
+  ): Promise<OwnerReportDeliveryAttempt> {
+    if (!to?.trim()) {
+      return {
+        channel: "sms",
+        reason: "Recipient has no phone number.",
+        recipient: recipient.name,
+        status: "skipped",
+      };
+    }
+
+    if (!this.accountSid || !this.authToken || (!this.messagingServiceSid && !this.smsFromNumber)) {
+      return {
+        channel: "sms",
+        reason: "Twilio SMS delivery is not configured.",
+        recipient: to,
+        status: "skipped",
+      };
+    }
+
+    const body = new URLSearchParams({
+      Body: message,
+      To: to.trim(),
+    });
+    if (this.messagingServiceSid) {
+      body.set("MessagingServiceSid", this.messagingServiceSid);
+    } else if (this.smsFromNumber) {
+      body.set("From", this.smsFromNumber);
+    }
+
+    try {
+      const response = await fetch(
+        `${this.baseUrl}/2010-04-01/Accounts/${encodeURIComponent(this.accountSid)}/Messages.json`,
+        {
+          body,
+          headers: {
+            Authorization: `Basic ${Buffer.from(`${this.accountSid}:${this.authToken}`).toString("base64")}`,
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          method: "POST",
+        },
+      );
+
+      if (!response.ok) {
+        return {
+          channel: "sms",
+          reason: `Twilio returned ${response.status}: ${await response.text()}`,
+          recipient: to,
+          status: "failed",
+        };
+      }
+
+      return { channel: "sms", recipient: to, status: "sent" };
+    } catch (error) {
+      return {
+        channel: "sms",
+        reason: error instanceof Error ? error.message : "SMS delivery failed.",
+        recipient: to,
+        status: "failed",
+      };
+    }
+  }
+
+  private async sendWebhook(
+    report: OwnerReportResult,
+    recipients: OwnerReportRecipient[],
+  ): Promise<OwnerReportDeliveryAttempt> {
+    if (!this.ownerReportWebhookUrl) {
+      return { channel: "webhook", reason: "Owner report webhook is not configured.", status: "skipped" };
+    }
+
+    try {
+      const response = await fetch(this.ownerReportWebhookUrl, {
+        body: JSON.stringify({
+          locationId: report.locationId,
+          periodEnd: report.periodEnd,
+          periodStart: report.periodStart,
+          recipients,
+          report: report.report,
+          reportId: report.reportId,
+          timezone: report.timezone,
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        return {
+          channel: "webhook",
+          reason: `Webhook returned ${response.status}: ${await response.text()}`,
+          recipient: this.ownerReportWebhookUrl,
+          status: "failed",
+        };
+      }
+
+      return { channel: "webhook", recipient: this.ownerReportWebhookUrl, status: "sent" };
+    } catch (error) {
+      return {
+        channel: "webhook",
+        reason: error instanceof Error ? error.message : "Webhook delivery failed.",
+        recipient: this.ownerReportWebhookUrl,
+        status: "failed",
+      };
+    }
+  }
+
+  private async updateReportDeliveryStatus(input: {
+    attempts: OwnerReportDeliveryAttempt[];
+    reportId: string;
+    status: "failed" | "sent" | "skipped";
+  }) {
+    await this.request("owner_reports", {
+      body: {
+        delivery_channels: input.attempts,
+        error_message: input.attempts.find((attempt) => attempt.status === "failed")?.reason ?? null,
+        sent_at: input.status === "sent" ? new Date().toISOString() : null,
+        status: input.status === "skipped" ? "ready" : input.status,
+      },
+      method: "PATCH",
+      query: `id=eq.${encodeURIComponent(input.reportId)}`,
+    });
+  }
+
   private async request<T>(
     table: string,
     options: {
       body?: unknown;
       headers?: Record<string, string>;
-      method: "GET" | "POST";
+      method: "GET" | "PATCH" | "POST";
       query?: string;
     },
   ) {
@@ -374,6 +667,46 @@ function mapStaffTask(row: SupabaseReportStaffTaskRow): StaffTask {
   };
 }
 
+function mapBusinessContactRecipient(row: SupabaseBusinessContactRow): OwnerReportRecipient | null {
+  const phone = stringValue(row.phone);
+  const email = stringValue(row.email);
+  if (!phone && !email) return null;
+
+  return {
+    email,
+    name: stringValue(row.name) ?? stringValue(row.contact_type) ?? "Owner",
+    phone,
+    preferredChannel: normalizePreferredChannel(row.preferred_channel),
+    source: "business_contacts",
+  };
+}
+
+function mapOnboardingRecipient(draft: Record<string, unknown>): OwnerReportRecipient | null {
+  const phone = stringValue(draft.ownerPhone);
+  const email = stringValue(draft.ownerEmail);
+  if (!phone && !email) return null;
+
+  return {
+    email,
+    name: stringValue(draft.ownerName) ?? "Owner",
+    phone,
+    preferredChannel: phone ? "sms" : "email",
+    source: "onboarding",
+  };
+}
+
+function formatOwnerReportSms(input: OwnerReportResult) {
+  const totals = input.report.totals;
+  const parts = [
+    input.report.ownerMessage,
+    totals.openFollowUps ? `${totals.openFollowUps} follow-up${totals.openFollowUps === 1 ? "" : "s"} need attention.` : "",
+    totals.highValue ? `${totals.highValue} high-value opportunit${totals.highValue === 1 ? "y" : "ies"} captured.` : "",
+    "Reply STOP to opt out.",
+  ].filter(Boolean);
+  const message = parts.join(" ");
+  return message.length <= 600 ? message : `${message.slice(0, 597)}...`;
+}
+
 function readCallChannel(row: SupabaseReportCallRow) {
   const payload = row.twilio_payload;
   const provider = payload && typeof payload === "object" && !Array.isArray(payload)
@@ -447,8 +780,25 @@ function normalizeLocationId(locationId?: string) {
   return locationId;
 }
 
+function normalizePreferredChannel(value: string | null | undefined): OwnerReportRecipient["preferredChannel"] {
+  if (value === "email" || value === "both") return value;
+  return "sms";
+}
+
 function normalizeEnum<T extends string>(value: string | null | undefined, allowedValues: readonly T[], fallback: T): T {
   return allowedValues.includes(value as T) ? (value as T) : fallback;
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function isMissingOptionalTableError(error: unknown, table: string) {
+  return error instanceof Error && new RegExp(`${table}|relation .* does not exist|404|42P01`, "i").test(error.message);
 }
 
 const callIntents: CallIntent[] = ["order", "reservation", "faq", "hours", "complaint", "sales", "other"];

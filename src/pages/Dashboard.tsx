@@ -46,7 +46,7 @@ import {
   getActiveSupabaseLocationId,
   isSupabaseConfigured,
 } from "@/lib/supabase-rest";
-import { generateOwnerDailyReport, isVoiceServiceConfigured } from "@/lib/voice-service";
+import { deliverOwnerDailyReport, generateOwnerDailyReport, isVoiceServiceConfigured } from "@/lib/voice-service";
 import { toast } from "sonner";
 
 const intentColor: Record<string, string> = {
@@ -176,6 +176,17 @@ export default function Dashboard() {
       toast.success(result.reportId ? "Owner report saved" : "Owner report generated");
     },
   });
+  const deliverReportMutation = useMutation({
+    mutationFn: () => deliverOwnerDailyReport(activeLocationId),
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Could not send owner report");
+    },
+    onSuccess: (result) => {
+      const sent = result.delivery?.attempts.filter((attempt) => attempt.status === "sent").length ?? 0;
+      toast.success(sent ? `Owner report sent to ${sent} channel${sent === 1 ? "" : "s"}` : "Owner report generated, but no delivery channel is ready");
+    },
+  });
+  const reportActionBusy = saveReportMutation.isPending || deliverReportMutation.isPending;
 
   async function copyDailyBrief() {
     try {
@@ -232,12 +243,20 @@ export default function Dashboard() {
                 </div>
               </div>
               <Button
-                disabled={!isVoiceServiceConfigured() || saveReportMutation.isPending}
+                disabled={!isVoiceServiceConfigured() || reportActionBusy}
                 onClick={() => saveReportMutation.mutate()}
                 size="sm"
                 variant="outline"
               >
                 {saveReportMutation.isPending ? "Saving..." : "Save report"}
+              </Button>
+              <Button
+                disabled={!isVoiceServiceConfigured() || reportActionBusy}
+                onClick={() => deliverReportMutation.mutate()}
+                size="sm"
+                variant="outline"
+              >
+                {deliverReportMutation.isPending ? "Sending..." : "Send report"}
               </Button>
               <Button size="sm" asChild>
                 <Link to="/app/calls">View calls<ArrowRight className="ml-1.5 h-3.5 w-3.5" /></Link>
