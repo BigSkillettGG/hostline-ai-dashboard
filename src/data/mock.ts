@@ -43,6 +43,7 @@ export interface Call {
   id: string;
   caller: string;
   phone: string;
+  locationId?: string;
   time: string; // ISO
   duration: number; // seconds
   intent: CallIntent;

@@ -468,6 +468,11 @@ export interface CreateCallFeedbackInput {
   suggestedAnswer?: string;
 }
 
+export interface UpdateCallStatusInput {
+  callId: string;
+  status: CallStatus;
+}
+
 export interface CreateMenuSourceInput {
   frequency: SyncFrequency;
   label?: string;
@@ -601,7 +606,7 @@ export async function fetchCallsFromSupabase(
   const callParams = new URLSearchParams({
     limit: "100",
     order: "started_at.desc",
-    select: "id,caller_name,caller_phone,started_at,duration_seconds,intent,outcome,confidence,status,summary,recording_url",
+    select: "id,caller_name,caller_phone,started_at,duration_seconds,intent,location_id,outcome,confidence,status,summary,recording_url",
   });
   if (locationId) callParams.set("location_id", `eq.${locationId}`);
 
@@ -718,7 +723,7 @@ export async function fetchTenantDirectoryFromSupabase(): Promise<TenantDirector
 }
 
 export async function fetchCallFeedbackFromSupabase(callId: string): Promise<CallFeedback[]> {
-  if (!isCallFeedbackPersistenceConfigured()) {
+  if (!isSupabaseConfigured()) {
     throw new Error("Supabase call feedback persistence is not configured.");
   }
 
@@ -775,6 +780,19 @@ export async function createCallFeedbackInSupabase(
   }
 
   return savedFeedback;
+}
+
+export async function updateCallStatusInSupabase(input: UpdateCallStatusInput): Promise<void> {
+  if (!isSupabaseConfigured()) {
+    throw new Error("Supabase call persistence is not configured.");
+  }
+
+  await supabaseRequest("calls", new URLSearchParams({ id: `eq.${input.callId}` }), {
+    body: {
+      status: normalizeEnum(input.status, callStatuses, "new"),
+    },
+    method: "PATCH",
+  });
 }
 
 export async function fetchOrdersFromSupabase(
@@ -1927,6 +1945,7 @@ export function mapSupabaseCalls(
     id: call.id,
     caller: call.caller_name?.trim() || "Unknown",
     phone: call.caller_phone?.trim() || "Unknown",
+    locationId: call.location_id ?? undefined,
     time: call.started_at,
     duration: call.duration_seconds ?? 0,
     intent: normalizeEnum(call.intent, callIntents, "other"),
