@@ -11,6 +11,7 @@ export interface VoiceServiceHealth {
   menuIngestionConfigured?: boolean;
   onboardedContextConfigured?: boolean;
   staffAlertsConfigured?: boolean;
+  sharedSmsRoutingConfigured?: boolean;
   supabaseConfigured: boolean;
   tenantProvisioningConfigured?: boolean;
   twilioProvisioningConfigured?: boolean;
@@ -279,10 +280,15 @@ export async function searchAvailableVoicePhoneNumbers(input: {
 }
 
 export async function provisionVoicePhoneNumber(input: {
+  areaCode?: string;
+  contains?: string;
+  country?: string;
   forwardingMode?: string;
   locationId?: string;
-  phoneNumber: string;
+  phoneNumber?: string;
   restaurantMainLine?: string;
+  trialDays?: number;
+  trialGraceDays?: number;
 }) {
   if (!voiceServiceBaseUrl) {
     throw new Error("VITE_VOICE_SERVICE_URL is not configured.");
@@ -306,6 +312,37 @@ export async function provisionVoicePhoneNumber(input: {
   }
 
   return (await response.json()) as { phoneNumber: ProvisionedVoicePhoneNumber };
+}
+
+export async function releaseVoicePhoneNumber(input: {
+  id?: string;
+  locationId?: string;
+  phoneNumber?: string;
+  providerSid: string;
+  releaseReason?: string;
+}) {
+  if (!voiceServiceBaseUrl) {
+    throw new Error("VITE_VOICE_SERVICE_URL is not configured.");
+  }
+
+  const response = await fetch(`${voiceServiceBaseUrl}/telephony/release-number`, {
+    body: JSON.stringify({
+      ...input,
+      locationId: input.locationId ?? getActiveLocationId(),
+    }),
+    headers: {
+      "Content-Type": "application/json",
+      ...buildVoiceAdminHeaders(),
+    },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(body || `Phone number release failed with ${response.status}.`);
+  }
+
+  return (await response.json()) as { phoneNumber: { providerSid: string; status: "released" } };
 }
 
 export async function runNextMenuIngestionJob(input: { jobId?: string; locationId?: string } = {}) {

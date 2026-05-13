@@ -691,6 +691,7 @@ describe("Supabase tenant directory mapping", () => {
 describe("Supabase phone number mapping", () => {
   it("maps persisted Twilio phone-number rows into dashboard records", () => {
     const phoneNumber = mapSupabasePhoneNumber({
+      created_at: "2026-05-05T13:59:00.000Z",
       forwarding_mode: "forward_unanswered",
       forwarding_status: "pending_verification",
       id: "pn_1",
@@ -698,19 +699,27 @@ describe("Supabase phone number mapping", () => {
       phone_number: "+14155550199",
       provider: "twilio",
       provider_sid: "PN123",
+      provisioning_source: "trial",
+      released_at: null,
+      release_reason: null,
       restaurant_main_line: "+14155550148",
-        status: "in-use",
-        updated_at: "2026-05-05T14:00:00.000Z",
-        verification_results: {
-          busyForwarding: "failed",
-          directCall: "passed",
-          noAnswerForwarding: "passed",
-          updatedAt: "2026-05-05T14:01:00.000Z",
-        },
-        voice_webhook_url: "https://voice.signalhost.test/twilio/voice",
-      });
+      sms_webhook_url: "https://voice.signalhost.test/twilio/sms",
+      status: "in-use",
+      trial_ends_at: "2026-05-12T14:00:00.000Z",
+      trial_grace_ends_at: "2026-05-26T14:00:00.000Z",
+      trial_started_at: "2026-05-05T14:00:00.000Z",
+      updated_at: "2026-05-05T14:00:00.000Z",
+      verification_results: {
+        busyForwarding: "failed",
+        directCall: "passed",
+        noAnswerForwarding: "passed",
+        updatedAt: "2026-05-05T14:01:00.000Z",
+      },
+      voice_webhook_url: "https://voice.signalhost.test/twilio/voice",
+    });
 
     expect(phoneNumber).toEqual({
+      createdAt: "2026-05-05T13:59:00.000Z",
       forwardingMode: "forward_unanswered",
       forwardingStatus: "pending_verification",
       forwardingVerification: {
@@ -725,8 +734,15 @@ describe("Supabase phone number mapping", () => {
       phoneNumber: "+14155550199",
       provider: "twilio",
       providerSid: "PN123",
+      provisioningSource: "trial",
+      releasedAt: undefined,
+      releaseReason: undefined,
       restaurantMainLine: "+14155550148",
+      smsWebhookUrl: "https://voice.signalhost.test/twilio/sms",
       status: "in-use",
+      trialEndsAt: "2026-05-12T14:00:00.000Z",
+      trialGraceEndsAt: "2026-05-26T14:00:00.000Z",
+      trialStartedAt: "2026-05-05T14:00:00.000Z",
       updatedAt: "2026-05-05T14:00:00.000Z",
       voiceWebhookUrl: "https://voice.signalhost.test/twilio/voice",
     });

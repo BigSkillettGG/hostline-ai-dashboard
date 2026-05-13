@@ -1,6 +1,20 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { CheckCircle2, CircleDashed, ClipboardCheck, Copy, PhoneCall, RefreshCw, ServerCog, Webhook, XCircle } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  CircleDashed,
+  ClipboardCheck,
+  Copy,
+  MessageSquareText,
+  PhoneCall,
+  RefreshCw,
+  ServerCog,
+  TimerReset,
+  Trash2,
+  Webhook,
+  XCircle,
+} from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader, PageBody } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -8,21 +22,24 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { tenants } from "@/data/tenants";
 import { buildFirstCallReadiness, type FirstCallReadinessStep } from "@/domain/first-call-readiness";
+import { fetchPhoneNumbersFromSupabase, isSupabaseConfigured, type PhoneNumberRecord } from "@/lib/supabase-rest";
 import {
   fetchLiveCallConfig,
   fetchTwiMLPreview,
   fetchVoiceServiceHealth,
   isVoiceServiceConfigured,
+  releaseVoicePhoneNumber,
   voiceServiceBaseUrl,
 } from "@/lib/voice-service";
 
 const defaultLocationId = import.meta.env.VITE_SUPABASE_DEMO_LOCATION_ID ?? "";
 
 export default function Telephony() {
+  const queryClient = useQueryClient();
   const [locationId, setLocationId] = useState(defaultLocationId);
   const voiceConfigured = isVoiceServiceConfigured();
+  const supabaseConfigured = isSupabaseConfigured();
 
   const healthQuery = useQuery({
     enabled: voiceConfigured,
@@ -43,10 +60,29 @@ export default function Telephony() {
     queryKey: ["twiml-preview", locationId],
   });
 
+  const phoneNumbersQuery = useQuery({
+    enabled: supabaseConfigured && Boolean(locationId.trim()),
+    queryFn: () => fetchPhoneNumbersFromSupabase(locationId),
+    queryKey: ["phone-numbers", locationId],
+  });
+
+  const releaseMutation = useMutation({
+    mutationFn: releaseVoicePhoneNumber,
+    onSuccess: async () => {
+      toast.success("Number released");
+      await queryClient.invalidateQueries({ queryKey: ["phone-numbers"] });
+      await queryClient.invalidateQueries({ queryKey: ["voice-service-health"] });
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Could not release number");
+    },
+  });
+
   const refreshAll = () => {
     void healthQuery.refetch();
     void liveCallQuery.refetch();
     void twimlQuery.refetch();
+    void phoneNumbersQuery.refetch();
   };
 
   const config = liveCallQuery.data;
@@ -59,6 +95,25 @@ export default function Telephony() {
     twimlPreview: twimlQuery.data,
     voiceConfigured,
   });
+  const sharedSmsWebhookUrl = voiceServiceBaseUrl ? `${voiceServiceBaseUrl}/twilio/sms` : "Set VITE_VOICE_SERVICE_URL";
+  const expiredTrialReleaseUrl = voiceServiceBaseUrl ? `${voiceServiceBaseUrl}/telephony/release-expired-trials` : "Set VITE_VOICE_SERVICE_URL";
+
+  const releaseNumber = (record: PhoneNumberRecord) => {
+    if (!record.providerSid) {
+      toast.error("This number is missing its Twilio provider SID.");
+      return;
+    }
+    const confirmed = window.confirm(`Release ${record.phoneNumber}? This gives the Twilio number back and callers will no longer reach this location through it.`);
+    if (!confirmed) return;
+
+    releaseMutation.mutate({
+      id: record.id,
+      locationId,
+      phoneNumber: record.phoneNumber,
+      providerSid: record.providerSid,
+      releaseReason: "manual_dashboard_release",
+    });
+  };
 
   return (
     <>
@@ -138,19 +193,37 @@ export default function Telephony() {
             </Card>
 
             <Card>
-              <CardHeader className="pb-3"><CardTitle className="text-base">AI host numbers</CardTitle></CardHeader>
-              <CardContent>
-                <div className="divide-y divide-border rounded-md border border-border">
-                  {tenants.map((tenant) => (
-                    <div key={tenant.id} className="flex items-center justify-between gap-3 p-3">
-                      <div>
-                        <div className="text-sm font-medium">{tenant.name}</div>
-                        <div className="font-mono text-xs text-muted-foreground">{tenant.aiNumber}</div>
-                      </div>
-                      <Badge variant="outline" className="border-success/30 bg-success/10 text-success">Active</Badge>
-                    </div>
-                  ))}
+              <CardHeader className="flex flex-row items-start justify-between gap-3 pb-3">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <PhoneCall className="h-4 w-4 text-primary" />
+                    Number lifecycle
+                  </CardTitle>
+                  <p className="mt-1 text-xs text-muted-foreground">Trial timing, forwarding status, and release controls for this location.</p>
                 </div>
+                <Badge variant="outline" className={phoneNumbersQuery.data?.length ? "border-success/30 bg-success/10 text-success" : "bg-muted text-muted-foreground"}>
+                  {phoneNumbersQuery.data?.length ? `${phoneNumbersQuery.data.length} number${phoneNumbersQuery.data.length === 1 ? "" : "s"}` : "No live rows"}
+                </Badge>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {phoneNumbersQuery.isError && (
+                  <div className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
+                    {phoneNumbersQuery.error instanceof Error ? phoneNumbersQuery.error.message : "Phone numbers could not be loaded."}
+                  </div>
+                )}
+                {(phoneNumbersQuery.data ?? []).map((record) => (
+                  <PhoneNumberLifecycleRow
+                    key={record.id}
+                    busy={releaseMutation.isPending}
+                    onRelease={releaseNumber}
+                    record={record}
+                  />
+                ))}
+                {!phoneNumbersQuery.isLoading && !(phoneNumbersQuery.data ?? []).length && (
+                  <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
+                    No provisioned SignalHost number is saved for this location yet.
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -170,6 +243,42 @@ export default function Telephony() {
                 <StatusRow label="OpenAI" ready={Boolean(healthQuery.data?.openaiConfigured)} value={healthQuery.data?.openaiConfigured ? "Configured" : "Missing"} />
                 <StatusRow label="ElevenLabs" ready={Boolean(healthQuery.data?.elevenLabsConfigured)} value={healthQuery.data?.elevenLabsConfigured ? "Configured" : "Missing"} />
                 <StatusRow label="Supabase context" ready={Boolean(healthQuery.data?.onboardedContextConfigured)} value={healthQuery.data?.onboardedContextConfigured ? "Configured" : "Missing"} />
+                <StatusRow label="Shared SMS routing" ready={Boolean(healthQuery.data?.sharedSmsRoutingConfigured)} value={healthQuery.data?.sharedSmsRoutingConfigured ? "Configured" : "Needs sender + Supabase"} />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <MessageSquareText className="h-4 w-4 text-primary" />
+                  Shared texting
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <StatusRow
+                  label="Routing mode"
+                  ready={Boolean(healthQuery.data?.sharedSmsRoutingConfigured)}
+                  value={healthQuery.data?.sharedSmsRoutingConfigured ? "One sender, thread-routed replies" : "Not fully configured"}
+                />
+                <UrlRow label="Twilio Messaging webhook" value={sharedSmsWebhookUrl} />
+                <div className="rounded-md border border-border p-3 text-xs text-muted-foreground">
+                  In Twilio, set the shared texting number or Messaging Service inbound message webhook to this URL using HTTP POST.
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <TimerReset className="h-4 w-4 text-primary" />
+                  Trial cleanup
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <UrlRow label="Expired-trial release endpoint" value={expiredTrialReleaseUrl} />
+                <div className="rounded-md border border-border p-3 text-xs text-muted-foreground">
+                  This endpoint is intentionally internal-key protected. Use it from Render cron or a manual ops call with <code className="font-mono">x-signalhost-api-key</code>. Send <code className="font-mono">{`{"dryRun":true}`}</code> first to preview releases.
+                </div>
               </CardContent>
             </Card>
 
@@ -220,6 +329,71 @@ export default function Telephony() {
         </div>
       </PageBody>
     </>
+  );
+}
+
+function PhoneNumberLifecycleRow({
+  busy,
+  onRelease,
+  record,
+}: {
+  busy: boolean;
+  onRelease: (record: PhoneNumberRecord) => void;
+  record: PhoneNumberRecord;
+}) {
+  const released = record.status === "released" || Boolean(record.releasedAt);
+  const trialState = phoneTrialState(record);
+
+  return (
+    <div className="rounded-md border border-border p-3">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="font-mono text-sm font-semibold">{record.phoneNumber}</div>
+            <Badge variant="outline" className={phoneStatusClass(record.status)}>
+              {record.status}
+            </Badge>
+            <Badge variant="outline" className={trialState.className}>
+              {trialState.label}
+            </Badge>
+          </div>
+          <div className="mt-2 grid gap-1 text-xs text-muted-foreground md:grid-cols-2">
+            <span>Forwarding: {record.forwardingStatus.replace(/_/g, " ")}</span>
+            <span>Main line: {record.restaurantMainLine || "Not set"}</span>
+            <span>Trial ends: {formatDateTime(record.trialEndsAt)}</span>
+            <span>Grace ends: {formatDateTime(record.trialGraceEndsAt)}</span>
+            <span>Provider SID: {record.providerSid || "Missing"}</span>
+            <span>Released: {formatDateTime(record.releasedAt)}</span>
+          </div>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <Button
+            disabled={!record.voiceWebhookUrl}
+            onClick={() => record.voiceWebhookUrl && copyToClipboard(record.voiceWebhookUrl)}
+            size="sm"
+            variant="outline"
+          >
+            <Copy className="mr-1.5 h-3.5 w-3.5" />
+            Voice URL
+          </Button>
+          <Button
+            disabled={released || busy || !record.providerSid}
+            onClick={() => onRelease(record)}
+            size="sm"
+            variant="outline"
+          >
+            <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+            Release
+          </Button>
+        </div>
+      </div>
+      {released && (
+        <div className="mt-3 flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 p-2 text-xs text-warning">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          Released numbers no longer receive calls. Reason: {record.releaseReason || "not recorded"}.
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -282,4 +456,42 @@ async function copyToClipboard(value: string) {
   } catch {
     toast.error("Copy failed");
   }
+}
+
+function phoneTrialState(record: PhoneNumberRecord) {
+  if (record.status === "released" || record.releasedAt) {
+    return { className: "border-muted bg-muted text-muted-foreground", label: "Released" };
+  }
+  if (!record.trialGraceEndsAt) {
+    return { className: "bg-muted text-muted-foreground", label: "No trial dates" };
+  }
+
+  const now = Date.now();
+  const trialEnds = record.trialEndsAt ? new Date(record.trialEndsAt).getTime() : NaN;
+  const graceEnds = new Date(record.trialGraceEndsAt).getTime();
+  if (Number.isFinite(graceEnds) && now > graceEnds) {
+    return { className: "border-destructive/30 bg-destructive/10 text-destructive", label: "Release due" };
+  }
+  if (Number.isFinite(trialEnds) && now > trialEnds) {
+    return { className: "border-warning/30 bg-warning/10 text-warning", label: "Grace period" };
+  }
+  return { className: "border-success/30 bg-success/10 text-success", label: "Trial active" };
+}
+
+function phoneStatusClass(status: string) {
+  if (status === "released") return "bg-muted text-muted-foreground";
+  if (status === "in-use" || status === "active" || status === "provisioned") return "border-success/30 bg-success/10 text-success";
+  return "border-warning/30 bg-warning/10 text-warning";
+}
+
+function formatDateTime(value?: string) {
+  if (!value) return "Not set";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Invalid date";
+  return date.toLocaleString([], {
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    month: "short",
+  });
 }

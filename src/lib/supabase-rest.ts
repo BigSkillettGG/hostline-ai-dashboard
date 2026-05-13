@@ -283,14 +283,22 @@ interface SupabaseStaffTaskRow {
 }
 
 interface SupabasePhoneNumberRow {
+  created_at?: string | null;
   id: string;
   phone_number: string;
   provider: string | null;
   provider_sid: string | null;
+  provisioning_source?: string | null;
+  released_at?: string | null;
+  release_reason?: string | null;
   restaurant_main_line: string | null;
   forwarding_mode: string | null;
   forwarding_status: string | null;
+  sms_webhook_url?: string | null;
   status: string | null;
+  trial_ends_at?: string | null;
+  trial_grace_ends_at?: string | null;
+  trial_started_at?: string | null;
   voice_webhook_url: string | null;
   verification_results: unknown;
   last_verified_at: string | null;
@@ -382,6 +390,7 @@ interface SupabaseTeamInvitationRow {
 }
 
 export interface PhoneNumberRecord {
+  createdAt?: string;
   forwardingMode: string;
   forwardingStatus: string;
   forwardingVerification: ForwardingVerification;
@@ -390,8 +399,15 @@ export interface PhoneNumberRecord {
   phoneNumber: string;
   provider: string;
   providerSid?: string;
+  provisioningSource?: string;
+  releasedAt?: string;
+  releaseReason?: string;
   restaurantMainLine?: string;
+  smsWebhookUrl?: string;
   status: string;
+  trialEndsAt?: string;
+  trialGraceEndsAt?: string;
+  trialStartedAt?: string;
   updatedAt?: string;
   voiceWebhookUrl?: string;
 }
@@ -1236,7 +1252,7 @@ export async function fetchPhoneNumbersFromSupabase(
       location_id: `eq.${locationId}`,
       order: "created_at.desc",
       select:
-        "id,phone_number,provider,provider_sid,restaurant_main_line,forwarding_mode,forwarding_status,status,voice_webhook_url,verification_results,last_verified_at,updated_at",
+        "id,phone_number,provider,provider_sid,provisioning_source,restaurant_main_line,forwarding_mode,forwarding_status,status,voice_webhook_url,sms_webhook_url,verification_results,last_verified_at,trial_started_at,trial_ends_at,trial_grace_ends_at,released_at,release_reason,created_at,updated_at",
     }),
   );
 
@@ -1257,7 +1273,7 @@ export async function savePhoneNumberVerificationToSupabase(
     new URLSearchParams({
       id: `eq.${phoneNumberId}`,
       select:
-        "id,phone_number,provider,provider_sid,restaurant_main_line,forwarding_mode,forwarding_status,status,voice_webhook_url,verification_results,last_verified_at,updated_at",
+        "id,phone_number,provider,provider_sid,provisioning_source,restaurant_main_line,forwarding_mode,forwarding_status,status,voice_webhook_url,sms_webhook_url,verification_results,last_verified_at,trial_started_at,trial_ends_at,trial_grace_ends_at,released_at,release_reason,created_at,updated_at",
     }),
     {
       body: {
@@ -1569,6 +1585,7 @@ export function buildOnboardingProfilePayload(draft: OnboardingDraft, locationId
 
 export function mapSupabasePhoneNumber(row: SupabasePhoneNumberRow): PhoneNumberRecord {
   return {
+    createdAt: row.created_at ?? undefined,
     forwardingMode: row.forwarding_mode ?? "forward_unanswered",
     forwardingStatus: row.forwarding_status ?? "not_verified",
     forwardingVerification: normalizeForwardingVerification(row.verification_results),
@@ -1577,8 +1594,15 @@ export function mapSupabasePhoneNumber(row: SupabasePhoneNumberRow): PhoneNumber
     phoneNumber: row.phone_number,
     provider: row.provider ?? "twilio",
     providerSid: row.provider_sid ?? undefined,
+    provisioningSource: row.provisioning_source ?? undefined,
+    releasedAt: row.released_at ?? undefined,
+    releaseReason: row.release_reason ?? undefined,
     restaurantMainLine: row.restaurant_main_line ?? undefined,
+    smsWebhookUrl: row.sms_webhook_url ?? undefined,
     status: row.status ?? "provisioned",
+    trialEndsAt: row.trial_ends_at ?? undefined,
+    trialGraceEndsAt: row.trial_grace_ends_at ?? undefined,
+    trialStartedAt: row.trial_started_at ?? undefined,
     updatedAt: row.updated_at ?? undefined,
     voiceWebhookUrl: row.voice_webhook_url ?? undefined,
   };
