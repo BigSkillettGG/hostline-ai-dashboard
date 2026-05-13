@@ -173,6 +173,7 @@ export function buildRestaurantInstructions(context: RestaurantVoiceContext) {
     .map((section) => `${section.title}: ${section.body}`)
     .join(" | ");
   const behaviorTuningLines = formatBehaviorTuningNotes(context.behaviorTuningNotes);
+  const liveContextLines = formatBusinessLiveContext(context);
 
   return [
     `You are ${context.hostName}, the virtual host for ${context.restaurantName}.`,
@@ -202,6 +203,7 @@ export function buildRestaurantInstructions(context: RestaurantVoiceContext) {
     "If the caller gives a full name, you may use the first name casually and say the order or reservation is under the full name or last name.",
     "If the caller gives only one name and it may be a last name or is unclear, do not address them by that bare name. Say 'Thanks' or 'I'll put that under Schneider,' not 'Thanks, Schneider.'",
     "Do not infer Mr., Ms., or Mrs. from the sound of the caller's voice. Use an honorific only if the caller says it, such as 'Mr. Schneider' or 'Dr. Patel.'",
+    liveContextLines && `Current live business updates, which override permanent knowledge when relevant: ${liveContextLines}`,
     businessLabels.toolUseLine,
     "When a tool captures or submits something, make your final spoken reply coherent with the tool result. Do not repeat yourself.",
     "If a caller is rude, stay calm and helpful. Do not argue, shame, or mirror profanity.",
@@ -233,6 +235,17 @@ function formatBehaviorTuningNotes(notes: RestaurantVoiceContext["behaviorTuning
       const body = compactBehaviorTuningBody(section.body);
       return body ? `${title}: ${body}` : "";
     })
+    .filter(Boolean)
+    .join(" | ");
+}
+
+function formatBusinessLiveContext(context: RestaurantVoiceContext) {
+  const liveContext = context.businessLiveContext;
+  if (!liveContext) return "";
+
+  return liveContext.instructionBlock
+    .split("\n")
+    .map((line) => line.trim())
     .filter(Boolean)
     .join(" | ");
 }

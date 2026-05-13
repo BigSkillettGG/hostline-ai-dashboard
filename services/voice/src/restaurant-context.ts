@@ -1,8 +1,10 @@
 import type { SignalHostVoiceGender } from "../../../src/domain/voice-selection";
 import type { BusinessLink } from "../../../src/domain/business-links";
+import type { BusinessLiveContext } from "../../../src/domain/business-updates";
 
 export interface RestaurantVoiceContext {
   behaviorTuningNotes: RestaurantKnowledgeSection[];
+  businessLiveContext?: BusinessLiveContext;
   businessLinks: BusinessLink[];
   businessType: string;
   restaurantName: string;

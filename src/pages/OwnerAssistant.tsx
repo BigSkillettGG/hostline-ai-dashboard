@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowRight,
@@ -34,13 +34,16 @@ import { isPlatformAdminUser, useCurrentUser } from "@/lib/auth";
 import { loadBusinessLiveState, saveBusinessLiveState } from "@/lib/business-live-updates-storage";
 import { loadOnboardingDraft } from "@/lib/onboarding-draft";
 import {
+  createBusinessLiveUpdateInSupabase,
   fetchCallsFromSupabase,
   fetchOrdersFromSupabase,
   fetchReservationsFromSupabase,
   fetchStaffTasksFromSupabase,
   fetchTenantDirectoryFromSupabase,
   getActiveSupabaseLocationId,
+  isBusinessLiveUpdatesPersistenceConfigured,
   isSupabaseConfigured,
+  saveBusinessLiveModeToSupabase,
 } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
 
@@ -68,10 +71,12 @@ const ownerCommandSuggestions = [
 ];
 
 export default function OwnerAssistant() {
+  const queryClient = useQueryClient();
   const user = useCurrentUser();
   const platformAdmin = isPlatformAdminUser(user);
   const activeLocationId = getActiveSupabaseLocationId();
   const liveEnabled = Boolean(isSupabaseConfigured() && activeLocationId);
+  const liveUpdatesEnabled = isBusinessLiveUpdatesPersistenceConfigured();
   const draft = loadOnboardingDraft();
   const [question, setQuestion] = useState("");
 
@@ -131,14 +136,17 @@ export default function OwnerAssistant() {
   ]);
   const hasLiveError = callQuery.isError || orderQuery.isError || reservationQuery.isError || taskQuery.isError;
 
-  function askOwnerAssistant(nextQuestion: string) {
+  async function askOwnerAssistant(nextQuestion: string) {
     const trimmed = nextQuestion.trim();
     if (!trimmed) return;
 
     const liveCommand = parseOwnerLiveCommand(trimmed);
     const response = liveCommand
-      ? applyOwnerLiveCommand(liveCommand)
+      ? await applyOwnerLiveCommand(liveCommand, { useSupabase: liveUpdatesEnabled })
       : buildOwnerAssistantResponse(trimmed, assistantContext);
+    if (liveCommand) {
+      await queryClient.invalidateQueries({ queryKey: ["business-live-state", activeLocationId] });
+    }
     setMessages((current) => [
       ...current,
       { id: `owner-${Date.now()}`, role: "owner", text: trimmed },
@@ -309,12 +317,24 @@ export default function OwnerAssistant() {
   );
 }
 
-function applyOwnerLiveCommand(command: OwnerLiveCommand): OwnerAssistantResponse {
+async function applyOwnerLiveCommand(
+  command: OwnerLiveCommand,
+  options: { useSupabase: boolean },
+): Promise<OwnerAssistantResponse> {
   const current = loadBusinessLiveState();
 
   if (command.kind === "set_mode") {
+    let savedMode = command.mode;
+    try {
+      if (options.useSupabase) {
+        savedMode = await saveBusinessLiveModeToSupabase(command.mode);
+      }
+    } catch (error) {
+      return ownerLiveCommandErrorResponse(error, "business mode");
+    }
+
     const next = saveBusinessLiveState({
-      mode: command.mode,
+      mode: savedMode,
       updates: current.updates,
     });
     const mode = getBusinessMode(next.mode);
@@ -324,7 +344,9 @@ function applyOwnerLiveCommand(command: OwnerLiveCommand): OwnerAssistantRespons
       bullets: [
         `${mode.label} mode is active.`,
         mode.operatorCue,
-        "The Knowledge Base live-updates panel will show this immediately.",
+        options.useSupabase
+          ? "Saved to Supabase for live runtime use."
+          : "Saved locally for this dashboard preview.",
       ],
       confidence: "high",
       intent: "live_update",
@@ -333,22 +355,46 @@ function applyOwnerLiveCommand(command: OwnerLiveCommand): OwnerAssistantRespons
     };
   }
 
+  let savedUpdate = command.update;
+  try {
+    if (options.useSupabase) {
+      savedUpdate = await createBusinessLiveUpdateInSupabase(command.update);
+    }
+  } catch (error) {
+    return ownerLiveCommandErrorResponse(error, "live update");
+  }
+
   const next = saveBusinessLiveState({
     mode: current.mode,
-    updates: [command.update, ...current.updates],
+    updates: [savedUpdate, ...current.updates.filter((update) => update.id !== savedUpdate.id)],
   });
 
   return {
     answer: command.confirmation,
     bullets: [
-      command.update.body,
-      command.update.expiresAt ? `Expires ${formatOwnerUpdateExpiration(command.update.expiresAt)}.` : "Active until cleared.",
+      savedUpdate.body,
+      savedUpdate.expiresAt ? `Expires ${formatOwnerUpdateExpiration(savedUpdate.expiresAt)}.` : "Active until cleared.",
+      options.useSupabase ? "Saved to Supabase for live runtime use." : "Saved locally for this dashboard preview.",
       `${next.updates.length} live update${next.updates.length === 1 ? "" : "s"} saved for this workspace.`,
     ],
     confidence: "high",
     intent: "live_update",
     suggestedActions: ["Open Knowledge Base", "Ask what changed today"],
     title: "Live update created",
+  };
+}
+
+function ownerLiveCommandErrorResponse(error: unknown, label: string): OwnerAssistantResponse {
+  return {
+    answer: `I understood that ${label} command, but I could not save it to the live database.`,
+    bullets: [
+      error instanceof Error ? error.message : "Unknown save error.",
+      "The Knowledge Base can still use local preview updates if the live tables are not migrated yet.",
+    ],
+    confidence: "medium",
+    intent: "live_update",
+    suggestedActions: ["Open Knowledge Base", "Check Supabase migration"],
+    title: "Live update not saved",
   };
 }
 

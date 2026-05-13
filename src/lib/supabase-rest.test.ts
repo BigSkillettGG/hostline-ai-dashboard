@@ -5,6 +5,7 @@ import {
   buildAgentConfigPayload,
   buildAlertRoutingConfigPayload,
   buildCallFeedbackInsertPayload,
+  buildBusinessLiveUpdateInsertPayload,
   buildIngestionJobInsertPayload,
   buildKnowledgeSectionUpdatePayload,
   buildMenuCategoryInsertRows,
@@ -17,6 +18,8 @@ import {
   calculateForwardingStatus,
   mapSupabaseCalls,
   mapSupabaseCallFeedback,
+  mapSupabaseBusinessLiveState,
+  mapSupabaseBusinessLiveUpdate,
   mapSupabaseAgentConfig,
   mapSupabaseIngestionJob,
   mapSupabaseKnowledgeSection,
@@ -277,6 +280,112 @@ describe("Supabase knowledge sections", () => {
       body: "Updated body.",
       is_active: false,
       title: "Updated title",
+    });
+  });
+});
+
+describe("Supabase business live updates", () => {
+  it("maps live settings and updates into shared business live state", () => {
+    const state = mapSupabaseBusinessLiveState(
+      {
+        active_mode: "busy",
+        location_id: "location_1",
+        updated_at: "2026-05-13T20:00:00.000Z",
+      },
+      [
+        {
+          body: " Mention the lobster ravioli. ",
+          cleared_at: null,
+          created_at: "2026-05-13T19:55:00.000Z",
+          expiration: "today_close",
+          expires_at: "2026-05-13T23:59:59.999Z",
+          id: "live_1",
+          location_id: "location_1",
+          mode: null,
+          source: "owner_text",
+          title: " Tonight's special ",
+          update_type: "special",
+        },
+        {
+          body: "Already cleared.",
+          cleared_at: "2026-05-13T20:01:00.000Z",
+          created_at: "2026-05-13T19:54:00.000Z",
+          expiration: "today_close",
+          expires_at: null,
+          id: "live_2",
+          location_id: "location_1",
+          mode: null,
+          source: "dashboard",
+          title: "Cleared",
+          update_type: "policy",
+        },
+      ],
+    );
+
+    expect(state.mode).toBe("busy");
+    expect(state.updatedAt).toBe("2026-05-13T20:00:00.000Z");
+    expect(state.updates).toEqual([
+      {
+        body: "Mention the lobster ravioli.",
+        createdAt: "2026-05-13T19:55:00.000Z",
+        expiration: "today_close",
+        expiresAt: "2026-05-13T23:59:59.999Z",
+        id: "live_1",
+        mode: undefined,
+        source: "owner_text",
+        title: "Tonight's special",
+        type: "special",
+      },
+    ]);
+  });
+
+  it("builds insert payloads and normalizes unexpected persisted values", () => {
+    expect(
+      buildBusinessLiveUpdateInsertPayload(
+        {
+          body: " We are closed tomorrow. ",
+          createdAt: "2026-05-13T20:00:00.000Z",
+          expiration: "tomorrow_close",
+          expiresAt: "2026-05-14T23:59:59.999Z",
+          id: "local_1",
+          mode: "holiday",
+          source: "owner_text",
+          title: " Closed tomorrow ",
+          type: "closure",
+        },
+        "location_1",
+      ),
+    ).toEqual({
+      body: "We are closed tomorrow.",
+      expiration: "tomorrow_close",
+      expires_at: "2026-05-14T23:59:59.999Z",
+      location_id: "location_1",
+      mode: "holiday",
+      source: "owner_text",
+      title: "Closed tomorrow",
+      update_type: "closure",
+    });
+
+    expect(
+      mapSupabaseBusinessLiveUpdate({
+        body: null,
+        cleared_at: null,
+        created_at: null,
+        expiration: "weird",
+        expires_at: null,
+        id: "live_3",
+        location_id: "location_1",
+        mode: "not_a_mode",
+        source: "unknown",
+        title: null,
+        update_type: "odd",
+      }),
+    ).toMatchObject({
+      expiration: "today_close",
+      mode: undefined,
+      source: "dashboard",
+      title: "Live update",
+      type: "policy",
     });
   });
 });

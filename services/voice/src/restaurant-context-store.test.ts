@@ -13,6 +13,36 @@ describe("restaurant context store", () => {
         reservation_provider: "opentable",
         sms_confirmations_enabled: false,
       },
+      businessLiveSettings: {
+        active_mode: "busy",
+        updated_at: "2026-05-13T20:00:00.000Z",
+      },
+      businessLiveUpdates: [
+        {
+          body: "Tonight's special is lobster ravioli.",
+          cleared_at: null,
+          created_at: "2026-05-13T19:55:00.000Z",
+          expiration: "today_close",
+          expires_at: "2026-05-13T23:59:59.999Z",
+          id: "live_1",
+          mode: null,
+          source: "owner_text",
+          title: "Tonight's special",
+          update_type: "special",
+        },
+        {
+          body: "Use only in emergency mode.",
+          cleared_at: null,
+          created_at: "2026-05-13T19:50:00.000Z",
+          expiration: "until_cleared",
+          expires_at: null,
+          id: "live_2",
+          mode: "emergency",
+          source: "dashboard",
+          title: "Emergency-only note",
+          update_type: "policy",
+        },
+      ],
       faqs: [
         {
           answer: "Gift cards are sold at the host stand.",
@@ -112,6 +142,9 @@ describe("restaurant context store", () => {
     expect(context.greeting).toBe("Hello from Saffron Table, Nina speaking.");
     expect(context.defaultPickupEtaMinutes).toBe(20);
     expect(context.smsConfirmationsEnabled).toBe(false);
+    expect(context.businessLiveContext?.activeMode.id).toBe("busy");
+    expect(context.businessLiveContext?.activeUpdates.map((update) => update.id)).toEqual(["live_1"]);
+    expect(context.businessLiveContext?.instructionBlock).toContain("lobster ravioli");
     expect(context.menuItems).toEqual([
       {
         aliases: ["Pad Thai", "Rice noodles with tamarind"],
@@ -154,6 +187,8 @@ describe("restaurant context store", () => {
     });
     expect(context.policies.sales).toContain("Vendors should leave");
     expect(context.policies.specials).toContain("Chef's curry special");
+    expect(context.policies.specials).toContain("lobster ravioli");
+    expect(context.policies.live_updates).toContain("Business mode: Busy");
     expect(context.policies.substitutions).toContain("No off-menu noodles");
     expect(context.policies.waitlist).toContain("quoted waits");
     expect(context.faqs).toEqual([

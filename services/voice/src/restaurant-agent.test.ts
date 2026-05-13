@@ -102,6 +102,38 @@ describe("restaurant fallback replies", () => {
     expect(instructions).not.toContain("Source call: call_123");
   });
 
+  it("promotes live business updates above permanent knowledge", () => {
+    const instructions = buildRestaurantInstructions({
+      ...demoRestaurantContext,
+      businessLiveContext: {
+        activeMode: {
+          description: "High demand period.",
+          id: "busy",
+          label: "Busy",
+          operatorCue: "Keep answers crisp.",
+          urgency: "high",
+        },
+        activeUpdates: [
+          {
+            body: "Tonight's special is lobster ravioli.",
+            createdAt: "2026-05-13T20:00:00.000Z",
+            expiration: "today_close",
+            id: "live_1",
+            title: "Tonight's special",
+            type: "special",
+          },
+        ],
+        expiredUpdates: [],
+        instructionBlock: "Business mode: Busy\nMode instruction: Keep answers crisp.\nActive temporary updates:\n- Special: Tonight's special. Tonight's special is lobster ravioli.",
+      },
+    });
+
+    expect(instructions).toContain("Current live business updates");
+    expect(instructions).toContain("Business mode: Busy");
+    expect(instructions).toContain("lobster ravioli");
+    expect(instructions).toContain("override permanent knowledge");
+  });
+
   it("prevents fake live transfers and over-promising substitutions", () => {
     const instructions = buildRestaurantInstructions(demoRestaurantContext);
 

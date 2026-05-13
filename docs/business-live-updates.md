@@ -21,6 +21,8 @@ This slice starts the "owner can brief SignalHost like a staff member" layer.
 - Supports mode-scoped updates, such as "only use this during Busy mode."
 - Shares the local live state between the Knowledge Base and Owner Assistant.
 - Lets the Owner Assistant create live updates and mode changes from plain owner commands.
+- Persists live updates and current business mode to Supabase when the live tables are available.
+- Loads active live updates into the voice and website-chat runtime context.
 
 ## Examples
 
@@ -32,16 +34,17 @@ This slice starts the "owner can brief SignalHost like a staff member" layer.
 
 ## Current Scope
 
-The UI keeps this local for now so the live database does not need an immediate migration. The domain model is ready for backend persistence. Owner Assistant commands already use the same shared state, which makes the future SMS command path much smaller.
+The dashboard uses Supabase-backed live updates when `business_live_settings` and `business_live_updates` are migrated. If those tables are not available yet, the dashboard falls back to local browser storage so preview work does not break.
+
+The voice service reads active live updates into restaurant/business context and places them above permanent knowledge in model instructions. Active special, promotion, and event updates are also folded into the specials policy so callers asking about specials get the live answer.
 
 ## Persistence Path
 
-The baseline Supabase schema now includes `business_live_updates`.
+The baseline Supabase schema now includes `business_live_settings` and `business_live_updates`.
 
 Next backend step:
 
-1. Add the table to the live Lovable Supabase database.
-2. Add RLS policies for owners/admins/managers.
-3. Add Supabase REST functions for create/read/clear.
-4. Load active updates into the voice service restaurant context.
-5. Replace local command writes with Supabase-backed writes.
+1. Apply the `20260513170000_business_live_updates.sql` migration in the live Lovable Supabase database.
+2. Add verified owner SMS commands on top of the same command parser.
+3. Add dashboard history/audit for who created or cleared each update.
+4. Add optional expiry cleanup for old cleared updates.

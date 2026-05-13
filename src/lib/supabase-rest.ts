@@ -48,6 +48,13 @@ import {
 } from "@/domain/team";
 import type { RestaurantAgentConfig } from "@/domain/restaurant-config";
 import type {
+  BusinessMode,
+  TemporaryBusinessUpdate,
+  TemporaryUpdateExpiration,
+  TemporaryUpdateType,
+} from "@/domain/business-updates";
+import type { BusinessLiveState } from "@/lib/business-live-updates-storage";
+import type {
   IngestionJob,
   IngestionJobStatus,
   IngestionJobType,
@@ -88,6 +95,9 @@ const orderStatuses: OrderStatus[] = ["new", "accepted", "in_progress", "complet
 const orderDeliveryStatuses: OrderDeliveryStatus[] = ["pending", "sent", "failed", "not_configured"];
 const reservationStatuses: ReservationStatus[] = ["pending", "confirmed", "declined", "seated", "canceled"];
 const reservationSources: Reservation["source"][] = ["ai_host", "web", "walk_in"];
+const businessModes: BusinessMode[] = ["normal", "busy", "after_hours", "emergency", "holiday", "promo", "staffing_shortage"];
+const temporaryUpdateTypes: TemporaryUpdateType[] = ["closure", "event", "hours", "policy", "promotion", "service_status", "special", "staffing"];
+const temporaryUpdateExpirations: TemporaryUpdateExpiration[] = ["today_close", "tomorrow_close", "custom", "until_cleared"];
 const menuSourceTypes: MenuSourceType[] = ["url", "file", "paste"];
 const syncFrequencies: SyncFrequency[] = ["hourly", "daily", "weekly"];
 const syncStatuses: SyncStatus[] = ["synced", "error", "pending", "processing"];
@@ -170,6 +180,26 @@ interface SupabaseKnowledgeSectionRow {
   location_id: string;
   title: string;
   updated_at: string | null;
+}
+
+interface SupabaseBusinessLiveSettingsRow {
+  active_mode: string | null;
+  location_id: string;
+  updated_at: string | null;
+}
+
+interface SupabaseBusinessLiveUpdateRow {
+  body: string | null;
+  cleared_at?: string | null;
+  created_at: string | null;
+  expiration: string | null;
+  expires_at: string | null;
+  id: string;
+  location_id: string;
+  mode: string | null;
+  source: string | null;
+  title: string | null;
+  update_type: string | null;
 }
 
 interface SupabaseOrderRow {
@@ -573,6 +603,10 @@ export function isKnowledgePersistenceConfigured() {
   return Boolean(isSupabaseConfigured() && getActiveSupabaseLocationId());
 }
 
+export function isBusinessLiveUpdatesPersistenceConfigured() {
+  return Boolean(isSupabaseConfigured() && getActiveSupabaseLocationId());
+}
+
 export function isTeamPersistenceConfigured(organizationId = getActiveOrganizationId()) {
   return Boolean(isSupabaseConfigured() && organizationId);
 }
@@ -875,6 +909,116 @@ export async function updateKnowledgeSectionInSupabase(
 
   if (!rows?.[0]) throw new Error("Knowledge section was not returned after update.");
   return mapSupabaseKnowledgeSection(rows[0]);
+}
+
+export async function fetchBusinessLiveStateFromSupabase(
+  locationId = getActiveSupabaseLocationId(),
+): Promise<BusinessLiveState> {
+  if (!isSupabaseConfigured() || !locationId) {
+    throw new Error("Supabase business live updates are not configured.");
+  }
+
+  const [settingsRows, updateRows] = await Promise.all([
+    supabaseRequest<SupabaseBusinessLiveSettingsRow[]>(
+      "business_live_settings",
+      new URLSearchParams({
+        limit: "1",
+        location_id: `eq.${locationId}`,
+        select: businessLiveSettingsSelectColumns,
+      }),
+    ),
+    supabaseRequest<SupabaseBusinessLiveUpdateRow[]>(
+      "business_live_updates",
+      new URLSearchParams({
+        cleared_at: "is.null",
+        location_id: `eq.${locationId}`,
+        order: "created_at.desc",
+        select: businessLiveUpdateSelectColumns,
+      }),
+    ),
+  ]);
+
+  return mapSupabaseBusinessLiveState(settingsRows[0], updateRows);
+}
+
+export async function saveBusinessLiveModeToSupabase(
+  mode: BusinessMode,
+  locationId = getActiveSupabaseLocationId(),
+): Promise<BusinessMode> {
+  if (!isSupabaseConfigured() || !locationId) {
+    throw new Error("Supabase business live updates are not configured.");
+  }
+
+  const normalizedMode = normalizeBusinessMode(mode) ?? "normal";
+  const rows = await supabaseRequest<SupabaseBusinessLiveSettingsRow[]>(
+    "business_live_settings",
+    new URLSearchParams({
+      on_conflict: "location_id",
+      select: businessLiveSettingsSelectColumns,
+    }),
+    {
+      body: {
+        active_mode: normalizedMode,
+        location_id: locationId,
+        updated_at: new Date().toISOString(),
+      },
+      headers: {
+        Prefer: "return=representation,resolution=merge-duplicates",
+      },
+      method: "POST",
+    },
+  );
+
+  return normalizeBusinessMode(rows?.[0]?.active_mode) ?? normalizedMode;
+}
+
+export async function createBusinessLiveUpdateInSupabase(
+  update: TemporaryBusinessUpdate,
+  locationId = getActiveSupabaseLocationId(),
+): Promise<TemporaryBusinessUpdate> {
+  if (!isSupabaseConfigured() || !locationId) {
+    throw new Error("Supabase business live updates are not configured.");
+  }
+
+  const rows = await supabaseRequest<SupabaseBusinessLiveUpdateRow[]>(
+    "business_live_updates",
+    new URLSearchParams({
+      select: businessLiveUpdateSelectColumns,
+    }),
+    {
+      body: buildBusinessLiveUpdateInsertPayload(update, locationId),
+      headers: {
+        Prefer: "return=representation",
+      },
+      method: "POST",
+    },
+  );
+
+  if (!rows?.[0]) throw new Error("Business live update was not returned after insert.");
+  return mapSupabaseBusinessLiveUpdate(rows[0]);
+}
+
+export async function clearBusinessLiveUpdateInSupabase(
+  updateId: string,
+  locationId = getActiveSupabaseLocationId(),
+): Promise<void> {
+  if (!isSupabaseConfigured() || !locationId) {
+    throw new Error("Supabase business live updates are not configured.");
+  }
+
+  await supabaseRequest(
+    "business_live_updates",
+    new URLSearchParams({
+      id: `eq.${updateId}`,
+      location_id: `eq.${locationId}`,
+    }),
+    {
+      body: {
+        cleared_at: new Date().toISOString(),
+      },
+      method: "PATCH",
+    },
+  );
 }
 
 export async function updateCallStatusInSupabase(input: UpdateCallStatusInput): Promise<void> {
@@ -1720,6 +1864,19 @@ export function buildKnowledgeSectionUpdatePayload(input: UpdateKnowledgeSection
   };
 }
 
+export function buildBusinessLiveUpdateInsertPayload(update: TemporaryBusinessUpdate, locationId: string) {
+  return {
+    body: update.body.trim(),
+    expiration: normalizeEnum(update.expiration, temporaryUpdateExpirations, "today_close"),
+    expires_at: update.expiresAt ?? null,
+    location_id: locationId,
+    mode: update.mode ? normalizeBusinessMode(update.mode) : null,
+    source: update.source ?? "dashboard",
+    title: update.title.trim(),
+    update_type: normalizeEnum(update.type, temporaryUpdateTypes, "policy"),
+  };
+}
+
 async function createKnowledgeSectionFromCallFeedback(feedback: CallFeedback, locationId: string) {
   const title = callFeedbackCategoryLabels[feedback.category] ?? "Call feedback";
   const body = [
@@ -2050,6 +2207,35 @@ export function mapSupabaseKnowledgeSection(row: SupabaseKnowledgeSectionRow): K
   };
 }
 
+export function mapSupabaseBusinessLiveState(
+  settings: SupabaseBusinessLiveSettingsRow | null | undefined,
+  updates: SupabaseBusinessLiveUpdateRow[] = [],
+): BusinessLiveState {
+  const mappedUpdates = updates
+    .filter((row) => !row.cleared_at)
+    .map(mapSupabaseBusinessLiveUpdate);
+
+  return {
+    mode: normalizeBusinessMode(settings?.active_mode) ?? "normal",
+    updatedAt: settings?.updated_at ?? mappedUpdates[0]?.createdAt ?? new Date().toISOString(),
+    updates: mappedUpdates,
+  };
+}
+
+export function mapSupabaseBusinessLiveUpdate(row: SupabaseBusinessLiveUpdateRow): TemporaryBusinessUpdate {
+  return {
+    body: row.body?.trim() || "",
+    createdAt: row.created_at ?? new Date().toISOString(),
+    expiration: normalizeEnum(row.expiration, temporaryUpdateExpirations, "today_close"),
+    expiresAt: row.expires_at ?? undefined,
+    id: row.id,
+    mode: normalizeBusinessMode(row.mode) ?? undefined,
+    source: normalizeLiveUpdateSource(row.source),
+    title: row.title?.trim() || "Live update",
+    type: normalizeEnum(row.update_type, temporaryUpdateTypes, "policy"),
+  };
+}
+
 export function mapSupabaseCalls(
   calls: SupabaseCallRow[],
   transcriptTurns: SupabaseTranscriptTurnRow[],
@@ -2332,6 +2518,14 @@ function normalizeEnum<T extends string>(value: string | null | undefined, allow
   return allowedValues.includes(value as T) ? (value as T) : fallback;
 }
 
+function normalizeBusinessMode(value: string | null | undefined): BusinessMode | undefined {
+  return businessModes.includes(value as BusinessMode) ? (value as BusinessMode) : undefined;
+}
+
+function normalizeLiveUpdateSource(value: string | null | undefined): TemporaryBusinessUpdate["source"] {
+  return value === "owner_text" || value === "staff" ? value : "dashboard";
+}
+
 function normalizeReservationTime(time: string) {
   if (/^\d{2}:\d{2}:\d{2}$/.test(time)) return time;
   if (/^\d{2}:\d{2}$/.test(time)) return `${time}:00`;
@@ -2558,3 +2752,9 @@ const callFeedbackSelectColumns =
 
 const knowledgeSectionSelectColumns =
   "id,location_id,title,body,is_active,updated_at";
+
+const businessLiveSettingsSelectColumns =
+  "location_id,active_mode,updated_at";
+
+const businessLiveUpdateSelectColumns =
+  "id,location_id,update_type,title,body,mode,expiration,expires_at,source,created_at,cleared_at";

@@ -46,12 +46,12 @@ The dashboard assistant can now also act on simple owner instructions:
 - "Set busy mode"
 - "Set emergency mode"
 
-Those commands create the same temporary live updates and business modes shown on the Knowledge Base page. This is still local browser storage in the dashboard, but it proves the product behavior before moving it to Supabase and verified owner SMS.
+Those commands create the same temporary live updates and business modes shown on the Knowledge Base page. When Supabase live-update tables are migrated, the assistant saves them to Supabase so the voice and website-chat runtime can use them. Local browser storage remains the preview fallback.
 
 ## Next Steps
 
 1. Persist `business_contacts` from onboarding into Supabase.
 2. Add owner SMS verification before accepting text commands.
-3. Persist assistant-created temporary live updates in Supabase.
+3. Add owner SMS commands on top of the now-shared live-update parser.
 4. Add an LLM answer layer with the deterministic report as tool/context.
 5. Log owner assistant questions and useful missing intents for product tuning.

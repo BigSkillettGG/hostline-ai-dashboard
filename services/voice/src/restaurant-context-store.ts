@@ -3,6 +3,13 @@ import { normalizeSignalHostVoiceGender } from "../../../src/domain/voice-select
 import type { BusinessLink } from "../../../src/domain/business-links";
 import { getBusinessTemplate, normalizeBusinessType, type BusinessTemplate, type BusinessType } from "../../../src/domain/business-templates";
 import {
+  buildBusinessLiveContext,
+  type BusinessMode,
+  type TemporaryBusinessUpdate,
+  type TemporaryUpdateExpiration,
+  type TemporaryUpdateType,
+} from "../../../src/domain/business-updates";
+import {
   demoRestaurantContext,
   isBehaviorTuningSection,
   toSpokenRestaurantName,
@@ -68,6 +75,24 @@ export interface SupabaseKnowledgeSectionRow {
   is_active: boolean | null;
 }
 
+export interface SupabaseBusinessLiveSettingsRow {
+  active_mode: string | null;
+  updated_at: string | null;
+}
+
+export interface SupabaseBusinessLiveUpdateRow {
+  body: string | null;
+  cleared_at?: string | null;
+  created_at: string | null;
+  expiration: string | null;
+  expires_at: string | null;
+  id: string;
+  mode: string | null;
+  source: string | null;
+  title: string | null;
+  update_type: string | null;
+}
+
 export interface SupabaseFaqRow {
   question: string | null;
   answer: string | null;
@@ -76,6 +101,8 @@ export interface SupabaseFaqRow {
 
 export interface BuildRestaurantContextInput {
   agentConfig?: SupabaseAgentConfigRow | null;
+  businessLiveSettings?: SupabaseBusinessLiveSettingsRow | null;
+  businessLiveUpdates?: SupabaseBusinessLiveUpdateRow[];
   faqs?: SupabaseFaqRow[];
   knowledgeSections?: SupabaseKnowledgeSectionRow[];
   location?: SupabaseLocationRow | null;
@@ -107,6 +134,8 @@ export function createCachedRestaurantContextStore(
 
 export function buildRestaurantContext({
   agentConfig,
+  businessLiveSettings,
+  businessLiveUpdates = [],
   faqs = [],
   knowledgeSections = [],
   location,
@@ -147,9 +176,19 @@ export function buildRestaurantContext({
   const parkingPolicy = stringValue(draft.parking) ?? defaultParkingOrServiceAreaPolicy(businessTemplate);
   const reservationSettings = buildReservationSettings(draft, agentConfig);
   const businessLinks = buildBusinessLinks(draft, orderSettings, reservationSettings);
+  const businessLiveContext = buildBusinessLiveContext({
+    mode: normalizeBusinessMode(businessLiveSettings?.active_mode) ?? "normal",
+    updates: mapBusinessLiveUpdates(businessLiveUpdates),
+  });
+  const liveUpdatePolicy = buildLiveUpdatePolicy(businessLiveContext.instructionBlock);
+  const activeSpecialUpdates = businessLiveContext.activeUpdates
+    .filter((update) => update.type === "special" || update.type === "promotion" || update.type === "event")
+    .map((update) => update.body)
+    .join(" ");
 
   return {
     behaviorTuningNotes,
+    businessLiveContext,
     businessLinks,
     businessType,
     defaultPickupEtaMinutes: parseMinutes(stringValue(draft.defaultPickupEta)) ?? demoRestaurantContext.defaultPickupEtaMinutes,
@@ -194,7 +233,8 @@ export function buildRestaurantContext({
         "Reservation changes and cancellations need staff confirmation before they are promised.",
       reservations: buildReservationPolicy(draft, agentConfig, reservationSettings),
       sales: buildVendorPolicy(draft),
-      specials: buildSpecialsPolicy(draft),
+      live_updates: liveUpdatePolicy,
+      specials: [activeSpecialUpdates, buildSpecialsPolicy(draft)].filter(Boolean).join(" "),
       waitlist: stringValue(draft.waitlistPolicy) ?? defaultAvailabilityPolicy(businessTemplate),
     },
     orderSettings,
@@ -272,7 +312,7 @@ class SupabaseRestaurantContextStore implements RestaurantContextStore {
     const resolvedLocationId = normalizeLocationId(locationId) ?? this.defaultLocationId;
 
     try {
-      const [locations, agentConfigs, onboardingProfiles, menuCategories, knowledgeSections, faqs] = await Promise.all([
+      const [locations, agentConfigs, onboardingProfiles, menuCategories, knowledgeSections, faqs, businessLiveSettings, businessLiveUpdates] = await Promise.all([
         this.request<SupabaseLocationRow[]>(
           "locations",
           `id=eq.${encodeURIComponent(resolvedLocationId)}&limit=1&select=id,name,cuisine,timezone,phone,ai_host_phone,address`,
@@ -297,6 +337,14 @@ class SupabaseRestaurantContextStore implements RestaurantContextStore {
           "faqs",
           `location_id=eq.${encodeURIComponent(resolvedLocationId)}&is_active=eq.true&select=question,answer,is_active`,
         ),
+        this.request<SupabaseBusinessLiveSettingsRow[]>(
+          "business_live_settings",
+          `location_id=eq.${encodeURIComponent(resolvedLocationId)}&limit=1&select=active_mode,updated_at`,
+        ).catch(() => []),
+        this.request<SupabaseBusinessLiveUpdateRow[]>(
+          "business_live_updates",
+          `location_id=eq.${encodeURIComponent(resolvedLocationId)}&cleared_at=is.null&order=created_at.desc&select=id,update_type,title,body,mode,expiration,expires_at,source,created_at,cleared_at`,
+        ).catch(() => []),
       ]);
 
       const categoryIds = menuCategories.map((category) => category.id);
@@ -309,6 +357,8 @@ class SupabaseRestaurantContextStore implements RestaurantContextStore {
 
       return buildRestaurantContext({
         agentConfig: agentConfigs[0],
+        businessLiveSettings: businessLiveSettings[0],
+        businessLiveUpdates,
         faqs,
         knowledgeSections,
         location: locations[0],
@@ -344,6 +394,46 @@ function normalizeDraft(value: unknown): OnboardingDraft {
 
 function stringValue(value: OnboardingDraftValue) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function normalizeBusinessMode(value: string | null | undefined): BusinessMode | undefined {
+  if (
+    value === "normal" ||
+    value === "busy" ||
+    value === "after_hours" ||
+    value === "emergency" ||
+    value === "holiday" ||
+    value === "promo" ||
+    value === "staffing_shortage"
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
+function normalizeTemporaryUpdateExpiration(value: string | null | undefined): TemporaryUpdateExpiration {
+  if (value === "tomorrow_close" || value === "custom" || value === "until_cleared") return value;
+  return "today_close";
+}
+
+function normalizeTemporaryUpdateType(value: string | null | undefined): TemporaryUpdateType {
+  if (
+    value === "closure" ||
+    value === "event" ||
+    value === "hours" ||
+    value === "policy" ||
+    value === "promotion" ||
+    value === "service_status" ||
+    value === "special" ||
+    value === "staffing"
+  ) {
+    return value;
+  }
+  return "policy";
+}
+
+function normalizeLiveUpdateSource(value: string | null | undefined): TemporaryBusinessUpdate["source"] {
+  return value === "owner_text" || value === "staff" ? value : "dashboard";
 }
 
 function buildHoursPolicy(draft: OnboardingDraft, template = getBusinessTemplate(stringValue(draft.businessType))) {
@@ -772,6 +862,31 @@ function mapKnowledgeSections(rows: SupabaseKnowledgeSectionRow[]): RestaurantKn
       return isBehaviorTuningSection(section) ? { ...section, kind: "behavior_tuning" as const } : section;
     })
     .filter((section) => section.title && section.body);
+}
+
+function mapBusinessLiveUpdates(rows: SupabaseBusinessLiveUpdateRow[]): TemporaryBusinessUpdate[] {
+  return rows
+    .filter((row) => !row.cleared_at)
+    .map((row) => ({
+      body: row.body?.trim() || "",
+      createdAt: row.created_at ?? new Date().toISOString(),
+      expiration: normalizeTemporaryUpdateExpiration(row.expiration),
+      expiresAt: row.expires_at ?? undefined,
+      id: row.id,
+      mode: normalizeBusinessMode(row.mode),
+      source: normalizeLiveUpdateSource(row.source),
+      title: row.title?.trim() || "Live update",
+      type: normalizeTemporaryUpdateType(row.update_type),
+    }))
+    .filter((update) => update.body && update.title);
+}
+
+function buildLiveUpdatePolicy(instructionBlock: string) {
+  return instructionBlock
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join(" ");
 }
 
 function buildDraftKnowledgeSections(draft: OnboardingDraft): RestaurantKnowledgeSection[] {

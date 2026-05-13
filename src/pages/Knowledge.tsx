@@ -24,8 +24,14 @@ import {
   type TemporaryUpdateType,
 } from "@/domain/business-updates";
 import {
+  clearBusinessLiveUpdateInSupabase,
+  createBusinessLiveUpdateInSupabase,
+  fetchBusinessLiveStateFromSupabase,
   fetchKnowledgeSectionsFromSupabase,
+  getActiveSupabaseLocationId,
+  isBusinessLiveUpdatesPersistenceConfigured,
   isKnowledgePersistenceConfigured,
+  saveBusinessLiveModeToSupabase,
   updateKnowledgeSectionInSupabase,
   type KnowledgeSectionRecord,
 } from "@/lib/supabase-rest";
@@ -76,7 +82,9 @@ type TemporaryUpdateDraft = {
 
 export default function Knowledge() {
   const queryClient = useQueryClient();
-  const liveConfigured = isKnowledgePersistenceConfigured();
+  const knowledgeConfigured = isKnowledgePersistenceConfigured();
+  const liveUpdatesConfigured = isBusinessLiveUpdatesPersistenceConfigured();
+  const activeLocationId = getActiveSupabaseLocationId();
   const [items, setItems] = useState(faqs);
   const [businessLiveState, setBusinessLiveState] = useState(() =>
     loadBusinessLiveState({ defaultUpdates: createDefaultBusinessLiveUpdates() }),
@@ -108,11 +116,20 @@ export default function Knowledge() {
   const temporaryUpdates = businessLiveState.updates;
 
   const knowledgeQuery = useQuery({
-    enabled: liveConfigured,
+    enabled: knowledgeConfigured,
     queryFn: () => fetchKnowledgeSectionsFromSupabase(),
     queryKey: ["knowledge-sections"],
     refetchInterval: 60_000,
   });
+
+  const businessLiveQuery = useQuery({
+    enabled: liveUpdatesConfigured,
+    queryFn: () => fetchBusinessLiveStateFromSupabase(),
+    queryKey: ["business-live-state", activeLocationId],
+    refetchInterval: 60_000,
+    retry: 1,
+  });
+  const liveUpdatesWritable = liveUpdatesConfigured && !businessLiveQuery.isError;
 
   const updateKnowledgeMutation = useMutation({
     mutationFn: updateKnowledgeSectionInSupabase,
@@ -122,6 +139,47 @@ export default function Knowledge() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["knowledge-sections"] });
       toast.success("Knowledge updated");
+    },
+  });
+
+  const saveBusinessModeMutation = useMutation({
+    mutationFn: saveBusinessLiveModeToSupabase,
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Could not save business mode");
+    },
+    onSuccess: async (mode) => {
+      setBusinessLiveState((current) => saveBusinessLiveState({ ...current, mode }));
+      await queryClient.invalidateQueries({ queryKey: ["business-live-state", activeLocationId] });
+    },
+  });
+
+  const createBusinessLiveUpdateMutation = useMutation({
+    mutationFn: createBusinessLiveUpdateInSupabase,
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Could not save live update");
+    },
+    onSuccess: async (update) => {
+      setBusinessLiveState((current) => {
+        const withoutDuplicate = current.updates.filter((item) => item.id !== update.id);
+        return saveBusinessLiveState({ ...current, updates: [update, ...withoutDuplicate] });
+      });
+      await queryClient.invalidateQueries({ queryKey: ["business-live-state", activeLocationId] });
+      toast.success("Live update added");
+    },
+  });
+
+  const clearBusinessLiveUpdateMutation = useMutation({
+    mutationFn: clearBusinessLiveUpdateInSupabase,
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Could not clear live update");
+    },
+    onSuccess: async (_result, updateId) => {
+      setBusinessLiveState((current) => saveBusinessLiveState({
+        ...current,
+        updates: current.updates.filter((update) => update.id !== updateId),
+      }));
+      await queryClient.invalidateQueries({ queryKey: ["business-live-state", activeLocationId] });
+      toast.success("Live update cleared");
     },
   });
 
@@ -143,7 +201,7 @@ export default function Knowledge() {
   );
   const activeLiveSections = liveSections.filter((section) => section.isActive);
   const tuningNotes = activeLiveSections.filter((section) => section.isBehaviorTuning);
-  const businessSections: DisplayKnowledgeSection[] = liveConfigured
+  const businessSections: DisplayKnowledgeSection[] = knowledgeConfigured
     ? activeLiveSections.filter((section) => !section.isBehaviorTuning)
     : sampleSections;
   const inactiveTuningCount = liveSections.filter((section) => section.isBehaviorTuning && !section.isActive).length;
@@ -170,12 +228,25 @@ export default function Knowledge() {
     };
   }, []);
 
+  useEffect(() => {
+    if (businessLiveQuery.data) {
+      setBusinessLiveState(saveBusinessLiveState(businessLiveQuery.data));
+    }
+  }, [businessLiveQuery.data]);
+
   const persistLiveState = (next: { mode?: BusinessMode; updates?: TemporaryBusinessUpdate[] }) => {
     const saved = saveBusinessLiveState({
       mode: next.mode ?? businessLiveState.mode,
       updates: next.updates ?? businessLiveState.updates,
     });
     setBusinessLiveState(saved);
+  };
+
+  const persistBusinessMode = (mode: BusinessMode) => {
+    persistLiveState({ mode });
+    if (liveUpdatesWritable) {
+      saveBusinessModeMutation.mutate(mode);
+    }
   };
 
   const addSource = () => {
@@ -217,7 +288,6 @@ export default function Knowledge() {
       title: updateDraft.title,
       type: updateDraft.type,
     });
-    persistLiveState({ updates: [update, ...temporaryUpdates] });
     setUpdateDraft({
       body: "",
       customExpiresAt: "",
@@ -226,12 +296,21 @@ export default function Knowledge() {
       title: "",
       type: "special",
     });
-    toast.success("Live update added");
+    if (liveUpdatesWritable) {
+      createBusinessLiveUpdateMutation.mutate(update);
+    } else {
+      persistLiveState({ updates: [update, ...temporaryUpdates] });
+      toast.success("Live update added");
+    }
   };
 
   const clearTemporaryUpdate = (id: string) => {
-    persistLiveState({ updates: temporaryUpdates.filter((update) => update.id !== id) });
-    toast.success("Live update cleared");
+    if (liveUpdatesWritable) {
+      clearBusinessLiveUpdateMutation.mutate(id);
+    } else {
+      persistLiveState({ updates: temporaryUpdates.filter((update) => update.id !== id) });
+      toast.success("Live update cleared");
+    }
   };
 
   const addEvent = () => {
@@ -284,11 +363,11 @@ export default function Knowledge() {
           <div className="flex flex-wrap items-center gap-2">
             <Badge
               variant="outline"
-              className={liveConfigured ? "border-success/30 bg-success/10 text-success" : "border-warning/30 bg-warning/10 text-warning"}
+              className={knowledgeConfigured ? "border-success/30 bg-success/10 text-success" : "border-warning/30 bg-warning/10 text-warning"}
             >
-              {liveConfigured ? "Live knowledge" : "Sample mode"}
+              {knowledgeConfigured ? "Live knowledge" : "Sample mode"}
             </Badge>
-            {liveConfigured && (
+            {knowledgeConfigured && (
               <Button variant="outline" size="sm" onClick={() => void knowledgeQuery.refetch()} disabled={knowledgeQuery.isFetching}>
                 <RefreshCw className={cn("mr-1.5 h-3.5 w-3.5", knowledgeQuery.isFetching && "animate-spin")} />
                 Refresh
@@ -310,7 +389,7 @@ export default function Knowledge() {
               </p>
               <div className="mt-4 space-y-2">
                 <Label className="text-xs font-medium text-muted-foreground">Current mode</Label>
-                <Select value={businessMode} onValueChange={(value) => persistLiveState({ mode: value as BusinessMode })}>
+                <Select value={businessMode} onValueChange={(value) => persistBusinessMode(value as BusinessMode)}>
                   <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {businessModes.map((mode) => (
@@ -417,6 +496,11 @@ export default function Knowledge() {
                   <div>
                     <div className="text-xs font-medium uppercase text-muted-foreground">Active for the AI</div>
                     <p className="text-xs text-muted-foreground">These are the rules SignalHost would apply before regular knowledge.</p>
+                    {businessLiveQuery.isError && (
+                      <p className="mt-2 rounded-md border border-warning/30 bg-warning/10 p-2 text-xs text-warning">
+                        Live-update tables are not reachable yet, so this page is using local browser storage.
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     {liveContext.activeUpdates.length === 0 && <EmptyState text="No live updates are active." />}
@@ -453,7 +537,7 @@ export default function Knowledge() {
               <p className="mt-1 text-sm text-muted-foreground">
                 QA notes saved to knowledge are now included in Vera's runtime instructions. They are behavior corrections, not caller-facing facts.
               </p>
-              {liveConfigured && (
+              {knowledgeConfigured && (
                 <p className="mt-1 text-xs text-muted-foreground">
                   The voice service caches restaurant context briefly, so changes can take about five minutes to show up in live calls.
                 </p>
@@ -471,7 +555,7 @@ export default function Knowledge() {
             </div>
           </div>
 
-          {!liveConfigured ? (
+          {!knowledgeConfigured ? (
             <div className="mt-4 rounded-md border border-dashed border-warning/40 bg-background/70 p-4 text-sm text-muted-foreground">
               Connect Supabase for this tenant to see active tuning notes created from real call QA.
             </div>

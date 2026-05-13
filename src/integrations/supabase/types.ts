@@ -120,6 +120,88 @@ export type Database = {
           },
         ]
       }
+      business_live_settings: {
+        Row: {
+          active_mode: string
+          location_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          active_mode?: string
+          location_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          active_mode?: string
+          location_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_live_settings_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: true
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      business_live_updates: {
+        Row: {
+          body: string
+          cleared_at: string | null
+          created_at: string
+          created_by: string | null
+          expiration: string
+          expires_at: string | null
+          id: string
+          location_id: string
+          mode: string | null
+          source: string
+          title: string
+          update_type: string
+        }
+        Insert: {
+          body: string
+          cleared_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          expiration?: string
+          expires_at?: string | null
+          id?: string
+          location_id: string
+          mode?: string | null
+          source?: string
+          title: string
+          update_type: string
+        }
+        Update: {
+          body?: string
+          cleared_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          expiration?: string
+          expires_at?: string | null
+          id?: string
+          location_id?: string
+          mode?: string | null
+          source?: string
+          title?: string
+          update_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_live_updates_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       call_feedback: {
         Row: {
           add_to_knowledge: boolean
