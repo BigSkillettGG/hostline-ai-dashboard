@@ -2189,8 +2189,8 @@ function buildTenantDirectoryRecord(input: {
     onboardingStatus: input.onboarding?.status ?? "not_started",
     organizationId: input.organization.id,
     organizationName: input.organization.name,
-    ownerEmail: stringValue(owner?.member_email) ?? "Unknown",
-    ownerName: stringValue(owner?.member_name) ?? "Owner",
+    ownerEmail: stringValue(owner?.member_email) ?? stringValue(draft.ownerEmail) ?? "Unknown",
+    ownerName: stringValue(owner?.member_name) ?? stringValue(draft.ownerName) ?? "Owner",
     planName: stringValue(draft.selectedPlanName) ?? "Unassigned",
     status,
     timezone:

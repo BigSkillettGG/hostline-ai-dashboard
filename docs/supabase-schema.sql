@@ -66,6 +66,20 @@ create table locations (
   created_at timestamptz not null default now()
 );
 
+create table business_contacts (
+  id uuid primary key default gen_random_uuid(),
+  location_id uuid not null references locations(id) on delete cascade,
+  contact_type text not null default 'owner' check (contact_type in ('owner', 'manager', 'front_desk', 'billing')),
+  name text not null,
+  phone text,
+  email text,
+  preferred_channel text not null default 'sms' check (preferred_channel in ('sms', 'email', 'both')),
+  can_receive_alerts boolean not null default true,
+  can_use_owner_assistant boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table agent_configs (
   id uuid primary key default gen_random_uuid(),
   location_id uuid not null references locations(id) on delete cascade,

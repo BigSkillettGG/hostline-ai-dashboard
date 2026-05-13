@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Phone, ShoppingBag, CalendarDays, BookOpen,
   Bot, Plug, Settings as SettingsIcon, UtensilsCrossed, Flame,
   CreditCard, Users, Building2, ChevronDown, AlertTriangle, BellRing,
-  ChefHat, ListTodo, MessageCircle,
+  ChefHat, ListTodo, MessageCircle, Sparkles,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
@@ -17,6 +17,7 @@ import { loadOnboardingDraft } from "@/lib/onboarding-draft";
 
 const operations = [
   { title: "Dashboard", url: "/app", icon: LayoutDashboard, end: true },
+  { title: "Owner Assistant", url: "/app/assistant", icon: Sparkles },
   { title: "Alert Log", url: "/app/alert-log", icon: BellRing },
   { title: "Action Center", url: "/app/tasks", icon: ListTodo },
   { title: "Calls", url: "/app/calls", icon: Phone },
