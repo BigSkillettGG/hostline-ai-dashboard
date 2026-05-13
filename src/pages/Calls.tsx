@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "react-router-dom";
 import { PageHeader, PageBody } from "@/components/PageHeader";
@@ -21,6 +21,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { isDemoWorkspace, isPlatformAdminUser, useCurrentUser } from "@/lib/auth";
 import {
+  buildInteractionInsight,
+  interactionUrgencyLabels,
+  interactionValueLabels,
+  interactionWorkflowLabels,
+  ownerReportBucketLabels,
+  type InteractionUrgency,
+  type InteractionValueTier,
+  type InteractionWorkflowStatus,
+} from "@/domain/interaction-status";
+import {
   createCallFeedbackInSupabase,
   fetchCallFeedbackFromSupabase,
   fetchCallsFromSupabase,
@@ -28,6 +38,7 @@ import {
   isCallFeedbackPersistenceConfigured,
   isSupabaseConfigured,
 } from "@/lib/supabase-rest";
+import { cn } from "@/lib/utils";
 
 const intentColor: Record<string, string> = {
   order: "bg-primary/10 text-primary border-primary/20",
@@ -44,6 +55,30 @@ const statusColor: Record<string, string> = {
   needs_review: "bg-destructive/10 text-destructive border-destructive/20",
   new: "bg-info/10 text-info border-info/20",
 };
+const workflowColor: Record<InteractionWorkflowStatus, string> = {
+  booking_link_sent: "bg-info/10 text-info border-info/20",
+  escalated: "bg-destructive/10 text-destructive border-destructive/20",
+  needs_follow_up: "bg-warning/15 text-warning border-warning/20",
+  needs_review: "bg-destructive/10 text-destructive border-destructive/20",
+  new: "bg-muted text-muted-foreground border-border",
+  quote_requested: "bg-warning/15 text-warning border-warning/20",
+  resolved: "bg-success/15 text-success border-success/20",
+  spam_vendor: "bg-muted text-muted-foreground border-border",
+  waiting_on_customer: "bg-info/10 text-info border-info/20",
+};
+const urgencyColor: Record<InteractionUrgency, string> = {
+  high: "bg-warning/15 text-warning border-warning/20",
+  low: "bg-muted text-muted-foreground border-border",
+  normal: "bg-info/10 text-info border-info/20",
+  urgent: "bg-destructive/10 text-destructive border-destructive/20",
+};
+const valueColor: Record<InteractionValueTier, string> = {
+  high: "bg-warning/15 text-warning border-warning/20",
+  low: "bg-muted text-muted-foreground border-border",
+  medium: "bg-info/10 text-info border-info/20",
+  risk: "bg-destructive/10 text-destructive border-destructive/20",
+  very_high: "bg-primary/10 text-primary border-primary/20",
+};
 const reviewOptions: Array<{ description: string; label: string; value: CallFeedbackCategory }> = [
   { description: "Vera nailed it. Keep this behavior.", label: "Good answer", value: "good_answer" },
   { description: "Factually wrong or misleading.", label: "Wrong answer", value: "wrong_answer" },
@@ -56,6 +91,7 @@ const reviewLabelByCategory = reviewOptions.reduce<Record<CallFeedbackCategory, 
   acc[option.value] = option.label;
   return acc;
 }, {} as Record<CallFeedbackCategory, string>);
+const emptyCalls: Call[] = [];
 
 export default function Calls() {
   const user = useCurrentUser();
@@ -63,6 +99,7 @@ export default function Calls() {
   const [selected, setSelected] = useState<Call | null>(null);
   const [intent, setIntent] = useState<string>("all");
   const [status, setStatus] = useState<string>("all");
+  const [workFilter, setWorkFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [reviewCategory, setReviewCategory] = useState<CallFeedbackCategory>("good_answer");
   const [reviewNote, setReviewNote] = useState("");
@@ -101,18 +138,44 @@ export default function Calls() {
     },
   });
   const usingSupabase = Boolean(supabaseConfigured && callQuery.isSuccess);
-  const calls = usingSupabase ? callQuery.data : allowSampleCalls ? sampleCalls : [];
+  const calls = usingSupabase ? callQuery.data : allowSampleCalls ? sampleCalls : emptyCalls;
   const sourceLabel = usingSupabase ? "Live Supabase" : allowSampleCalls ? "Sample data" : "Live data unavailable";
+  const insightsByCallId = useMemo(
+    () => new Map(calls.map((call) => [call.id, buildInteractionInsight({ call })])),
+    [calls],
+  );
   const selectedFeedback = selected
     ? feedbackConfigured
       ? feedbackQuery.data ?? []
       : localFeedback[selected.id] ?? []
     : [];
+  const selectedInsight = selected ? buildInteractionInsight({ call: selected, feedback: selectedFeedback }) : null;
+  const interactionStats = useMemo(
+    () => calls.reduce(
+      (stats, call) => {
+        const insight = insightsByCallId.get(call.id);
+        if (!insight) return stats;
+        if (insight.followUpNeeded) stats.needsFollowUp += 1;
+        if (insight.valueTier === "high" || insight.valueTier === "very_high") stats.highValue += 1;
+        if (insight.knowledgeGap) stats.knowledgeGaps += 1;
+        if (insight.urgency === "urgent") stats.urgent += 1;
+        return stats;
+      },
+      { highValue: 0, knowledgeGaps: 0, needsFollowUp: 0, urgent: 0 },
+    ),
+    [calls, insightsByCallId],
+  );
 
   const filtered = calls.filter(c => {
+    const insight = insightsByCallId.get(c.id);
     if (intent !== "all" && c.intent !== intent) return false;
     if (status !== "all" && c.status !== status) return false;
-    if (search && !c.caller.toLowerCase().includes(search.toLowerCase()) && !c.phone.includes(search)) return false;
+    if (workFilter === "needs_follow_up" && !insight?.followUpNeeded) return false;
+    if (workFilter === "needs_review" && insight?.workflowStatus !== "needs_review") return false;
+    if (workFilter === "knowledge_gap" && !insight?.knowledgeGap) return false;
+    if (workFilter === "high_value" && insight?.valueTier !== "high" && insight?.valueTier !== "very_high") return false;
+    if (workFilter === "urgent" && insight?.urgency !== "urgent") return false;
+    if (search && !c.caller.toLowerCase().includes(search.toLowerCase()) && !c.phone.includes(search) && !c.summary.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
   const reviewCanSave = Boolean(selected && (reviewCategory === "good_answer" || reviewNote.trim() || suggestedAnswer.trim()));
@@ -237,6 +300,32 @@ export default function Calls() {
             Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY to show real calls from Supabase.
           </Card>
         )}
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <InteractionMetricCard
+            caption="Open customer or owner action"
+            label="Needs follow-up"
+            tone={interactionStats.needsFollowUp > 0 ? "warning" : "muted"}
+            value={interactionStats.needsFollowUp}
+          />
+          <InteractionMetricCard
+            caption="Large orders, bookings, quotes, events"
+            label="High-value"
+            tone={interactionStats.highValue > 0 ? "primary" : "muted"}
+            value={interactionStats.highValue}
+          />
+          <InteractionMetricCard
+            caption="Missing or low-confidence answers"
+            label="Knowledge gaps"
+            tone={interactionStats.knowledgeGaps > 0 ? "danger" : "muted"}
+            value={interactionStats.knowledgeGaps}
+          />
+          <InteractionMetricCard
+            caption="Complaints, safety, allergy, emergency"
+            label="Urgent/risk"
+            tone={interactionStats.urgent > 0 ? "danger" : "muted"}
+            value={interactionStats.urgent}
+          />
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[200px] max-w-xs">
             <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -264,6 +353,17 @@ export default function Calls() {
               <SelectItem value="resolved">Resolved</SelectItem>
             </SelectContent>
           </Select>
+          <Select value={workFilter} onValueChange={setWorkFilter}>
+            <SelectTrigger className="h-9 w-44"><SelectValue placeholder="Work queue" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All work signals</SelectItem>
+              <SelectItem value="needs_follow_up">Needs follow-up</SelectItem>
+              <SelectItem value="needs_review">Needs review</SelectItem>
+              <SelectItem value="knowledge_gap">Knowledge gaps</SelectItem>
+              <SelectItem value="high_value">High-value</SelectItem>
+              <SelectItem value="urgent">Urgent / risk</SelectItem>
+            </SelectContent>
+          </Select>
           <Button variant="outline" size="sm" className="h-9"><Filter className="mr-1.5 h-3.5 w-3.5" />More filters</Button>
         </div>
 
@@ -275,6 +375,8 @@ export default function Calls() {
                 <TableHead>Time</TableHead>
                 <TableHead>Duration</TableHead>
                 <TableHead>Intent</TableHead>
+                <TableHead>Next step</TableHead>
+                <TableHead>Value</TableHead>
                 <TableHead>Outcome</TableHead>
                 <TableHead className="w-32">Confidence</TableHead>
                 <TableHead>Status</TableHead>
@@ -282,7 +384,7 @@ export default function Calls() {
             </TableHeader>
             <TableBody>
               {filtered.length === 0 && (
-                <TableRow><TableCell colSpan={7} className="py-12 text-center">
+                <TableRow><TableCell colSpan={9} className="py-12 text-center">
                   <Phone className="mx-auto h-8 w-8 text-muted-foreground/50" />
                   <p className="mt-2 text-sm font-medium">
                     {platformAdmin && !usingSupabase ? "Live calls are not connected yet" : "No calls match these filters"}
@@ -292,7 +394,9 @@ export default function Calls() {
                   </p>
                 </TableCell></TableRow>
               )}
-              {filtered.map(c => (
+              {filtered.map(c => {
+                const insight = insightsByCallId.get(c.id) ?? buildInteractionInsight({ call: c });
+                return (
                 <TableRow key={c.id} className="cursor-pointer" onClick={() => setSelected(c)}>
                   <TableCell>
                     <div className="flex flex-wrap items-center gap-2">
@@ -311,6 +415,19 @@ export default function Calls() {
                   <TableCell>
                     <Badge variant="outline" className={intentColor[c.intent]}>{c.intent}</Badge>
                   </TableCell>
+                  <TableCell>
+                    <InsightBadge className="max-w-40" color={workflowColor[insight.workflowStatus]}>
+                      {interactionWorkflowLabels[insight.workflowStatus]}
+                    </InsightBadge>
+                    <div className="mt-1 line-clamp-1 max-w-44 text-xs text-muted-foreground">
+                      {insight.recommendedAction}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <InsightBadge color={valueColor[insight.valueTier]}>
+                      {interactionValueLabels[insight.valueTier]}
+                    </InsightBadge>
+                  </TableCell>
                   <TableCell className="text-sm capitalize">{c.outcome.replace(/_/g, " ")}</TableCell>
                   <TableCell>
                     {c.confidence > 0 ? (
@@ -326,7 +443,8 @@ export default function Calls() {
                     <Badge variant="outline" className={statusColor[c.status]}>{c.status.replace(/_/g, " ")}</Badge>
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         </Card>
@@ -350,6 +468,19 @@ export default function Calls() {
                 <div className="text-sm text-muted-foreground tabular-nums">
                   {selected.phone} · {formatTime(selected.time)} · {formatDuration(selected.duration)}
                 </div>
+                {selectedInsight && (
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    <InsightBadge color={workflowColor[selectedInsight.workflowStatus]}>
+                      {interactionWorkflowLabels[selectedInsight.workflowStatus]}
+                    </InsightBadge>
+                    <InsightBadge color={urgencyColor[selectedInsight.urgency]}>
+                      {interactionUrgencyLabels[selectedInsight.urgency]}
+                    </InsightBadge>
+                    <InsightBadge color={valueColor[selectedInsight.valueTier]}>
+                      {interactionValueLabels[selectedInsight.valueTier]}
+                    </InsightBadge>
+                  </div>
+                )}
               </SheetHeader>
 
               {selected.escalation && (
@@ -449,15 +580,62 @@ export default function Calls() {
                 </TabsContent>
 
                 <TabsContent value="summary" className="mt-4">
-                  <Card className="p-4">
-                    <div className="flex items-start gap-2">
-                      <MessageSquare className="mt-0.5 h-4 w-4 text-primary shrink-0" />
-                      <div>
-                        <div className="text-xs font-medium text-muted-foreground">AI summary</div>
-                        <p className="mt-1 text-sm">{selected.summary}</p>
+                  <div className="space-y-3">
+                    {selectedInsight && (
+                      <Card className="p-4">
+                        <div className="flex items-start gap-2">
+                          <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs font-medium text-muted-foreground">Owner action</div>
+                            <p className="mt-1 text-sm font-medium">{selectedInsight.recommendedAction}</p>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <InsightBadge color={workflowColor[selectedInsight.workflowStatus]}>
+                                {interactionWorkflowLabels[selectedInsight.workflowStatus]}
+                              </InsightBadge>
+                              <InsightBadge color={urgencyColor[selectedInsight.urgency]}>
+                                {interactionUrgencyLabels[selectedInsight.urgency]}
+                              </InsightBadge>
+                              <InsightBadge color={valueColor[selectedInsight.valueTier]}>
+                                {interactionValueLabels[selectedInsight.valueTier]}
+                              </InsightBadge>
+                            </div>
+                            <div className="mt-3 text-xs text-muted-foreground">
+                              Daily report bucket: {ownerReportBucketLabels[selectedInsight.ownerReportBucket]}
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+                    )}
+                    <Card className="p-4">
+                      <div className="flex items-start gap-2">
+                        <MessageSquare className="mt-0.5 h-4 w-4 text-primary shrink-0" />
+                        <div>
+                          <div className="text-xs font-medium text-muted-foreground">AI summary</div>
+                          <p className="mt-1 text-sm">{selected.summary}</p>
+                        </div>
                       </div>
-                    </div>
-                  </Card>
+                    </Card>
+                    {selectedInsight && (
+                      <Card className="p-4">
+                        <div className="text-xs font-medium text-muted-foreground">Why SignalHost flagged it</div>
+                        <div className="mt-2 space-y-1 text-sm">
+                          {selectedInsight.evidence.map((item) => (
+                            <div key={item} className="flex gap-2">
+                              <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/60" />
+                              <span>{item}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          {selectedInsight.tags.map((tag) => (
+                            <Badge key={tag} variant="secondary" className="text-[10px]">
+                              {tag}
+                            </Badge>
+                          ))}
+                        </div>
+                      </Card>
+                    )}
+                  </div>
                 </TabsContent>
 
                 <TabsContent value="extracted" className="mt-4">
@@ -600,6 +778,24 @@ export default function Calls() {
                 </TabsContent>
 
                 <TabsContent value="followup" className="mt-4 space-y-3">
+                  {selectedInsight && (
+                    <Card className="p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-xs font-medium text-muted-foreground">Recommended next step</div>
+                          <p className="mt-1 text-sm font-semibold">{selectedInsight.recommendedAction}</p>
+                        </div>
+                        <InsightBadge color={workflowColor[selectedInsight.workflowStatus]}>
+                          {interactionWorkflowLabels[selectedInsight.workflowStatus]}
+                        </InsightBadge>
+                      </div>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                        <InsightMiniStat label="Urgency" value={interactionUrgencyLabels[selectedInsight.urgency]} />
+                        <InsightMiniStat label="Value" value={interactionValueLabels[selectedInsight.valueTier]} />
+                        <InsightMiniStat label="Report as" value={ownerReportBucketLabels[selectedInsight.ownerReportBucket]} />
+                      </div>
+                    </Card>
+                  )}
                   <div className="space-y-2">
                     <label className="text-xs font-medium text-muted-foreground">Assign to</label>
                     <Select defaultValue="alex">
@@ -626,5 +822,57 @@ export default function Calls() {
         </SheetContent>
       </Sheet>
     </>
+  );
+}
+
+function InteractionMetricCard({
+  caption,
+  label,
+  tone,
+  value,
+}: {
+  caption: string;
+  label: string;
+  tone: "danger" | "muted" | "primary" | "warning";
+  value: number;
+}) {
+  const toneClass = {
+    danger: "border-destructive/20 bg-destructive/5 text-destructive",
+    muted: "border-border bg-card text-muted-foreground",
+    primary: "border-primary/20 bg-primary/5 text-primary",
+    warning: "border-warning/20 bg-warning/5 text-warning",
+  }[tone];
+
+  return (
+    <Card className={cn("p-4", toneClass)}>
+      <div className="text-xs font-medium uppercase text-muted-foreground">{label}</div>
+      <div className="mt-2 text-2xl font-semibold tabular-nums text-foreground">{value}</div>
+      <div className="mt-1 text-xs text-muted-foreground">{caption}</div>
+    </Card>
+  );
+}
+
+function InsightBadge({
+  children,
+  className,
+  color,
+}: {
+  children: string;
+  className?: string;
+  color: string;
+}) {
+  return (
+    <Badge variant="outline" className={cn("whitespace-nowrap", color, className)}>
+      {children}
+    </Badge>
+  );
+}
+
+function InsightMiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-border bg-muted/30 p-2">
+      <div className="text-[10px] font-medium uppercase text-muted-foreground">{label}</div>
+      <div className="mt-1 text-xs font-semibold text-foreground">{value}</div>
+    </div>
   );
 }

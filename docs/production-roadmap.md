@@ -54,6 +54,7 @@ There are 12 production workstreams:
 - Signup now captures business phone and preferred area code, then onboarding presents a self-service launch assistant that can assign the first available local Twilio trial number, store it on the profile, and guide the first test call.
 - Billing now shows plan, trial number status, usage, cleanup timing, and trial guardrails, while the voice backend blocks duplicate active trial-number purchases for a location.
 - Stripe checkout, customer portal, signed webhook handling, and `billing_accounts` subscription persistence are now wired through the voice service using a server-side plan catalog.
+- Calls now have a derived interaction-status foundation in the dashboard: follow-up need, urgency, value tier, knowledge-gap signal, owner report bucket, and recommended next action. The schema baseline includes matching persisted columns for the next migration, but the dashboard derives them safely until the live database is updated.
 - The onboarding phone launch flow tracks direct-call, no-answer forwarding, and busy-line forwarding verification before no-busy-signal coverage is treated as ready.
 - The live voice service includes Supabase FAQs and knowledge sections in model instructions and deterministic fallback replies.
 - Alert routing rules can now persist per location, and the voice service can use those rules to route staff SMS/webhook alerts by event type and severity.
