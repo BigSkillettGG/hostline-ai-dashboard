@@ -2,7 +2,23 @@ import type { VoiceServiceEnv } from "./env";
 import { buildSupabaseServiceHeaders } from "./supabase-headers";
 import type { ProvisionPhoneNumberInput, ProvisionedPhoneNumber } from "./telephony";
 
+export interface TrialPhoneNumberReleaseCandidate {
+  id: string;
+  locationId: string;
+  phoneNumber: string;
+  providerSid: string;
+  trialGraceEndsAt?: string;
+}
+
 export interface PhoneNumberStore {
+  listExpiredTrialNumbers(input?: { limit?: number; now?: Date }): Promise<TrialPhoneNumberReleaseCandidate[]>;
+  markNumberReleased(input: {
+    id?: string;
+    locationId?: string;
+    phoneNumber?: string;
+    providerSid?: string;
+    releaseReason?: string;
+  }): Promise<void>;
   saveProvisionedNumber(input: ProvisionPhoneNumberInput, provisioned: ProvisionedPhoneNumber): Promise<void>;
 }
 
@@ -19,6 +35,18 @@ export function createPhoneNumberStore(env: VoiceServiceEnv): PhoneNumberStore {
 }
 
 class NoopPhoneNumberStore implements PhoneNumberStore {
+  async listExpiredTrialNumbers(): Promise<TrialPhoneNumberReleaseCandidate[]> {
+    console.info("[phone-number-store] Supabase not configured; expired trial numbers not loaded");
+    return [];
+  }
+
+  async markNumberReleased(input: { phoneNumber?: string; providerSid?: string }) {
+    console.info("[phone-number-store] Supabase not configured; released phone number not persisted", {
+      phoneNumber: input.phoneNumber,
+      providerSid: input.providerSid,
+    });
+  }
+
   async saveProvisionedNumber(input: ProvisionPhoneNumberInput, provisioned: ProvisionedPhoneNumber) {
     console.info("[phone-number-store] Supabase not configured; phone number not persisted", {
       locationId: input.locationId,
@@ -40,6 +68,9 @@ class SupabasePhoneNumberStore implements PhoneNumberStore {
 
   async saveProvisionedNumber(input: ProvisionPhoneNumberInput, provisioned: ProvisionedPhoneNumber) {
     const locationId = normalizeLocationId(input.locationId) ?? this.defaultLocationId;
+    const trialStartedAt = new Date();
+    const trialEndsAt = addDays(trialStartedAt, inputTrialDays(input));
+    const trialGraceEndsAt = addDays(trialEndsAt, inputTrialGraceDays(input));
 
     await this.request("phone_numbers", {
       body: {
@@ -50,8 +81,14 @@ class SupabasePhoneNumberStore implements PhoneNumberStore {
         phone_number: provisioned.phoneNumber,
         provider: "twilio",
         provider_sid: provisioned.providerSid || null,
+        provisioning_source: "trial",
         restaurant_main_line: input.restaurantMainLine ?? null,
+        released_at: null,
+        release_reason: null,
         status: provisioned.status,
+        trial_ends_at: trialEndsAt.toISOString(),
+        trial_grace_ends_at: trialGraceEndsAt.toISOString(),
+        trial_started_at: trialStartedAt.toISOString(),
         updated_at: new Date().toISOString(),
         voice_webhook_url: provisioned.voiceWebhookUrl ?? null,
       },
@@ -70,6 +107,79 @@ class SupabasePhoneNumberStore implements PhoneNumberStore {
       method: "PATCH",
       query: `id=eq.${encodeURIComponent(locationId)}`,
     });
+  }
+
+  async listExpiredTrialNumbers(input: { limit?: number; now?: Date } = {}) {
+    const now = input.now ?? new Date();
+    const limit = Math.max(1, Math.min(100, Math.round(input.limit ?? 25)));
+    const rows = await this.get<Array<{
+      id: string;
+      location_id: string;
+      phone_number: string;
+      provider_sid: string | null;
+      trial_grace_ends_at: string | null;
+    }>>(
+      "phone_numbers",
+      [
+        "provider=eq.twilio",
+        "released_at=is.null",
+        "status=in.(provisioned,trialing,in-use,active)",
+        `trial_grace_ends_at=lte.${encodeURIComponent(now.toISOString())}`,
+        "select=id,location_id,phone_number,provider_sid,trial_grace_ends_at",
+        "order=trial_grace_ends_at.asc",
+        `limit=${limit}`,
+      ].join("&"),
+    );
+
+    return (rows ?? [])
+      .filter((row) => Boolean(row.provider_sid))
+      .map((row) => ({
+        id: row.id,
+        locationId: row.location_id,
+        phoneNumber: row.phone_number,
+        providerSid: row.provider_sid ?? "",
+        trialGraceEndsAt: row.trial_grace_ends_at ?? undefined,
+      }));
+  }
+
+  async markNumberReleased(input: {
+    id?: string;
+    locationId?: string;
+    phoneNumber?: string;
+    providerSid?: string;
+    releaseReason?: string;
+  }) {
+    const releasedAt = new Date().toISOString();
+    const filter = input.id
+      ? `id=eq.${encodeURIComponent(input.id)}`
+      : input.providerSid
+        ? `provider_sid=eq.${encodeURIComponent(input.providerSid)}`
+        : input.phoneNumber
+          ? `phone_number=eq.${encodeURIComponent(input.phoneNumber)}`
+          : "";
+    if (!filter) return;
+
+    await this.request("phone_numbers", {
+      body: {
+        forwarding_status: "released",
+        release_reason: input.releaseReason ?? "released",
+        released_at: releasedAt,
+        status: "released",
+        updated_at: releasedAt,
+      },
+      method: "PATCH",
+      query: filter,
+    });
+
+    if (input.locationId && input.phoneNumber) {
+      await this.request("locations", {
+        body: {
+          ai_host_phone: null,
+        },
+        method: "PATCH",
+        query: `id=eq.${encodeURIComponent(input.locationId)}&ai_host_phone=eq.${encodeURIComponent(input.phoneNumber)}`,
+      });
+    }
   }
 
   private async request(
@@ -93,9 +203,38 @@ class SupabasePhoneNumberStore implements PhoneNumberStore {
       throw new Error(`Supabase ${options.method} ${table} failed: ${response.status} ${body}`);
     }
   }
+
+  private async get<T>(table: string, query: string): Promise<T> {
+    const response = await fetch(`${this.restUrl}/${table}?${query}`, {
+      headers: buildSupabaseServiceHeaders(this.key),
+      method: "GET",
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`Supabase GET ${table} failed: ${response.status} ${body}`);
+    }
+
+    const text = await response.text();
+    return text ? (JSON.parse(text) as T) : ([] as T);
+  }
 }
 
 function normalizeLocationId(locationId?: string) {
   if (!locationId || locationId === "demo-location") return undefined;
   return locationId;
+}
+
+function addDays(date: Date, days: number) {
+  return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
+}
+
+function inputTrialDays(input: ProvisionPhoneNumberInput) {
+  const value = Number((input as { trialDays?: unknown }).trialDays);
+  return Number.isFinite(value) ? Math.max(1, Math.min(30, Math.round(value))) : 7;
+}
+
+function inputTrialGraceDays(input: ProvisionPhoneNumberInput) {
+  const value = Number((input as { trialGraceDays?: unknown }).trialGraceDays);
+  return Number.isFinite(value) ? Math.max(0, Math.min(60, Math.round(value))) : 14;
 }

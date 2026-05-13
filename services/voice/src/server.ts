@@ -17,6 +17,7 @@ import {
   readLimitedRequestBody,
 } from "./http-safety";
 import { createMenuIngestionService } from "./menu-ingestion-service";
+import { buildSmsTwiML, createMessageThreadStore } from "./message-thread-store";
 import { createStaffNotificationService } from "./notification-service";
 import { createOpenAIRealtimeSipService } from "./openai-realtime-sip";
 import { createPlatformIntegrationRegistry } from "./platform-integrations";
@@ -39,6 +40,7 @@ const restaurantContextStore = createRestaurantContextStore(env);
 const telephonyService = createTelephonyService(env);
 const staffNotificationService = createStaffNotificationService(env);
 const guestConfirmationService = createGuestConfirmationService(env);
+const messageThreadStore = createMessageThreadStore(env);
 const menuIngestionService = createMenuIngestionService(env);
 const platformIntegrationRegistry = createPlatformIntegrationRegistry(env);
 const reservationPlatformService = createReservationPlatformService(env);
@@ -139,6 +141,12 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       twilioProvisioningConfigured: telephonyService.configured,
       staffAlertsConfigured: staffNotificationService.configured,
       guestConfirmationsConfigured: guestConfirmationService.configured,
+      sharedSmsRoutingConfigured: Boolean(
+        currentEnv.SUPABASE_URL &&
+          currentEnv.SUPABASE_SECRET_KEY &&
+          currentEnv.SUPABASE_DEMO_LOCATION_ID &&
+          (currentEnv.TWILIO_MESSAGING_SERVICE_SID || currentEnv.TWILIO_SMS_FROM_NUMBER),
+      ),
       twilioSignatureRequired: currentEnv.REQUIRE_TWILIO_SIGNATURE,
     });
     return;
@@ -329,13 +337,67 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
 
     try {
       const body = parseJsonRequestBody(await readLimitedRequestBody(req, ADMIN_BODY_LIMIT_BYTES)) as {
+        areaCode?: string;
+        contains?: string;
+        country?: string;
         forwardingMode?: string;
         locationId?: string;
         phoneNumber?: string;
         restaurantMainLine?: string;
+        trialDays?: number;
+        trialGraceDays?: number;
       };
-      if (!body.phoneNumber?.trim()) {
-        sendJson(res, 400, { error: "phoneNumber is required" });
+
+      const authorization = await authorizeVoiceAdminRequest({
+        currentEnv,
+        locationId: body.locationId ?? currentEnv.SUPABASE_DEMO_LOCATION_ID,
+        req,
+      });
+      if (!authorization.authorized) {
+        sendJson(res, authorization.status, { error: authorization.reason ?? "Unauthorized" });
+        return;
+      }
+
+      const selectedPhoneNumber = body.phoneNumber?.trim() || await findFirstAvailablePhoneNumber({
+        areaCode: body.areaCode,
+        contains: body.contains,
+        country: body.country,
+      });
+      if (!selectedPhoneNumber) {
+        sendJson(res, 404, { error: "No available Twilio number matched that search." });
+        return;
+      }
+
+      const input = {
+        forwardingMode: body.forwardingMode,
+        locationId: body.locationId ?? currentEnv.SUPABASE_DEMO_LOCATION_ID,
+        phoneNumber: selectedPhoneNumber,
+        restaurantMainLine: body.restaurantMainLine,
+        trialDays: body.trialDays,
+        trialGraceDays: body.trialGraceDays,
+      };
+      const provisioned = await telephonyService.provisionPhoneNumber(input);
+      await phoneNumberStore.saveProvisionedNumber(input, provisioned);
+      sendJson(res, 200, { phoneNumber: provisioned });
+    } catch (error) {
+      sendCaughtError(res, error, "Twilio number provisioning failed");
+    }
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/telephony/release-number") {
+    if (!allowRateLimitedRequest(req, res, "number-release", 20)) return;
+
+    try {
+      const body = parseJsonRequestBody(await readLimitedRequestBody(req, ADMIN_BODY_LIMIT_BYTES)) as {
+        id?: string;
+        locationId?: string;
+        phoneNumber?: string;
+        providerSid?: string;
+        releaseReason?: string;
+      };
+      if (!body.providerSid?.trim()) {
+        sendJson(res, 400, { error: "providerSid is required to release a Twilio number." });
         return;
       }
 
@@ -349,17 +411,67 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
         return;
       }
 
-      const input = {
-        forwardingMode: body.forwardingMode,
-        locationId: body.locationId ?? currentEnv.SUPABASE_DEMO_LOCATION_ID,
-        phoneNumber: body.phoneNumber.trim(),
-        restaurantMainLine: body.restaurantMainLine,
-      };
-      const provisioned = await telephonyService.provisionPhoneNumber(input);
-      await phoneNumberStore.saveProvisionedNumber(input, provisioned);
-      sendJson(res, 200, { phoneNumber: provisioned });
+      const released = await telephonyService.releasePhoneNumber({ providerSid: body.providerSid.trim() });
+      await phoneNumberStore.markNumberReleased({
+        id: body.id,
+        locationId: body.locationId,
+        phoneNumber: body.phoneNumber,
+        providerSid: body.providerSid,
+        releaseReason: body.releaseReason ?? "manual_release",
+      });
+      sendJson(res, 200, { phoneNumber: released });
     } catch (error) {
-      sendCaughtError(res, error, "Twilio number provisioning failed");
+      sendCaughtError(res, error, "Twilio number release failed");
+    }
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/telephony/release-expired-trials") {
+    if (!isValidInternalRequest(req, currentEnv)) {
+      sendJson(res, 401, { error: "Unauthorized" });
+      return;
+    }
+
+    try {
+      const rawBody = await readLimitedRequestBody(req, ADMIN_BODY_LIMIT_BYTES);
+      const body: { dryRun?: boolean; limit?: number; now?: string } = rawBody.trim()
+        ? parseJsonRequestBody(rawBody) as { dryRun?: boolean; limit?: number; now?: string }
+        : {};
+      const candidates = await phoneNumberStore.listExpiredTrialNumbers({
+        limit: body.limit,
+        now: body.now ? new Date(body.now) : undefined,
+      });
+      const released: Array<{ phoneNumber: string; providerSid: string; status: string }> = [];
+      const failed: Array<{ error: string; phoneNumber: string; providerSid: string }> = [];
+
+      for (const candidate of candidates) {
+        if (body.dryRun) {
+          released.push({ phoneNumber: candidate.phoneNumber, providerSid: candidate.providerSid, status: "dry_run" });
+          continue;
+        }
+
+        try {
+          await telephonyService.releasePhoneNumber({ providerSid: candidate.providerSid });
+          await phoneNumberStore.markNumberReleased({
+            id: candidate.id,
+            locationId: candidate.locationId,
+            phoneNumber: candidate.phoneNumber,
+            providerSid: candidate.providerSid,
+            releaseReason: "trial_grace_expired",
+          });
+          released.push({ phoneNumber: candidate.phoneNumber, providerSid: candidate.providerSid, status: "released" });
+        } catch (error) {
+          failed.push({
+            error: error instanceof Error ? error.message : "Release failed",
+            phoneNumber: candidate.phoneNumber,
+            providerSid: candidate.providerSid,
+          });
+        }
+      }
+
+      sendJson(res, failed.length ? 207 : 200, { candidateCount: candidates.length, failed, released });
+    } catch (error) {
+      sendCaughtError(res, error, "Expired trial release failed");
     }
     return;
   }
@@ -410,6 +522,32 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
         console.error("[voice-service] Twilio voice webhook failed", error);
         sendXml(res, 500, buildUnavailableTwiML("SignalHost hit a setup issue. Please try again soon."));
       }
+    }
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/twilio/sms") {
+    try {
+      const rawBody = await readLimitedRequestBody(req, TWILIO_BODY_LIMIT_BYTES);
+      const params = Object.fromEntries(new URLSearchParams(rawBody));
+
+      if (!isValidTwilioWebhook(req, currentEnv, params)) {
+        sendText(res, 401, "Invalid Twilio signature");
+        return;
+      }
+
+      const result = await messageThreadStore.handleInboundSms({
+        body: firstNonEmpty(params.Body, params.body) ?? "",
+        from: firstNonEmpty(params.From, params.from) ?? "",
+        providerMessageSid: firstNonEmpty(params.MessageSid, params.SmsSid, params.messageSid),
+        rawPayload: params,
+        to: firstNonEmpty(params.To, params.to) ?? "",
+      });
+
+      sendXml(res, 200, buildSmsTwiML(result.replyMessage));
+    } catch (error) {
+      console.error("[voice-service] Twilio SMS webhook failed", error);
+      sendXml(res, 200, buildSmsTwiML("SignalHost received your text, but routing needs staff review."));
     }
     return;
   }
@@ -766,6 +904,39 @@ function sendCaughtError(res: ServerResponse, error: unknown, fallbackMessage: s
 
   console.error("[voice-service] request failed", error);
   sendJson(res, 500, { error: fallbackMessage });
+}
+
+async function findFirstAvailablePhoneNumber(input: {
+  areaCode?: string;
+  contains?: string;
+  country?: string;
+}) {
+  const numbers = await telephonyService.searchAvailableNumbers({
+    areaCode: input.areaCode,
+    contains: input.contains,
+    country: input.country,
+    limit: 1,
+  });
+  return numbers[0]?.phoneNumber;
+}
+
+function isValidInternalRequest(req: IncomingMessage, currentEnv: VoiceServiceEnv) {
+  const expected = currentEnv.SIGNALHOST_INTERNAL_API_KEY || currentEnv.HOSTLINE_INTERNAL_API_KEY;
+  if (!expected) return false;
+
+  const apiKey = firstHeader(req.headers["x-signalhost-api-key"]) ??
+    firstHeader(req.headers["x-hostline-api-key"]) ??
+    bearerToken(firstHeader(req.headers.authorization));
+  return apiKey === expected;
+}
+
+function bearerToken(value?: string) {
+  const match = value?.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim();
+}
+
+function firstHeader(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
 }
 
 function applyCors(req: IncomingMessage, res: ServerResponse, currentEnv: VoiceServiceEnv) {

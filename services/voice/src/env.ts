@@ -10,6 +10,7 @@ const envSchema = z.object({
   VOICE_SERVICE_ALLOWED_ORIGIN: z.string().default("*"),
   SIGNALHOST_INTERNAL_API_KEY: z.string().optional(),
   HOSTLINE_INTERNAL_API_KEY: z.string().optional(),
+  SIGNALHOST_SMS_THREAD_TTL_DAYS: z.coerce.number().int().positive().max(30).optional(),
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_PUBLISHABLE_KEY: z.string().optional(),
   SUPABASE_SECRET_KEY: z.string().optional(),

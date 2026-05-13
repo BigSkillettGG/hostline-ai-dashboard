@@ -1465,18 +1465,22 @@ async function handleOpenAIRealtimeToolCall({
 
   if (toolCall.name === "send_guest_confirmation") {
     return sendOpenAIRealtimeGuestConfirmation({
+      callRecordId,
       callerPhone,
       context,
       guestConfirmationService,
+      locationId,
       rawArguments: toolCall.arguments,
     });
   }
 
   if (toolCall.name === "send_business_link") {
     return sendOpenAIRealtimeBusinessLink({
+      callRecordId,
       callerPhone,
       context,
       guestConfirmationService,
+      locationId,
       rawArguments: toolCall.arguments,
     });
   }
@@ -1739,14 +1743,18 @@ function buildReservationFallbackNotes({
 }
 
 export async function sendOpenAIRealtimeGuestConfirmation({
+  callRecordId,
   callerPhone,
   context,
   guestConfirmationService,
+  locationId,
   rawArguments,
 }: {
+  callRecordId?: string;
   callerPhone?: string;
   context: RestaurantVoiceContext;
   guestConfirmationService?: GuestConfirmationService;
+  locationId?: string;
   rawArguments: Record<string, unknown>;
 }) {
   const phoneNumber = normalizeCallerPhone(stringValue(rawArguments.phone_number) ?? callerPhone);
@@ -1772,8 +1780,10 @@ export async function sendOpenAIRealtimeGuestConfirmation({
       }
       if (guestConfirmationService) {
         await guestConfirmationService.sendReservationConfirmation({
+          callId: callRecordId,
           date: reservation.date,
           guestName: stringValue(rawArguments.guest_name),
+          locationId,
           partySize: reservation.partySize,
           restaurantName: context.restaurantName,
           time: reservation.time,
@@ -1790,9 +1800,11 @@ export async function sendOpenAIRealtimeGuestConfirmation({
       const items = parseOrderItems(rawArguments.order_items);
       if (guestConfirmationService) {
         await guestConfirmationService.sendOrderConfirmation({
+          callId: callRecordId,
           customerName: stringValue(rawArguments.guest_name),
           etaMinutes: context.defaultPickupEtaMinutes,
           items,
+          locationId,
           restaurantName: context.restaurantName,
           to: phoneNumber,
         });
@@ -1806,8 +1818,11 @@ export async function sendOpenAIRealtimeGuestConfirmation({
       const message = stringValue(rawArguments.message) ?? "Your request was received.";
       if (guestConfirmationService) {
         await guestConfirmationService.sendTextMessage({
+          callId: callRecordId,
+          locationId,
           message,
           restaurantName: context.restaurantName,
+          threadType: "general",
           to: phoneNumber,
         });
       } else {
@@ -1835,14 +1850,18 @@ export async function sendOpenAIRealtimeGuestConfirmation({
 }
 
 export async function sendOpenAIRealtimeBusinessLink({
+  callRecordId,
   callerPhone,
   context,
   guestConfirmationService,
+  locationId,
   rawArguments,
 }: {
+  callRecordId?: string;
   callerPhone?: string;
   context: RestaurantVoiceContext;
   guestConfirmationService?: GuestConfirmationService;
+  locationId?: string;
   rawArguments: Record<string, unknown>;
 }) {
   const phoneNumber = normalizeCallerPhone(stringValue(rawArguments.phone_number) ?? callerPhone);
@@ -1867,8 +1886,11 @@ export async function sendOpenAIRealtimeBusinessLink({
   try {
     if (guestConfirmationService) {
       await guestConfirmationService.sendTextMessage({
+        callId: callRecordId,
+        locationId,
         message,
         restaurantName: context.restaurantName,
+        threadType: "business_link",
         to: phoneNumber,
       });
     } else {

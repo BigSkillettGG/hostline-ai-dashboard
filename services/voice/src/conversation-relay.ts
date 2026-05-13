@@ -1438,9 +1438,11 @@ async function maybeSendOrderConfirmation({
   if (!shouldSendGuestConfirmation(session, guestConfirmations)) return;
 
   await guestConfirmations.sendOrderConfirmation({
+    callId: session.callRecordId,
     customerName: capturedOrder.customerName,
     etaMinutes: session.context.defaultPickupEtaMinutes ?? 25,
     items: session.orderDraftItems,
+    locationId: session.locationId,
     orderId: session.orderCreatedId,
     restaurantName: session.context.restaurantName,
     to: session.callerPhone,
@@ -1459,8 +1461,10 @@ async function maybeSendReservationConfirmation({
   if (!shouldSendGuestConfirmation(session, guestConfirmations)) return;
 
   await guestConfirmations.sendReservationConfirmation({
+    callId: session.callRecordId,
     date: capturedReservation.date,
     guestName: capturedReservation.guestName,
+    locationId: session.locationId,
     partySize: capturedReservation.partySize,
     reservationId: session.reservationCreatedId,
     restaurantName: session.context.restaurantName,

@@ -1,28 +1,45 @@
 import type { VoiceServiceEnv } from "./env";
+import { createMessageThreadStore, type MessageThreadStore, type MessageThreadType } from "./message-thread-store";
 import type { CapturedOrderItem } from "./order-intake";
 
+interface GuestThreadMetadata {
+  callId?: string;
+  locationId?: string;
+  signalhostPhone?: string;
+}
+
 export interface GuestOrderConfirmationInput {
+  callId?: string;
   customerName?: string;
   etaMinutes?: number;
   items: CapturedOrderItem[];
+  locationId?: string;
   orderId?: string;
   restaurantName: string;
+  signalhostPhone?: string;
   to?: string;
 }
 
 export interface GuestReservationConfirmationInput {
+  callId?: string;
   date: string;
   guestName?: string;
+  locationId?: string;
   partySize: number;
   reservationId?: string;
   restaurantName: string;
+  signalhostPhone?: string;
   time: string;
   to?: string;
 }
 
 export interface GuestTextMessageInput {
+  callId?: string;
+  locationId?: string;
   message: string;
   restaurantName: string;
+  signalhostPhone?: string;
+  threadType?: MessageThreadType;
   to?: string;
 }
 
@@ -106,6 +123,7 @@ class TwilioGuestConfirmationService implements GuestConfirmationService {
   private readonly accountSid: string;
   private readonly authToken: string;
   private readonly baseUrl: string;
+  private readonly messageThreadStore: MessageThreadStore;
   private readonly messagingServiceSid?: string;
   private readonly smsFromNumber?: string;
 
@@ -113,24 +131,45 @@ class TwilioGuestConfirmationService implements GuestConfirmationService {
     this.accountSid = env.TWILIO_ACCOUNT_SID ?? "";
     this.authToken = env.TWILIO_AUTH_TOKEN ?? "";
     this.baseUrl = env.TWILIO_API_BASE_URL.replace(/\/$/, "");
+    this.messageThreadStore = createMessageThreadStore(env);
     this.messagingServiceSid = env.TWILIO_MESSAGING_SERVICE_SID;
     this.smsFromNumber = env.TWILIO_SMS_FROM_NUMBER;
   }
 
   async sendOrderConfirmation(input: GuestOrderConfirmationInput) {
-    await this.sendSms(input.to, formatGuestOrderConfirmation(input));
+    const message = formatGuestOrderConfirmation(input);
+    const sent = await this.sendSms(input.to, message);
+    await this.recordThread(input, {
+      body: message,
+      providerMessageSid: sent?.sid,
+      relatedOrderId: input.orderId,
+      threadType: "order",
+    });
   }
 
   async sendReservationConfirmation(input: GuestReservationConfirmationInput) {
-    await this.sendSms(input.to, formatGuestReservationConfirmation(input));
+    const message = formatGuestReservationConfirmation(input);
+    const sent = await this.sendSms(input.to, message);
+    await this.recordThread(input, {
+      body: message,
+      providerMessageSid: sent?.sid,
+      relatedReservationId: input.reservationId,
+      threadType: "reservation",
+    });
   }
 
   async sendTextMessage(input: GuestTextMessageInput) {
-    await this.sendSms(input.to, formatGuestTextMessage(input));
+    const message = formatGuestTextMessage(input);
+    const sent = await this.sendSms(input.to, message);
+    await this.recordThread(input, {
+      body: message,
+      providerMessageSid: sent?.sid,
+      threadType: input.threadType ?? "general",
+    });
   }
 
   private async sendSms(to: string | undefined, message: string) {
-    if (!to?.trim()) return;
+    if (!to?.trim()) return undefined;
 
     const body = new URLSearchParams({
       Body: message,
@@ -159,6 +198,35 @@ class TwilioGuestConfirmationService implements GuestConfirmationService {
       const responseBody = await response.text();
       throw new Error(`Twilio guest confirmation failed: ${response.status} ${responseBody}`);
     }
+
+    const text = await response.text();
+    return text ? (JSON.parse(text) as { from?: string; sid?: string; to?: string }) : undefined;
+  }
+
+  private async recordThread(
+    input: GuestThreadMetadata & { restaurantName: string; to?: string },
+    details: {
+      body: string;
+      providerMessageSid?: string;
+      relatedOrderId?: string;
+      relatedReservationId?: string;
+      threadType: MessageThreadType;
+    },
+  ) {
+    if (!input.locationId || !input.to) return;
+
+    await this.messageThreadStore.recordOutboundMessage({
+      body: details.body,
+      customerPhone: input.to,
+      locationId: input.locationId,
+      providerMessageSid: details.providerMessageSid,
+      relatedCallId: input.callId,
+      relatedOrderId: details.relatedOrderId,
+      relatedReservationId: details.relatedReservationId,
+      restaurantName: input.restaurantName,
+      signalhostPhone: input.signalhostPhone ?? this.smsFromNumber,
+      threadType: details.threadType,
+    });
   }
 }
 

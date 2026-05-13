@@ -15,12 +15,21 @@ export interface ProvisionPhoneNumberInput {
   restaurantMainLine?: string;
 }
 
+export interface ReleasePhoneNumberInput {
+  providerSid: string;
+}
+
 export interface ProvisionedPhoneNumber {
   capabilities: Record<string, boolean>;
   phoneNumber: string;
   providerSid: string;
   status: string;
   voiceWebhookUrl?: string;
+}
+
+export interface ReleasedPhoneNumber {
+  providerSid: string;
+  status: "released";
 }
 
 export interface TelephonyService {
@@ -32,6 +41,7 @@ export interface TelephonyService {
     limit?: number;
   }): Promise<AvailableTwilioNumber[]>;
   provisionPhoneNumber(input: ProvisionPhoneNumberInput): Promise<ProvisionedPhoneNumber>;
+  releasePhoneNumber(input: ReleasePhoneNumberInput): Promise<ReleasedPhoneNumber>;
 }
 
 interface TwilioAvailableNumberResponse {
@@ -88,6 +98,10 @@ class NotConfiguredTelephonyService implements TelephonyService {
   }
 
   async provisionPhoneNumber(): Promise<ProvisionedPhoneNumber> {
+    throw new Error("Twilio provisioning is not configured.");
+  }
+
+  async releasePhoneNumber(): Promise<ReleasedPhoneNumber> {
     throw new Error("Twilio provisioning is not configured.");
   }
 }
@@ -160,7 +174,21 @@ class TwilioTelephonyService implements TelephonyService {
     };
   }
 
-  private async twilioRequest<T>(path: string, init?: { body?: URLSearchParams; method?: "GET" | "POST" }) {
+  async releasePhoneNumber(input: ReleasePhoneNumberInput): Promise<ReleasedPhoneNumber> {
+    const providerSid = input.providerSid.trim();
+    if (!providerSid) {
+      throw new Error("providerSid is required to release a Twilio number.");
+    }
+
+    await this.twilioRequest<void>(
+      `/2010-04-01/Accounts/${encodeURIComponent(this.accountSid)}/IncomingPhoneNumbers/${encodeURIComponent(providerSid)}.json`,
+      { method: "DELETE" },
+    );
+
+    return { providerSid, status: "released" };
+  }
+
+  private async twilioRequest<T>(path: string, init?: { body?: URLSearchParams; method?: "DELETE" | "GET" | "POST" }) {
     const response = await fetch(`${this.baseUrl}${path}`, {
       body: init?.body,
       headers: {
@@ -175,7 +203,9 @@ class TwilioTelephonyService implements TelephonyService {
       throw new Error(`Twilio ${init?.method ?? "GET"} failed: ${response.status} ${body}`);
     }
 
-    return (await response.json()) as T;
+    if (response.status === 204) return undefined as T;
+    const text = await response.text();
+    return text ? (JSON.parse(text) as T) : (undefined as T);
   }
 }
 

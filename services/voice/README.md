@@ -114,9 +114,12 @@ When Supabase is configured, Twilio requests can include `locationId` in the web
 
 - `POST /tenant/bootstrap` creates the signed-in user's organization, owner membership, first location, onboarding profile, and default agent config after website signup. It requires a Supabase bearer token and uses the backend-only service role key.
 - `GET /telephony/available-numbers?areaCode=415&limit=5` searches Twilio local numbers with voice and SMS enabled.
-- `POST /telephony/provision-number` purchases a selected number, sets its voice webhook to `/twilio/voice?locationId=...`, writes `phone_numbers`, and updates `locations.ai_host_phone`.
+- `POST /telephony/provision-number` purchases a selected number, sets its voice webhook to `/twilio/voice?locationId=...`, writes `phone_numbers`, and updates `locations.ai_host_phone`. If `phoneNumber` is omitted, the service searches Twilio with `areaCode`, `contains`, and `country`, then provisions the first match.
+- `POST /telephony/release-number` releases a Twilio number by `providerSid` and marks the matching `phone_numbers` row as released.
+- `POST /telephony/release-expired-trials` releases trial numbers whose grace period has ended. This endpoint is internal-key protected and supports `{ "dryRun": true }`.
 - `GET /twilio/live-call-config?locationId=...` returns the generated live call URLs.
 - `GET /twilio/twiml-preview?locationId=...` renders the TwiML preview used to verify ConversationRelay before calling.
+- `POST /twilio/sms` receives inbound SMS replies for the shared SignalHost sender, routes them to the most recent open message thread, asks the customer to disambiguate if needed, and creates a staff task for routed replies.
 - `POST /agent/test-reply` accepts `{ message, locationId, channel, transcript, scenarioId }` and returns Vera's reply plus simulated tool actions. It is admin-protected and does not create real texts, orders, reservations, or staff callbacks.
 - `POST /twilio/recording-status` receives Twilio recording callbacks. Configure Twilio call/SIP recording to send completed recording events to `https://your-voice-service/twilio/recording-status`; the service stores the MP3 URL on `calls.recording_url`.
 - `POST /ingestion/run-next` processes one queued menu ingestion job, fetches URL/text content, parses menu items, replaces `menu_categories` and `menu_items`, and updates `ingestion_jobs` plus `menu_sources`.
