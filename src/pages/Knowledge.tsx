@@ -11,6 +11,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { faqs, knowledgeSections } from "@/data/mock";
 import {
+  buildBusinessLiveContext,
+  businessModes,
+  createTemporaryUpdate,
+  expirationLabels,
+  getBusinessMode,
+  summarizeLiveContext,
+  temporaryUpdateTypeLabels,
+  type BusinessMode,
+  type TemporaryBusinessUpdate,
+  type TemporaryUpdateExpiration,
+  type TemporaryUpdateType,
+} from "@/domain/business-updates";
+import {
   fetchKnowledgeSectionsFromSupabase,
   isKnowledgePersistenceConfigured,
   updateKnowledgeSectionInSupabase,
@@ -32,20 +45,42 @@ import {
   RefreshCw,
   Sparkles,
   Trash2,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 
 const EVENT_TYPES: EventType[] = ["Live music", "DJ", "Trivia", "Open mic", "Other"];
+const UPDATE_TYPES: TemporaryUpdateType[] = ["special", "hours", "closure", "promotion", "staffing", "service_status", "event", "policy"];
+const EXPIRATIONS: TemporaryUpdateExpiration[] = ["today_close", "tomorrow_close", "custom", "until_cleared"];
 
 type DisplayKnowledgeSection = KnowledgeSectionRecord & {
   sample?: boolean;
   uses?: number;
 };
 
+type TemporaryUpdateDraft = {
+  body: string;
+  customExpiresAt: string;
+  expiration: TemporaryUpdateExpiration;
+  mode: BusinessMode | "none";
+  title: string;
+  type: TemporaryUpdateType;
+};
+
 export default function Knowledge() {
   const queryClient = useQueryClient();
   const liveConfigured = isKnowledgePersistenceConfigured();
   const [items, setItems] = useState(faqs);
+  const [businessMode, setBusinessMode] = useState<BusinessMode>("normal");
+  const [temporaryUpdates, setTemporaryUpdates] = useState<TemporaryBusinessUpdate[]>(() => buildInitialTemporaryUpdates());
+  const [updateDraft, setUpdateDraft] = useState<TemporaryUpdateDraft>({
+    body: "",
+    customExpiresAt: "",
+    expiration: "today_close",
+    mode: "none",
+    title: "",
+    type: "special",
+  });
   const [musicSources, setMusicSources] = useState<EntertainmentSource[]>([]);
   const [newMusicUrl, setNewMusicUrl] = useState("");
   const [newMusicFreq, setNewMusicFreq] = useState<SyncFrequency>("daily");
@@ -103,6 +138,11 @@ export default function Knowledge() {
     : sampleSections;
   const inactiveTuningCount = liveSections.filter((section) => section.isBehaviorTuning && !section.isActive).length;
   const sortedEvents = [...events].sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
+  const liveContext = useMemo(
+    () => buildBusinessLiveContext({ mode: businessMode, updates: temporaryUpdates }),
+    [businessMode, temporaryUpdates],
+  );
+  const selectedBusinessMode = getBusinessMode(businessMode);
 
   const addSource = () => {
     try {
@@ -123,6 +163,41 @@ export default function Knowledge() {
     } catch {
       toast.error("Enter a valid http(s) URL");
     }
+  };
+
+  const addTemporaryUpdate = () => {
+    if (!updateDraft.title.trim() || !updateDraft.body.trim()) {
+      toast.error("Add a title and the exact thing SignalHost should know.");
+      return;
+    }
+    if (updateDraft.expiration === "custom" && !updateDraft.customExpiresAt) {
+      toast.error("Choose when this update should expire.");
+      return;
+    }
+
+    const update = createTemporaryUpdate({
+      body: updateDraft.body,
+      customExpiresAt: updateDraft.customExpiresAt,
+      expiration: updateDraft.expiration,
+      mode: updateDraft.mode === "none" ? undefined : updateDraft.mode,
+      title: updateDraft.title,
+      type: updateDraft.type,
+    });
+    setTemporaryUpdates([update, ...temporaryUpdates]);
+    setUpdateDraft({
+      body: "",
+      customExpiresAt: "",
+      expiration: "today_close",
+      mode: "none",
+      title: "",
+      type: "special",
+    });
+    toast.success("Live update added");
+  };
+
+  const clearTemporaryUpdate = (id: string) => {
+    setTemporaryUpdates(temporaryUpdates.filter((update) => update.id !== id));
+    toast.success("Live update cleared");
   };
 
   const addEvent = () => {
@@ -189,6 +264,151 @@ export default function Knowledge() {
         }
       />
       <PageBody className="space-y-5">
+        <Card className="overflow-hidden border-primary/20">
+          <div className="grid gap-0 xl:grid-cols-[0.95fr_1.2fr]">
+            <div className="border-b border-border bg-primary/5 p-5 xl:border-b-0 xl:border-r">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <Zap className="h-4 w-4 text-primary" />
+                Live updates & modes
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Temporary instructions sit above permanent knowledge. Use them for today's specials, weather closures, staff shortages, holiday rules, or service surges.
+              </p>
+              <div className="mt-4 space-y-2">
+                <Label className="text-xs font-medium text-muted-foreground">Current mode</Label>
+                <Select value={businessMode} onValueChange={(value) => setBusinessMode(value as BusinessMode)}>
+                  <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {businessModes.map((mode) => (
+                      <SelectItem key={mode.id} value={mode.id}>{mode.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="rounded-md border border-border bg-background/80 p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline" className={selectedBusinessMode.urgency === "urgent" ? "border-destructive/30 bg-destructive/10 text-destructive" : selectedBusinessMode.urgency === "high" ? "border-warning/30 bg-warning/10 text-warning" : "border-primary/30 bg-primary/10 text-primary"}>
+                      {selectedBusinessMode.label}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">{selectedBusinessMode.description}</span>
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-muted-foreground">{selectedBusinessMode.operatorCue}</p>
+                </div>
+              </div>
+              <div className="mt-4 rounded-md border border-border bg-background/80 p-3 text-xs leading-5 text-muted-foreground">
+                {summarizeLiveContext(liveContext)}
+              </div>
+            </div>
+
+            <div className="p-5">
+              <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
+                <div className="space-y-3">
+                  <div>
+                    <div className="text-xs font-medium uppercase text-muted-foreground">Add live update</div>
+                    <p className="text-xs text-muted-foreground">Write it the way a manager would brief a front desk person.</p>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Type</Label>
+                      <Select value={updateDraft.type} onValueChange={(value) => setUpdateDraft({ ...updateDraft, type: value as TemporaryUpdateType })}>
+                        <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {UPDATE_TYPES.map((type) => (
+                            <SelectItem key={type} value={type}>{temporaryUpdateTypeLabels[type]}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Expires</Label>
+                      <Select value={updateDraft.expiration} onValueChange={(value) => setUpdateDraft({ ...updateDraft, expiration: value as TemporaryUpdateExpiration })}>
+                        <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {EXPIRATIONS.map((expiration) => (
+                            <SelectItem key={expiration} value={expiration}>{expirationLabels[expiration]}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <Label className="text-xs">Mode scope</Label>
+                      <Select value={updateDraft.mode} onValueChange={(value) => setUpdateDraft({ ...updateDraft, mode: value as BusinessMode | "none" })}>
+                        <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Any mode</SelectItem>
+                          {businessModes.map((mode) => (
+                            <SelectItem key={mode.id} value={mode.id}>{mode.label} only</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <Label className="text-xs">Title</Label>
+                      <Input
+                        value={updateDraft.title}
+                        onChange={(event) => setUpdateDraft({ ...updateDraft, title: event.target.value })}
+                        placeholder="Tonight's special, closed for storm, running behind..."
+                        className="h-9"
+                      />
+                    </div>
+                    {updateDraft.expiration === "custom" && (
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <Label className="text-xs">Custom expiration</Label>
+                        <Input
+                          type="datetime-local"
+                          value={updateDraft.customExpiresAt}
+                          onChange={(event) => setUpdateDraft({ ...updateDraft, customExpiresAt: event.target.value })}
+                          className="h-9"
+                        />
+                      </div>
+                    )}
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <Label className="text-xs">Temporary instruction</Label>
+                      <Textarea
+                        value={updateDraft.body}
+                        onChange={(event) => setUpdateDraft({ ...updateDraft, body: event.target.value })}
+                        placeholder="Example: Tell callers we are fully booked tonight, but they can join the walk-in waitlist at the door."
+                        rows={3}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button size="sm" onClick={addTemporaryUpdate}>
+                      <Plus className="mr-1.5 h-3.5 w-3.5" />
+                      Add update
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <div className="text-xs font-medium uppercase text-muted-foreground">Active for the AI</div>
+                    <p className="text-xs text-muted-foreground">These are the rules SignalHost would apply before regular knowledge.</p>
+                  </div>
+                  <div className="space-y-2">
+                    {liveContext.activeUpdates.length === 0 && <EmptyState text="No live updates are active." />}
+                    {liveContext.activeUpdates.map((update) => (
+                      <TemporaryUpdateRow key={update.id} update={update} onClear={() => clearTemporaryUpdate(update.id)} />
+                    ))}
+                  </div>
+                  {liveContext.expiredUpdates.length > 0 && (
+                    <div className="rounded-md border border-dashed border-border p-3">
+                      <div className="mb-2 text-xs font-medium uppercase text-muted-foreground">Expired</div>
+                      <div className="space-y-1 text-xs text-muted-foreground">
+                        {liveContext.expiredUpdates.slice(0, 3).map((update) => (
+                          <div key={update.id} className="flex items-center justify-between gap-2">
+                            <span className="truncate">{update.title}</span>
+                            <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => clearTemporaryUpdate(update.id)}>Clear</Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </Card>
+
         <Card className="border-primary/20 bg-primary/5 p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="max-w-3xl">
@@ -555,6 +775,35 @@ function EmptyState({ text }: { text: string }) {
   return <div className="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">{text}</div>;
 }
 
+function TemporaryUpdateRow({
+  onClear,
+  update,
+}: {
+  onClear: () => void;
+  update: TemporaryBusinessUpdate;
+}) {
+  return (
+    <div className="rounded-md border border-border bg-background/80 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className="text-[10px]">{temporaryUpdateTypeLabels[update.type]}</Badge>
+            {update.mode && (
+              <Badge variant="secondary" className="text-[10px]">{getBusinessMode(update.mode).label}</Badge>
+            )}
+          </div>
+          <div className="mt-2 text-sm font-semibold">{update.title}</div>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">{update.body}</p>
+        </div>
+        <Button size="sm" variant="outline" onClick={onClear}>Clear</Button>
+      </div>
+      <div className="mt-2 text-[11px] text-muted-foreground">
+        {update.expiresAt ? `Expires ${formatUpdateExpiration(update.expiresAt)}` : "Active until cleared"}
+      </div>
+    </div>
+  );
+}
+
 function parseTuningBody(body: string) {
   const feedback = body.match(/Feedback:\s*([\s\S]*?)(?:\n\s*\nPreferred answer:|\n\s*\nSource call:|$)/i)?.[1]?.trim();
   const preferred = body.match(/Preferred answer:\s*([\s\S]*?)(?:\n\s*\nSource call:|$)/i)?.[1]?.trim();
@@ -578,4 +827,39 @@ function formatUpdatedAt(value: string) {
   } catch {
     return "recently";
   }
+}
+
+function formatUpdateExpiration(value: string) {
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      month: "short",
+    }).format(new Date(value));
+  } catch {
+    return value;
+  }
+}
+
+function buildInitialTemporaryUpdates(): TemporaryBusinessUpdate[] {
+  const now = new Date();
+  return [
+    createTemporaryUpdate({
+      body: "Tonight's specials are roasted branzino, mushroom risotto, and burrata with stone fruit. Mention that specials can sell out.",
+      expiration: "today_close",
+      id: "demo-specials",
+      now,
+      title: "Tonight's specials",
+      type: "special",
+    }),
+    createTemporaryUpdate({
+      body: "If callers ask about patio seating tonight, say the patio is open but seating is first come, first served because of the weather.",
+      expiration: "today_close",
+      id: "demo-patio",
+      now,
+      title: "Patio seating note",
+      type: "service_status",
+    }),
+  ];
 }

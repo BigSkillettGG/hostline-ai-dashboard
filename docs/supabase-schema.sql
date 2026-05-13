@@ -107,6 +107,21 @@ create table knowledge_sections (
   updated_at timestamptz not null default now()
 );
 
+create table business_live_updates (
+  id uuid primary key default gen_random_uuid(),
+  location_id uuid not null references locations(id) on delete cascade,
+  update_type text not null check (update_type in ('closure', 'event', 'hours', 'policy', 'promotion', 'service_status', 'special', 'staffing')),
+  title text not null,
+  body text not null,
+  mode text check (mode in ('normal', 'busy', 'after_hours', 'emergency', 'holiday', 'promo', 'staffing_shortage')),
+  expiration text not null default 'today_close' check (expiration in ('today_close', 'tomorrow_close', 'custom', 'until_cleared')),
+  expires_at timestamptz,
+  source text not null default 'dashboard',
+  created_by uuid references auth.users(id) on delete set null default auth.uid(),
+  created_at timestamptz not null default now(),
+  cleared_at timestamptz
+);
+
 create table faqs (
   id uuid primary key default gen_random_uuid(),
   location_id uuid not null references locations(id) on delete cascade,
