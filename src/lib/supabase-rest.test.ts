@@ -115,6 +115,36 @@ describe("Supabase call mapping", () => {
     expect(calls[0].status).toBe("new");
   });
 
+  it("labels website chats from persisted provider metadata", () => {
+    const calls = mapSupabaseCalls(
+      [
+        {
+          caller_name: null,
+          caller_phone: null,
+          confidence: 76,
+          duration_seconds: 18,
+          external_call_sid: "webchat_visitor_123",
+          id: "chat_1",
+          intent: "faq",
+          location_id: "location_1",
+          outcome: "resolved",
+          recording_url: null,
+          started_at: "2026-05-04T20:00:00.000Z",
+          status: "resolved",
+          summary: "Visitor asked about parking.",
+          twilio_payload: { provider: "web_chat" },
+        },
+      ],
+      [],
+    );
+
+    expect(calls[0]).toMatchObject({
+      caller: "Website visitor",
+      channel: "web_chat",
+      phone: "Website chat",
+    });
+  });
+
   it("preserves complaint and sales call intents for operations reporting", () => {
     const calls = mapSupabaseCalls(
       [

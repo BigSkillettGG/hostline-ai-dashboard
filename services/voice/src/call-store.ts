@@ -11,10 +11,12 @@ export interface StartCallInput {
 }
 
 export interface StartRealtimeCallInput {
+  callerName?: string;
   callerPhone?: string;
   externalCallId: string;
   externalSessionId?: string;
   locationId?: string;
+  provider?: string;
   providerPayload?: Record<string, unknown>;
 }
 
@@ -233,6 +235,7 @@ class SupabaseCallStore implements CallStore {
     const startedAt = new Date().toISOString();
     const rows = await this.request<Array<{ id: string }>>("calls", {
       body: {
+        caller_name: input.callerName ?? null,
         caller_phone: input.callerPhone ?? null,
         external_call_sid: input.externalCallId,
         external_session_id: input.externalSessionId ?? null,
@@ -240,8 +243,8 @@ class SupabaseCallStore implements CallStore {
         started_at: startedAt,
         status: "new",
         twilio_payload: {
-          provider: "openai_realtime_sip",
           ...(input.providerPayload ?? {}),
+          provider: input.provider ?? "openai_realtime_sip",
         },
       },
       headers: {

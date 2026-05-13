@@ -98,6 +98,7 @@ interface SupabaseCallRow {
   id: string;
   caller_name: string | null;
   caller_phone: string | null;
+  external_call_sid?: string | null;
   started_at: string;
   duration_seconds: number | null;
   intent: string | null;
@@ -107,6 +108,7 @@ interface SupabaseCallRow {
   status: string | null;
   summary: string | null;
   recording_url: string | null;
+  twilio_payload?: unknown;
 }
 
 interface SupabaseOrganizationRow {
@@ -636,7 +638,7 @@ export async function fetchCallsFromSupabase(
   const callParams = new URLSearchParams({
     limit: "100",
     order: "started_at.desc",
-    select: "id,caller_name,caller_phone,started_at,duration_seconds,intent,location_id,outcome,confidence,status,summary,recording_url",
+    select: "id,caller_name,caller_phone,external_call_sid,started_at,duration_seconds,intent,location_id,outcome,confidence,status,summary,recording_url,twilio_payload",
   });
   if (locationId) callParams.set("location_id", `eq.${locationId}`);
 
@@ -2038,27 +2040,40 @@ export function mapSupabaseCalls(
     turnsByCallId.set(turn.call_id, currentTurns);
   }
 
-  return calls.map((call) => ({
-    id: call.id,
-    caller: call.caller_name?.trim() || "Unknown",
-    phone: call.caller_phone?.trim() || "Unknown",
-    locationId: call.location_id ?? undefined,
-    time: call.started_at,
-    duration: call.duration_seconds ?? 0,
-    intent: normalizeEnum(call.intent, callIntents, "other"),
-    outcome: normalizeEnum(call.outcome, callOutcomes, "unknown"),
-    confidence: call.confidence ?? 0,
-    status: normalizeEnum(call.status, callStatuses, "new"),
-    summary: call.summary?.trim() || "No summary available yet.",
-    recordingUrl: call.recording_url?.trim() || undefined,
-    orderId: orderIdByCallId.get(call.id),
-    reservationId: reservationIdByCallId.get(call.id),
-    transcript: (turnsByCallId.get(call.id) ?? []).map((turn) => ({
-      speaker: normalizeEnum(turn.speaker, transcriptSpeakers, "caller"),
-      text: turn.text,
-      t: formatOffset(turn.offset_seconds ?? 0),
-    })),
-  }));
+  return calls.map((call) => {
+    const channel = getSupabaseCallChannel(call);
+    return {
+      id: call.id,
+      caller: call.caller_name?.trim() || (channel === "web_chat" ? "Website visitor" : "Unknown"),
+      phone: call.caller_phone?.trim() || (channel === "web_chat" ? "Website chat" : "Unknown"),
+      channel,
+      locationId: call.location_id ?? undefined,
+      time: call.started_at,
+      duration: call.duration_seconds ?? 0,
+      intent: normalizeEnum(call.intent, callIntents, "other"),
+      outcome: normalizeEnum(call.outcome, callOutcomes, "unknown"),
+      confidence: call.confidence ?? 0,
+      status: normalizeEnum(call.status, callStatuses, "new"),
+      summary: call.summary?.trim() || "No summary available yet.",
+      recordingUrl: call.recording_url?.trim() || undefined,
+      orderId: orderIdByCallId.get(call.id),
+      reservationId: reservationIdByCallId.get(call.id),
+      transcript: (turnsByCallId.get(call.id) ?? []).map((turn) => ({
+        speaker: normalizeEnum(turn.speaker, transcriptSpeakers, "caller"),
+        text: turn.text,
+        t: formatOffset(turn.offset_seconds ?? 0),
+      })),
+    };
+  });
+}
+
+function getSupabaseCallChannel(call: SupabaseCallRow) {
+  const payload = call.twilio_payload;
+  const provider = payload && typeof payload === "object" && !Array.isArray(payload)
+    ? String((payload as Record<string, unknown>).provider ?? "")
+    : "";
+  if (provider === "web_chat" || call.external_call_sid?.startsWith("webchat_")) return "web_chat" as const;
+  return "phone" as const;
 }
 
 export function mapSupabaseTenantDirectory(input: {

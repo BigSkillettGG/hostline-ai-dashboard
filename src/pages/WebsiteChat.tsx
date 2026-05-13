@@ -50,6 +50,8 @@ export default function WebsiteChat() {
   const [visitorPhone, setVisitorPhone] = useState("");
   const [visitorEmail, setVisitorEmail] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [chatCallId, setChatCallId] = useState<string>();
+  const conversationId = useMemo(() => `dashboard_preview_${createConversationToken()}`, []);
 
   const embedSnippet = useMemo(() => {
     const widgetUrl = typeof window === "undefined"
@@ -90,6 +92,8 @@ export default function WebsiteChat() {
     try {
       const result = await sendWebChatMessage({
         locationId: activeLocationId,
+        callId: chatCallId,
+        conversationId,
         message: messageText,
         transcript,
         visitorEmail: visitorEmail.trim() || undefined,
@@ -97,6 +101,7 @@ export default function WebsiteChat() {
         visitorName: visitorName.trim() || undefined,
         visitorPhone: visitorPhone.trim() || undefined,
       });
+      setChatCallId((current) => result.callId || current);
       setMessages((current) => [
         ...current,
         {
@@ -295,6 +300,13 @@ function escapeHtmlAttribute(value: string) {
     .replace(/"/g, "&quot;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+}
+
+function createConversationToken() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
 }
 
 function ChatBubble({ message }: { message: ChatMessage }) {

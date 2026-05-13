@@ -3,6 +3,7 @@
 export type CallIntent = "order" | "reservation" | "faq" | "hours" | "complaint" | "sales" | "other";
 export type CallOutcome = "resolved" | "order_placed" | "reservation_booked" | "escalated" | "manager_alerted" | "message_taken" | "voicemail" | "missed" | "unknown";
 export type CallStatus = "new" | "reviewed" | "needs_review" | "resolved";
+export type CallChannel = "phone" | "web_chat";
 export type TranscriptSpeaker = "agent" | "caller" | "staff";
 export type CallFeedbackCategory =
   | "good_answer"
@@ -43,6 +44,7 @@ export interface Call {
   id: string;
   caller: string;
   phone: string;
+  channel?: CallChannel;
   locationId?: string;
   time: string; // ISO
   duration: number; // seconds

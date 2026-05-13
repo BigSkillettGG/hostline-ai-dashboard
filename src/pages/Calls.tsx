@@ -161,10 +161,11 @@ export default function Calls() {
     if (!selected) return;
 
     const transcript = selected.transcript.length
-      ? selected.transcript.map((turn) => `${turn.speaker === "agent" ? "Vera" : turn.speaker === "staff" ? "Staff" : "Caller"}: ${turn.text}`).join("\n")
+      ? selected.transcript.map((turn) => `${turn.speaker === "agent" ? "Vera" : turn.speaker === "staff" ? "Staff" : selected.channel === "web_chat" ? "Visitor" : "Caller"}: ${turn.text}`).join("\n")
       : "Transcript not available.";
     const text = [
-      `Call ID: ${selected.id}`,
+      `${selected.channel === "web_chat" ? "Conversation" : "Call"} ID: ${selected.id}`,
+      `Channel: ${selected.channel === "web_chat" ? "Website chat" : "Phone"}`,
       `Caller: ${selected.caller}`,
       `Phone: ${selected.phone}`,
       `Time: ${formatTime(selected.time)}`,
@@ -294,7 +295,15 @@ export default function Calls() {
               {filtered.map(c => (
                 <TableRow key={c.id} className="cursor-pointer" onClick={() => setSelected(c)}>
                   <TableCell>
-                    <div className="font-medium">{c.caller}</div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">{c.caller}</span>
+                      {c.channel === "web_chat" && (
+                        <Badge variant="outline" className="gap-1 border-info/20 bg-info/10 text-info">
+                          <MessageSquare className="h-3 w-3" />
+                          Web chat
+                        </Badge>
+                      )}
+                    </div>
                     <div className="text-xs text-muted-foreground tabular-nums">{c.phone}</div>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground tabular-nums">{formatTime(c.time)}</TableCell>
@@ -331,6 +340,12 @@ export default function Calls() {
                 <SheetTitle className="flex items-center gap-2">
                   {selected.caller}
                   <Badge variant="outline" className={intentColor[selected.intent]}>{selected.intent}</Badge>
+                  {selected.channel === "web_chat" && (
+                    <Badge variant="outline" className="gap-1 border-info/20 bg-info/10 text-info">
+                      <MessageSquare className="h-3 w-3" />
+                      Web chat
+                    </Badge>
+                  )}
                 </SheetTitle>
                 <div className="text-sm text-muted-foreground tabular-nums">
                   {selected.phone} · {formatTime(selected.time)} · {formatDuration(selected.duration)}
@@ -425,7 +440,7 @@ export default function Calls() {
                     <div key={i} className={`flex gap-3 ${t.speaker === "agent" ? "" : "flex-row-reverse"}`}>
                       <div className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${t.speaker === "agent" ? "bg-muted" : "bg-primary text-primary-foreground"}`}>
                         <div className={`text-[10px] mb-0.5 ${t.speaker === "agent" ? "text-muted-foreground" : "text-primary-foreground/70"}`}>
-                          {t.speaker === "agent" ? "Vera (AI)" : t.speaker === "staff" ? "Staff" : selected.caller} · {t.t}
+                          {t.speaker === "agent" ? "Vera (AI)" : t.speaker === "staff" ? "Staff" : selected.channel === "web_chat" ? "Visitor" : selected.caller} · {t.t}
                         </div>
                         {t.text}
                       </div>

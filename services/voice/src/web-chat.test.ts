@@ -85,6 +85,9 @@ describe("web chat service", () => {
   it("creates a customer request when staff follow-up is needed", async () => {
     const createdRequests: unknown[] = [];
     const callStore = buildFakeCallStore({
+      async startRealtimeCall() {
+        return { callId: "call_web_123" };
+      },
       async createCustomerRequest(input) {
         createdRequests.push(input);
         return {
@@ -146,12 +149,82 @@ describe("web chat service", () => {
     ]);
     expect(createdRequests).toEqual([
       expect.objectContaining({
+        callId: "call_web_123",
         customerName: "Sam",
         customerPhone: "+15551234567",
         locationId: "loc_123",
         priority: "high",
         requestType: "service_appointment",
         summary: "Sam wants help with a leaking sink.",
+      }),
+    ]);
+  });
+
+  it("persists each website chat exchange as a transcript-backed call", async () => {
+    const starts: unknown[] = [];
+    const turns: unknown[] = [];
+    const completions: unknown[] = [];
+    const callStore = buildFakeCallStore({
+      async addTranscriptTurn(input) {
+        turns.push(input);
+      },
+      async completeCall(input) {
+        completions.push(input);
+      },
+      async startRealtimeCall(input) {
+        starts.push(input);
+        return { callId: "call_web_456" };
+      },
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ output_text: "Tonight's specials are branzino and mushroom risotto. Anything else I can help with?" }), {
+        status: 200,
+      }),
+    );
+
+    const service = createWebChatService(env, contextStore, { callStore });
+    const result = await service.handleMessage({
+      conversationId: "webchat_test_456",
+      message: "What are the specials tonight?",
+      visitorId: "visitor_456",
+      visitorName: "Dana",
+      visitorPhone: "+15550001111",
+    });
+
+    expect(result.callId).toBe("call_web_456");
+    expect(result.conversationId).toBe("webchat_test_456");
+    expect(starts).toEqual([
+      expect.objectContaining({
+        callerName: "Dana",
+        callerPhone: "+15550001111",
+        externalCallId: "webchat_test_456",
+        externalSessionId: "visitor_456",
+        provider: "web_chat",
+        providerPayload: expect.objectContaining({
+          channel: "web_chat",
+          visitorId: "visitor_456",
+        }),
+      }),
+    ]);
+    expect(turns).toEqual([
+      expect.objectContaining({
+        callId: "call_web_456",
+        speaker: "caller",
+        text: "What are the specials tonight?",
+      }),
+      expect.objectContaining({
+        callId: "call_web_456",
+        speaker: "agent",
+        text: expect.stringContaining("branzino"),
+      }),
+    ]);
+    expect(completions).toEqual([
+      expect.objectContaining({
+        callId: "call_web_456",
+        intent: "faq",
+        outcome: "resolved",
+        status: "resolved",
+        summary: expect.stringContaining("Dana chatted with Olive & Ember"),
       }),
     ]);
   });

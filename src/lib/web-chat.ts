@@ -7,6 +7,8 @@ export interface WebChatUiMessage {
 }
 
 export interface SendWebChatMessageInput {
+  callId?: string;
+  conversationId?: string;
   locationId?: string;
   message: string;
   transcript: WebChatUiMessage[];
@@ -32,6 +34,8 @@ export interface WebChatAction {
 export interface WebChatMessageResult {
   actions: WebChatAction[];
   businessName: string;
+  callId?: string;
+  conversationId: string;
   locationId?: string;
   ok: boolean;
   reply: string;

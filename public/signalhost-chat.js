@@ -102,6 +102,9 @@
   avatar.textContent = initials(config.title);
 
   let pending = false;
+  const visitorId = getVisitorId();
+  let conversationId = getConversationId(visitorId);
+  let callId = getSessionValue(callIdKey(conversationId)) || "";
   let messages = [
     {
       at: new Date().toISOString(),
@@ -154,9 +157,11 @@
       const response = await fetch(`${config.voiceServiceUrl}/web-chat/message`, {
         body: JSON.stringify({
           locationId: config.locationId,
+          callId: callId || undefined,
+          conversationId,
           message: text,
           transcript,
-          visitorId: getVisitorId(),
+          visitorId,
           visitorName: nameInput.value.trim() || undefined,
           visitorPhone: phoneInput.value.trim() || undefined,
         }),
@@ -168,6 +173,11 @@
 
       if (!response.ok) throw new Error(`Chat request failed: ${response.status}`);
       const result = await response.json();
+      conversationId = result.conversationId || conversationId;
+      if (result.callId) {
+        callId = result.callId;
+        setSessionValue(callIdKey(conversationId), callId);
+      }
       lastActions = Array.isArray(result.actions) ? result.actions : [];
       messages = Array.isArray(result.transcript) && result.transcript.length
         ? result.transcript
@@ -241,12 +251,58 @@
 
   function getVisitorId() {
     const key = "signalhost.chat.visitorId";
-    let visitorId = localStorage.getItem(key);
+    let visitorId = getLocalValue(key);
     if (!visitorId) {
       visitorId = `web_${Math.random().toString(36).slice(2)}_${Date.now().toString(36)}`;
-      localStorage.setItem(key, visitorId);
+      setLocalValue(key, visitorId);
     }
     return visitorId;
+  }
+
+  function getConversationId(visitorId) {
+    const key = "signalhost.chat.conversationId";
+    let id = getSessionValue(key);
+    if (!id) {
+      id = `webchat_${visitorId}_${Date.now().toString(36)}`;
+      setSessionValue(key, id);
+    }
+    return id;
+  }
+
+  function callIdKey(conversationId) {
+    return `signalhost.chat.callId.${conversationId}`;
+  }
+
+  function getLocalValue(key) {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return "";
+    }
+  }
+
+  function setLocalValue(key, value) {
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      // Storage can be unavailable in strict embedded contexts; chat still works for the current page.
+    }
+  }
+
+  function getSessionValue(key) {
+    try {
+      return sessionStorage.getItem(key);
+    } catch {
+      return "";
+    }
+  }
+
+  function setSessionValue(key, value) {
+    try {
+      sessionStorage.setItem(key, value);
+    } catch {
+      // Storage can be unavailable in strict embedded contexts; chat still works for the current page.
+    }
   }
 
   function parseList(value) {
