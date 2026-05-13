@@ -70,6 +70,7 @@ const App = () => (
             <Route path="onboarding" element={<Onboarding />} />
             <Route path="alert-log" element={<AlertLog />} />
             <Route path="tasks" element={<Tasks />} />
+            <Route path="action-center" element={<Tasks />} />
             <Route path="calls" element={<Calls />} />
             <Route path="escalations" element={<Escalations />} />
             <Route path="orders" element={<Orders />} />
@@ -95,6 +96,7 @@ const App = () => (
             <Route path="qa" element={<CallQA />} />
             <Route path="scenarios" element={<ScenarioLab />} />
             <Route path="calls" element={<Calls />} />
+            <Route path="tasks" element={<Tasks />} />
             <Route path="voice-agent" element={<VoiceAgentAdvanced />} />
             <Route path="telephony" element={<Telephony />} />
             <Route path="billing" element={<SuperBilling />} />

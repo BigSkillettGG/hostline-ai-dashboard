@@ -17,6 +17,7 @@ export interface StaffTask {
   createdAt: string;
   dueAt?: string;
   id: string;
+  locationId?: string;
   orderId?: string;
   priority: StaffTaskPriority;
   reservationId?: string;

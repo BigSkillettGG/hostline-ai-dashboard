@@ -18,7 +18,7 @@ import { loadOnboardingDraft } from "@/lib/onboarding-draft";
 const operations = [
   { title: "Dashboard", url: "/app", icon: LayoutDashboard, end: true },
   { title: "Alert Log", url: "/app/alert-log", icon: BellRing },
-  { title: "Tasks", url: "/app/tasks", icon: ListTodo },
+  { title: "Action Center", url: "/app/tasks", icon: ListTodo },
   { title: "Calls", url: "/app/calls", icon: Phone },
   { title: "Orders", url: "/app/orders", icon: ShoppingBag },
   { title: "Kitchen", url: "/app/kitchen", icon: ChefHat },

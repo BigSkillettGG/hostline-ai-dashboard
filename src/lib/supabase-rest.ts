@@ -273,6 +273,7 @@ interface SupabaseStaffTaskRow {
   created_at: string | null;
   due_at: string | null;
   id: string;
+  location_id?: string | null;
   order_id: string | null;
   priority: string | null;
   reservation_id: string | null;
@@ -1162,20 +1163,22 @@ export async function fetchStaffAlertEventsFromSupabase(
 }
 
 export async function fetchStaffTasksFromSupabase(
-  locationId = getActiveSupabaseLocationId(),
+  locationId: string | null | undefined = getActiveSupabaseLocationId(),
 ): Promise<StaffTask[]> {
-  if (!isSupabaseConfigured() || !locationId) {
+  if (!isSupabaseConfigured()) {
     throw new Error("Supabase staff task persistence is not configured.");
   }
 
+  const params = new URLSearchParams({
+    limit: "100",
+    order: "created_at.desc",
+    select: staffTaskSelectColumns,
+  });
+  if (locationId) params.set("location_id", `eq.${locationId}`);
+
   const rows = await supabaseRequest<SupabaseStaffTaskRow[]>(
     "staff_tasks",
-    new URLSearchParams({
-      limit: "100",
-      location_id: `eq.${locationId}`,
-      order: "created_at.desc",
-      select: staffTaskSelectColumns,
-    }),
+    params,
   );
 
   return rows.map(mapSupabaseStaffTask);
@@ -1988,6 +1991,7 @@ export function mapSupabaseStaffTask(row: SupabaseStaffTaskRow): StaffTask {
     createdAt: row.created_at ?? "",
     dueAt: row.due_at ?? undefined,
     id: row.id,
+    locationId: row.location_id ?? undefined,
     orderId: row.order_id ?? undefined,
     priority: normalizeStaffTaskPriority(row.priority),
     reservationId: row.reservation_id ?? undefined,
@@ -2523,7 +2527,7 @@ const staffAlertEventSelectColumns =
   "id,call_id,kind,severity,status,summary,message,caller_phone,recipients,channels,route_snapshot,error_message,sent_at,created_at";
 
 const staffTaskSelectColumns =
-  "id,call_id,order_id,reservation_id,title,body,status,task_type,priority,assigned_to,due_at,completed_at,created_at";
+  "id,location_id,call_id,order_id,reservation_id,title,body,status,task_type,priority,assigned_to,due_at,completed_at,created_at";
 
 const callFeedbackSelectColumns =
   "id,call_id,category,note,suggested_answer,add_to_knowledge,created_by,created_at";
