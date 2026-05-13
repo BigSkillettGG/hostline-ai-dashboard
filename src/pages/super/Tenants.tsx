@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
-import { Building2, Eye, RefreshCw, Search } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { Building2, ExternalLink, FileText, RefreshCw, Search } from "lucide-react";
 import { PageHeader, PageBody } from "@/components/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -183,6 +183,19 @@ export default function SuperTenants() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex justify-end gap-2">
+                          {tenant.source === "live" && tenant.locationId !== "not-created" ? (
+                            <Button size="sm" variant="outline" asChild>
+                              <Link to={`/super/tenants/${tenant.locationId}`}>
+                                <FileText className="mr-1.5 h-3.5 w-3.5" />
+                                Details
+                              </Link>
+                            </Button>
+                          ) : (
+                            <Button size="sm" variant="outline" disabled>
+                              <FileText className="mr-1.5 h-3.5 w-3.5" />
+                              Details
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             variant="outline"
@@ -198,8 +211,8 @@ export default function SuperTenants() {
                             onClick={() => viewAsTenant(tenant)}
                             disabled={tenant.source !== "live" || tenant.locationId === "not-created"}
                           >
-                            <Eye className="mr-1.5 h-3.5 w-3.5" />
-                            View
+                            <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                            App
                           </Button>
                         </div>
                       </td>

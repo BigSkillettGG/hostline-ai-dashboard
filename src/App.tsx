@@ -36,6 +36,7 @@ import Billing from "./pages/settings/Billing";
 import SuperLayout from "./components/SuperLayout";
 import SuperOverview from "./pages/super/Overview";
 import SuperTenants from "./pages/super/Tenants";
+import TenantDetail from "./pages/super/TenantDetail";
 import SuperBilling from "./pages/super/Billing";
 import VoiceAgentAdvanced from "./pages/super/VoiceAgentAdvanced";
 import Telephony from "./pages/super/Telephony";
@@ -88,6 +89,7 @@ const App = () => (
           <Route path="/super" element={<RequireRole role="superadmin"><SuperLayout /></RequireRole>}>
             <Route index element={<SuperOverview />} />
             <Route path="tenants" element={<SuperTenants />} />
+            <Route path="tenants/:locationId" element={<TenantDetail />} />
             <Route path="calls" element={<Calls />} />
             <Route path="voice-agent" element={<VoiceAgentAdvanced />} />
             <Route path="telephony" element={<Telephony />} />
