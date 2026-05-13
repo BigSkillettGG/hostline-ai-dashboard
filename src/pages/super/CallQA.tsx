@@ -134,7 +134,7 @@ export default function CallQA() {
       setSuggestedAnswer("");
       setAddToKnowledge(false);
       await queryClient.invalidateQueries({ queryKey: ["call-feedback", feedback.callId] });
-      toast.success(feedback.addedToKnowledge ? "QA note saved and added to knowledge" : "QA note saved");
+      toast.success(feedback.addedToKnowledge ? "QA note saved for knowledge approval" : "QA note saved");
     },
   });
   const statusMutation = useMutation({
@@ -417,8 +417,8 @@ export default function CallQA() {
                     <div className="mt-3 flex items-start gap-2 rounded-md border border-border bg-muted/30 p-3">
                       <Checkbox checked={addToKnowledge} id="qa-add-knowledge" onCheckedChange={(checked) => setAddToKnowledge(checked === true)} />
                       <div>
-                        <Label htmlFor="qa-add-knowledge" className="text-sm font-medium">Add this to the tenant knowledge base</Label>
-                        <p className="text-xs text-muted-foreground">Use this for permanent facts or preferred behavior, not just one-off notes.</p>
+                        <Label htmlFor="qa-add-knowledge" className="text-sm font-medium">Queue this as a knowledge update</Label>
+                        <p className="text-xs text-muted-foreground">Use this for permanent facts or preferred behavior. It will wait for owner approval before shaping the AI.</p>
                       </div>
                     </div>
 
@@ -518,7 +518,7 @@ function FeedbackRow({ feedback }: { feedback: CallFeedback }) {
       {feedback.addedToKnowledge && (
         <div className="mt-2 inline-flex items-center gap-1 text-xs text-primary">
           <BookOpen className="h-3 w-3" />
-          Added to knowledge
+          Queued for knowledge approval
         </div>
       )}
     </div>

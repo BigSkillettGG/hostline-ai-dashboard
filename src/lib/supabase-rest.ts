@@ -53,6 +53,17 @@ import type {
   TemporaryUpdateExpiration,
   TemporaryUpdateType,
 } from "@/domain/business-updates";
+import {
+  buildKnowledgeSuggestionBody,
+  buildKnowledgeSuggestionTitle,
+  normalizeKnowledgeSuggestionPriority,
+  normalizeKnowledgeSuggestionSource,
+  normalizeKnowledgeSuggestionStatus,
+  type KnowledgeSuggestion,
+  type KnowledgeSuggestionPriority,
+  type KnowledgeSuggestionSource,
+  type KnowledgeSuggestionStatus,
+} from "@/domain/knowledge-suggestions";
 import type { BusinessLiveState } from "@/lib/business-live-updates-storage";
 import type {
   IngestionJob,
@@ -180,6 +191,23 @@ interface SupabaseKnowledgeSectionRow {
   location_id: string;
   title: string;
   updated_at: string | null;
+}
+
+interface SupabaseKnowledgeSuggestionRow {
+  applied_knowledge_section_id: string | null;
+  body: string | null;
+  call_id: string | null;
+  created_at: string | null;
+  feedback_id: string | null;
+  id: string;
+  location_id: string;
+  priority: string | null;
+  reviewed_at: string | null;
+  source: string | null;
+  source_question: string | null;
+  status: string | null;
+  suggested_answer: string | null;
+  title: string | null;
 }
 
 interface SupabaseBusinessLiveSettingsRow {
@@ -548,6 +576,28 @@ export interface UpdateKnowledgeSectionInput {
   title?: string;
 }
 
+export interface CreateKnowledgeSuggestionInput {
+  body: string;
+  callId?: string;
+  feedbackId?: string;
+  priority?: KnowledgeSuggestionPriority;
+  source?: KnowledgeSuggestionSource;
+  sourceQuestion?: string;
+  status?: KnowledgeSuggestionStatus;
+  suggestedAnswer?: string;
+  title: string;
+}
+
+export interface UpdateKnowledgeSuggestionInput {
+  body?: string;
+  id: string;
+  priority?: KnowledgeSuggestionPriority;
+  sourceQuestion?: string;
+  status?: KnowledgeSuggestionStatus;
+  suggestedAnswer?: string;
+  title?: string;
+}
+
 export interface CreateMenuSourceInput {
   frequency: SyncFrequency;
   label?: string;
@@ -600,6 +650,10 @@ export function isCallFeedbackPersistenceConfigured() {
 }
 
 export function isKnowledgePersistenceConfigured() {
+  return Boolean(isSupabaseConfigured() && getActiveSupabaseLocationId());
+}
+
+export function isKnowledgeSuggestionPersistenceConfigured() {
   return Boolean(isSupabaseConfigured() && getActiveSupabaseLocationId());
 }
 
@@ -857,8 +911,8 @@ export async function createCallFeedbackInSupabase(
       });
 
   if (input.addToKnowledge) {
-    await createKnowledgeSectionFromCallFeedback(savedFeedback, locationId).catch((error) => {
-      console.error("[supabase-rest] knowledge section creation failed", error);
+    await createKnowledgeSuggestionFromCallFeedback(savedFeedback, locationId).catch((error) => {
+      console.error("[supabase-rest] knowledge suggestion creation failed", error);
     });
   }
 
@@ -909,6 +963,93 @@ export async function updateKnowledgeSectionInSupabase(
 
   if (!rows?.[0]) throw new Error("Knowledge section was not returned after update.");
   return mapSupabaseKnowledgeSection(rows[0]);
+}
+
+export async function fetchKnowledgeSuggestionsFromSupabase(
+  locationId = getActiveSupabaseLocationId(),
+): Promise<KnowledgeSuggestion[]> {
+  if (!isSupabaseConfigured() || !locationId) {
+    throw new Error("Supabase knowledge suggestion persistence is not configured.");
+  }
+
+  const rows = await supabaseRequest<SupabaseKnowledgeSuggestionRow[]>(
+    "knowledge_suggestions",
+    new URLSearchParams({
+      location_id: `eq.${locationId}`,
+      order: "created_at.desc",
+      select: knowledgeSuggestionSelectColumns,
+    }),
+  );
+
+  return rows.map(mapSupabaseKnowledgeSuggestion);
+}
+
+export async function createKnowledgeSuggestionInSupabase(
+  input: CreateKnowledgeSuggestionInput,
+  locationId = getActiveSupabaseLocationId(),
+): Promise<KnowledgeSuggestion> {
+  if (!isSupabaseConfigured() || !locationId) {
+    throw new Error("Supabase knowledge suggestion persistence is not configured.");
+  }
+
+  const payload = buildKnowledgeSuggestionInsertPayload(input, locationId);
+  const rows = await supabaseRequest<SupabaseKnowledgeSuggestionRow[]>(
+    "knowledge_suggestions",
+    new URLSearchParams({
+      select: knowledgeSuggestionSelectColumns,
+    }),
+    {
+      body: payload,
+      headers: { Prefer: "return=representation" },
+      method: "POST",
+    },
+  );
+
+  if (!rows?.[0]) throw new Error("Knowledge suggestion was not returned after insert.");
+  return mapSupabaseKnowledgeSuggestion(rows[0]);
+}
+
+export async function updateKnowledgeSuggestionInSupabase(
+  input: UpdateKnowledgeSuggestionInput,
+  locationId = getActiveSupabaseLocationId(),
+): Promise<KnowledgeSuggestion> {
+  if (!isSupabaseConfigured() || !locationId) {
+    throw new Error("Supabase knowledge suggestion persistence is not configured.");
+  }
+
+  const payload = buildKnowledgeSuggestionUpdatePayload(input);
+  const rows = await supabaseRequest<SupabaseKnowledgeSuggestionRow[]>(
+    "knowledge_suggestions",
+    new URLSearchParams({
+      id: `eq.${input.id}`,
+      location_id: `eq.${locationId}`,
+      select: knowledgeSuggestionSelectColumns,
+    }),
+    {
+      body: payload,
+      headers: { Prefer: "return=representation" },
+      method: "PATCH",
+    },
+  );
+
+  if (!rows?.[0]) throw new Error("Knowledge suggestion was not returned after update.");
+  return mapSupabaseKnowledgeSuggestion(rows[0]);
+}
+
+export async function applyKnowledgeSuggestionInSupabase(
+  input: { body?: string; id: string; title?: string },
+  locationId = getActiveSupabaseLocationId(),
+): Promise<KnowledgeSuggestion> {
+  if (!isSupabaseConfigured() || !locationId) {
+    throw new Error("Supabase knowledge approval persistence is not configured.");
+  }
+
+  return createAppliedKnowledgeSectionFromSuggestion({
+    body: input.body,
+    locationId,
+    suggestionId: input.id,
+    title: input.title,
+  });
 }
 
 export async function fetchBusinessLiveStateFromSupabase(
@@ -1864,6 +2005,35 @@ export function buildKnowledgeSectionUpdatePayload(input: UpdateKnowledgeSection
   };
 }
 
+export function buildKnowledgeSuggestionInsertPayload(input: CreateKnowledgeSuggestionInput, locationId: string) {
+  return {
+    body: input.body.trim(),
+    call_id: input.callId ?? null,
+    feedback_id: input.feedbackId ?? null,
+    location_id: locationId,
+    priority: normalizeKnowledgeSuggestionPriority(input.priority),
+    source: normalizeKnowledgeSuggestionSource(input.source),
+    source_question: input.sourceQuestion?.trim() || null,
+    status: normalizeKnowledgeSuggestionStatus(input.status),
+    suggested_answer: input.suggestedAnswer?.trim() || null,
+    title: input.title.trim(),
+  };
+}
+
+export function buildKnowledgeSuggestionUpdatePayload(input: UpdateKnowledgeSuggestionInput) {
+  const status = input.status ? normalizeKnowledgeSuggestionStatus(input.status) : undefined;
+
+  return {
+    ...(input.body !== undefined ? { body: input.body.trim() } : {}),
+    ...(input.priority !== undefined ? { priority: normalizeKnowledgeSuggestionPriority(input.priority) } : {}),
+    ...(input.sourceQuestion !== undefined ? { source_question: input.sourceQuestion.trim() || null } : {}),
+    ...(status !== undefined ? { status } : {}),
+    ...(input.suggestedAnswer !== undefined ? { suggested_answer: input.suggestedAnswer.trim() || null } : {}),
+    ...(input.title !== undefined ? { title: input.title.trim() } : {}),
+    ...(status === "applied" || status === "rejected" ? { reviewed_at: new Date().toISOString() } : {}),
+  };
+}
+
 export function buildBusinessLiveUpdateInsertPayload(update: TemporaryBusinessUpdate, locationId: string) {
   return {
     body: update.body.trim(),
@@ -1877,27 +2047,143 @@ export function buildBusinessLiveUpdateInsertPayload(update: TemporaryBusinessUp
   };
 }
 
-async function createKnowledgeSectionFromCallFeedback(feedback: CallFeedback, locationId: string) {
-  const title = callFeedbackCategoryLabels[feedback.category] ?? "Call feedback";
-  const body = [
-    feedback.note && `Feedback: ${feedback.note}`,
-    feedback.suggestedAnswer && `Preferred answer: ${feedback.suggestedAnswer}`,
-    `Source call: ${feedback.callId}`,
-  ]
-    .filter((item): item is string => Boolean(item))
-    .join("\n\n");
+async function createKnowledgeSuggestionFromCallFeedback(feedback: CallFeedback, locationId: string) {
+  const body = buildKnowledgeSuggestionBody({
+    note: feedback.note,
+    sourceCallId: feedback.callId,
+    suggestedAnswer: feedback.suggestedAnswer,
+  });
 
   if (!body.trim()) return;
 
-  await supabaseRequest("knowledge_sections", new URLSearchParams(), {
-    body: {
-      body,
-      is_active: true,
-      location_id: locationId,
-      title: `Call tuning - ${title}`,
-      updated_at: new Date().toISOString(),
+  await createKnowledgeSuggestionInSupabase({
+    body,
+    callId: feedback.callId,
+    feedbackId: feedback.id,
+    priority: feedback.category === "wrong_answer" || feedback.category === "should_have_escalated" ? "high" : "normal",
+    source: "call_feedback",
+    suggestedAnswer: feedback.suggestedAnswer,
+    title: buildKnowledgeSuggestionTitle({
+      category: callFeedbackCategoryLabels[feedback.category] ?? feedback.category,
+      note: feedback.note,
+    }),
+  }, locationId);
+}
+
+async function createKnowledgeSectionFromSuggestion(suggestion: KnowledgeSuggestion, locationId: string) {
+  const rows = await supabaseRequest<SupabaseKnowledgeSectionRow[]>(
+    "knowledge_sections",
+    new URLSearchParams({ select: knowledgeSectionSelectColumns }),
+    {
+      body: {
+        body: suggestion.body,
+        is_active: true,
+        location_id: locationId,
+        title: suggestion.title,
+        updated_at: new Date().toISOString(),
+      },
+      headers: { Prefer: "return=representation" },
+      method: "POST",
     },
-    method: "POST",
+  );
+
+  return rows?.[0] ? mapSupabaseKnowledgeSection(rows[0]) : undefined;
+}
+
+async function markKnowledgeSuggestionApplied(input: {
+  knowledgeSectionId?: string;
+  locationId: string;
+  suggestionId: string;
+}) {
+  const rows = await supabaseRequest<SupabaseKnowledgeSuggestionRow[]>(
+    "knowledge_suggestions",
+    new URLSearchParams({
+      id: `eq.${input.suggestionId}`,
+      location_id: `eq.${input.locationId}`,
+      select: knowledgeSuggestionSelectColumns,
+    }),
+    {
+      body: {
+        applied_knowledge_section_id: input.knowledgeSectionId ?? null,
+        reviewed_at: new Date().toISOString(),
+        status: "applied",
+      },
+      headers: { Prefer: "return=representation" },
+      method: "PATCH",
+    },
+  );
+
+  if (!rows?.[0]) throw new Error("Knowledge suggestion was not returned after applying.");
+  return mapSupabaseKnowledgeSuggestion(rows[0]);
+}
+
+async function findKnowledgeSuggestion(input: {
+  locationId: string;
+  suggestionId: string;
+}) {
+  const rows = await supabaseRequest<SupabaseKnowledgeSuggestionRow[]>(
+    "knowledge_suggestions",
+    new URLSearchParams({
+      id: `eq.${input.suggestionId}`,
+      location_id: `eq.${input.locationId}`,
+      limit: "1",
+      select: knowledgeSuggestionSelectColumns,
+    }),
+  );
+
+  return rows[0] ? mapSupabaseKnowledgeSuggestion(rows[0]) : undefined;
+}
+
+async function patchKnowledgeSuggestionContent(input: {
+  body: string;
+  locationId: string;
+  suggestionId: string;
+  title: string;
+}) {
+  const rows = await supabaseRequest<SupabaseKnowledgeSuggestionRow[]>(
+    "knowledge_suggestions",
+    new URLSearchParams({
+      id: `eq.${input.suggestionId}`,
+      location_id: `eq.${input.locationId}`,
+      select: knowledgeSuggestionSelectColumns,
+    }),
+    {
+      body: {
+        body: input.body,
+        title: input.title,
+      },
+      headers: { Prefer: "return=representation" },
+      method: "PATCH",
+    },
+  );
+
+  if (!rows?.[0]) throw new Error("Knowledge suggestion was not returned after content update.");
+  return mapSupabaseKnowledgeSuggestion(rows[0]);
+}
+
+async function createAppliedKnowledgeSectionFromSuggestion(input: {
+  body?: string;
+  locationId: string;
+  suggestionId: string;
+  title?: string;
+}) {
+  const suggestion = await findKnowledgeSuggestion({
+    locationId: input.locationId,
+    suggestionId: input.suggestionId,
+  });
+  if (!suggestion) throw new Error("Knowledge suggestion was not found.");
+
+  const updatedSuggestion = await patchKnowledgeSuggestionContent({
+    body: input.body?.trim() || suggestion.body,
+    locationId: input.locationId,
+    suggestionId: input.suggestionId,
+    title: input.title?.trim() || suggestion.title,
+  });
+  const section = await createKnowledgeSectionFromSuggestion(updatedSuggestion, input.locationId);
+  return markKnowledgeSuggestionApplied({
+    knowledgeSectionId: section?.id,
+    locationId: input.locationId,
+    suggestionId: input.suggestionId,
   });
 }
 
@@ -2204,6 +2490,25 @@ export function mapSupabaseKnowledgeSection(row: SupabaseKnowledgeSectionRow): K
     locationId: row.location_id,
     title: row.title?.trim() || "Untitled knowledge",
     updatedAt: row.updated_at ?? "",
+  };
+}
+
+export function mapSupabaseKnowledgeSuggestion(row: SupabaseKnowledgeSuggestionRow): KnowledgeSuggestion {
+  return {
+    appliedKnowledgeSectionId: row.applied_knowledge_section_id ?? undefined,
+    body: row.body?.trim() || "",
+    callId: row.call_id ?? undefined,
+    createdAt: row.created_at ?? "",
+    feedbackId: row.feedback_id ?? undefined,
+    id: row.id,
+    locationId: row.location_id,
+    priority: normalizeKnowledgeSuggestionPriority(row.priority),
+    reviewedAt: row.reviewed_at ?? undefined,
+    source: normalizeKnowledgeSuggestionSource(row.source),
+    sourceQuestion: row.source_question?.trim() || undefined,
+    status: normalizeKnowledgeSuggestionStatus(row.status),
+    suggestedAnswer: row.suggested_answer?.trim() || undefined,
+    title: row.title?.trim() || "Suggested knowledge update",
   };
 }
 
@@ -2752,6 +3057,9 @@ const callFeedbackSelectColumns =
 
 const knowledgeSectionSelectColumns =
   "id,location_id,title,body,is_active,updated_at";
+
+const knowledgeSuggestionSelectColumns =
+  "id,location_id,call_id,feedback_id,title,body,source,source_question,suggested_answer,status,priority,applied_knowledge_section_id,reviewed_at,created_at";
 
 const businessLiveSettingsSelectColumns =
   "location_id,active_mode,updated_at";

@@ -604,6 +604,92 @@ export type Database = {
           },
         ]
       }
+      knowledge_suggestions: {
+        Row: {
+          applied_knowledge_section_id: string | null
+          body: string
+          call_id: string | null
+          created_at: string
+          created_by: string | null
+          feedback_id: string | null
+          id: string
+          location_id: string
+          priority: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          source: string
+          source_question: string | null
+          status: string
+          suggested_answer: string | null
+          title: string
+        }
+        Insert: {
+          applied_knowledge_section_id?: string | null
+          body: string
+          call_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          feedback_id?: string | null
+          id?: string
+          location_id: string
+          priority?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          source?: string
+          source_question?: string | null
+          status?: string
+          suggested_answer?: string | null
+          title: string
+        }
+        Update: {
+          applied_knowledge_section_id?: string | null
+          body?: string
+          call_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          feedback_id?: string | null
+          id?: string
+          location_id?: string
+          priority?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          source?: string
+          source_question?: string | null
+          status?: string
+          suggested_answer?: string | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "knowledge_suggestions_applied_knowledge_section_id_fkey"
+            columns: ["applied_knowledge_section_id"]
+            isOneToOne: false
+            referencedRelation: "knowledge_sections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "knowledge_suggestions_call_id_fkey"
+            columns: ["call_id"]
+            isOneToOne: false
+            referencedRelation: "calls"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "knowledge_suggestions_feedback_id_fkey"
+            columns: ["feedback_id"]
+            isOneToOne: false
+            referencedRelation: "call_feedback"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "knowledge_suggestions_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       locations: {
         Row: {
           address: string | null

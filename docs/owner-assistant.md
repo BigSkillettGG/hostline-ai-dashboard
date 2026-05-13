@@ -15,6 +15,7 @@ Those fields are the trusted identity foundation for:
 - Daily reports
 - Urgent escalation alerts
 - Future owner SMS commands
+- Owner-approved knowledge suggestions from rough calls
 - Future owner-approved follow-up
 - Future temporary knowledge updates by text
 
@@ -54,4 +55,5 @@ Those commands create the same temporary live updates and business modes shown o
 2. Add owner SMS verification before accepting text commands.
 3. Add owner SMS commands on top of the now-shared live-update parser.
 4. Add an LLM answer layer with the deterministic report as tool/context.
-5. Log owner assistant questions and useful missing intents for product tuning.
+5. Expand the learning loop so owner answers can respond back to waiting customers, not just train future calls.
+6. Log owner assistant questions and useful missing intents for product tuning.

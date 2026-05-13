@@ -8,6 +8,8 @@ import {
   buildBusinessLiveUpdateInsertPayload,
   buildIngestionJobInsertPayload,
   buildKnowledgeSectionUpdatePayload,
+  buildKnowledgeSuggestionInsertPayload,
+  buildKnowledgeSuggestionUpdatePayload,
   buildMenuCategoryInsertRows,
   buildMenuItemInsertRows,
   buildMenuSourceInsertPayload,
@@ -23,6 +25,7 @@ import {
   mapSupabaseAgentConfig,
   mapSupabaseIngestionJob,
   mapSupabaseKnowledgeSection,
+  mapSupabaseKnowledgeSuggestion,
   mapSupabaseMenu,
   mapSupabaseMenuSource,
   mapSupabaseOrders,
@@ -236,6 +239,69 @@ describe("Supabase call feedback", () => {
 });
 
 describe("Supabase knowledge sections", () => {
+  it("builds and maps owner-approved knowledge suggestions", () => {
+    expect(
+      buildKnowledgeSuggestionInsertPayload(
+        {
+          body: "Observed issue: Vera did not know patio heater policy.\n\nApproved answer or behavior: Patio heaters are available on chilly nights.",
+          callId: "call_1",
+          feedbackId: "feedback_1",
+          priority: "high",
+          source: "call_feedback",
+          suggestedAnswer: "Patio heaters are available on chilly nights.",
+          title: "Patio heater policy",
+        },
+        "location_1",
+      ),
+    ).toEqual({
+      body: "Observed issue: Vera did not know patio heater policy.\n\nApproved answer or behavior: Patio heaters are available on chilly nights.",
+      call_id: "call_1",
+      feedback_id: "feedback_1",
+      location_id: "location_1",
+      priority: "high",
+      source: "call_feedback",
+      source_question: null,
+      status: "pending",
+      suggested_answer: "Patio heaters are available on chilly nights.",
+      title: "Patio heater policy",
+    });
+
+    expect(
+      buildKnowledgeSuggestionUpdatePayload({
+        id: "suggestion_1",
+        status: "rejected",
+      }),
+    ).toMatchObject({
+      reviewed_at: expect.any(String),
+      status: "rejected",
+    });
+
+    expect(
+      mapSupabaseKnowledgeSuggestion({
+        applied_knowledge_section_id: null,
+        body: " Use this answer. ",
+        call_id: "call_1",
+        created_at: "2026-05-13T20:00:00.000Z",
+        feedback_id: "feedback_1",
+        id: "suggestion_1",
+        location_id: "location_1",
+        priority: "urgent",
+        reviewed_at: null,
+        source: "call_feedback",
+        source_question: "Do you have patio heaters?",
+        status: "pending",
+        suggested_answer: "Yes.",
+        title: " Patio heaters ",
+      }),
+    ).toMatchObject({
+      body: "Use this answer.",
+      priority: "urgent",
+      source: "call_feedback",
+      status: "pending",
+      title: "Patio heaters",
+    });
+  });
+
   it("maps call tuning notes separately from normal knowledge", () => {
     expect(
       mapSupabaseKnowledgeSection({

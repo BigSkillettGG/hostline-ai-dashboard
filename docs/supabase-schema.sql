@@ -358,6 +358,28 @@ create table call_feedback (
   created_at timestamptz not null default now()
 );
 
+create table knowledge_suggestions (
+  id uuid primary key default gen_random_uuid(),
+  location_id uuid not null references locations(id) on delete cascade,
+  call_id uuid references calls(id) on delete set null,
+  feedback_id uuid references call_feedback(id) on delete set null,
+  title text not null,
+  body text not null,
+  source text not null default 'manual' check (source in ('call_feedback', 'owner_assistant', 'staff_task', 'manual')),
+  source_question text,
+  suggested_answer text,
+  status text not null default 'pending' check (status in ('pending', 'applied', 'rejected')),
+  priority text not null default 'normal' check (priority in ('low', 'normal', 'high', 'urgent')),
+  applied_knowledge_section_id uuid references knowledge_sections(id) on delete set null,
+  created_by uuid references auth.users(id) on delete set null default auth.uid(),
+  reviewed_by uuid references auth.users(id) on delete set null,
+  reviewed_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create index knowledge_suggestions_location_status_idx
+on knowledge_suggestions (location_id, status, created_at desc);
+
 create table orders (
   id uuid primary key default gen_random_uuid(),
   location_id uuid not null references locations(id) on delete cascade,

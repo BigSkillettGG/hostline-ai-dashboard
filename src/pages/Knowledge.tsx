@@ -25,16 +25,25 @@ import {
 } from "@/domain/business-updates";
 import {
   clearBusinessLiveUpdateInSupabase,
+  applyKnowledgeSuggestionInSupabase,
   createBusinessLiveUpdateInSupabase,
   fetchBusinessLiveStateFromSupabase,
+  fetchKnowledgeSuggestionsFromSupabase,
   fetchKnowledgeSectionsFromSupabase,
   getActiveSupabaseLocationId,
   isBusinessLiveUpdatesPersistenceConfigured,
   isKnowledgePersistenceConfigured,
+  isKnowledgeSuggestionPersistenceConfigured,
   saveBusinessLiveModeToSupabase,
+  updateKnowledgeSuggestionInSupabase,
   updateKnowledgeSectionInSupabase,
   type KnowledgeSectionRecord,
 } from "@/lib/supabase-rest";
+import {
+  knowledgeSuggestionPriorityLabels,
+  knowledgeSuggestionSourceLabels,
+  type KnowledgeSuggestion,
+} from "@/domain/knowledge-suggestions";
 import {
   businessLiveUpdatesEvent,
   businessLiveUpdatesStorageKey,
@@ -83,6 +92,7 @@ type TemporaryUpdateDraft = {
 export default function Knowledge() {
   const queryClient = useQueryClient();
   const knowledgeConfigured = isKnowledgePersistenceConfigured();
+  const suggestionsConfigured = isKnowledgeSuggestionPersistenceConfigured();
   const liveUpdatesConfigured = isBusinessLiveUpdatesPersistenceConfigured();
   const activeLocationId = getActiveSupabaseLocationId();
   const [items, setItems] = useState(faqs);
@@ -121,6 +131,13 @@ export default function Knowledge() {
     queryKey: ["knowledge-sections"],
     refetchInterval: 60_000,
   });
+  const suggestionsQuery = useQuery({
+    enabled: suggestionsConfigured,
+    queryFn: () => fetchKnowledgeSuggestionsFromSupabase(),
+    queryKey: ["knowledge-suggestions", activeLocationId],
+    refetchInterval: 60_000,
+    retry: 1,
+  });
 
   const businessLiveQuery = useQuery({
     enabled: liveUpdatesConfigured,
@@ -139,6 +156,29 @@ export default function Knowledge() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["knowledge-sections"] });
       toast.success("Knowledge updated");
+    },
+  });
+  const applySuggestionMutation = useMutation({
+    mutationFn: applyKnowledgeSuggestionInSupabase,
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Could not apply knowledge update");
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["knowledge-sections"] }),
+        queryClient.invalidateQueries({ queryKey: ["knowledge-suggestions", activeLocationId] }),
+      ]);
+      toast.success("Knowledge update approved and applied");
+    },
+  });
+  const rejectSuggestionMutation = useMutation({
+    mutationFn: (id: string) => updateKnowledgeSuggestionInSupabase({ id, status: "rejected" }),
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Could not reject knowledge update");
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["knowledge-suggestions", activeLocationId] });
+      toast.success("Knowledge update rejected");
     },
   });
 
@@ -201,6 +241,9 @@ export default function Knowledge() {
   );
   const activeLiveSections = liveSections.filter((section) => section.isActive);
   const tuningNotes = activeLiveSections.filter((section) => section.isBehaviorTuning);
+  const knowledgeSuggestions = suggestionsQuery.data ?? [];
+  const pendingSuggestions = knowledgeSuggestions.filter((suggestion) => suggestion.status === "pending");
+  const completedSuggestions = knowledgeSuggestions.length - pendingSuggestions.length;
   const businessSections: DisplayKnowledgeSection[] = knowledgeConfigured
     ? activeLiveSections.filter((section) => !section.isBehaviorTuning)
     : sampleSections;
@@ -525,6 +568,63 @@ export default function Knowledge() {
               </div>
             </div>
           </div>
+        </Card>
+
+        <Card className="border-warning/30 bg-warning/5 p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="max-w-3xl">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <Sparkles className="h-4 w-4 text-warning" />
+                Suggested knowledge updates
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                When a call review finds missing knowledge or a better answer, SignalHost queues it here before it changes the live AI.
+              </p>
+              {knowledgeConfigured && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Approving one creates an active knowledge section. Rejected suggestions stay out of the live runtime.
+                </p>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="outline" className="border-warning/30 bg-background text-warning">
+                {pendingSuggestions.length} pending
+              </Badge>
+              {completedSuggestions > 0 && (
+                <Badge variant="outline" className="bg-background text-muted-foreground">
+                  {completedSuggestions} reviewed
+                </Badge>
+              )}
+            </div>
+          </div>
+
+          {!suggestionsConfigured ? (
+            <div className="mt-4 rounded-md border border-dashed border-warning/40 bg-background/70 p-4 text-sm text-muted-foreground">
+              Connect Supabase for this tenant to approve learning suggestions from real calls.
+            </div>
+          ) : suggestionsQuery.isError ? (
+            <div className="mt-4 flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 p-4 text-sm text-muted-foreground">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+              <span>{suggestionsQuery.error instanceof Error ? suggestionsQuery.error.message : "Could not load suggested knowledge updates."}</span>
+            </div>
+          ) : pendingSuggestions.length === 0 ? (
+            <div className="mt-4 rounded-md border border-dashed border-border bg-background/70 p-4 text-sm text-muted-foreground">
+              No pending suggestions yet. Save QA feedback with "Queue this as a knowledge update" to build the learning loop.
+            </div>
+          ) : (
+            <div className="mt-4 grid gap-3 xl:grid-cols-2">
+              {pendingSuggestions.map((suggestion) => (
+                <KnowledgeSuggestionRow
+                  key={suggestion.id}
+                  isApplying={applySuggestionMutation.isPending && applySuggestionMutation.variables?.id === suggestion.id}
+                  isRejecting={rejectSuggestionMutation.isPending && rejectSuggestionMutation.variables === suggestion.id}
+                  onApply={(input) => applySuggestionMutation.mutate(input)}
+                  onReject={() => rejectSuggestionMutation.mutate(suggestion.id)}
+                  suggestion={suggestion}
+                />
+              ))}
+            </div>
+          )}
         </Card>
 
         <Card className="border-primary/20 bg-primary/5 p-5">
@@ -891,6 +991,75 @@ function TuningNoteRow({
 
 function EmptyState({ text }: { text: string }) {
   return <div className="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">{text}</div>;
+}
+
+function KnowledgeSuggestionRow({
+  isApplying,
+  isRejecting,
+  onApply,
+  onReject,
+  suggestion,
+}: {
+  isApplying: boolean;
+  isRejecting: boolean;
+  onApply: (input: { body: string; id: string; title: string }) => void;
+  onReject: () => void;
+  suggestion: KnowledgeSuggestion;
+}) {
+  const [title, setTitle] = useState(suggestion.title);
+  const [body, setBody] = useState(suggestion.body);
+
+  useEffect(() => {
+    setTitle(suggestion.title);
+    setBody(suggestion.body);
+  }, [suggestion.body, suggestion.title]);
+
+  return (
+    <div className="rounded-md border border-warning/30 bg-background/85 p-4 shadow-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant="outline" className="border-warning/30 bg-warning/10 text-warning">
+          {knowledgeSuggestionPriorityLabels[suggestion.priority]}
+        </Badge>
+        <Badge variant="secondary" className="text-[10px]">
+          {knowledgeSuggestionSourceLabels[suggestion.source]}
+        </Badge>
+        {suggestion.callId && (
+          <span className="text-[11px] text-muted-foreground">Call {suggestion.callId.slice(0, 8)}</span>
+        )}
+      </div>
+
+      <div className="mt-3 space-y-2">
+        <Label className="text-xs font-medium text-muted-foreground">Title</Label>
+        <Input value={title} onChange={(event) => setTitle(event.target.value)} />
+      </div>
+
+      <div className="mt-3 space-y-2">
+        <Label className="text-xs font-medium text-muted-foreground">Knowledge to apply</Label>
+        <Textarea value={body} onChange={(event) => setBody(event.target.value)} rows={5} />
+      </div>
+
+      {suggestion.suggestedAnswer && (
+        <div className="mt-3 rounded-md bg-warning/10 p-3 text-sm">
+          <div className="text-[11px] font-medium uppercase text-warning">Suggested answer</div>
+          <p className="mt-1 text-muted-foreground">{suggestion.suggestedAnswer}</p>
+        </div>
+      )}
+
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs text-muted-foreground">Queued {formatUpdatedAt(suggestion.createdAt)}</span>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" onClick={onReject} disabled={isApplying || isRejecting}>
+            {isRejecting ? <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <EyeOff className="mr-1.5 h-3.5 w-3.5" />}
+            Reject
+          </Button>
+          <Button size="sm" onClick={() => onApply({ body, id: suggestion.id, title })} disabled={isApplying || isRejecting || !title.trim() || !body.trim()}>
+            {isApplying ? <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />}
+            Approve & apply
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function TemporaryUpdateRow({
