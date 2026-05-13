@@ -23,18 +23,23 @@ import { Separator } from "@/components/ui/separator";
 import { calls as sampleCalls, orders as sampleOrders, reservations as sampleReservations } from "@/data/mock";
 import type { Call, Order, Reservation } from "@/data/mock";
 import { getBusinessMode } from "@/domain/business-updates";
-import { parseOwnerLiveCommand, type OwnerLiveCommand } from "@/domain/owner-live-commands";
+import { routeOwnerCommand, type OwnerCommandRoute } from "@/domain/owner-command-router";
+import type { OwnerLiveCommand } from "@/domain/owner-live-commands";
 import {
   buildOwnerAssistantResponse,
   ownerAssistantSuggestions,
+  type OwnerAssistantContext,
   type OwnerAssistantResponse,
 } from "@/domain/owner-assistant";
 import type { StaffTask } from "@/domain/staff-tasks";
+import { defaultTrustedContactPermissions, trustedContactTypeFromRole } from "@/domain/trusted-contacts";
 import { isPlatformAdminUser, useCurrentUser } from "@/lib/auth";
 import { loadBusinessLiveState, saveBusinessLiveState } from "@/lib/business-live-updates-storage";
 import { loadOnboardingDraft } from "@/lib/onboarding-draft";
 import {
   createBusinessLiveUpdateInSupabase,
+  applyKnowledgeSuggestionInSupabase,
+  createKnowledgeSuggestionInSupabase,
   fetchCallsFromSupabase,
   fetchOrdersFromSupabase,
   fetchReservationsFromSupabase,
@@ -67,6 +72,7 @@ const emptyTasks: StaffTask[] = [];
 const ownerCommandSuggestions = [
   "Tonight's special is lobster ravioli",
   "We're closed tomorrow for a private event",
+  "Remember that the bathroom is white",
   "Set busy mode",
 ];
 
@@ -116,6 +122,21 @@ export default function OwnerAssistant() {
   const ownerName = String(draft.ownerName || activeTenant?.ownerName || "Owner");
   const ownerPhone = String(draft.ownerPhone || draft.escalationPhone || "");
   const ownerEmail = String(draft.ownerEmail || activeTenant?.ownerEmail || draft.salesManagerEmail || "");
+  const commandActor = useMemo(() => {
+    const contactType = platformAdmin || !user?.restaurantMembershipRole
+      ? "owner"
+      : trustedContactTypeFromRole(user.restaurantMembershipRole);
+
+    return {
+      contact: {
+        contactType,
+        email: user?.email,
+        name: user?.name ?? ownerName,
+        phone: ownerPhone,
+      },
+      permissions: defaultTrustedContactPermissions(contactType),
+    };
+  }, [ownerName, ownerPhone, platformAdmin, user?.email, user?.name, user?.restaurantMembershipRole]);
   const calls = useMemo(() => liveEnabled ? callQuery.data ?? emptyCalls : sampleCalls, [callQuery.data, liveEnabled]);
   const orders = useMemo(() => liveEnabled ? orderQuery.data ?? emptyOrders : sampleOrders, [liveEnabled, orderQuery.data]);
   const reservations = useMemo(
@@ -140,12 +161,26 @@ export default function OwnerAssistant() {
     const trimmed = nextQuestion.trim();
     if (!trimmed) return;
 
-    const liveCommand = parseOwnerLiveCommand(trimmed);
-    const response = liveCommand
-      ? await applyOwnerLiveCommand(liveCommand, { useSupabase: liveUpdatesEnabled })
-      : buildOwnerAssistantResponse(trimmed, assistantContext);
-    if (liveCommand) {
+    const commandRoute = routeOwnerCommand({
+      actor: commandActor,
+      channel: "dashboard",
+      message: trimmed,
+    });
+    const response = await handleOwnerCommandRoute(commandRoute, trimmed, {
+      assistantContext,
+      useKnowledgeSupabase: liveEnabled,
+      useLiveSupabase: liveUpdatesEnabled,
+    });
+    if (commandRoute.kind === "live_command") {
       await queryClient.invalidateQueries({ queryKey: ["business-live-state", activeLocationId] });
+    }
+    if (commandRoute.kind === "knowledge_update") {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["knowledge-suggestions"] }),
+        queryClient.invalidateQueries({ queryKey: ["knowledge-suggestions", activeLocationId] }),
+        queryClient.invalidateQueries({ queryKey: ["knowledge-sections"] }),
+        queryClient.invalidateQueries({ queryKey: ["knowledge-sections", activeLocationId] }),
+      ]);
     }
     setMessages((current) => [
       ...current,
@@ -317,6 +352,113 @@ export default function OwnerAssistant() {
   );
 }
 
+async function handleOwnerCommandRoute(
+  route: OwnerCommandRoute,
+  originalMessage: string,
+  options: {
+    assistantContext: OwnerAssistantContext;
+    useKnowledgeSupabase: boolean;
+    useLiveSupabase: boolean;
+  },
+): Promise<OwnerAssistantResponse> {
+  if (route.kind === "report_query") {
+    return buildOwnerAssistantResponse(route.question, options.assistantContext);
+  }
+
+  if (route.kind === "live_command") {
+    if (route.decision === "denied") {
+      return deniedOwnerCommandResponse(route.reason ?? "This contact cannot change live business updates.");
+    }
+    if (route.decision === "approval_required") {
+      return approvalRequiredOwnerCommandResponse("I understood that live update, but this contact needs owner approval before I change what callers hear.");
+    }
+    return applyOwnerLiveCommand(route.command, { useSupabase: options.useLiveSupabase });
+  }
+
+  if (route.kind === "knowledge_update") {
+    return applyOwnerKnowledgeCommand(route, { useSupabase: options.useKnowledgeSupabase });
+  }
+
+  if (route.kind === "denied") {
+    return deniedOwnerCommandResponse(route.reason);
+  }
+
+  return unknownOwnerCommandResponse(originalMessage, route.reason);
+}
+
+async function applyOwnerKnowledgeCommand(
+  route: Extract<OwnerCommandRoute, { kind: "knowledge_update" }>,
+  options: { useSupabase: boolean },
+): Promise<OwnerAssistantResponse> {
+  if (route.decision === "denied") {
+    return deniedOwnerCommandResponse(route.reason ?? "This contact cannot update permanent knowledge.");
+  }
+
+  if (!options.useSupabase) {
+    return {
+      answer: "I understood that as permanent knowledge, but this preview is not connected to live Supabase, so I cannot save it for future calls from here.",
+      bullets: [
+        route.answer,
+        route.decision === "approval_required"
+          ? "This would be saved as a pending owner approval item in the live app."
+          : "This would be saved directly to the Knowledge Base in the live app.",
+        "Connect Supabase in the deployed dashboard to make owner-taught answers available to callers.",
+      ],
+      confidence: "medium",
+      intent: "knowledge_gaps",
+      suggestedActions: ["Open Knowledge Base", "Check Supabase settings"],
+      title: route.decision === "approval_required" ? "Knowledge approval needed" : "Knowledge understood",
+    };
+  }
+
+  try {
+    const suggestion = await createKnowledgeSuggestionInSupabase({
+      body: route.body,
+      priority: "normal",
+      source: "owner_assistant",
+      sourceQuestion: route.sourceQuestion,
+      suggestedAnswer: route.answer,
+      title: route.title,
+    });
+
+    if (route.decision === "approval_required") {
+      return {
+        answer: "I saved that as a pending knowledge update for owner approval.",
+        bullets: [
+          route.answer,
+          route.reason ?? "A trusted contact submitted this, so it needs review before callers hear it.",
+          "Open the Knowledge Base to approve, edit, or reject it.",
+        ],
+        confidence: "high",
+        intent: "knowledge_gaps",
+        suggestedActions: ["Open Knowledge Base", "Review pending updates"],
+        title: "Knowledge update pending",
+      };
+    }
+
+    await applyKnowledgeSuggestionInSupabase({
+      body: route.body,
+      id: suggestion.id,
+      title: route.title,
+    });
+
+    return {
+      answer: "Got it. I saved that as permanent knowledge for future customer conversations.",
+      bullets: [
+        route.answer,
+        "Future calls, chats, texts, and emails can use this answer unless a newer live update overrides it.",
+        "Saved to Supabase and applied to the Knowledge Base.",
+      ],
+      confidence: "high",
+      intent: "knowledge_gaps",
+      suggestedActions: ["Open Knowledge Base", "Ask what changed today"],
+      title: "Knowledge saved",
+    };
+  } catch (error) {
+    return ownerKnowledgeCommandErrorResponse(error);
+  }
+}
+
 async function applyOwnerLiveCommand(
   command: OwnerLiveCommand,
   options: { useSupabase: boolean },
@@ -395,6 +537,60 @@ function ownerLiveCommandErrorResponse(error: unknown, label: string): OwnerAssi
     intent: "live_update",
     suggestedActions: ["Open Knowledge Base", "Check Supabase migration"],
     title: "Live update not saved",
+  };
+}
+
+function ownerKnowledgeCommandErrorResponse(error: unknown): OwnerAssistantResponse {
+  return {
+    answer: "I understood that knowledge update, but I could not save it to the live database.",
+    bullets: [
+      error instanceof Error ? error.message : "Unknown save error.",
+      "The Knowledge Base migration and Supabase environment variables may need to be checked.",
+    ],
+    confidence: "medium",
+    intent: "knowledge_gaps",
+    suggestedActions: ["Open Knowledge Base", "Check Supabase settings"],
+    title: "Knowledge not saved",
+  };
+}
+
+function approvalRequiredOwnerCommandResponse(answer: string): OwnerAssistantResponse {
+  return {
+    answer,
+    bullets: [
+      "I did not change live caller behavior yet.",
+      "An owner can approve this from the dashboard before it becomes active.",
+    ],
+    confidence: "medium",
+    intent: "live_update",
+    suggestedActions: ["Open Knowledge Base", "Review trusted contacts"],
+    title: "Owner approval required",
+  };
+}
+
+function deniedOwnerCommandResponse(reason: string): OwnerAssistantResponse {
+  return {
+    answer: "I cannot run that owner command from this contact.",
+    bullets: [reason, "Ask an owner to update trusted-contact permissions if this person should have access."],
+    confidence: "medium",
+    intent: "unknown",
+    suggestedActions: ["Review trusted contacts", "Open Team settings"],
+    title: "Command not allowed",
+  };
+}
+
+function unknownOwnerCommandResponse(message: string, reason: string): OwnerAssistantResponse {
+  return {
+    answer: "I am not sure whether that is a report question, a live update, or a permanent knowledge update.",
+    bullets: [
+      reason,
+      `I heard: "${message}"`,
+      "Try asking a report question like 'Any urgent calls today?' or teaching a fact like 'Remember that the patio has heaters.'",
+    ],
+    confidence: "medium",
+    intent: "unknown",
+    suggestedActions: ["Ask today's summary", "Open Knowledge Base"],
+    title: "Command unclear",
   };
 }
 
