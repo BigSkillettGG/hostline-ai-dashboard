@@ -62,7 +62,7 @@ const supabasePublishableKey =
   import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? import.meta.env.VITE_SUPABASE_ANON_KEY ?? "";
 const supabaseDemoLocationId = import.meta.env.VITE_SUPABASE_DEMO_LOCATION_ID ?? "";
 
-const callIntents: CallIntent[] = ["order", "reservation", "faq", "hours", "other"];
+const callIntents: CallIntent[] = ["order", "reservation", "faq", "hours", "complaint", "sales", "other"];
 const callOutcomes: CallOutcome[] = [
   "resolved",
   "order_placed",
@@ -591,18 +591,23 @@ export async function createTeamInvitationInSupabase(
   return mapSupabaseTeamInvitation(rows[0]);
 }
 
-export async function fetchCallsFromSupabase(): Promise<Call[]> {
+export async function fetchCallsFromSupabase(
+  locationId: string | null | undefined = getActiveSupabaseLocationId(),
+): Promise<Call[]> {
   if (!isSupabaseConfigured()) {
     throw new Error("Supabase is not configured.");
   }
 
+  const callParams = new URLSearchParams({
+    limit: "100",
+    order: "started_at.desc",
+    select: "id,caller_name,caller_phone,started_at,duration_seconds,intent,outcome,confidence,status,summary,recording_url",
+  });
+  if (locationId) callParams.set("location_id", `eq.${locationId}`);
+
   const calls = await supabaseRequest<SupabaseCallRow[]>(
     "calls",
-    new URLSearchParams({
-      limit: "100",
-      order: "started_at.desc",
-      select: "id,caller_name,caller_phone,started_at,duration_seconds,intent,outcome,confidence,status,summary,recording_url",
-    }),
+    callParams,
   );
 
   const callIds = calls.map((call) => call.id);
@@ -772,19 +777,24 @@ export async function createCallFeedbackInSupabase(
   return savedFeedback;
 }
 
-export async function fetchOrdersFromSupabase(): Promise<Order[]> {
+export async function fetchOrdersFromSupabase(
+  locationId: string | null | undefined = getActiveSupabaseLocationId(),
+): Promise<Order[]> {
   if (!isSupabaseConfigured()) {
     throw new Error("Supabase is not configured.");
   }
 
+  const orderParams = new URLSearchParams({
+    limit: "100",
+    order: "created_at.desc",
+    select:
+      "id,source_call_id,customer_name,customer_phone,status,total_cents,eta_minutes,payment_mode,destination,notes,created_at",
+  });
+  if (locationId) orderParams.set("location_id", `eq.${locationId}`);
+
   const orders = await supabaseRequest<SupabaseOrderRow[]>(
     "orders",
-    new URLSearchParams({
-      limit: "100",
-      order: "created_at.desc",
-      select:
-        "id,source_call_id,customer_name,customer_phone,status,total_cents,eta_minutes,payment_mode,destination,notes,created_at",
-    }),
+    orderParams,
   );
 
   const orderIds = orders.map((order) => order.id);

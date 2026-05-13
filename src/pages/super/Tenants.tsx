@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Building2, RefreshCw, Search } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Building2, Eye, RefreshCw, Search } from "lucide-react";
 import { PageHeader, PageBody } from "@/components/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -13,6 +14,7 @@ import {
   type TenantDirectoryRecord,
   type TenantDirectoryStatus,
 } from "@/lib/supabase-rest";
+import { updateCurrentUserAccess } from "@/lib/auth";
 import { toast } from "sonner";
 
 interface TenantTableRow {
@@ -36,6 +38,7 @@ interface TenantTableRow {
 
 export default function SuperTenants() {
   const [q, setQ] = useState("");
+  const navigate = useNavigate();
   const supabaseConfigured = isSupabaseConfigured();
   const tenantQuery = useQuery({
     enabled: supabaseConfigured,
@@ -60,6 +63,20 @@ export default function SuperTenants() {
   );
   const liveRows = rows.filter((tenant) => tenant.source === "live").length;
   const needsAttention = rows.filter((tenant) => tenant.status !== "healthy").length;
+
+  function viewAsTenant(tenant: TenantTableRow) {
+    if (tenant.source !== "live" || tenant.locationId === "not-created") {
+      toast.error("Only live tenants with a Supabase location can be opened.");
+      return;
+    }
+
+    updateCurrentUserAccess({
+      activeLocationId: tenant.locationId,
+      activeOrganizationId: tenant.organizationId,
+    });
+    toast.success(`Viewing ${tenant.name} as SignalHost staff`);
+    navigate("/app");
+  }
 
   return (
     <>
@@ -165,16 +182,26 @@ export default function SuperTenants() {
                         <Badge variant="outline" className={statusBadgeClass(tenant.status)}>{tenant.status}</Badge>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            void navigator.clipboard?.writeText(tenant.locationId);
-                            toast.success(`Copied location ID for ${tenant.name}`);
-                          }}
-                        >
-                          Copy ID
-                        </Button>
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              void navigator.clipboard?.writeText(tenant.locationId);
+                              toast.success(`Copied location ID for ${tenant.name}`);
+                            }}
+                          >
+                            Copy ID
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => viewAsTenant(tenant)}
+                            disabled={tenant.source !== "live" || tenant.locationId === "not-created"}
+                          >
+                            <Eye className="mr-1.5 h-3.5 w-3.5" />
+                            View
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}

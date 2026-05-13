@@ -98,7 +98,7 @@ export default function Orders() {
   const supabaseConfigured = isSupabaseConfigured();
   const orderQuery = useQuery({
     enabled: supabaseConfigured,
-    queryFn: fetchOrdersFromSupabase,
+    queryFn: () => fetchOrdersFromSupabase(),
     queryKey: ["orders", "supabase"],
     refetchInterval: 30_000,
   });

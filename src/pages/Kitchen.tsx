@@ -107,7 +107,7 @@ export default function Kitchen() {
   const supabaseConfigured = isSupabaseConfigured();
   const orderQuery = useQuery({
     enabled: supabaseConfigured,
-    queryFn: fetchOrdersFromSupabase,
+    queryFn: () => fetchOrdersFromSupabase(),
     queryKey: ["orders", "supabase"],
     refetchInterval: 10_000,
   });

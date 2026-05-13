@@ -109,6 +109,42 @@ describe("Supabase call mapping", () => {
     expect(calls[0].outcome).toBe("unknown");
     expect(calls[0].status).toBe("new");
   });
+
+  it("preserves complaint and sales call intents for operations reporting", () => {
+    const calls = mapSupabaseCalls(
+      [
+        {
+          caller_name: "Upset Guest",
+          caller_phone: "+15550100",
+          confidence: 87,
+          duration_seconds: 90,
+          id: "call_complaint",
+          intent: "complaint",
+          outcome: "manager_alerted",
+          recording_url: null,
+          started_at: "2026-05-04T20:00:00.000Z",
+          status: "needs_review",
+          summary: "Guest reported a missing item.",
+        },
+        {
+          caller_name: "Vendor",
+          caller_phone: "+15550101",
+          confidence: 74,
+          duration_seconds: 32,
+          id: "call_sales",
+          intent: "sales",
+          outcome: "message_taken",
+          recording_url: null,
+          started_at: "2026-05-04T20:01:00.000Z",
+          status: "new",
+          summary: "Vendor asked for purchasing contact.",
+        },
+      ],
+      [],
+    );
+
+    expect(calls.map((call) => call.intent)).toEqual(["complaint", "sales"]);
+  });
 });
 
 describe("Supabase call feedback", () => {

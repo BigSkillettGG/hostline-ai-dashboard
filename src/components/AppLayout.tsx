@@ -1,5 +1,6 @@
 import { Outlet, useNavigate } from "react-router-dom";
 import { Bell, Search, MapPin, ChevronDown } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 import { Input } from "@/components/ui/input";
@@ -14,13 +15,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   getAuthReadiness,
+  getActiveLocationId,
   getRestaurantRoleLabel,
   isDemoAuthMode,
   isDemoWorkspace,
+  isPlatformAdminUser,
   useCurrentUser,
   signOut,
   setRole,
 } from "@/lib/auth";
+import { fetchTenantDirectoryFromSupabase, isSupabaseConfigured } from "@/lib/supabase-rest";
 import { getOnboardingBusinessTemplate } from "@/domain/onboarding";
 import { loadOnboardingDraft } from "@/lib/onboarding-draft";
 
@@ -31,11 +35,23 @@ export default function AppLayout() {
   const initials = (user?.name ?? "ML").split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase();
   const authReadiness = getAuthReadiness();
   const demoAuth = isDemoAuthMode();
+  const platformAdmin = isPlatformAdminUser(user);
+  const activeLocationId = getActiveLocationId();
+  const tenantQuery = useQuery({
+    enabled: isSupabaseConfigured() && Boolean(activeLocationId),
+    queryFn: fetchTenantDirectoryFromSupabase,
+    queryKey: ["tenant-directory", "app-shell", activeLocationId],
+    staleTime: 60_000,
+  });
+  const activeTenant = tenantQuery.data?.find((tenant) => tenant.locationId === activeLocationId);
   const restaurantRole = getRestaurantRoleLabel(user?.restaurantMembershipRole);
   const draft = loadOnboardingDraft();
   const businessTemplate = getOnboardingBusinessTemplate(draft);
   const businessName = String(draft.restaurantName || businessTemplate.defaultName);
-  const locationLabel = businessTemplate.id === "restaurant" ? `${businessName} - Valencia` : businessName;
+  const locationLabel =
+    activeTenant?.locationName ??
+    (businessTemplate.id === "restaurant" ? `${businessName} - Valencia` : businessName);
+  const workspaceLabel = activeTenant?.businessLabel ?? businessTemplate.workspaceLabel;
 
   return (
     <SidebarProvider>
@@ -51,14 +67,14 @@ export default function AppLayout() {
                 <Button variant="ghost" size="sm" className="gap-1.5 px-2 text-sm font-medium">
                   <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
                   <span className="hidden sm:inline">{locationLabel}</span>
-                  <span className="sm:hidden">{businessTemplate.workspaceLabel}</span>
+                  <span className="sm:hidden">{workspaceLabel}</span>
                   <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-56">
                 <DropdownMenuLabel>Locations</DropdownMenuLabel>
                 <DropdownMenuItem>{locationLabel}</DropdownMenuItem>
-                <DropdownMenuItem disabled>{businessTemplate.workspaceLabel} second location (soon)</DropdownMenuItem>
+                <DropdownMenuItem disabled>{workspaceLabel} second location (soon)</DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem>Add location</DropdownMenuItem>
               </DropdownMenuContent>
@@ -81,6 +97,16 @@ export default function AppLayout() {
                 <Badge variant="outline" className="hidden border-primary/20 bg-primary/10 text-primary lg:inline-flex">
                   Demo workspace
                 </Badge>
+              )}
+              {platformAdmin && activeLocationId && (
+                <Badge variant="outline" className="hidden border-warning/30 bg-warning/10 text-warning lg:inline-flex">
+                  Staff tenant view
+                </Badge>
+              )}
+              {platformAdmin && (
+                <Button variant="outline" size="sm" className="hidden h-9 sm:inline-flex" onClick={() => navigate("/super/tenants")}>
+                  Back to Super
+                </Button>
               )}
               <div className="hidden sm:flex items-center gap-2 rounded-full border border-border bg-card px-2.5 py-1">
                 <span className={`h-1.5 w-1.5 rounded-full ${agentLive ? "bg-success animate-pulse" : "bg-muted-foreground"}`} />
@@ -110,6 +136,14 @@ export default function AppLayout() {
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => navigate("/app/profile")}>Profile</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate("/app/billing")}>Billing</DropdownMenuItem>
+                  {platformAdmin && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => navigate("/super/tenants")}>
+                        Back to Super Console
+                      </DropdownMenuItem>
+                    </>
+                  )}
                   {demoAuth && (
                     <>
                       <DropdownMenuSeparator />

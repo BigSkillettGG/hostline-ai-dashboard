@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   canCurrentUserManageTeam,
+  canUserAccessRole,
   buildDemoUser,
   buildDemoSuperAdmin,
   getAuthReadiness,
@@ -58,6 +59,16 @@ describe("auth helpers", () => {
     expect(buildDemoSuperAdmin().isPlatformAdmin).toBe(true);
     expect(roleFromEmailAndMetadata("owner@example.com", { role: "superadmin" })).toBe("superadmin");
     expect(roleFromEmailAndMetadata("staff@signalhost.ai")).toBe("admin");
+  });
+
+  it("lets platform admins enter tenant app routes without becoming restaurant users", () => {
+    const platformAdmin = buildDemoSuperAdmin();
+    const restaurantAdmin = buildDemoUser("maria@oliveandember.com");
+
+    expect(canUserAccessRole(platformAdmin, "superadmin")).toBe(true);
+    expect(canUserAccessRole(platformAdmin, "admin")).toBe(true);
+    expect(canUserAccessRole(restaurantAdmin, "admin")).toBe(true);
+    expect(canUserAccessRole(restaurantAdmin, "superadmin")).toBe(false);
   });
 
   it("maps Supabase auth responses into membership-backed dashboard users", () => {

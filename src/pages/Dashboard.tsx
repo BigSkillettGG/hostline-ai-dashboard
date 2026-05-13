@@ -1,80 +1,202 @@
+import { useMemo } from "react";
+import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { PageBody } from "@/components/PageHeader";
 import { StatCard } from "@/components/StatCard";
 import {
-  Phone, PhoneIncoming, ShoppingBag, CalendarDays, DollarSign,
-  AlertTriangle, Megaphone, Activity, ArrowRight, Sparkles, Calendar,
+  Activity,
+  AlertTriangle,
+  ArrowRight,
+  Calendar,
+  CalendarDays,
+  CheckCircle2,
+  ClipboardList,
+  Megaphone,
+  Phone,
+  PhoneIncoming,
+  ShoppingBag,
+  Sparkles,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { dashboardStats, callVolumeByHour, calls, orders, reservations, topIntents } from "@/data/mock";
+import { calls as sampleCalls, orders as sampleOrders, reservations as sampleReservations } from "@/data/mock";
+import type { Call, Order, Reservation } from "@/data/mock";
+import type { StaffTask } from "@/domain/staff-tasks";
 import {
-  Area, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine,
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
 } from "recharts";
 import { formatTime, formatMoney } from "@/lib/format";
-import { Link } from "react-router-dom";
+import { isPlatformAdminUser, useCurrentUser } from "@/lib/auth";
+import { loadOnboardingDraft } from "@/lib/onboarding-draft";
+import {
+  fetchCallsFromSupabase,
+  fetchOrdersFromSupabase,
+  fetchReservationsFromSupabase,
+  fetchStaffTasksFromSupabase,
+  fetchTenantDirectoryFromSupabase,
+  getActiveSupabaseLocationId,
+  isSupabaseConfigured,
+} from "@/lib/supabase-rest";
 
 const intentColor: Record<string, string> = {
-  order: "text-primary",
-  reservation: "text-warning",
+  complaint: "text-destructive",
   faq: "text-info",
   hours: "text-info",
+  order: "text-primary",
   other: "text-muted-foreground",
+  reservation: "text-warning",
+  sales: "text-warning",
 };
 
+type ActivityItem =
+  | { item: Call; t: string; type: "call" }
+  | { item: Order; t: string; type: "order" }
+  | { item: Reservation; t: string; type: "reservation" }
+  | { item: StaffTask; t: string; type: "task" };
+
+const emptyCalls: Call[] = [];
+const emptyOrders: Order[] = [];
+const emptyReservations: Reservation[] = [];
+const emptyTasks: StaffTask[] = [];
+
 export default function Dashboard() {
-  const peakHour = callVolumeByHour.reduce((m, c) => c.calls > m.calls ? c : m, callVolumeByHour[0]);
-  const totalCalls = callVolumeByHour.reduce((s, c) => s + c.calls, 0);
+  const user = useCurrentUser();
+  const platformAdmin = isPlatformAdminUser(user);
+  const activeLocationId = getActiveSupabaseLocationId();
+  const supabaseConfigured = isSupabaseConfigured();
+  const liveEnabled = Boolean(supabaseConfigured && activeLocationId);
 
-  const activity = [
-    ...calls.slice(0, 5).map(c => ({ type: "call" as const, t: c.time, item: c })),
-    ...orders.slice(0, 4).map(o => ({ type: "order" as const, t: o.createdAt, item: o })),
-    ...reservations.slice(0, 3).map((r, i) => ({ type: "reservation" as const, t: new Date(Date.now() - (i + 1) * 18 * 60_000).toISOString(), item: r })),
-  ].sort((a, b) => +new Date(b.t) - +new Date(a.t)).slice(0, 8);
+  const callQuery = useQuery({
+    enabled: liveEnabled,
+    queryFn: () => fetchCallsFromSupabase(activeLocationId),
+    queryKey: ["dashboard", "calls", activeLocationId],
+    refetchInterval: 30_000,
+  });
+  const orderQuery = useQuery({
+    enabled: liveEnabled,
+    queryFn: () => fetchOrdersFromSupabase(activeLocationId),
+    queryKey: ["dashboard", "orders", activeLocationId],
+    refetchInterval: 30_000,
+  });
+  const reservationQuery = useQuery({
+    enabled: liveEnabled,
+    queryFn: () => fetchReservationsFromSupabase(activeLocationId),
+    queryKey: ["dashboard", "reservations", activeLocationId],
+    refetchInterval: 30_000,
+  });
+  const taskQuery = useQuery({
+    enabled: liveEnabled,
+    queryFn: () => fetchStaffTasksFromSupabase(activeLocationId),
+    queryKey: ["dashboard", "tasks", activeLocationId],
+    refetchInterval: 30_000,
+  });
+  const tenantQuery = useQuery({
+    enabled: liveEnabled,
+    queryFn: fetchTenantDirectoryFromSupabase,
+    queryKey: ["tenant-directory", "dashboard", activeLocationId],
+    staleTime: 60_000,
+  });
 
+  const dashboardCalls = useMemo(
+    () => liveEnabled ? callQuery.data ?? emptyCalls : sampleCalls,
+    [callQuery.data, liveEnabled],
+  );
+  const dashboardOrders = useMemo(
+    () => liveEnabled ? orderQuery.data ?? emptyOrders : sampleOrders,
+    [liveEnabled, orderQuery.data],
+  );
+  const dashboardReservations = useMemo(
+    () => liveEnabled ? reservationQuery.data ?? emptyReservations : sampleReservations,
+    [liveEnabled, reservationQuery.data],
+  );
+  const dashboardTasks = useMemo(
+    () => liveEnabled ? taskQuery.data ?? emptyTasks : emptyTasks,
+    [liveEnabled, taskQuery.data],
+  );
+  const activeTenant = tenantQuery.data?.find((tenant) => tenant.locationId === activeLocationId);
+  const draft = loadOnboardingDraft();
+  const businessName = activeTenant?.locationName ?? String(draft.restaurantName || "your business");
+  const aiHostPhone = activeTenant?.aiHostPhone ?? String(draft.assignedPhoneNumber || "(415) 555-0142");
+  const recentCalls = useMemo(() => dashboardCalls.filter((call) => isWithinLastHours(call.time, 24)), [dashboardCalls]);
+  const recentOrders = useMemo(() => dashboardOrders.filter((order) => isWithinLastHours(order.createdAt, 24)), [dashboardOrders]);
+  const recentTasks = useMemo(() => dashboardTasks.filter((task) => isWithinLastHours(task.createdAt, 24)), [dashboardTasks]);
+  const callVolume = useMemo(() => buildHourlyCallVolume(recentCalls), [recentCalls]);
+  const peakHour = callVolume.reduce((max, item) => (item.calls > max.calls ? item : max), callVolume[0]);
+  const topIntents = useMemo(() => buildTopIntents(recentCalls), [recentCalls]);
+  const totalCalls = recentCalls.length;
+  const activeStaffFollowUps = dashboardTasks.filter((task) => task.status === "open" || task.status === "in_progress").length;
+  const ordersCaptured = recentOrders.length;
+  const reservationRequests = dashboardReservations.filter((reservation) =>
+    reservation.createdAt ? isWithinLastHours(reservation.createdAt, 24) : true,
+  ).length;
+  const missedRecovered = recentCalls.filter((call) => call.outcome !== "missed" && call.outcome !== "voicemail").length;
+  const salesCalls = recentCalls.filter((call) => call.intent === "sales").length;
+  const revenueCaptured = recentOrders.reduce((sum, order) => sum + order.total, 0);
+  const resolvedCalls = recentCalls.filter((call) =>
+    call.outcome === "resolved" ||
+    call.outcome === "order_placed" ||
+    call.outcome === "reservation_booked",
+  ).length;
+  const containment = totalCalls ? Math.round((resolvedCalls / totalCalls) * 100) : 0;
+  const activity = useMemo(() => buildActivity(dashboardCalls, dashboardOrders, dashboardReservations, recentTasks), [
+    dashboardCalls,
+    dashboardOrders,
+    dashboardReservations,
+    recentTasks,
+  ]);
+  const hasLiveError = callQuery.isError || orderQuery.isError || reservationQuery.isError || taskQuery.isError;
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
 
   return (
     <>
-      {/* Polished hero header */}
-      <div className="relative overflow-hidden border-b border-border bg-gradient-to-br from-primary/5 via-background to-background">
-        <div className="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
-        <div className="absolute right-1/3 -bottom-32 h-64 w-64 rounded-full bg-warning/10 blur-3xl pointer-events-none" />
-        <div className="relative px-4 py-6 md:px-6 md:py-7">
+      <div className="border-b border-border bg-background">
+        <div className="px-4 py-6 md:px-6 md:py-7">
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 <Calendar className="h-3.5 w-3.5" />
                 <span>{today}</span>
-                <span className="mx-1.5 h-1 w-1 rounded-full bg-muted-foreground/40" />
+                <span className="mx-1 h-1 w-1 rounded-full bg-muted-foreground/40" />
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
-                  AI host live
+                  <span className="h-1.5 w-1.5 rounded-full bg-success" />
+                  {liveEnabled ? "Live customer data" : "Demo workspace"}
                 </span>
               </div>
-              <h1 className="mt-1.5 text-[26px] md:text-[28px] font-semibold tracking-tight">
-                Good evening, Maria
+              <h1 className="mt-1.5 text-[26px] font-semibold tracking-tight md:text-[28px]">
+                {businessName}
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                Vera handled <span className="font-medium text-foreground tabular-nums">{totalCalls}</span> calls today and captured{" "}
-                <span className="font-medium text-foreground">{formatMoney(dashboardStats.revenueCaptured.value)}</span> in revenue.
+                SignalHost handled <span className="font-medium text-foreground tabular-nums">{totalCalls}</span> calls in the last 24 hours
+                {ordersCaptured > 0 ? (
+                  <> and captured <span className="font-medium text-foreground">{formatMoney(revenueCaptured)}</span> in order value.</>
+                ) : (
+                  <> with <span className="font-medium text-foreground tabular-nums">{activeStaffFollowUps}</span> open staff follow-ups.</>
+                )}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-3 rounded-xl border border-border/80 bg-card/80 px-3 py-2 shadow-sm backdrop-blur">
+              <div className="flex items-center gap-3 rounded-md border border-border bg-card px-3 py-2 shadow-sm">
                 <div className="relative">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-glow text-sm font-semibold text-primary-foreground">
-                    V
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+                    S
                   </div>
                   <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-success ring-2 ring-card" />
                 </div>
                 <div className="leading-tight">
-                  <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase text-muted-foreground">
                     <Phone className="h-3 w-3" />
-                    Vera is answering
+                    AI host answering
                   </div>
-                  <a href="tel:+14155550142" className="block text-sm font-semibold tabular-nums tracking-tight hover:text-primary">
-                    (415) 555-0142
+                  <a href={`tel:${aiHostPhone}`} className="block text-sm font-semibold tabular-nums hover:text-primary">
+                    {aiHostPhone}
                   </a>
                 </div>
               </div>
@@ -88,16 +210,30 @@ export default function Dashboard() {
       </div>
 
       <PageBody className="space-y-6">
+        {platformAdmin && activeTenant && (
+          <Card className="border-warning/30 bg-warning/10 p-4 text-sm">
+            <div className="font-medium text-foreground">SignalHost staff view</div>
+            <p className="mt-1 text-muted-foreground">
+              You are viewing {activeTenant.locationName} with live tenant data. Owner demo data remains separate.
+            </p>
+          </Card>
+        )}
+        {hasLiveError && (
+          <Card className="border-warning/30 bg-warning/10 p-4 text-sm text-muted-foreground">
+            Some live dashboard panels could not load. Calls, orders, reservations, and tasks will update automatically once Supabase responds.
+          </Card>
+        )}
+
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-          <StatCard label="Calls answered" value={dashboardStats.callsAnswered.value} delta={dashboardStats.callsAnswered.delta} icon={Phone} accent />
-          <StatCard label="Missed recovered" value={dashboardStats.missedRecovered.value} delta={dashboardStats.missedRecovered.delta} icon={PhoneIncoming} />
-          <StatCard label="Orders captured" value={dashboardStats.ordersCaptured.value} delta={dashboardStats.ordersCaptured.delta} icon={ShoppingBag} />
-          <StatCard label="Reservation requests" value={dashboardStats.reservationRequests.value} delta={dashboardStats.reservationRequests.delta} icon={CalendarDays} />
-          <Link to="/app/escalations?type=complaint" className="contents">
-            <StatCard label="Complaints escalated" value={dashboardStats.complaints.value} delta={dashboardStats.complaints.delta} icon={AlertTriangle} />
+          <StatCard label="Calls answered" value={totalCalls} delta={0} icon={Phone} accent />
+          <StatCard label="Missed recovered" value={missedRecovered} delta={0} icon={PhoneIncoming} />
+          <StatCard label="Orders captured" value={ordersCaptured} delta={0} icon={ShoppingBag} />
+          <StatCard label="Reservation requests" value={reservationRequests} delta={0} icon={CalendarDays} />
+          <Link to="/app/tasks" className="contents">
+            <StatCard label="Needs staff" value={activeStaffFollowUps} delta={0} icon={AlertTriangle} />
           </Link>
-          <Link to="/app/escalations?type=sales" className="contents">
-            <StatCard label="Sales / vendor calls" value={dashboardStats.salesCalls.value} delta={dashboardStats.salesCalls.delta} icon={Megaphone} />
+          <Link to="/app/calls?intent=sales" className="contents">
+            <StatCard label="Sales / vendor calls" value={salesCalls} delta={0} icon={Megaphone} />
           </Link>
         </div>
 
@@ -108,11 +244,11 @@ export default function Dashboard() {
                 <div>
                   <CardTitle className="text-base">Call volume</CardTitle>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    Peak at <span className="font-medium text-foreground">{peakHour.hour}</span> · {peakHour.calls} calls · {totalCalls} total today
+                    Peak at <span className="font-medium text-foreground">{peakHour.hour}</span> · {peakHour.calls} calls · {totalCalls} total in 24h
                   </p>
                 </div>
                 <div className="flex items-center gap-1 rounded-md border border-border bg-card p-0.5">
-                  <button className="rounded px-2 py-1 text-[11px] font-medium bg-muted">Today</button>
+                  <button className="rounded px-2 py-1 text-[11px] font-medium bg-muted">24h</button>
                   <button className="rounded px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted/50">7d</button>
                   <button className="rounded px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted/50">30d</button>
                 </div>
@@ -121,7 +257,7 @@ export default function Dashboard() {
             <CardContent>
               <div className="h-64 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={callVolumeByHour} margin={{ top: 10, right: 8, left: -20, bottom: 0 }}>
+                  <AreaChart data={callVolume} margin={{ top: 10, right: 8, left: -20, bottom: 0 }}>
                     <defs>
                       <linearGradient id="callFill" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.32} />
@@ -148,11 +284,11 @@ export default function Dashboard() {
                         background: "hsl(var(--popover))",
                         border: "1px solid hsl(var(--border))",
                         borderRadius: 8,
-                        fontSize: 12,
                         boxShadow: "0 4px 12px hsl(var(--foreground) / 0.08)",
+                        fontSize: 12,
                       }}
                       labelStyle={{ color: "hsl(var(--muted-foreground))", fontSize: 11 }}
-                      formatter={(v: number) => [`${v} calls`, ""]}
+                      formatter={(value: number) => [`${value} calls`, ""]}
                     />
                     <ReferenceLine x={peakHour.hour} stroke="hsl(var(--primary))" strokeDasharray="3 3" strokeOpacity={0.5} />
                     <Area
@@ -180,34 +316,38 @@ export default function Dashboard() {
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
-              {topIntents.map(i => {
-                const total = topIntents.reduce((s, x) => s + x.value, 0);
-                const pct = (i.value / total) * 100;
-                return (
-                  <div key={i.name}>
-                    <div className="mb-1 flex items-center justify-between text-xs">
-                      <span className="font-medium">{i.name}</span>
-                      <span className="text-muted-foreground tabular-nums">{i.value} · {Math.round(pct)}%</span>
-                    </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-primary to-primary-glow transition-all"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
+              {topIntents.length === 0 && (
+                <div className="rounded-md border border-dashed border-border p-5 text-center text-sm text-muted-foreground">
+                  No call intents yet.
+                </div>
+              )}
+              {topIntents.map((intent) => (
+                <div key={intent.name}>
+                  <div className="mb-1 flex items-center justify-between text-xs">
+                    <span className="font-medium">{intent.name}</span>
+                    <span className="text-muted-foreground tabular-nums">{intent.value} · {intent.percent}%</span>
                   </div>
-                );
-              })}
-              <div className="mt-4 rounded-lg border border-success/20 bg-success/5 p-3">
+                  <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-primary transition-all"
+                      style={{ width: `${intent.percent}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+              <div className="mt-4 rounded-md border border-success/20 bg-success/5 p-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Containment</div>
-                    <div className="mt-0.5 text-2xl font-semibold tabular-nums text-success">86%</div>
+                    <div className="text-[11px] font-medium uppercase text-muted-foreground">Containment</div>
+                    <div className="mt-0.5 text-2xl font-semibold tabular-nums text-success">{containment}%</div>
                   </div>
-                  <Badge variant="secondary" className="bg-success/15 text-success border-0">+4%</Badge>
+                  <Badge variant="secondary" className="border-0 bg-success/15 text-success">
+                    <CheckCircle2 className="mr-1 h-3 w-3" />
+                    Live
+                  </Badge>
                 </div>
                 <p className="mt-1 text-[11px] text-muted-foreground">
-                  Calls fully resolved without staff handoff
+                  Calls resolved without staff handoff
                 </p>
               </div>
             </CardContent>
@@ -227,55 +367,162 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent className="px-0">
-            <ul className="divide-y divide-border">
-              {activity.map((a, i) => (
-                <li key={i} className="group flex items-center gap-3 px-6 py-3 text-sm transition-colors hover:bg-muted/30">
-                  {a.type === "call" && (
-                    <>
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-info/10 text-info ring-4 ring-info/5">
-                        <Phone className="h-3.5 w-3.5" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate">
-                          <span className="font-medium">{(a.item as any).caller}</span>
-                          <span className={`ml-2 text-xs font-medium capitalize ${intentColor[(a.item as any).intent]}`}>{(a.item as any).intent}</span>
-                        </div>
-                        <div className="truncate text-xs text-muted-foreground">{(a.item as any).summary}</div>
-                      </div>
-                    </>
-                  )}
-                  {a.type === "order" && (
-                    <>
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary ring-4 ring-primary/5">
-                        <ShoppingBag className="h-3.5 w-3.5" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate"><span className="font-medium">New order</span> · {(a.item as any).customer}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {formatMoney((a.item as any).total)} · ETA {(a.item as any).etaMinutes}m
-                        </div>
-                      </div>
-                    </>
-                  )}
-                  {a.type === "reservation" && (
-                    <>
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-warning/15 text-warning ring-4 ring-warning/5">
-                        <CalendarDays className="h-3.5 w-3.5" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate"><span className="font-medium">{(a.item as any).guest}</span> · party of {(a.item as any).partySize}</div>
-                        <div className="text-xs text-muted-foreground">{(a.item as any).date} at {(a.item as any).time}</div>
-                      </div>
-                    </>
-                  )}
-                  <div className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">{formatTime(a.t)}</div>
-                  <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground" />
-                </li>
-              ))}
-            </ul>
+            {activity.length === 0 ? (
+              <div className="px-6 py-10 text-center text-sm text-muted-foreground">No live activity yet.</div>
+            ) : (
+              <ul className="divide-y divide-border">
+                {activity.map((activityItem) => (
+                  <li key={`${activityItem.type}-${activityItem.t}-${activityItem.item.id}`} className="group flex items-center gap-3 px-6 py-3 text-sm transition-colors hover:bg-muted/30">
+                    {activityItem.type === "call" && <CallActivity item={activityItem.item} />}
+                    {activityItem.type === "order" && <OrderActivity item={activityItem.item} />}
+                    {activityItem.type === "reservation" && <ReservationActivity item={activityItem.item} />}
+                    {activityItem.type === "task" && <TaskActivity item={activityItem.item} />}
+                    <div className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">{formatTime(activityItem.t)}</div>
+                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground" />
+                  </li>
+                ))}
+              </ul>
+            )}
           </CardContent>
         </Card>
       </PageBody>
     </>
   );
+}
+
+function CallActivity({ item }: { item: Call }) {
+  return (
+    <>
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-info/10 text-info ring-4 ring-info/5">
+        <Phone className="h-3.5 w-3.5" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="truncate">
+          <span className="font-medium">{item.caller}</span>
+          <span className={`ml-2 text-xs font-medium capitalize ${intentColor[item.intent]}`}>{item.intent}</span>
+        </div>
+        <div className="truncate text-xs text-muted-foreground">{item.summary}</div>
+      </div>
+    </>
+  );
+}
+
+function OrderActivity({ item }: { item: Order }) {
+  return (
+    <>
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary ring-4 ring-primary/5">
+        <ShoppingBag className="h-3.5 w-3.5" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="truncate"><span className="font-medium">New order</span> · {item.customer}</div>
+        <div className="text-xs text-muted-foreground">
+          {formatMoney(item.total)} · ETA {item.etaMinutes}m
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ReservationActivity({ item }: { item: Reservation }) {
+  return (
+    <>
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-warning/15 text-warning ring-4 ring-warning/5">
+        <CalendarDays className="h-3.5 w-3.5" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="truncate"><span className="font-medium">{item.guest}</span> · party of {item.partySize}</div>
+        <div className="text-xs text-muted-foreground">{item.date} at {item.time}</div>
+      </div>
+    </>
+  );
+}
+
+function TaskActivity({ item }: { item: StaffTask }) {
+  return (
+    <>
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive ring-4 ring-destructive/5">
+        <ClipboardList className="h-3.5 w-3.5" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="truncate"><span className="font-medium">Staff follow-up</span> · {item.title}</div>
+        <div className="text-xs text-muted-foreground capitalize">{item.priority} priority · {item.status.replace(/_/g, " ")}</div>
+      </div>
+    </>
+  );
+}
+
+function buildActivity(
+  calls: Call[],
+  orders: Order[],
+  reservations: Reservation[],
+  tasks: StaffTask[],
+): ActivityItem[] {
+  return [
+    ...calls.slice(0, 5).map((item) => ({ item, t: item.time, type: "call" as const })),
+    ...orders.slice(0, 4).map((item) => ({ item, t: item.createdAt, type: "order" as const })),
+    ...reservations.slice(0, 3).map((item) => ({
+      item,
+      t: item.createdAt ?? reservationDateTime(item),
+      type: "reservation" as const,
+    })),
+    ...tasks.slice(0, 4).map((item) => ({ item, t: item.createdAt, type: "task" as const })),
+  ].sort((first, second) => +new Date(second.t) - +new Date(first.t)).slice(0, 8);
+}
+
+function buildHourlyCallVolume(calls: Call[]) {
+  const now = new Date();
+  const buckets = Array.from({ length: 24 }, (_, index) => {
+    const date = new Date(now.getTime() - (23 - index) * 60 * 60_000);
+    return {
+      calls: 0,
+      hour: formatHour(date),
+      rawHour: date.getHours(),
+    };
+  });
+
+  for (const call of calls) {
+    const date = new Date(call.time);
+    const bucket = buckets.find((item) => item.rawHour === date.getHours());
+    if (bucket) bucket.calls += 1;
+  }
+
+  return buckets.map(({ hour, calls }) => ({ hour, calls }));
+}
+
+function buildTopIntents(calls: Call[]) {
+  const counts = new Map<string, number>();
+  for (const call of calls) counts.set(call.intent, (counts.get(call.intent) ?? 0) + 1);
+  const total = calls.length || 1;
+
+  return [...counts.entries()]
+    .sort((first, second) => second[1] - first[1])
+    .slice(0, 5)
+    .map(([intent, value]) => ({
+      name: titleCase(intent),
+      percent: Math.round((value / total) * 100),
+      value,
+    }));
+}
+
+function isWithinLastHours(value: string | undefined, hours: number) {
+  if (!value) return false;
+  const time = new Date(value).getTime();
+  if (!Number.isFinite(time)) return false;
+  return Date.now() - time <= hours * 60 * 60_000;
+}
+
+function reservationDateTime(reservation: Reservation) {
+  if (!reservation.date) return new Date(0).toISOString();
+  return new Date(`${reservation.date}T${reservation.time || "00:00"}:00`).toISOString();
+}
+
+function formatHour(date: Date) {
+  const hour = date.getHours();
+  const period = hour < 12 ? "AM" : "PM";
+  const display = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+  return `${display}${period}`;
+}
+
+function titleCase(value: string) {
+  return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }

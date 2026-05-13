@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "react-router-dom";
 import { PageHeader, PageBody } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,7 @@ import {
   createCallFeedbackInSupabase,
   fetchCallFeedbackFromSupabase,
   fetchCallsFromSupabase,
+  getActiveSupabaseLocationId,
   isCallFeedbackPersistenceConfigured,
   isSupabaseConfigured,
 } from "@/lib/supabase-rest";
@@ -57,6 +59,7 @@ const reviewLabelByCategory = reviewOptions.reduce<Record<CallFeedbackCategory, 
 
 export default function Calls() {
   const user = useCurrentUser();
+  const routeLocation = useLocation();
   const [selected, setSelected] = useState<Call | null>(null);
   const [intent, setIntent] = useState<string>("all");
   const [status, setStatus] = useState<string>("all");
@@ -71,12 +74,14 @@ export default function Calls() {
   const demoWorkspace = isDemoWorkspace(user);
   const allowSampleCalls = Boolean(demoWorkspace && !platformAdmin);
   const supabaseConfigured = isSupabaseConfigured();
+  const superCallConsole = platformAdmin && routeLocation.pathname.startsWith("/super");
+  const callLocationFilter = superCallConsole ? null : getActiveSupabaseLocationId();
   const feedbackConfigured = isCallFeedbackPersistenceConfigured();
   const selectedCallId = selected?.id;
   const callQuery = useQuery({
     enabled: supabaseConfigured,
-    queryFn: fetchCallsFromSupabase,
-    queryKey: ["calls", "supabase"],
+    queryFn: () => fetchCallsFromSupabase(callLocationFilter),
+    queryKey: ["calls", "supabase", callLocationFilter ?? "all"],
     refetchInterval: 30_000,
   });
   const feedbackQuery = useQuery({

@@ -147,6 +147,12 @@ export function isPlatformAdminUser(user: CurrentUser | null | undefined) {
   return Boolean(user?.role === "superadmin" || user?.isPlatformAdmin);
 }
 
+export function canUserAccessRole(user: CurrentUser | null | undefined, role: UserRole) {
+  if (!user) return false;
+  if (user.role === role) return true;
+  return role === "admin" && isPlatformAdminUser(user);
+}
+
 export function canCurrentUserManageTeam(user: CurrentUser | null | undefined) {
   return Boolean(user && user.role === "admin" && canManageRestaurantTeam(user.restaurantMembershipRole));
 }
