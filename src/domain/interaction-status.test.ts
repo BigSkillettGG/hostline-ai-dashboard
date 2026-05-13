@@ -94,8 +94,17 @@ describe("interaction status", () => {
     const insight = buildInteractionInsight({
       call: {
         ...baseCall,
+        escalation: {
+          alertedAt: "2026-05-13T12:02:00.000Z",
+          alertedTo: ["owner@example.com"],
+          channels: ["email"],
+          status: "pending_callback",
+          summary: "Equipment financing vendor wants a callback.",
+          type: "sales",
+        },
         intent: "sales",
         outcome: "resolved",
+        status: "needs_review",
         summary: "Vendor sales call asked for the manager about equipment financing. Message was not urgent.",
       },
     });
@@ -104,5 +113,32 @@ describe("interaction status", () => {
     expect(insight.urgency).toBe("low");
     expect(insight.valueTier).toBe("low");
     expect(insight.ownerReportBucket).toBe("low_value");
+  });
+
+  it("does not keep resolved complaints in the urgent queue", () => {
+    const insight = buildInteractionInsight({
+      call: {
+        ...baseCall,
+        escalation: {
+          alertedAt: "2026-05-13T12:02:00.000Z",
+          alertedTo: ["manager@example.com"],
+          channels: ["sms"],
+          severity: "medium",
+          status: "callback_made",
+          summary: "Manager called back about the complaint.",
+          type: "complaint",
+        },
+        intent: "complaint",
+        outcome: "manager_alerted",
+        status: "resolved",
+        summary: "Resolved complaint. Manager called back and closed the loop.",
+      },
+    });
+
+    expect(insight.valueTier).toBe("risk");
+    expect(insight.urgency).toBe("normal");
+    expect(insight.workflowStatus).toBe("resolved");
+    expect(insight.followUpNeeded).toBe(false);
+    expect(insight.ownerReportBucket).toBe("risk_or_complaint");
   });
 });

@@ -110,6 +110,9 @@ export function buildInteractionInsight({
   const lowConfidence = call.confidence > 0 && call.confidence < 70;
   const staffOrKnowledgeUncertainty = containsAny(text, uncertaintyTerms);
   const safetyOrRisk = complaint || containsAny(text, safetyRiskTerms);
+  const resolvedInteraction = isResolvedInteraction(call);
+  const openRisk = safetyOrRisk && !resolvedInteraction;
+  const pendingComplaintEscalation = pendingEscalation && call.escalation?.type === "complaint";
   const knowledgeGap = feedbackNeedsReview || lowConfidence || staffOrKnowledgeUncertainty || call.status === "needs_review";
 
   if (pendingEscalation) evidence.push("Staff callback or alert is still open.");
@@ -118,7 +121,7 @@ export function buildInteractionInsight({
   if (highValueOpportunity) evidence.push("High-value opportunity keywords were detected.");
   if (safetyOrRisk) evidence.push("Risk, complaint, or safety-sensitive language was detected.");
 
-  const followUpNeeded =
+  const followUpNeeded = !resolvedInteraction && (
     pendingEscalation ||
     missedOrVoicemail ||
     feedbackNeedsReview ||
@@ -129,10 +132,11 @@ export function buildInteractionInsight({
     call.status === "needs_review" ||
     highValueOpportunity ||
     quoteRequest ||
-    customerWaiting;
+    customerWaiting
+  );
 
   const valueTier = deriveValueTier({ call, highValueOpportunity, quoteRequest, safetyOrRisk, text });
-  const urgency = deriveUrgency({ followUpNeeded, knowledgeGap, missedOrVoicemail, pendingEscalation, safetyOrRisk, vendorOrSales, valueTier });
+  const urgency = deriveUrgency({ followUpNeeded, knowledgeGap, missedOrVoicemail, openRisk, pendingComplaintEscalation, vendorOrSales, valueTier });
   const workflowStatus = deriveWorkflowStatus({
     bookingLinkSent,
     call,
@@ -180,13 +184,14 @@ function deriveWorkflowStatus({
   quoteRequest: boolean;
   vendorOrSales: boolean;
 }): InteractionWorkflowStatus {
+  if (vendorOrSales) return "spam_vendor";
+  if (isResolvedInteraction(call)) return "resolved";
   if (pendingEscalation || call.outcome === "escalated" || call.outcome === "manager_alerted") return "escalated";
   if (missedOrVoicemail || call.outcome === "message_taken") return "needs_follow_up";
   if (quoteRequest) return "quote_requested";
   if (bookingLinkSent) return "booking_link_sent";
   if (customerWaiting) return "waiting_on_customer";
   if (knowledgeGap) return "needs_review";
-  if (vendorOrSales) return "spam_vendor";
   if (!followUpNeeded && (call.status === "resolved" || call.status === "reviewed" || call.outcome === "resolved" || call.outcome === "order_placed" || call.outcome === "reservation_booked")) {
     return "resolved";
   }
@@ -197,22 +202,23 @@ function deriveUrgency({
   followUpNeeded,
   knowledgeGap,
   missedOrVoicemail,
-  pendingEscalation,
-  safetyOrRisk,
+  openRisk,
+  pendingComplaintEscalation,
   valueTier,
   vendorOrSales,
 }: {
   followUpNeeded: boolean;
   knowledgeGap: boolean;
   missedOrVoicemail: boolean;
-  pendingEscalation: boolean;
-  safetyOrRisk: boolean;
+  openRisk: boolean;
+  pendingComplaintEscalation: boolean;
   valueTier: InteractionValueTier;
   vendorOrSales: boolean;
 }): InteractionUrgency {
-  if (safetyOrRisk || pendingEscalation) return "urgent";
+  if (openRisk || pendingComplaintEscalation) return "urgent";
+  if (vendorOrSales) return "low";
   if (valueTier === "very_high" || followUpNeeded || knowledgeGap || missedOrVoicemail) return "high";
-  if (vendorOrSales || valueTier === "low") return "low";
+  if (valueTier === "low") return "low";
   return "normal";
 }
 
@@ -252,10 +258,10 @@ function deriveOwnerReportBucket({
   workflowStatus: InteractionWorkflowStatus;
 }): OwnerReportBucket {
   if (safetyOrRisk) return "risk_or_complaint";
+  if (vendorOrSales) return "low_value";
   if (knowledgeGap) return "knowledge_gap";
   if (followUpNeeded || workflowStatus === "needs_follow_up" || workflowStatus === "escalated") return "open_follow_up";
   if (valueTier === "high" || valueTier === "very_high" || valueTier === "medium") return "revenue_opportunity";
-  if (vendorOrSales) return "low_value";
   return "handled";
 }
 
@@ -331,6 +337,14 @@ function normalizedInteractionText(call: InsightCall) {
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
+}
+
+function isResolvedInteraction(call: InsightCall) {
+  return (
+    call.status === "resolved" ||
+    call.escalation?.status === "callback_made" ||
+    call.escalation?.status === "closed"
+  );
 }
 
 function containsAny(text: string, terms: RegExp[]) {

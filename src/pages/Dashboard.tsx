@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { calls as sampleCalls, orders as sampleOrders, reservations as sampleReservations } from "@/data/mock";
 import type { Call, Order, Reservation } from "@/data/mock";
+import { buildDailyBrief, type DailyBriefFollowUp, type DailyBriefSuggestion } from "@/domain/daily-brief";
 import type { StaffTask } from "@/domain/staff-tasks";
 import {
   Area,
@@ -45,6 +46,7 @@ import {
   getActiveSupabaseLocationId,
   isSupabaseConfigured,
 } from "@/lib/supabase-rest";
+import { toast } from "sonner";
 
 const intentColor: Record<string, string> = {
   complaint: "text-destructive",
@@ -128,6 +130,16 @@ export default function Dashboard() {
   const recentCalls = useMemo(() => dashboardCalls.filter((call) => isWithinLastHours(call.time, 24)), [dashboardCalls]);
   const recentOrders = useMemo(() => dashboardOrders.filter((order) => isWithinLastHours(order.createdAt, 24)), [dashboardOrders]);
   const recentTasks = useMemo(() => dashboardTasks.filter((task) => isWithinLastHours(task.createdAt, 24)), [dashboardTasks]);
+  const dailyBrief = useMemo(
+    () => buildDailyBrief({
+      businessName,
+      calls: dashboardCalls,
+      orders: dashboardOrders,
+      reservations: dashboardReservations,
+      tasks: dashboardTasks,
+    }),
+    [businessName, dashboardCalls, dashboardOrders, dashboardReservations, dashboardTasks],
+  );
   const callVolume = useMemo(() => buildHourlyCallVolume(recentCalls), [recentCalls]);
   const peakHour = callVolume.reduce((max, item) => (item.calls > max.calls ? item : max), callVolume[0]);
   const topIntents = useMemo(() => buildTopIntents(recentCalls), [recentCalls]);
@@ -154,6 +166,15 @@ export default function Dashboard() {
   ]);
   const hasLiveError = callQuery.isError || orderQuery.isError || reservationQuery.isError || taskQuery.isError;
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+
+  async function copyDailyBrief() {
+    try {
+      await navigator.clipboard.writeText(dailyBrief.copyText);
+      toast.success("Daily brief copied");
+    } catch {
+      toast.error("Could not copy daily brief");
+    }
+  }
 
   return (
     <>
@@ -223,6 +244,56 @@ export default function Dashboard() {
             Some live dashboard panels could not load. Calls, orders, reservations, and tasks will update automatically once Supabase responds.
           </Card>
         )}
+
+        <Card className="overflow-hidden border-primary/15">
+          <div className="grid gap-0 lg:grid-cols-[1.4fr_0.9fr]">
+            <div className="p-5 md:p-6">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline" className="border-primary/20 bg-primary/10 text-primary">
+                  Daily brief
+                </Badge>
+                <span className="text-xs text-muted-foreground">{dailyBrief.dateLabel}</span>
+              </div>
+              <h2 className="mt-3 text-xl font-semibold tracking-tight">{dailyBrief.headline}</h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{dailyBrief.ownerMessage}</p>
+              <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+                {dailyBrief.metrics.map((metric) => (
+                  <div key={metric.label} className="rounded-md border border-border bg-muted/20 p-3">
+                    <div className="text-[10px] font-medium uppercase text-muted-foreground">{metric.label}</div>
+                    <div className="mt-1 text-xl font-semibold tabular-nums">{metric.value}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-5 flex flex-wrap gap-2">
+                <Button size="sm" onClick={copyDailyBrief}>
+                  Copy brief
+                </Button>
+                <Button variant="outline" size="sm" asChild>
+                  <Link to="/app/tasks">Open follow-ups</Link>
+                </Button>
+                <Button variant="outline" size="sm" asChild>
+                  <Link to="/app/calls">Review calls</Link>
+                </Button>
+              </div>
+            </div>
+            <div className="border-t border-border bg-muted/20 p-5 md:p-6 lg:border-l lg:border-t-0">
+              <div className="grid gap-4">
+                <BriefList
+                  empty="Nothing needs owner attention right now."
+                  items={dailyBrief.followUps}
+                  title="Needs attention"
+                  type="followup"
+                />
+                <BriefList
+                  empty="No knowledge updates suggested yet."
+                  items={dailyBrief.suggestedUpdates}
+                  title="Suggested updates"
+                  type="suggestion"
+                />
+              </div>
+            </div>
+          </div>
+        </Card>
 
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
           <StatCard label="Calls answered" value={totalCalls} delta={0} icon={Phone} accent />
@@ -448,6 +519,49 @@ function TaskActivity({ item }: { item: StaffTask }) {
         <div className="text-xs text-muted-foreground capitalize">{item.priority} priority · {item.status.replace(/_/g, " ")}</div>
       </div>
     </>
+  );
+}
+
+function BriefList({
+  empty,
+  items,
+  title,
+  type,
+}: {
+  empty: string;
+  items: DailyBriefFollowUp[] | DailyBriefSuggestion[];
+  title: string;
+  type: "followup" | "suggestion";
+}) {
+  return (
+    <div>
+      <div className="mb-2 text-xs font-medium uppercase text-muted-foreground">{title}</div>
+      {items.length === 0 ? (
+        <div className="rounded-md border border-dashed border-border bg-background/60 p-3 text-sm text-muted-foreground">
+          {empty}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {items.slice(0, 3).map((item) => (
+            <div key={item.id} className="rounded-md border border-border bg-background/70 p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium">{item.title}</div>
+                  <div className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                    {type === "followup" ? (item as DailyBriefFollowUp).action : (item as DailyBriefSuggestion).detail}
+                  </div>
+                </div>
+                {type === "followup" && (
+                  <Badge variant="outline" className="shrink-0 capitalize">
+                    {(item as DailyBriefFollowUp).priority}
+                  </Badge>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
