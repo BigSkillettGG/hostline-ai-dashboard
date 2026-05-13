@@ -82,4 +82,71 @@ describe("phone number store", () => {
       }),
     );
   });
+
+  it("allows provisioning when a location has no active unreleased number", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response("[]", { status: 200 }));
+    const store = createPhoneNumberStore(env);
+
+    const guard = await store.getLocationProvisioningGuard("00000000-0000-4000-8000-000000000002");
+
+    expect(guard).toEqual({
+      allowed: true,
+      locationId: "00000000-0000-4000-8000-000000000002",
+    });
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("phone_numbers?location_id=eq.00000000-0000-4000-8000-000000000002");
+  });
+
+  it("blocks provisioning when a location already has an active unreleased number", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(JSON.stringify([
+      {
+        id: "phone-number-1",
+        phone_number: "+14155550199",
+        provider_sid: "PN123",
+        status: "in-use",
+        trial_grace_ends_at: "2026-05-25T00:00:00.000Z",
+      },
+    ]), { status: 200 }));
+    const store = createPhoneNumberStore(env);
+
+    const guard = await store.getLocationProvisioningGuard(
+      "00000000-0000-4000-8000-000000000002",
+      new Date("2026-05-13T00:00:00.000Z"),
+    );
+
+    expect(guard).toMatchObject({
+      allowed: false,
+      existingPhoneNumber: "+14155550199",
+      existingProviderSid: "PN123",
+      existingStatus: "in-use",
+      locationId: "00000000-0000-4000-8000-000000000002",
+      reason: "active_number_exists",
+      trialGraceEndsAt: "2026-05-25T00:00:00.000Z",
+    });
+  });
+
+  it("marks provisioning as cleanup overdue when the existing trial number is past grace", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(JSON.stringify([
+      {
+        id: "phone-number-1",
+        phone_number: "+14155550199",
+        provider_sid: "PN123",
+        status: "trialing",
+        trial_grace_ends_at: "2026-05-01T00:00:00.000Z",
+      },
+    ]), { status: 200 }));
+    const store = createPhoneNumberStore(env);
+
+    const guard = await store.getLocationProvisioningGuard(
+      "00000000-0000-4000-8000-000000000002",
+      new Date("2026-05-13T00:00:00.000Z"),
+    );
+
+    expect(guard).toMatchObject({
+      allowed: false,
+      reason: "trial_grace_expired",
+      trialGraceEndsAt: "2026-05-01T00:00:00.000Z",
+    });
+  });
 });

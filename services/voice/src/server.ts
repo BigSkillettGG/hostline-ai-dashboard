@@ -347,14 +347,29 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
         trialDays?: number;
         trialGraceDays?: number;
       };
+      const locationId = body.locationId ?? currentEnv.SUPABASE_DEMO_LOCATION_ID;
 
       const authorization = await authorizeVoiceAdminRequest({
         currentEnv,
-        locationId: body.locationId ?? currentEnv.SUPABASE_DEMO_LOCATION_ID,
+        locationId,
         req,
       });
       if (!authorization.authorized) {
         sendJson(res, authorization.status, { error: authorization.reason ?? "Unauthorized" });
+        return;
+      }
+
+      const guard = await phoneNumberStore.getLocationProvisioningGuard(locationId);
+      if (!guard.allowed) {
+        sendJson(res, 409, {
+          code: guard.reason,
+          error: guard.reason === "trial_grace_expired"
+            ? "This location already has a trial number past its cleanup date. Release it or upgrade before provisioning another number."
+            : "This location already has an active SignalHost phone number.",
+          locationId: guard.locationId,
+          phoneNumber: guard.existingPhoneNumber,
+          trialGraceEndsAt: guard.trialGraceEndsAt,
+        });
         return;
       }
 
@@ -370,7 +385,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
 
       const input = {
         forwardingMode: body.forwardingMode,
-        locationId: body.locationId ?? currentEnv.SUPABASE_DEMO_LOCATION_ID,
+        locationId,
         phoneNumber: selectedPhoneNumber,
         restaurantMainLine: body.restaurantMainLine,
         trialDays: body.trialDays,

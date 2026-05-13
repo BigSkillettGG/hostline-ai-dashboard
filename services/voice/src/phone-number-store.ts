@@ -10,7 +10,18 @@ export interface TrialPhoneNumberReleaseCandidate {
   trialGraceEndsAt?: string;
 }
 
+export interface LocationProvisioningGuard {
+  allowed: boolean;
+  existingPhoneNumber?: string;
+  existingProviderSid?: string;
+  existingStatus?: string;
+  locationId: string;
+  reason?: "active_number_exists" | "trial_grace_expired";
+  trialGraceEndsAt?: string;
+}
+
 export interface PhoneNumberStore {
+  getLocationProvisioningGuard(locationId?: string, now?: Date): Promise<LocationProvisioningGuard>;
   listExpiredTrialNumbers(input?: { limit?: number; now?: Date }): Promise<TrialPhoneNumberReleaseCandidate[]>;
   markNumberReleased(input: {
     id?: string;
@@ -35,6 +46,11 @@ export function createPhoneNumberStore(env: VoiceServiceEnv): PhoneNumberStore {
 }
 
 class NoopPhoneNumberStore implements PhoneNumberStore {
+  async getLocationProvisioningGuard(locationId?: string): Promise<LocationProvisioningGuard> {
+    console.info("[phone-number-store] Supabase not configured; provisioning guard skipped", { locationId });
+    return { allowed: true, locationId: locationId ?? "" };
+  }
+
   async listExpiredTrialNumbers(): Promise<TrialPhoneNumberReleaseCandidate[]> {
     console.info("[phone-number-store] Supabase not configured; expired trial numbers not loaded");
     return [];
@@ -107,6 +123,45 @@ class SupabasePhoneNumberStore implements PhoneNumberStore {
       method: "PATCH",
       query: `id=eq.${encodeURIComponent(locationId)}`,
     });
+  }
+
+  async getLocationProvisioningGuard(locationId?: string, now = new Date()): Promise<LocationProvisioningGuard> {
+    const normalizedLocationId = normalizeLocationId(locationId) ?? this.defaultLocationId;
+    const rows = await this.get<Array<{
+      id: string;
+      phone_number: string;
+      provider_sid: string | null;
+      status: string | null;
+      trial_grace_ends_at: string | null;
+    }>>(
+      "phone_numbers",
+      [
+        `location_id=eq.${encodeURIComponent(normalizedLocationId)}`,
+        "released_at=is.null",
+        "status=in.(provisioned,trialing,in-use,active)",
+        "select=id,phone_number,provider_sid,status,trial_grace_ends_at",
+        "order=created_at.desc",
+        "limit=1",
+      ].join("&"),
+    );
+    const existingNumber = rows?.[0];
+    if (!existingNumber) {
+      return { allowed: true, locationId: normalizedLocationId };
+    }
+
+    const trialGraceEndsAt = existingNumber.trial_grace_ends_at ?? undefined;
+    const graceEnds = trialGraceEndsAt ? new Date(trialGraceEndsAt) : undefined;
+    return {
+      allowed: false,
+      existingPhoneNumber: existingNumber.phone_number,
+      existingProviderSid: existingNumber.provider_sid ?? undefined,
+      existingStatus: existingNumber.status ?? undefined,
+      locationId: normalizedLocationId,
+      reason: graceEnds && !Number.isNaN(graceEnds.getTime()) && now.getTime() > graceEnds.getTime()
+        ? "trial_grace_expired"
+        : "active_number_exists",
+      trialGraceEndsAt,
+    };
   }
 
   async listExpiredTrialNumbers(input: { limit?: number; now?: Date } = {}) {
