@@ -369,7 +369,7 @@ class SupabaseCallStore implements CallStore {
     }
 
     const task = await this.createStaffTask({
-      body: buildCustomerRequestTaskBody(input),
+      body: buildCustomerRequestTaskBody(input, requestId),
       callId: input.callId,
       dueMinutes: input.priority === "urgent" ? 5 : input.priority === "high" ? 15 : 30,
       locationId,
@@ -557,7 +557,7 @@ function customerRequestTitle(requestType: CustomerRequestKind) {
   return "Customer request";
 }
 
-function buildCustomerRequestTaskBody(input: CreateCustomerRequestInput) {
+function buildCustomerRequestTaskBody(input: CreateCustomerRequestInput, requestId?: string) {
   const details = input.details
     ? Object.entries(input.details)
         .filter(([, value]) => value !== undefined && value !== null && value !== "")
@@ -568,6 +568,7 @@ function buildCustomerRequestTaskBody(input: CreateCustomerRequestInput) {
     `Type: ${input.requestType}`,
     input.customerName && `Customer: ${input.customerName}`,
     input.customerPhone && `Phone: ${input.customerPhone}`,
+    requestId && `Customer request ID: ${requestId}`,
     `Summary: ${input.summary}`,
     ...details,
   ]

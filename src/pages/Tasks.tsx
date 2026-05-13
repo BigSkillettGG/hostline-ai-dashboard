@@ -16,6 +16,7 @@ import {
   Phone,
   RefreshCw,
   Search,
+  Sparkles,
   ShoppingBag,
   UserCheck,
   XCircle,
@@ -29,6 +30,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { buildCustomerRequestResolutionDraft } from "@/domain/customer-requests";
 import {
   isActiveStaffTask,
   nextStaffTaskStatus,
@@ -44,6 +47,7 @@ import {
   fetchStaffTasksFromSupabase,
   isStaffTaskPersistenceConfigured,
   isSupabaseConfigured,
+  resolveCustomerRequestInSupabase,
   updateStaffTaskStatusInSupabase,
 } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
@@ -265,6 +269,18 @@ export default function Tasks() {
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: StaffTaskStatus }) => updateStaffTaskStatusInSupabase(id, status),
   });
+  const resolutionMutation = useMutation({
+    mutationFn: ({ answer, task }: { answer: string; task: StaffTask }) => resolveCustomerRequestInSupabase({
+      answer,
+      callId: task.callId,
+      customerContext: task.body,
+      requestId: extractCustomerRequestId(task),
+      responseChannel: "manual",
+      sourceQuestion: sourceQuestionForTask(task),
+      taskId: task.id,
+      title: task.title,
+    }),
+  });
 
   const setTaskStatus = async (task: StaffTask, status: StaffTaskStatus) => {
     if (!usingSupabase && !superConsole) {
@@ -292,6 +308,28 @@ export default function Tasks() {
 
   const dismissTask = (task: StaffTask) => {
     void setTaskStatus(task, "dismissed");
+  };
+
+  const resolveCustomerRequest = async (task: StaffTask, answer: string) => {
+    if (!usingSupabase && !superConsole) {
+      setSampleStaffTasks((current) => current.map((item) => item.id === task.id ? updateTaskLocally(item, "done") : item));
+      toast.success("Answer saved in sample mode");
+      return;
+    }
+
+    setBusyTaskId(task.id);
+    try {
+      await resolutionMutation.mutateAsync({ answer, task });
+      await queryClient.invalidateQueries({ queryKey: ["staff-tasks", "supabase"] });
+      await queryClient.invalidateQueries({ queryKey: ["knowledge-suggestions"] });
+      await queryClient.invalidateQueries({ queryKey: ["knowledge-sections"] });
+      await queryClient.invalidateQueries({ queryKey: ["tenant-detail", "tasks"] });
+      toast.success("Answer saved, task closed, and knowledge updated");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Customer answer could not be saved");
+    } finally {
+      setBusyTaskId(null);
+    }
   };
 
   const resetFilters = () => {
@@ -492,10 +530,12 @@ export default function Tasks() {
           <div className="space-y-3">
             <ActionDetail
               busy={Boolean(selectedTask && busyTaskId === selectedTask.id)}
+              canResolveCustomerRequest={usingSupabase || (!superConsole && !persistenceConfigured)}
               consoleBase={consoleBase}
               onAdvance={advanceTask}
               onCopy={(item) => void copyTask(item)}
               onDismiss={dismissTask}
+              onResolveCustomerRequest={(task, answer) => void resolveCustomerRequest(task, answer)}
               superConsole={superConsole}
               task={selectedTask}
             />
@@ -641,18 +681,22 @@ function TaskCard({
 
 function ActionDetail({
   busy,
+  canResolveCustomerRequest,
   consoleBase,
   onAdvance,
   onCopy,
   onDismiss,
+  onResolveCustomerRequest,
   superConsole,
   task,
 }: {
   busy: boolean;
+  canResolveCustomerRequest: boolean;
   consoleBase: string;
   onAdvance: (task: StaffTask) => void;
   onCopy: (task: StaffTask) => void;
   onDismiss: (task: StaffTask) => void;
+  onResolveCustomerRequest: (task: StaffTask, answer: string) => void;
   superConsole: boolean;
   task: StaffTask | null;
 }) {
@@ -689,6 +733,15 @@ function ActionDetail({
       <div className="space-y-4">
         <DetailSection label="Recommended next step" value={recommendedAction(task)} />
         {task.body && <DetailSection label="Context Vera captured" value={task.body} />}
+        {(task.type === "customer_request" || task.type === "low_confidence_review") && (
+          <CustomerAnswerPanel
+            busy={busy}
+            canResolve={canResolveCustomerRequest}
+            key={task.id}
+            onResolve={(answer) => onResolveCustomerRequest(task, answer)}
+            task={task}
+          />
+        )}
         <div className="grid gap-2 text-sm">
           <DetailRow label="Assigned to" value={task.assignedTo || "Unassigned"} />
           <DetailRow label="Due" value={dueLabel(task)} />
@@ -730,6 +783,74 @@ function ActionDetail({
         )}
       </div>
     </Card>
+  );
+}
+
+function CustomerAnswerPanel({
+  busy,
+  canResolve,
+  onResolve,
+  task,
+}: {
+  busy: boolean;
+  canResolve: boolean;
+  onResolve: (answer: string) => void;
+  task: StaffTask;
+}) {
+  const [answer, setAnswer] = useState("");
+  const draft = answer.trim()
+    ? buildCustomerRequestResolutionDraft({
+        answer,
+        callId: task.callId,
+        customerContext: task.body,
+        sourceQuestion: sourceQuestionForTask(task),
+        title: task.title,
+      })
+    : null;
+  const requestId = extractCustomerRequestId(task);
+  const canSubmit = canResolve && Boolean(answer.trim()) && !busy;
+
+  return (
+    <div className="rounded-md border border-primary/20 bg-primary/5 p-3">
+      <div className="flex items-start gap-2">
+        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+          <Sparkles className="h-3.5 w-3.5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold">Answer customer and teach SignalHost</div>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            Use this when staff knows the right answer. It closes the action, drafts the customer response, and adds an approved knowledge entry for future calls.
+          </p>
+        </div>
+      </div>
+      <Textarea
+        className="mt-3 min-h-24 bg-background"
+        onChange={(event) => setAnswer(event.target.value)}
+        placeholder="Example: The bathroom is white."
+        value={answer}
+      />
+      {draft && (
+        <div className="mt-3 space-y-2 rounded-md border border-border bg-background p-3 text-xs">
+          <div>
+            <div className="font-medium uppercase text-muted-foreground">Customer reply draft</div>
+            <p className="mt-1 leading-relaxed">{draft.customerMessage}</p>
+          </div>
+          <div>
+            <div className="font-medium uppercase text-muted-foreground">Saved knowledge</div>
+            <p className="mt-1 leading-relaxed">{draft.knowledgeTitle}</p>
+          </div>
+        </div>
+      )}
+      {!requestId && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Older actions may not have a customer request ID yet. The knowledge update will still be saved.
+        </p>
+      )}
+      <Button className="mt-3 w-full" disabled={!canSubmit} onClick={() => onResolve(answer)} size="sm">
+        <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+        {busy ? "Saving..." : "Save answer and teach SignalHost"}
+      </Button>
+    </div>
   );
 }
 
@@ -862,13 +983,31 @@ function sourceLabelForTask(task: StaffTask) {
 function recommendedAction(task: StaffTask) {
   if (task.status === "done") return "This item is closed. Reopen it only if staff still needs to take action.";
   if (task.status === "dismissed") return "This item was dismissed. Restore it if the customer still needs a response.";
-  if (task.type === "customer_request") return "Review the captured details, contact the customer, then mark done once the request is handled.";
+  if (task.type === "customer_request") return "Answer the customer, save the approved answer for future calls, then close the request.";
   if (task.type === "manager_callback") return "Have the manager or owner call the customer back and record the outcome in your normal staff notes.";
   if (task.type === "reservation_review") return "Confirm availability in the reservation book or platform, then follow up with the guest.";
   if (task.type === "order_follow_up") return "Check the order record, confirm the kitchen or counter update, then close the action.";
   if (task.type === "delivery_issue") return "Resolve the operational handoff first, then verify the guest or kitchen is no longer blocked.";
   if (task.type === "low_confidence_review") return "Open the call transcript, decide the right answer, and add a tuning note if Vera needs better knowledge.";
   return "Handle the request, then mark done when no customer or staff follow-up remains.";
+}
+
+function extractCustomerRequestId(task: StaffTask) {
+  const match = task.body?.match(/Customer request ID:\s*([0-9a-f-]{36})/i);
+  return match?.[1];
+}
+
+function sourceQuestionForTask(task: StaffTask) {
+  return extractTaskBodyLine(task.body, "Summary")
+    ?? extractTaskBodyLine(task.body, "Question")
+    ?? task.body?.split("\n").find((line) => line.trim().length > 12)?.trim()
+    ?? task.title;
+}
+
+function extractTaskBodyLine(body: string | undefined, label: string) {
+  if (!body) return undefined;
+  const expression = new RegExp(`^${label}:\\s*(.+)$`, "im");
+  return body.match(expression)?.[1]?.trim();
 }
 
 function taskMatchesSearch(task: StaffTask, rawSearch: string) {

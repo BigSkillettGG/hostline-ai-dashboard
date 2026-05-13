@@ -64,6 +64,11 @@ import {
   type KnowledgeSuggestionSource,
   type KnowledgeSuggestionStatus,
 } from "@/domain/knowledge-suggestions";
+import {
+  buildCustomerRequestResolutionDraft,
+  normalizeCustomerRequestResponseStatus,
+  type CustomerRequestResponseStatus,
+} from "@/domain/customer-requests";
 import type { BusinessLiveState } from "@/lib/business-live-updates-storage";
 import type {
   IngestionJob,
@@ -340,6 +345,27 @@ interface SupabaseStaffTaskRow {
   title: string;
 }
 
+interface SupabaseCustomerRequestRow {
+  customer_name: string | null;
+  customer_phone: string | null;
+  details: unknown;
+  id: string;
+  knowledge_suggestion_id: string | null;
+  location_id: string;
+  priority: string | null;
+  request_type: string | null;
+  responded_at: string | null;
+  response_channel: string | null;
+  response_status: string | null;
+  response_text: string | null;
+  source: string | null;
+  source_call_id: string | null;
+  status: string | null;
+  summary: string;
+  title: string;
+  updated_at: string | null;
+}
+
 interface SupabasePhoneNumberRow {
   created_at?: string | null;
   id: string;
@@ -596,6 +622,28 @@ export interface UpdateKnowledgeSuggestionInput {
   status?: KnowledgeSuggestionStatus;
   suggestedAnswer?: string;
   title?: string;
+}
+
+export interface ResolveCustomerRequestInput {
+  answer: string;
+  businessName?: string;
+  callId?: string;
+  customerContext?: string;
+  customerMessage?: string;
+  requestId?: string;
+  responseChannel?: string;
+  sourceQuestion: string;
+  taskId?: string;
+  title?: string;
+}
+
+export interface ResolveCustomerRequestResult {
+  customerRequest?: {
+    id: string;
+    responseStatus: CustomerRequestResponseStatus;
+    responseText?: string;
+  };
+  knowledgeSuggestion?: KnowledgeSuggestion;
 }
 
 export interface CreateMenuSourceInput {
@@ -1050,6 +1098,57 @@ export async function applyKnowledgeSuggestionInSupabase(
     suggestionId: input.id,
     title: input.title,
   });
+}
+
+export async function resolveCustomerRequestInSupabase(
+  input: ResolveCustomerRequestInput,
+  locationId = getActiveSupabaseLocationId(),
+): Promise<ResolveCustomerRequestResult> {
+  if (!isSupabaseConfigured() || !locationId) {
+    throw new Error("Supabase customer request persistence is not configured.");
+  }
+
+  const draft = buildCustomerRequestResolutionDraft({
+    answer: input.answer,
+    businessName: input.businessName,
+    callId: input.callId,
+    customerContext: input.customerContext,
+    sourceQuestion: input.sourceQuestion,
+    title: input.title,
+  });
+  const pendingSuggestion = await createKnowledgeSuggestionInSupabase({
+    body: draft.knowledgeBody,
+    callId: input.callId,
+    priority: "normal",
+    source: "staff_task",
+    sourceQuestion: draft.sourceQuestion,
+    suggestedAnswer: draft.answer,
+    title: draft.knowledgeTitle,
+  }, locationId);
+  const appliedSuggestion = await applyKnowledgeSuggestionInSupabase({
+    body: draft.knowledgeBody,
+    id: pendingSuggestion.id,
+    title: draft.knowledgeTitle,
+  }, locationId);
+  const customerMessage = input.customerMessage?.trim() || draft.customerMessage;
+  const customerRequest = input.requestId
+    ? await updateCustomerRequestResolutionInSupabase({
+        knowledgeSuggestionId: appliedSuggestion.id,
+        locationId,
+        requestId: input.requestId,
+        responseChannel: input.responseChannel,
+        responseText: customerMessage,
+      })
+    : undefined;
+
+  if (input.taskId) {
+    await updateStaffTaskStatusInSupabase(input.taskId, "done");
+  }
+
+  return {
+    customerRequest,
+    knowledgeSuggestion: appliedSuggestion,
+  };
 }
 
 export async function fetchBusinessLiveStateFromSupabase(
@@ -2070,6 +2169,44 @@ async function createKnowledgeSuggestionFromCallFeedback(feedback: CallFeedback,
   }, locationId);
 }
 
+async function updateCustomerRequestResolutionInSupabase(input: {
+  knowledgeSuggestionId?: string;
+  locationId: string;
+  requestId: string;
+  responseChannel?: string;
+  responseText: string;
+}) {
+  const rows = await supabaseRequest<SupabaseCustomerRequestRow[]>(
+    "customer_requests",
+    new URLSearchParams({
+      id: `eq.${input.requestId}`,
+      location_id: `eq.${input.locationId}`,
+      select: customerRequestSelectColumns,
+    }),
+    {
+      body: {
+        knowledge_suggestion_id: input.knowledgeSuggestionId ?? null,
+        responded_at: new Date().toISOString(),
+        response_channel: input.responseChannel?.trim() || "manual",
+        response_status: "drafted",
+        response_text: input.responseText.trim(),
+        status: "resolved",
+        updated_at: new Date().toISOString(),
+      },
+      headers: { Prefer: "return=representation" },
+      method: "PATCH",
+    },
+  );
+
+  if (!rows?.[0]) return undefined;
+
+  return {
+    id: rows[0].id,
+    responseStatus: normalizeCustomerRequestResponseStatus(rows[0].response_status),
+    responseText: rows[0].response_text?.trim() || undefined,
+  };
+}
+
 async function createKnowledgeSectionFromSuggestion(suggestion: KnowledgeSuggestion, locationId: string) {
   const rows = await supabaseRequest<SupabaseKnowledgeSectionRow[]>(
     "knowledge_sections",
@@ -3051,6 +3188,9 @@ const staffAlertEventSelectColumns =
 
 const staffTaskSelectColumns =
   "id,location_id,call_id,order_id,reservation_id,title,body,status,task_type,priority,assigned_to,due_at,completed_at,created_at";
+
+const customerRequestSelectColumns =
+  "id,location_id,source_call_id,request_type,title,summary,customer_name,customer_phone,status,priority,source,details,response_text,response_status,response_channel,responded_at,knowledge_suggestion_id,updated_at";
 
 const callFeedbackSelectColumns =
   "id,call_id,category,note,suggested_answer,add_to_knowledge,created_by,created_at";

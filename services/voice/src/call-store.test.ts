@@ -238,6 +238,7 @@ describe("Supabase call store", () => {
         method: "POST",
       }),
     );
+    expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toContain("Customer request ID: request_uuid");
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
       "https://example.supabase.co/rest/v1/calls?id=eq.call_uuid",

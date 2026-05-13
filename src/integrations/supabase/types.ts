@@ -439,6 +439,94 @@ export type Database = {
           },
         ]
       }
+      customer_requests: {
+        Row: {
+          created_at: string
+          customer_name: string | null
+          customer_phone: string | null
+          details: Json
+          id: string
+          knowledge_suggestion_id: string | null
+          location_id: string
+          priority: string
+          request_type: string
+          responded_at: string | null
+          response_channel: string | null
+          response_status: string
+          response_text: string | null
+          source: string
+          source_call_id: string | null
+          status: string
+          summary: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          customer_name?: string | null
+          customer_phone?: string | null
+          details?: Json
+          id?: string
+          knowledge_suggestion_id?: string | null
+          location_id: string
+          priority?: string
+          request_type?: string
+          responded_at?: string | null
+          response_channel?: string | null
+          response_status?: string
+          response_text?: string | null
+          source?: string
+          source_call_id?: string | null
+          status?: string
+          summary: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          customer_name?: string | null
+          customer_phone?: string | null
+          details?: Json
+          id?: string
+          knowledge_suggestion_id?: string | null
+          location_id?: string
+          priority?: string
+          request_type?: string
+          responded_at?: string | null
+          response_channel?: string | null
+          response_status?: string
+          response_text?: string | null
+          source?: string
+          source_call_id?: string | null
+          status?: string
+          summary?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_requests_knowledge_suggestion_id_fkey"
+            columns: ["knowledge_suggestion_id"]
+            isOneToOne: false
+            referencedRelation: "knowledge_suggestions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_requests_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_requests_source_call_id_fkey"
+            columns: ["source_call_id"]
+            isOneToOne: false
+            referencedRelation: "calls"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       faqs: {
         Row: {
           answer: string
