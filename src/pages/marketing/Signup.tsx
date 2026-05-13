@@ -24,6 +24,8 @@ export default function Signup() {
   );
   const [name, setName] = useState("");
   const [businessName, setBusinessName] = useState("");
+  const [businessPhone, setBusinessPhone] = useState("");
+  const [preferredAreaCode, setPreferredAreaCode] = useState("");
   const [businessType, setBusinessType] = useState<BusinessType>(initialSolution.businessType);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -43,6 +45,11 @@ export default function Signup() {
     try {
       const onboardingDraft = {
         ...createOnboardingDraftForBusiness(businessType, {
+          assignedHostLineNumber: "",
+          assignedSignalHostNumber: "",
+          escalationPhone: businessPhone || undefined,
+          mainPhone: businessPhone,
+          preferredAreaCode: preferredAreaCode || inferAreaCode(businessPhone),
           restaurantName: businessName || template.defaultName,
           selectedPlanId: selectedTier.id,
           selectedPlanName: selectedTier.name,
@@ -174,6 +181,36 @@ export default function Signup() {
                 </div>
               </div>
 
+              <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_120px]">
+                <div className="space-y-1.5">
+                  <Label htmlFor="business-phone">Business phone</Label>
+                  <Input
+                    id="business-phone"
+                    inputMode="tel"
+                    value={businessPhone}
+                    onChange={(event) => {
+                      const nextPhone = event.target.value;
+                      setBusinessPhone(nextPhone);
+                      if (!preferredAreaCode) setPreferredAreaCode(inferAreaCode(nextPhone));
+                    }}
+                    placeholder="+1 (617) 555-0148"
+                  />
+                  <p className="text-xs text-muted-foreground">This becomes the main line and escalation number during setup.</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="area-code">Area code</Label>
+                  <Input
+                    id="area-code"
+                    inputMode="numeric"
+                    maxLength={3}
+                    value={preferredAreaCode}
+                    onChange={(event) => setPreferredAreaCode(event.target.value.replace(/\D/g, "").slice(0, 3))}
+                    placeholder="617"
+                  />
+                  <p className="text-xs text-muted-foreground">For the trial number.</p>
+                </div>
+              </div>
+
               <div className="space-y-1.5">
                 <Label htmlFor="email">Work email</Label>
                 <Input id="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@business.com" />
@@ -209,4 +246,11 @@ export default function Signup() {
       </div>
     </div>
   );
+}
+
+function inferAreaCode(phoneNumber: string) {
+  const digits = phoneNumber.replace(/\D/g, "");
+  if (digits.length >= 11 && digits.startsWith("1")) return digits.slice(1, 4);
+  if (digits.length >= 10) return digits.slice(0, 3);
+  return "";
 }

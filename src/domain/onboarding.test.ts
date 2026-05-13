@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  assignedDemoPhoneNumber,
   calculateOnboardingProgress,
   createOnboardingDraftForBusiness,
   getBusinessOnboardingSections,
@@ -114,5 +115,17 @@ describe("restaurant onboarding scope", () => {
     expect(progress.percent).toBeGreaterThan(70);
     expect(progress.completedRequired).toBeLessThanOrEqual(progress.totalRequired);
     expect(progress.missingBySection).toHaveLength(onboardingSections.length);
+  });
+
+  it("does not treat the demo SignalHost number as launch-ready", () => {
+    const progress = calculateOnboardingProgress(
+      {
+        ...sampleOnboardingDraft,
+        assignedSignalHostNumber: assignedDemoPhoneNumber,
+      },
+      getBusinessOnboardingSections(sampleOnboardingDraft),
+    );
+
+    expect(progress.missingBySection.find((section) => section.id === "launch")?.missing).toContain("SignalHost number");
   });
 });

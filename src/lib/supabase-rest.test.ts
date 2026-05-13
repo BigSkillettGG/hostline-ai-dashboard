@@ -592,11 +592,28 @@ describe("Supabase order mapping", () => {
 });
 
 describe("Supabase onboarding profile payload", () => {
-  it("stores the draft with launch-readiness metadata", () => {
+  it("keeps the profile in progress while the launch number is still a demo placeholder", () => {
     const payload = buildOnboardingProfilePayload(sampleOnboardingDraft, "location_1");
 
     expect(payload).toMatchObject({
       draft: sampleOnboardingDraft,
+      location_id: "location_1",
+      status: "in_progress",
+    });
+    expect(payload.completed_required).toBeLessThan(payload.total_required);
+    expect(payload.progress_percent).toBeLessThan(100);
+    expect(new Date(payload.updated_at).toString()).not.toBe("Invalid Date");
+  });
+
+  it("marks the profile ready after a real SignalHost number is assigned", () => {
+    const readyDraft = {
+      ...sampleOnboardingDraft,
+      assignedSignalHostNumber: "+16175550199",
+    };
+    const payload = buildOnboardingProfilePayload(readyDraft, "location_1");
+
+    expect(payload).toMatchObject({
+      draft: readyDraft,
       location_id: "location_1",
       status: "ready_for_test_call",
     });

@@ -82,6 +82,16 @@ type ForwardingVerificationCheck = {
   label: string;
 };
 
+type LaunchAssistantStep = {
+  detail: string;
+  label: string;
+  status: "blocked" | "current" | "done" | "pending";
+};
+
+const FIRST_AVAILABLE_NUMBER_TOKEN = "__first_available__";
+const TRIAL_DAYS = 7;
+const TRIAL_GRACE_DAYS = 14;
+
 export default function Onboarding() {
   const [activeSectionId, setActiveSectionId] = useState<OnboardingStepId>("basics");
   const [draft, setDraft] = useState<OnboardingDraft>(() => loadOnboardingDraft());
@@ -93,7 +103,10 @@ export default function Onboarding() {
     isOnboardingPersistenceConfigured() ? "Checking Supabase profile" : "Saved to this browser",
   );
   const [availableNumbers, setAvailableNumbers] = useState<AvailableVoicePhoneNumber[]>([]);
-  const [phoneSearchAreaCode, setPhoneSearchAreaCode] = useState(() => inferAreaCode(String(loadOnboardingDraft().mainPhone ?? "")));
+  const [phoneSearchAreaCode, setPhoneSearchAreaCode] = useState(() => {
+    const savedDraft = loadOnboardingDraft();
+    return String(savedDraft.preferredAreaCode ?? "") || inferAreaCode(String(savedDraft.mainPhone ?? ""));
+  });
   const [phoneSearchError, setPhoneSearchError] = useState<string | null>(null);
   const [phoneNumberRecord, setPhoneNumberRecord] = useState<PhoneNumberRecord | null>(null);
   const [localForwardingVerification, setLocalForwardingVerification] = useState<ForwardingVerification>({});
@@ -107,12 +120,24 @@ export default function Onboarding() {
   const ActiveIcon = sectionIcons[activeSection.id];
   const assignedNumber = String(draft.assignedSignalHostNumber || draft.assignedHostLineNumber || assignedDemoPhoneNumber);
   const assignedNumberIsDemo = assignedNumber === assignedDemoPhoneNumber;
+  const activeLocationId = getActiveSupabaseLocationId();
   const launchChecklist = useMemo(() => buildLaunchChecklist(businessTemplate), [businessTemplate]);
   const forwardingVerificationChecks = useMemo(() => buildForwardingVerificationChecks(businessTemplate), [businessTemplate]);
   const forwardingVerification = phoneNumberRecord?.forwardingVerification ?? localForwardingVerification;
   const forwardingVerificationStatus = buildVerificationStatus(forwardingVerification);
   const selectedPlanName = String(draft.selectedPlanName ?? "Not selected");
   const selectedPlanMonthly = String(draft.selectedPlanMonthly ?? "");
+  const launchAssistantSteps = useMemo(
+    () =>
+      buildLaunchAssistantSteps({
+        assignedNumberIsDemo,
+        forwardingVerificationStatus,
+        progressPercent: progress.percent,
+        syncState,
+        voiceConfigured: isVoiceServiceConfigured(),
+      }),
+    [assignedNumberIsDemo, forwardingVerificationStatus, progress.percent, syncState],
+  );
 
   useEffect(() => {
     if (!isOnboardingPersistenceConfigured()) return;
@@ -173,6 +198,12 @@ export default function Onboarding() {
       active = false;
     };
   }, [assignedNumber]);
+
+  useEffect(() => {
+    if (phoneSearchAreaCode) return;
+    const inferredAreaCode = String(draft.preferredAreaCode ?? "") || inferAreaCode(String(draft.mainPhone ?? ""));
+    if (inferredAreaCode) setPhoneSearchAreaCode(inferredAreaCode);
+  }, [draft.mainPhone, draft.preferredAreaCode, phoneSearchAreaCode]);
 
   const updateField = (fieldId: string, value: string | boolean) => {
     if (fieldId === "businessType" && typeof value === "string") {
@@ -242,23 +273,39 @@ export default function Onboarding() {
     }
   };
 
-  const provisionNumber = async (phoneNumber: string) => {
-    setProvisioningNumber(phoneNumber);
+  const provisionNumber = async (phoneNumber?: string) => {
+    const searchAreaCode = phoneSearchAreaCode || inferAreaCode(String(draft.mainPhone ?? ""));
+    if (!phoneNumber && !searchAreaCode) {
+      setPhoneSearchError("Enter the business area code before assigning a trial number.");
+      toast.error("Enter an area code first.");
+      return;
+    }
+
+    const provisioningToken = phoneNumber ?? FIRST_AVAILABLE_NUMBER_TOKEN;
+    setProvisioningNumber(provisioningToken);
     setPhoneSearchError(null);
 
     try {
       const result = await provisionVoicePhoneNumber({
+        areaCode: phoneNumber ? undefined : searchAreaCode,
+        country: "US",
         forwardingMode: mapForwardingMode(String(draft.forwardingMode ?? "")),
-        locationId: getActiveSupabaseLocationId(),
+        locationId: activeLocationId,
         phoneNumber,
         restaurantMainLine: String(draft.mainPhone ?? "").trim() || undefined,
+        trialDays: TRIAL_DAYS,
+        trialGraceDays: TRIAL_GRACE_DAYS,
       });
       const nextDraft = {
         ...draft,
+        assignedHostLineNumber: result.phoneNumber.phoneNumber,
         assignedSignalHostNumber: result.phoneNumber.phoneNumber,
+        preferredAreaCode: searchAreaCode,
       };
       setDraft(nextDraft);
       await persistDraft(nextDraft, "SignalHost number assigned");
+      await refreshPhoneNumberRecord(result.phoneNumber.phoneNumber);
+      setAvailableNumbers([]);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Phone number provisioning failed.";
       setPhoneSearchError(message);
@@ -267,6 +314,15 @@ export default function Onboarding() {
       setProvisioningNumber(null);
     }
   };
+
+  async function refreshPhoneNumberRecord(expectedPhoneNumber = assignedNumber) {
+    if (!isOnboardingPersistenceConfigured()) return;
+
+    const phoneNumbers = await fetchPhoneNumbersFromSupabase(activeLocationId);
+    const matchedNumber =
+      phoneNumbers.find((phoneNumber) => phoneNumber.phoneNumber === expectedPhoneNumber) ?? phoneNumbers[0] ?? null;
+    setPhoneNumberRecord(matchedNumber);
+  }
 
   const updateForwardingVerification = async (
     key: keyof Pick<ForwardingVerification, "busyForwarding" | "directCall" | "noAnswerForwarding">,
@@ -317,6 +373,56 @@ export default function Onboarding() {
       />
 
       <PageBody className="space-y-5">
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="p-4">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline" className="border-primary/25 bg-background/80 text-primary">Self-service launch</Badge>
+                  <span className="text-xs font-medium text-muted-foreground">7-day trial number, then 14-day cleanup grace</span>
+                </div>
+                <h2 className="mt-3 text-xl font-semibold">Get to the first test call without touching Twilio.</h2>
+                <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
+                  Finish the interview, assign a local SignalHost number, call it directly, then forward the business line when it sounds right.
+                </p>
+
+                <div className="mt-4 grid gap-2 md:grid-cols-4">
+                  {launchAssistantSteps.map((step) => (
+                    <LaunchAssistantStepCard key={step.label} step={step} />
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
+                <Button
+                  onClick={() => provisionNumber()}
+                  disabled={Boolean(provisioningNumber) || !assignedNumberIsDemo || !isVoiceServiceConfigured() || !activeLocationId}
+                >
+                  {provisioningNumber === FIRST_AVAILABLE_NUMBER_TOKEN ? (
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <PhoneForwarded className="mr-1.5 h-3.5 w-3.5" />
+                  )}
+                  Assign first available
+                </Button>
+                <Button variant="outline" disabled={assignedNumberIsDemo} asChild={!assignedNumberIsDemo}>
+                  {assignedNumberIsDemo ? (
+                    <span>
+                      Call test number
+                      <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                    </span>
+                  ) : (
+                    <a href={`tel:${assignedNumber}`}>
+                      Call test number
+                      <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                    </a>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
           <div className="space-y-4">
             <div className="grid gap-3 md:grid-cols-4">
@@ -717,6 +823,22 @@ export default function Onboarding() {
   }
 }
 
+function LaunchAssistantStepCard({ step }: { step: LaunchAssistantStep }) {
+  const Icon = step.status === "done" ? CheckCircle2 : step.status === "blocked" ? AlertTriangle : Clock3;
+
+  return (
+    <div className="rounded-md border border-border bg-background/80 p-3">
+      <div className="flex items-start gap-2">
+        <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", launchStepIconClass(step.status))} />
+        <div className="min-w-0">
+          <div className="text-sm font-medium">{step.label}</div>
+          <div className="mt-1 text-xs leading-5 text-muted-foreground">{step.detail}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function OnboardingFieldControl({
   draft,
   field,
@@ -810,6 +932,61 @@ function optionLabel(option: OnboardingFieldOption) {
 function hasDraftValue(value: string | boolean | undefined) {
   if (typeof value === "boolean") return true;
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function buildLaunchAssistantSteps({
+  assignedNumberIsDemo,
+  forwardingVerificationStatus,
+  progressPercent,
+  syncState,
+  voiceConfigured,
+}: {
+  assignedNumberIsDemo: boolean;
+  forwardingVerificationStatus: ReturnType<typeof buildVerificationStatus>;
+  progressPercent: number;
+  syncState: "local" | "loading" | "live" | "error";
+  voiceConfigured: boolean;
+}): LaunchAssistantStep[] {
+  return [
+    {
+      detail: workspaceLaunchDetail(syncState),
+      label: "Workspace",
+      status: syncState === "error" ? "blocked" : syncState === "loading" ? "current" : "done",
+    },
+    {
+      detail: progressPercent >= 85 ? "Enough answers for a strong first call." : `${progressPercent}% complete. Fill the required blanks before forwarding real traffic.`,
+      label: "Interview",
+      status: progressPercent >= 85 ? "done" : "current",
+    },
+    {
+      detail: assignedNumberIsDemo
+        ? voiceConfigured
+          ? "Assign a real Twilio number from the trial pool."
+          : "Connect the voice service before assigning a number."
+        : "A real SignalHost number is attached to this location.",
+      label: "Trial number",
+      status: assignedNumberIsDemo ? (voiceConfigured ? "current" : "blocked") : "done",
+    },
+    {
+      detail: forwardingVerificationStatus === "verified" ? "Direct, no-answer, and busy-line tests passed." : "Call the AI number first, then verify forwarding.",
+      label: "Forwarding",
+      status: forwardingVerificationStatus === "verified" ? "done" : assignedNumberIsDemo ? "pending" : "current",
+    },
+  ];
+}
+
+function workspaceLaunchDetail(syncState: "local" | "loading" | "live" | "error") {
+  if (syncState === "live") return "Workspace and knowledge profile are connected.";
+  if (syncState === "error") return "Saved locally, but cloud sync needs attention.";
+  if (syncState === "local") return "Saved locally until Supabase is connected.";
+  return "Saving the workspace profile.";
+}
+
+function launchStepIconClass(status: LaunchAssistantStep["status"]) {
+  if (status === "done") return "text-success";
+  if (status === "blocked") return "text-destructive";
+  if (status === "current") return "text-primary";
+  return "text-muted-foreground";
 }
 
 function inferAreaCode(phoneNumber: string) {

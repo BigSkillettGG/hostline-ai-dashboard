@@ -1708,11 +1708,11 @@ export function calculateOnboardingProgress(
   sections: OnboardingSection[] = onboardingSections,
 ) {
   const requiredFields = sections.flatMap((section) => section.fields.filter((field) => field.required));
-  const completedRequired = requiredFields.filter((field) => hasDraftValue(draft[field.id])).length;
+  const completedRequired = requiredFields.filter((field) => hasCompletedFieldValue(field.id, draft[field.id])).length;
   const missingBySection = sections.map((section) => ({
     id: section.id,
     missing: section.fields
-      .filter((field) => field.required && !hasDraftValue(draft[field.id]))
+      .filter((field) => field.required && !hasCompletedFieldValue(field.id, draft[field.id]))
       .map((field) => field.label),
   }));
 
@@ -1722,6 +1722,13 @@ export function calculateOnboardingProgress(
     percent: requiredFields.length ? Math.round((completedRequired / requiredFields.length) * 100) : 100,
     totalRequired: requiredFields.length,
   };
+}
+
+function hasCompletedFieldValue(fieldId: string, value: OnboardingDraftValue) {
+  if ((fieldId === "assignedSignalHostNumber" || fieldId === "assignedHostLineNumber") && value === assignedDemoPhoneNumber) {
+    return false;
+  }
+  return hasDraftValue(value);
 }
 
 function hasDraftValue(value: OnboardingDraftValue) {
