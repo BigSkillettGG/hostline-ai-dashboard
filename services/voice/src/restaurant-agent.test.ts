@@ -83,6 +83,25 @@ describe("restaurant fallback replies", () => {
     expect(instructions).toContain("Use an honorific only if the caller says it");
   });
 
+  it("promotes reviewed QA notes into high-priority behavior guidance", () => {
+    const instructions = buildRestaurantInstructions({
+      ...demoRestaurantContext,
+      behaviorTuningNotes: [
+        {
+          body: "Feedback: Caller asked about specials and Vera answered hours.\n\nPreferred answer: Answer the specials question directly, then ask if they need anything else.\n\nSource call: call_123",
+          kind: "behavior_tuning",
+          title: "Call tuning - Wrong answer",
+        },
+      ],
+    });
+
+    expect(instructions).toContain("Active QA tuning notes from reviewed calls");
+    expect(instructions).toContain("Wrong answer: Feedback: Caller asked about specials");
+    expect(instructions).toContain("Preferred answer: Answer the specials question directly");
+    expect(instructions).toContain("never mention QA");
+    expect(instructions).not.toContain("Source call: call_123");
+  });
+
   it("prevents fake live transfers and over-promising substitutions", () => {
     const instructions = buildRestaurantInstructions(demoRestaurantContext);
 

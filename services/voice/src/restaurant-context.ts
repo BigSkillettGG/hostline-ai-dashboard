@@ -2,6 +2,7 @@ import type { SignalHostVoiceGender } from "../../../src/domain/voice-selection"
 import type { BusinessLink } from "../../../src/domain/business-links";
 
 export interface RestaurantVoiceContext {
+  behaviorTuningNotes: RestaurantKnowledgeSection[];
   businessLinks: BusinessLink[];
   businessType: string;
   restaurantName: string;
@@ -28,6 +29,7 @@ export interface RestaurantFaq {
 export interface RestaurantKnowledgeSection {
   title: string;
   body: string;
+  kind?: "behavior_tuning" | "business_fact";
 }
 
 export interface RestaurantMenuItem {
@@ -67,6 +69,7 @@ export interface RestaurantReservationSettings {
 }
 
 export const demoRestaurantContext: RestaurantVoiceContext = {
+  behaviorTuningNotes: [],
   businessLinks: [
     {
       description: "Full menu, online ordering, and pickup checkout.",
@@ -234,6 +237,14 @@ export const demoRestaurantContext: RestaurantVoiceContext = {
     sourceToday: "OpenTable",
   },
 };
+
+export function isBehaviorTuningSection(section: Pick<RestaurantKnowledgeSection, "body" | "kind" | "title">) {
+  return (
+    section.kind === "behavior_tuning" ||
+    /^call tuning\s*-/i.test(section.title) ||
+    /\b(preferred answer|source call):/i.test(section.body)
+  );
+}
 
 export function toSpokenRestaurantName(restaurantName: string) {
   return restaurantName

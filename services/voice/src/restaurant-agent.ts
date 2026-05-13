@@ -172,6 +172,7 @@ export function buildRestaurantInstructions(context: RestaurantVoiceContext) {
     .slice(0, 12)
     .map((section) => `${section.title}: ${section.body}`)
     .join(" | ");
+  const behaviorTuningLines = formatBehaviorTuningNotes(context.behaviorTuningNotes);
 
   return [
     `You are ${context.hostName}, the virtual host for ${context.restaurantName}.`,
@@ -188,6 +189,9 @@ export function buildRestaurantInstructions(context: RestaurantVoiceContext) {
     "Answer the caller's actual current question. Do not jump to hours, reservations, or ordering just because one related word appears.",
     "After answering a simple informational question, ask a light follow-up such as: Anything else I can help you with?",
     "Do not add that generic follow-up when you already asked a specific next question, are collecting order or reservation details, or are handling complaints, allergies, handoffs, delivery issues, vendors, or lost items.",
+    behaviorTuningLines && `Active QA tuning notes from reviewed calls: ${behaviorTuningLines}`,
+    behaviorTuningLines &&
+      "Apply these QA tuning notes when relevant. They override general style guidance, but never mention QA, feedback, internal notes, or source calls to callers.",
     businessLabels.contextLine,
     "Expect callers with accents, noisy phone audio, fragments, and corrections. Ask one short clarifying question when needed.",
     businessLabels.appointmentDetailLine,
@@ -219,6 +223,30 @@ export function buildRestaurantInstructions(context: RestaurantVoiceContext) {
   ]
     .filter((line): line is string => Boolean(line))
     .join("\n");
+}
+
+function formatBehaviorTuningNotes(notes: RestaurantVoiceContext["behaviorTuningNotes"]) {
+  return notes
+    .slice(0, 8)
+    .map((section) => {
+      const title = section.title.replace(/^call tuning\s*-\s*/i, "").trim() || "Reviewed call note";
+      const body = compactBehaviorTuningBody(section.body);
+      return body ? `${title}: ${body}` : "";
+    })
+    .filter(Boolean)
+    .join(" | ");
+}
+
+function compactBehaviorTuningBody(body: string) {
+  const compacted = body
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter((line) => line && !/^source call:/i.test(line))
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return compacted.length <= 360 ? compacted : `${compacted.slice(0, 357)}...`;
 }
 
 function buildBusinessInstructionLabels(context: RestaurantVoiceContext) {

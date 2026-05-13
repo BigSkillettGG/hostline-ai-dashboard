@@ -32,6 +32,11 @@ describe("restaurant context store", () => {
           title: "Accessibility",
         },
         {
+          body: "Feedback: Vera did not close the loop after answering.\n\nPreferred answer: Answer directly, then ask if the caller needs anything else.\n\nSource call: call_123",
+          is_active: true,
+          title: "Call tuning - Bad close-out",
+        },
+        {
           body: "This should not be included.",
           is_active: false,
           title: "Inactive section",
@@ -185,6 +190,20 @@ describe("restaurant context store", () => {
         },
       ]),
     );
+    expect(context.knowledgeSections).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: "Call tuning - Bad close-out",
+        }),
+      ]),
+    );
+    expect(context.behaviorTuningNotes).toEqual([
+      {
+        body: "Feedback: Vera did not close the loop after answering.\n\nPreferred answer: Answer directly, then ask if the caller needs anything else.\n\nSource call: call_123",
+        kind: "behavior_tuning",
+        title: "Call tuning - Bad close-out",
+      },
+    ]);
   });
 
   it("falls back to location data and demo-safe policies when onboarding is missing", () => {

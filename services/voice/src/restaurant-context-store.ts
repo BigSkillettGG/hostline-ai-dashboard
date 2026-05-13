@@ -4,6 +4,7 @@ import type { BusinessLink } from "../../../src/domain/business-links";
 import { getBusinessTemplate, normalizeBusinessType, type BusinessTemplate, type BusinessType } from "../../../src/domain/business-templates";
 import {
   demoRestaurantContext,
+  isBehaviorTuningSection,
   toSpokenRestaurantName,
   type RestaurantFaq,
   type RestaurantKnowledgeSection,
@@ -132,8 +133,10 @@ export function buildRestaurantContext({
     ? menu.map((item) => item.name)
     : splitList(stringValue(draft.menuCategories) ?? location?.cuisine ?? businessTemplate.defaultOffering).slice(0, 8);
   const categoryNames = menuCategories.map((category) => category.name).filter(Boolean).join(", ");
+  const persistedKnowledgeSections = mapKnowledgeSections(knowledgeSections);
+  const behaviorTuningNotes = persistedKnowledgeSections.filter(isBehaviorTuningSection);
   const mappedKnowledgeSections = [
-    ...mapKnowledgeSections(knowledgeSections),
+    ...persistedKnowledgeSections.filter((section) => !isBehaviorTuningSection(section)),
     ...buildDraftKnowledgeSections(draft),
   ];
   const mappedFaqs = mapFaqs(faqs);
@@ -146,6 +149,7 @@ export function buildRestaurantContext({
   const businessLinks = buildBusinessLinks(draft, orderSettings, reservationSettings);
 
   return {
+    behaviorTuningNotes,
     businessLinks,
     businessType,
     defaultPickupEtaMinutes: parseMinutes(stringValue(draft.defaultPickupEta)) ?? demoRestaurantContext.defaultPickupEtaMinutes,
@@ -760,10 +764,13 @@ function mapFaqs(rows: SupabaseFaqRow[]): RestaurantFaq[] {
 function mapKnowledgeSections(rows: SupabaseKnowledgeSectionRow[]): RestaurantKnowledgeSection[] {
   return rows
     .filter((row) => row.is_active !== false)
-    .map((row) => ({
-      body: row.body?.trim() ?? "",
-      title: row.title?.trim() ?? "",
-    }))
+    .map((row) => {
+      const section = {
+        body: row.body?.trim() ?? "",
+        title: row.title?.trim() ?? "",
+      };
+      return isBehaviorTuningSection(section) ? { ...section, kind: "behavior_tuning" as const } : section;
+    })
     .filter((section) => section.title && section.body);
 }
 
