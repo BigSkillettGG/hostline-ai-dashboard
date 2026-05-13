@@ -15,6 +15,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const demoAuth = isDemoAuthMode();
+  const localDemoEnabled = demoAuth || import.meta.env.DEV;
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -35,10 +36,10 @@ export default function Login() {
     }
   };
 
-  const openDemoWorkspace = () => {
-    const user = startDemoSession("admin");
+  const openDemoWorkspace = (role: "admin" | "superadmin" = "admin") => {
+    const user = startDemoSession(role);
     toast.success(`Opening ${user.name}'s demo workspace`);
-    navigate("/app", { replace: true });
+    navigate(user.role === "superadmin" ? "/super" : "/app", { replace: true });
   };
 
   return (
@@ -70,17 +71,22 @@ export default function Login() {
             <Button type="submit" className="w-full" disabled={isSubmitting}>
               {isSubmitting ? "Signing in..." : "Sign in"}
             </Button>
-            {demoAuth && (
-              <Button type="button" variant="outline" className="w-full" onClick={openDemoWorkspace}>
-                Open demo workspace
-              </Button>
+            {localDemoEnabled && (
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Button type="button" variant="outline" className="w-full" onClick={() => openDemoWorkspace("admin")}>
+                  Owner demo
+                </Button>
+                <Button type="button" variant="outline" className="w-full" onClick={() => openDemoWorkspace("superadmin")}>
+                  Staff console
+                </Button>
+              </div>
             )}
             <p className="text-center text-xs text-muted-foreground">
               No account? <Link to="/signup" className="text-foreground underline-offset-4 hover:underline">Start free</Link>
             </p>
-            {demoAuth && (
+            {localDemoEnabled && (
               <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
-                Demo: any email works. Use the demo workspace for an owner sales walkthrough, or an email containing <code className="font-mono">staff</code> or <code className="font-mono">@signalhost</code> for the internal console.
+                Local demo shortcuts are available in development so testing does not depend on typing credentials. Production Supabase login still requires a real account.
               </p>
             )}
           </form>
