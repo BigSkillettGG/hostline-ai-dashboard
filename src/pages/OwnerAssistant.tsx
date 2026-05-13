@@ -22,6 +22,8 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { calls as sampleCalls, orders as sampleOrders, reservations as sampleReservations } from "@/data/mock";
 import type { Call, Order, Reservation } from "@/data/mock";
+import { getBusinessMode } from "@/domain/business-updates";
+import { parseOwnerLiveCommand, type OwnerLiveCommand } from "@/domain/owner-live-commands";
 import {
   buildOwnerAssistantResponse,
   ownerAssistantSuggestions,
@@ -29,6 +31,7 @@ import {
 } from "@/domain/owner-assistant";
 import type { StaffTask } from "@/domain/staff-tasks";
 import { isPlatformAdminUser, useCurrentUser } from "@/lib/auth";
+import { loadBusinessLiveState, saveBusinessLiveState } from "@/lib/business-live-updates-storage";
 import { loadOnboardingDraft } from "@/lib/onboarding-draft";
 import {
   fetchCallsFromSupabase,
@@ -58,6 +61,11 @@ const emptyCalls: Call[] = [];
 const emptyOrders: Order[] = [];
 const emptyReservations: Reservation[] = [];
 const emptyTasks: StaffTask[] = [];
+const ownerCommandSuggestions = [
+  "Tonight's special is lobster ravioli",
+  "We're closed tomorrow for a private event",
+  "Set busy mode",
+];
 
 export default function OwnerAssistant() {
   const user = useCurrentUser();
@@ -118,7 +126,7 @@ export default function OwnerAssistant() {
     {
       id: "assistant-start",
       role: "assistant",
-      text: "Ask me what happened today, what needs follow-up, what I did not know, or where the money is.",
+      text: "Ask me what happened today, what needs follow-up, what I did not know, or tell me live updates like tonight's special.",
     },
   ]);
   const hasLiveError = callQuery.isError || orderQuery.isError || reservationQuery.isError || taskQuery.isError;
@@ -127,7 +135,10 @@ export default function OwnerAssistant() {
     const trimmed = nextQuestion.trim();
     if (!trimmed) return;
 
-    const response = buildOwnerAssistantResponse(trimmed, assistantContext);
+    const liveCommand = parseOwnerLiveCommand(trimmed);
+    const response = liveCommand
+      ? applyOwnerLiveCommand(liveCommand)
+      : buildOwnerAssistantResponse(trimmed, assistantContext);
     setMessages((current) => [
       ...current,
       { id: `owner-${Date.now()}`, role: "owner", text: trimmed },
@@ -209,6 +220,18 @@ export default function OwnerAssistant() {
                       {item}
                     </Button>
                   ))}
+                  {ownerCommandSuggestions.map((item) => (
+                    <Button
+                      key={item}
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="border-primary/30 bg-primary/5 text-primary hover:bg-primary/10"
+                      onClick={() => askOwnerAssistant(item)}
+                    >
+                      {item}
+                    </Button>
+                  ))}
                 </div>
                 <form
                   className="flex gap-2"
@@ -220,7 +243,7 @@ export default function OwnerAssistant() {
                   <Input
                     value={question}
                     onChange={(event) => setQuestion(event.target.value)}
-                    placeholder="Ask about urgent calls, leads, follow-ups, complaints..."
+                    placeholder="Ask about urgent calls, leads, or say: Tonight's special is lobster ravioli..."
                   />
                   <Button type="submit">
                     <Send className="mr-1.5 h-3.5 w-3.5" />
@@ -267,6 +290,7 @@ export default function OwnerAssistant() {
                 <Capability icon={Phone} label="Call and chat volume" />
                 <Capability icon={BookOpen} label="Knowledge gaps and suggestions" />
                 <Capability icon={MessageCircle} label="Revenue opportunities" />
+                <Capability icon={Sparkles} label="Live updates and business modes" />
               </CardContent>
             </Card>
 
@@ -274,7 +298,7 @@ export default function OwnerAssistant() {
               <CardContent className="p-4">
                 <div className="text-sm font-medium">Next evolution</div>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  After dashboard chat, the same assistant can work over verified owner SMS and create temporary updates when the owner says things like "we are closed tomorrow."
+                  Verified owner SMS can use the same command layer next, so an owner can text "we are closed tomorrow" and brief SignalHost without opening the dashboard.
                 </p>
               </CardContent>
             </Card>
@@ -283,6 +307,49 @@ export default function OwnerAssistant() {
       </PageBody>
     </>
   );
+}
+
+function applyOwnerLiveCommand(command: OwnerLiveCommand): OwnerAssistantResponse {
+  const current = loadBusinessLiveState();
+
+  if (command.kind === "set_mode") {
+    const next = saveBusinessLiveState({
+      mode: command.mode,
+      updates: current.updates,
+    });
+    const mode = getBusinessMode(next.mode);
+
+    return {
+      answer: command.confirmation,
+      bullets: [
+        `${mode.label} mode is active.`,
+        mode.operatorCue,
+        "The Knowledge Base live-updates panel will show this immediately.",
+      ],
+      confidence: "high",
+      intent: "live_update",
+      suggestedActions: ["Open Knowledge Base", "Ask for today's summary"],
+      title: "Business mode updated",
+    };
+  }
+
+  const next = saveBusinessLiveState({
+    mode: current.mode,
+    updates: [command.update, ...current.updates],
+  });
+
+  return {
+    answer: command.confirmation,
+    bullets: [
+      command.update.body,
+      command.update.expiresAt ? `Expires ${formatOwnerUpdateExpiration(command.update.expiresAt)}.` : "Active until cleared.",
+      `${next.updates.length} live update${next.updates.length === 1 ? "" : "s"} saved for this workspace.`,
+    ],
+    confidence: "high",
+    intent: "live_update",
+    suggestedActions: ["Open Knowledge Base", "Ask what changed today"],
+    title: "Live update created",
+  };
 }
 
 function ChatBubble({ message }: { message: OwnerChatMessage }) {
@@ -345,4 +412,17 @@ function Capability({ icon: Icon, label }: { icon: typeof CheckCircle2; label: s
       <span>{label}</span>
     </div>
   );
+}
+
+function formatOwnerUpdateExpiration(value: string) {
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      month: "short",
+    }).format(new Date(value));
+  } catch {
+    return value;
+  }
 }

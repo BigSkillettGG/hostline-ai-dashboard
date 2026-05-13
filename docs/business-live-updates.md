@@ -19,6 +19,8 @@ This slice starts the "owner can brief SignalHost like a staff member" layer.
   - Until cleared
 - Builds an instruction block that can be sent to the voice service later.
 - Supports mode-scoped updates, such as "only use this during Busy mode."
+- Shares the local live state between the Knowledge Base and Owner Assistant.
+- Lets the Owner Assistant create live updates and mode changes from plain owner commands.
 
 ## Examples
 
@@ -30,7 +32,7 @@ This slice starts the "owner can brief SignalHost like a staff member" layer.
 
 ## Current Scope
 
-The UI keeps this local for now so the live database does not need an immediate migration. The domain model is ready for backend persistence.
+The UI keeps this local for now so the live database does not need an immediate migration. The domain model is ready for backend persistence. Owner Assistant commands already use the same shared state, which makes the future SMS command path much smaller.
 
 ## Persistence Path
 
@@ -42,4 +44,4 @@ Next backend step:
 2. Add RLS policies for owners/admins/managers.
 3. Add Supabase REST functions for create/read/clear.
 4. Load active updates into the voice service restaurant context.
-5. Allow owner assistant commands like "we're closed tomorrow" to create these updates automatically.
+5. Replace local command writes with Supabase-backed writes.

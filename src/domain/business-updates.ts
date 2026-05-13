@@ -159,6 +159,7 @@ export function createTemporaryUpdate(input: {
   id?: string;
   mode?: BusinessMode;
   now?: Date;
+  source?: TemporaryBusinessUpdate["source"];
   title: string;
   type: TemporaryUpdateType;
 }): TemporaryBusinessUpdate {
@@ -174,7 +175,7 @@ export function createTemporaryUpdate(input: {
     expiration: input.expiration,
     id: input.id ?? crypto.randomUUID(),
     mode: input.mode,
-    source: "dashboard",
+    source: input.source ?? "dashboard",
     title: input.title.trim(),
     type: input.type,
   };

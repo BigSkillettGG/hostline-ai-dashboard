@@ -35,10 +35,23 @@ The new `/app/assistant` page lets an owner ask operational questions such as:
 
 The first version uses deterministic business logic over calls, orders, reservations, staff tasks, interaction insight, and the daily brief. That keeps answers fast and grounded before adding an LLM layer for broader natural language.
 
+## Live Update Commands
+
+The dashboard assistant can now also act on simple owner instructions:
+
+- "Tonight's special is lobster ravioli"
+- "We're closed tomorrow for a private event"
+- "We're running 20 minutes behind"
+- "Sarah is out sick today"
+- "Set busy mode"
+- "Set emergency mode"
+
+Those commands create the same temporary live updates and business modes shown on the Knowledge Base page. This is still local browser storage in the dashboard, but it proves the product behavior before moving it to Supabase and verified owner SMS.
+
 ## Next Steps
 
 1. Persist `business_contacts` from onboarding into Supabase.
 2. Add owner SMS verification before accepting text commands.
-3. Let owner assistant commands create temporary live updates.
+3. Persist assistant-created temporary live updates in Supabase.
 4. Add an LLM answer layer with the deterministic report as tool/context.
 5. Log owner assistant questions and useful missing intents for product tuning.

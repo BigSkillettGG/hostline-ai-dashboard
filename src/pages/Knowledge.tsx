@@ -29,6 +29,13 @@ import {
   updateKnowledgeSectionInSupabase,
   type KnowledgeSectionRecord,
 } from "@/lib/supabase-rest";
+import {
+  businessLiveUpdatesEvent,
+  businessLiveUpdatesStorageKey,
+  createDefaultBusinessLiveUpdates,
+  loadBusinessLiveState,
+  saveBusinessLiveState,
+} from "@/lib/business-live-updates-storage";
 import { cn } from "@/lib/utils";
 import type { EntertainmentEvent, EntertainmentSource, EventType, SyncFrequency } from "@/types/sources";
 import {
@@ -71,8 +78,9 @@ export default function Knowledge() {
   const queryClient = useQueryClient();
   const liveConfigured = isKnowledgePersistenceConfigured();
   const [items, setItems] = useState(faqs);
-  const [businessMode, setBusinessMode] = useState<BusinessMode>("normal");
-  const [temporaryUpdates, setTemporaryUpdates] = useState<TemporaryBusinessUpdate[]>(() => buildInitialTemporaryUpdates());
+  const [businessLiveState, setBusinessLiveState] = useState(() =>
+    loadBusinessLiveState({ defaultUpdates: createDefaultBusinessLiveUpdates() }),
+  );
   const [updateDraft, setUpdateDraft] = useState<TemporaryUpdateDraft>({
     body: "",
     customExpiresAt: "",
@@ -96,6 +104,8 @@ export default function Knowledge() {
     },
   ]);
   const [draft, setDraft] = useState<Partial<EntertainmentEvent>>({ type: "Live music" });
+  const businessMode = businessLiveState.mode;
+  const temporaryUpdates = businessLiveState.updates;
 
   const knowledgeQuery = useQuery({
     enabled: liveConfigured,
@@ -144,6 +154,30 @@ export default function Knowledge() {
   );
   const selectedBusinessMode = getBusinessMode(businessMode);
 
+  useEffect(() => {
+    const syncLiveState = () => {
+      setBusinessLiveState(loadBusinessLiveState({ defaultUpdates: createDefaultBusinessLiveUpdates() }));
+    };
+    const syncFromStorage = (event: StorageEvent) => {
+      if (event.key === businessLiveUpdatesStorageKey) syncLiveState();
+    };
+
+    window.addEventListener(businessLiveUpdatesEvent, syncLiveState);
+    window.addEventListener("storage", syncFromStorage);
+    return () => {
+      window.removeEventListener(businessLiveUpdatesEvent, syncLiveState);
+      window.removeEventListener("storage", syncFromStorage);
+    };
+  }, []);
+
+  const persistLiveState = (next: { mode?: BusinessMode; updates?: TemporaryBusinessUpdate[] }) => {
+    const saved = saveBusinessLiveState({
+      mode: next.mode ?? businessLiveState.mode,
+      updates: next.updates ?? businessLiveState.updates,
+    });
+    setBusinessLiveState(saved);
+  };
+
   const addSource = () => {
     try {
       const url = new URL(newMusicUrl.trim());
@@ -183,7 +217,7 @@ export default function Knowledge() {
       title: updateDraft.title,
       type: updateDraft.type,
     });
-    setTemporaryUpdates([update, ...temporaryUpdates]);
+    persistLiveState({ updates: [update, ...temporaryUpdates] });
     setUpdateDraft({
       body: "",
       customExpiresAt: "",
@@ -196,7 +230,7 @@ export default function Knowledge() {
   };
 
   const clearTemporaryUpdate = (id: string) => {
-    setTemporaryUpdates(temporaryUpdates.filter((update) => update.id !== id));
+    persistLiveState({ updates: temporaryUpdates.filter((update) => update.id !== id) });
     toast.success("Live update cleared");
   };
 
@@ -276,7 +310,7 @@ export default function Knowledge() {
               </p>
               <div className="mt-4 space-y-2">
                 <Label className="text-xs font-medium text-muted-foreground">Current mode</Label>
-                <Select value={businessMode} onValueChange={(value) => setBusinessMode(value as BusinessMode)}>
+                <Select value={businessMode} onValueChange={(value) => persistLiveState({ mode: value as BusinessMode })}>
                   <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {businessModes.map((mode) => (
@@ -840,26 +874,4 @@ function formatUpdateExpiration(value: string) {
   } catch {
     return value;
   }
-}
-
-function buildInitialTemporaryUpdates(): TemporaryBusinessUpdate[] {
-  const now = new Date();
-  return [
-    createTemporaryUpdate({
-      body: "Tonight's specials are roasted branzino, mushroom risotto, and burrata with stone fruit. Mention that specials can sell out.",
-      expiration: "today_close",
-      id: "demo-specials",
-      now,
-      title: "Tonight's specials",
-      type: "special",
-    }),
-    createTemporaryUpdate({
-      body: "If callers ask about patio seating tonight, say the patio is open but seating is first come, first served because of the weather.",
-      expiration: "today_close",
-      id: "demo-patio",
-      now,
-      title: "Patio seating note",
-      type: "service_status",
-    }),
-  ];
 }

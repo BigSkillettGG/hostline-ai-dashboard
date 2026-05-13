@@ -9,6 +9,7 @@ export type OwnerAssistantIntent =
   | "daily_summary"
   | "follow_ups"
   | "knowledge_gaps"
+  | "live_update"
   | "opportunities"
   | "orders"
   | "reservations"
