@@ -21,6 +21,14 @@ export interface VoiceScenario {
   vertical: ScenarioVertical;
 }
 
+export type ScenarioTestChannel = "phone" | "website_chat";
+
+export interface ScenarioReplyReviewTurn {
+  actions?: Array<{ type?: string }>;
+  callerMessage: string;
+  reply: string;
+}
+
 export const voiceScenarios: VoiceScenario[] = [
   {
     callerScript: [
@@ -223,4 +231,101 @@ export function buildScenarioReport(
         .join("\n");
     })
     .join("\n\n");
+}
+
+export function getScenarioTestChannel(scenario: VoiceScenario): ScenarioTestChannel {
+  return scenario.channel === "website_chat" ? "website_chat" : "phone";
+}
+
+export function extractScenarioTestMessages(scenario: VoiceScenario) {
+  return scenario.callerScript
+    .map(extractScenarioMessage)
+    .filter((message): message is string => Boolean(message));
+}
+
+export function defaultScenarioTestMessage(scenario: VoiceScenario) {
+  return extractScenarioTestMessages(scenario)[0] ?? scenario.callerScript[0] ?? "";
+}
+
+export function getScenarioNextTestMessage(scenario: VoiceScenario, completedUserTurns: number) {
+  const messages = extractScenarioTestMessages(scenario);
+  if (!messages.length) return "";
+  return messages[Math.min(completedUserTurns, messages.length - 1)];
+}
+
+export function reviewScenarioReplies(scenario: VoiceScenario, turns: ScenarioReplyReviewTurn[]) {
+  const issues: string[] = [];
+  const laterReplies = turns.slice(1).map((turn) => turn.reply);
+  const allReplies = turns.map((turn) => turn.reply).join(" ");
+  const normalizedReplies = allReplies.toLowerCase();
+  const finalTurn = turns.at(-1);
+
+  if (laterReplies.some(looksLikeOpeningRestart)) {
+    issues.push("Possible mid-call greeting restart after the first answer.");
+  }
+
+  if (
+    (scenario.tags.includes("handoff") || scenario.tags.includes("allergy") || scenario.tags.includes("complaint")) &&
+    /\b(transfer|connect you now|put you on hold|place you on hold)\b/i.test(allReplies)
+  ) {
+    issues.push("Possible fake live transfer or hold language.");
+  }
+
+  if (
+    scenario.tags.includes("sms") &&
+    /\b(twilio|carrier registration|sms provider|placeholder mode|internal setup)\b/i.test(allReplies)
+  ) {
+    issues.push("Exposes internal texting setup details.");
+  }
+
+  if (
+    scenario.tags.includes("allergy") &&
+    !/\b(staff|confirm|confirmation|cross-contact|call back|callback)\b/i.test(allReplies)
+  ) {
+    issues.push("Allergy answer may not be conservative enough.");
+  }
+
+  if (
+    finalTurn &&
+    /\b(no thanks|no,? that's all|no,? thats all|that's all|thats all|i'm good|im good)\b/i.test(finalTurn.callerMessage) &&
+    !/\b(goodbye|bye|thanks for calling|thank you for calling|have a good)\b/i.test(finalTurn.reply) &&
+    !finalTurn.actions?.some((action) => action.type === "finish_call")
+  ) {
+    issues.push("Final no/that's-all turn did not clearly close the call.");
+  }
+
+  if (
+    scenario.id === "reservation-shorthand-last-name" &&
+    /\b(thanks|thank you),?\s+schneider\b/i.test(normalizedReplies)
+  ) {
+    issues.push("Uses a bare last name as if it were a first name.");
+  }
+
+  return issues;
+}
+
+function extractScenarioMessage(scriptLine: string) {
+  const trimmed = scriptLine.trim();
+  if (!trimmed) return null;
+  if (/\bconfirm yes\b/i.test(trimmed)) return "Yes";
+
+  const colonIndex = trimmed.indexOf(":");
+  if (colonIndex === -1) return null;
+
+  const prefix = trimmed.slice(0, colonIndex).toLowerCase();
+  if (!/\b(say|ask|type|reply|confirm)\b/.test(prefix)) return null;
+
+  return cleanScenarioMessage(trimmed.slice(colonIndex + 1));
+}
+
+function cleanScenarioMessage(value: string) {
+  return value
+    .replace(/^["'“”]+|["'“”]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function looksLikeOpeningRestart(reply: string) {
+  return /\b(thank you|thanks) for calling\b/i.test(reply) ||
+    /\bhow can i help\b/i.test(reply) && /\b(olive|ember|signalhost|calling)\b/i.test(reply);
 }

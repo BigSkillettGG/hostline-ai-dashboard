@@ -9,6 +9,7 @@ This service is the production path for inbound restaurant phone calls.
 - Searches and provisions Twilio numbers through internal telephony endpoints when Twilio credentials are configured.
 - Processes queued menu URL/text ingestion jobs through `POST /ingestion/run-next`.
 - Handles website chat messages at `POST /web-chat/message` using the same business context, configured links, and customer request fallback as the phone agent.
+- Supports side-effect-free Scenario Lab reply testing at `POST /agent/test-reply` for dashboard QA and deploy smoke tests.
 - Configures ConversationRelay to use ElevenLabs TTS by default.
 - Receives ConversationRelay setup, prompt, DTMF, interrupt, and error messages.
 - Generates restaurant-host replies with OpenAI Responses API when `OPENAI_API_KEY` is set.
@@ -64,6 +65,19 @@ After deployment:
 npm run check:voice -- https://voice.your-domain.com
 ```
 
+To exercise the curated Scenario Lab cases against a deployed service without placing live calls:
+
+```sh
+SIGNALHOST_INTERNAL_API_KEY=your-internal-key npm run scenario:lab -- --url https://voice.your-domain.com --location-id your-location-id
+```
+
+Useful filters:
+
+```sh
+npm run scenario:lab -- --url https://voice.your-domain.com --priority critical --strict
+npm run scenario:lab -- --list
+```
+
 For local Twilio testing, expose the service with a tunnel such as ngrok and set:
 
 ```sh
@@ -103,6 +117,7 @@ When Supabase is configured, Twilio requests can include `locationId` in the web
 - `POST /telephony/provision-number` purchases a selected number, sets its voice webhook to `/twilio/voice?locationId=...`, writes `phone_numbers`, and updates `locations.ai_host_phone`.
 - `GET /twilio/live-call-config?locationId=...` returns the generated live call URLs.
 - `GET /twilio/twiml-preview?locationId=...` renders the TwiML preview used to verify ConversationRelay before calling.
+- `POST /agent/test-reply` accepts `{ message, locationId, channel, transcript, scenarioId }` and returns Vera's reply plus simulated tool actions. It is admin-protected and does not create real texts, orders, reservations, or staff callbacks.
 - `POST /twilio/recording-status` receives Twilio recording callbacks. Configure Twilio call/SIP recording to send completed recording events to `https://your-voice-service/twilio/recording-status`; the service stores the MP3 URL on `calls.recording_url`.
 - `POST /ingestion/run-next` processes one queued menu ingestion job, fetches URL/text content, parses menu items, replaces `menu_categories` and `menu_items`, and updates `ingestion_jobs` plus `menu_sources`.
 - Staff alert routing is loaded from `alert_routing_configs` per location when Supabase is configured. If no route exists, the service falls back to `STAFF_ALERT_SMS_TO`.

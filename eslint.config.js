@@ -33,4 +33,11 @@ export default tseslint.config(
       globals: globals.node,
     },
   },
+  {
+    files: ["scripts/**/*.ts"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      globals: globals.node,
+    },
+  },
 );

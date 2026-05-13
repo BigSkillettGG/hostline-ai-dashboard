@@ -8,6 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import {
   buildScenarioReport,
+  defaultScenarioTestMessage,
+  extractScenarioTestMessages,
+  getScenarioNextTestMessage,
+  getScenarioTestChannel,
   summarizeScenarioRuns,
   voiceScenarios,
   type ScenarioChannel,
@@ -214,11 +218,14 @@ function ScenarioCard({
 }) {
   const status = run?.status ?? "untested";
   const voiceConfigured = isVoiceServiceConfigured();
-  const [testMessage, setTestMessage] = useState(() => defaultTestMessage(scenario));
+  const [testMessage, setTestMessage] = useState(() => defaultScenarioTestMessage(scenario));
   const [testTranscript, setTestTranscript] = useState<AgentTestTurn[]>([]);
   const [testReply, setTestReply] = useState("");
   const [testActions, setTestActions] = useState<AgentTestAction[]>([]);
   const [isTesting, setIsTesting] = useState(false);
+  const scriptPromptCount = extractScenarioTestMessages(scenario).length;
+  const completedUserTurns = testTranscript.filter((turn) => turn.role === "user").length;
+  const nextScriptPrompt = getScenarioNextTestMessage(scenario, completedUserTurns);
 
   const copyScript = async () => {
     try {
@@ -236,7 +243,7 @@ function ScenarioCard({
     setIsTesting(true);
     try {
       const result = await fetchAgentTestReply({
-        channel: scenario.channel === "website_chat" ? "website_chat" : "phone",
+        channel: getScenarioTestChannel(scenario),
         message,
         scenarioId: scenario.id,
         transcript: testTranscript,
@@ -321,6 +328,16 @@ function ScenarioCard({
                 >
                   Reset chat
                 </Button>
+              ) : null}
+              {nextScriptPrompt && nextScriptPrompt !== testMessage ? (
+                <Button size="sm" variant="outline" onClick={() => setTestMessage(nextScriptPrompt)}>
+                  Next script prompt
+                </Button>
+              ) : null}
+              {scriptPromptCount ? (
+                <span className="text-xs text-muted-foreground">
+                  {Math.min(completedUserTurns + 1, scriptPromptCount)} of {scriptPromptCount}
+                </span>
               ) : null}
               {!voiceConfigured ? (
                 <span className="text-xs text-muted-foreground">Set VITE_VOICE_SERVICE_URL to enable this.</span>
@@ -455,18 +472,6 @@ function buildScenarioScript(scenario: VoiceScenario) {
     "",
     `Listen for: ${scenario.listenFor.join(", ")}`,
   ].join("\n");
-}
-
-function defaultTestMessage(scenario: VoiceScenario) {
-  const firstPrompt = scenario.callerScript.find((item) =>
-    /\b(say|ask|type|start|reply|then say|then ask)\b/i.test(item),
-  ) ?? scenario.callerScript[0] ?? "";
-
-  return firstPrompt
-    .replace(/^.*?\b(?:say|ask|type|start|reply)\s*(?:in website chat)?\s*:\s*/i, "")
-    .replace(/^then\s+(?:say|ask)\s*:\s*/i, "")
-    .replace(/^["'“”]+|["'“”]+$/g, "")
-    .trim();
 }
 
 function labelAgentTestAction(action: AgentTestAction) {
