@@ -2,6 +2,20 @@ import type { OnboardingDraft } from "./onboarding";
 
 export type BillingLifecycleStatus = "active" | "grace_period" | "not_started" | "released" | "release_due" | "trialing";
 
+export interface BillingAccountRecord {
+  cancelAtPeriodEnd?: boolean;
+  currentPeriodEnd?: string;
+  includedInteractions?: number;
+  monthlyCents?: number;
+  organizationId?: string;
+  overageLabel?: string;
+  planId?: string;
+  planName?: string;
+  status?: string;
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
+}
+
 export interface BillingPhoneNumberRecord {
   phoneNumber: string;
   provisioningSource?: string;
@@ -13,6 +27,9 @@ export interface BillingPhoneNumberRecord {
 }
 
 export interface BillingSnapshot {
+  billingAccount?: BillingAccountRecord;
+  billingStatus: "active" | "checkout_started" | "past_due" | "trialing" | "unpaid" | "unconfigured";
+  businessType?: string;
   canProvisionTrialNumber: boolean;
   includedInteractions: number;
   lifecycleDetail: string;
@@ -20,6 +37,7 @@ export interface BillingSnapshot {
   lifecycleStatus: BillingLifecycleStatus;
   monthlyPrice: number;
   overageLabel: string;
+  planId?: string;
   planName: string;
   primaryNumber?: BillingPhoneNumberRecord;
   trialDaysRemaining?: number;
@@ -30,34 +48,59 @@ export interface BillingSnapshot {
 }
 
 export function buildBillingSnapshot(input: {
+  billingAccount?: BillingAccountRecord | null;
   callsThisMonth?: number;
   draft: OnboardingDraft;
   now?: Date;
   phoneNumbers?: BillingPhoneNumberRecord[];
 }): BillingSnapshot {
   const now = input.now ?? new Date();
+  const billingAccount = input.billingAccount ?? undefined;
   const usedInteractions = Math.max(0, Math.round(input.callsThisMonth ?? 0));
-  const includedInteractions = readInteger(input.draft.selectedPlanIncludedInteractions) ?? defaultIncludedInteractions(input.draft.selectedPlanName);
+  const selectedPlanName = stringValue(input.draft.selectedPlanName);
+  const includedInteractions =
+    billingAccount?.includedInteractions ??
+    readInteger(input.draft.selectedPlanIncludedInteractions) ??
+    defaultIncludedInteractions(selectedPlanName);
   const primaryNumber = selectPrimaryPhoneNumber(input.phoneNumbers ?? []);
   const lifecycle = deriveBillingLifecycle(primaryNumber, now);
   const usagePercent = includedInteractions > 0 ? Math.min(100, Math.round((usedInteractions / includedInteractions) * 100)) : 0;
+  const billingStatus = deriveBillingStatus(billingAccount);
 
   return {
+    billingAccount,
+    billingStatus,
+    businessType: stringValue(input.draft.businessType),
     canProvisionTrialNumber: !primaryNumber || lifecycle.status === "released",
     includedInteractions,
     lifecycleDetail: lifecycle.detail,
     lifecycleLabel: lifecycle.label,
     lifecycleStatus: lifecycle.status,
-    monthlyPrice: readInteger(input.draft.selectedPlanMonthly) ?? defaultMonthlyPrice(input.draft.selectedPlanName),
-    overageLabel: stringValue(input.draft.selectedPlanOverage) ?? defaultOverageLabel(input.draft.selectedPlanName),
-    planName: stringValue(input.draft.selectedPlanName) ?? "Unassigned",
+    monthlyPrice: billingAccount?.monthlyCents ? Math.round(billingAccount.monthlyCents / 100) : readInteger(input.draft.selectedPlanMonthly) ?? defaultMonthlyPrice(selectedPlanName),
+    overageLabel: billingAccount?.overageLabel ?? stringValue(input.draft.selectedPlanOverage) ?? defaultOverageLabel(selectedPlanName),
+    planId: billingAccount?.planId ?? stringValue(input.draft.selectedPlanId),
+    planName: billingAccount?.planName ?? selectedPlanName ?? "Unassigned",
     primaryNumber,
     trialDaysRemaining: lifecycle.trialDaysRemaining,
     trialGraceDaysRemaining: lifecycle.trialGraceDaysRemaining,
-    upgradeRequired: lifecycle.status === "grace_period" || lifecycle.status === "release_due",
+    upgradeRequired: (lifecycle.status === "grace_period" || lifecycle.status === "release_due") && !isPaidBillingStatus(billingStatus),
     usagePercent,
     usedInteractions,
   };
+}
+
+function deriveBillingStatus(account?: BillingAccountRecord): BillingSnapshot["billingStatus"] {
+  const status = account?.status?.toLowerCase();
+  if (status === "active") return "active";
+  if (status === "trialing") return "trialing";
+  if (status === "past_due") return "past_due";
+  if (status === "unpaid" || status === "incomplete_expired" || status === "canceled") return "unpaid";
+  if (status === "checkout_started" || status === "incomplete") return "checkout_started";
+  return "unconfigured";
+}
+
+function isPaidBillingStatus(status: BillingSnapshot["billingStatus"]) {
+  return status === "active" || status === "trialing";
 }
 
 function selectPrimaryPhoneNumber(phoneNumbers: BillingPhoneNumberRecord[]) {

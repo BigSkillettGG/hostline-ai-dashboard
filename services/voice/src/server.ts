@@ -3,6 +3,8 @@ import { URL } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
 import { authorizeVoiceAdminRequest } from "./admin-auth";
 import { generateAgentTestReply, type AgentTestReplyInput } from "./agent-test";
+import { createBillingService } from "./billing-service";
+import { createBillingStore } from "./billing-store";
 import { createCallStore } from "./call-store";
 import { createConversationRelayHandler } from "./conversation-relay";
 import { createElevenLabsPreview } from "./elevenlabs";
@@ -34,6 +36,8 @@ import { resolveConversationRelayTtsVoice } from "./voice-selection";
 import { createWebChatService, type WebChatMessageInput } from "./web-chat";
 
 const env = loadEnv();
+const billingStore = createBillingStore(env);
+const billingService = createBillingService(env, billingStore);
 const callStore = createCallStore(env);
 const phoneNumberStore = createPhoneNumberStore(env);
 const restaurantContextStore = createRestaurantContextStore(env);
@@ -53,6 +57,7 @@ const openAIRealtimeSipService = createOpenAIRealtimeSipService(env, restaurantC
 });
 const webChatService = createWebChatService(env, restaurantContextStore, { callStore });
 const ADMIN_BODY_LIMIT_BYTES = 16 * 1024;
+const BILLING_BODY_LIMIT_BYTES = 32 * 1024;
 const OPENAI_WEBHOOK_BODY_LIMIT_BYTES = 32 * 1024;
 const PREVIEW_BODY_LIMIT_BYTES = 4 * 1024;
 const TENANT_BOOTSTRAP_BODY_LIMIT_BYTES = 64 * 1024;
@@ -138,6 +143,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       openAIRealtimeSipConfigured: openAIRealtimeSipService.configured,
       platformIntegrations: platformIntegrationRegistry.summary,
       tenantProvisioningConfigured: tenantProvisioningService.configured,
+      stripeBillingConfigured: billingService.configured,
       twilioProvisioningConfigured: telephonyService.configured,
       staffAlertsConfigured: staffNotificationService.configured,
       guestConfirmationsConfigured: guestConfirmationService.configured,
@@ -184,6 +190,87 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       sendJson(res, 200, result);
     } catch (error) {
       sendCaughtError(res, error, "Tenant provisioning failed");
+    }
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/billing/status") {
+    const locationId = url.searchParams.get("locationId") ?? currentEnv.SUPABASE_DEMO_LOCATION_ID;
+    const authorization = await authorizeVoiceAdminRequest({ currentEnv, locationId, req });
+    if (!authorization.authorized) {
+      sendJson(res, authorization.status, { error: authorization.reason ?? "Unauthorized" });
+      return;
+    }
+
+    try {
+      sendJson(res, 200, await billingService.getStatus(locationId ?? undefined));
+    } catch (error) {
+      sendCaughtError(res, error, "Billing status failed");
+    }
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/billing/checkout-session") {
+    if (!allowRateLimitedRequest(req, res, "billing-checkout", 20)) return;
+
+    try {
+      const body = parseJsonRequestBody(await readLimitedRequestBody(req, ADMIN_BODY_LIMIT_BYTES)) as {
+        businessType?: string;
+        cancelUrl?: string;
+        customerEmail?: string;
+        locationId?: string;
+        planId?: string;
+        planName?: string;
+        successUrl?: string;
+      };
+      const locationId = body.locationId ?? currentEnv.SUPABASE_DEMO_LOCATION_ID;
+      const authorization = await authorizeVoiceAdminRequest({ currentEnv, locationId, req });
+      if (!authorization.authorized) {
+        sendJson(res, authorization.status, { error: authorization.reason ?? "Unauthorized" });
+        return;
+      }
+
+      const session = await billingService.createCheckoutSession({ ...body, locationId: locationId ?? undefined }, req.headers);
+      sendJson(res, 200, session);
+    } catch (error) {
+      sendCaughtError(res, error, "Stripe checkout failed");
+    }
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/billing/customer-portal") {
+    if (!allowRateLimitedRequest(req, res, "billing-portal", 20)) return;
+
+    try {
+      const body = parseJsonRequestBody(await readLimitedRequestBody(req, ADMIN_BODY_LIMIT_BYTES)) as {
+        locationId?: string;
+        returnUrl?: string;
+      };
+      const locationId = body.locationId ?? currentEnv.SUPABASE_DEMO_LOCATION_ID;
+      const authorization = await authorizeVoiceAdminRequest({ currentEnv, locationId, req });
+      if (!authorization.authorized) {
+        sendJson(res, authorization.status, { error: authorization.reason ?? "Unauthorized" });
+        return;
+      }
+
+      const session = await billingService.createCustomerPortalSession({ ...body, locationId: locationId ?? undefined }, req.headers);
+      sendJson(res, 200, session);
+    } catch (error) {
+      sendCaughtError(res, error, "Stripe customer portal failed");
+    }
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/stripe/webhook") {
+    try {
+      const rawBody = await readLimitedRequestBody(req, BILLING_BODY_LIMIT_BYTES);
+      const result = await billingService.handleWebhook({
+        rawBody,
+        signature: firstHeader(req.headers["stripe-signature"]),
+      });
+      sendJson(res, 200, result);
+    } catch (error) {
+      sendCaughtError(res, error, "Stripe webhook failed");
     }
     return;
   }
@@ -966,7 +1053,7 @@ function applyCors(req: IncomingMessage, res: ServerResponse, currentEnv: VoiceS
   }
 
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, webhook-id, webhook-signature, webhook-timestamp, x-signalhost-api-key, x-hostline-api-key");
+  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, stripe-signature, webhook-id, webhook-signature, webhook-timestamp, x-signalhost-api-key, x-hostline-api-key");
 }
 
 async function shutdownGracefully(signal: "SIGINT" | "SIGTERM") {

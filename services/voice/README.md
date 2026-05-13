@@ -103,6 +103,7 @@ POST https://your-tunnel.ngrok.app/twilio/voice
 - ElevenLabs voice ID for branded voice.
 - `TWILIO_SMS_FROM_NUMBER` or `TWILIO_MESSAGING_SERVICE_SID` for direct SMS staff alerts. `STAFF_ALERT_SMS_TO` remains the fallback recipient when no Supabase route is configured.
 - `STAFF_ALERT_WEBHOOK_URL` for webhook alerts. Email recipients configured in the dashboard are included in the webhook payload for your email/helpdesk/Zapier layer.
+- `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` for checkout, customer portal, and subscription status webhooks.
 - Supabase project with `docs/supabase-schema.sql` applied.
 - `SUPABASE_PUBLISHABLE_KEY` for validating Supabase user sessions.
 - `SUPABASE_SECRET_KEY` or legacy service role key stored only on the voice-service backend.
@@ -113,6 +114,10 @@ When Supabase is configured, Twilio requests can include `locationId` in the web
 ## Internal Telephony Endpoints
 
 - `POST /tenant/bootstrap` creates the signed-in user's organization, owner membership, first location, onboarding profile, and default agent config after website signup. It requires a Supabase bearer token and uses the backend-only service role key.
+- `GET /billing/status?locationId=...` returns the stored Stripe subscription state for the location's organization.
+- `POST /billing/checkout-session` creates a Stripe subscription checkout session from SignalHost's server-side plan catalog and stores checkout-started state.
+- `POST /billing/customer-portal` creates a Stripe customer portal session once a Stripe customer exists.
+- `POST /stripe/webhook` verifies Stripe signatures and updates `billing_accounts` from checkout, subscription, and invoice events.
 - `GET /telephony/available-numbers?areaCode=415&limit=5` searches Twilio local numbers with voice and SMS enabled.
 - `POST /telephony/provision-number` purchases a selected number, sets its voice webhook to `/twilio/voice?locationId=...`, writes `phone_numbers`, and updates `locations.ai_host_phone`. If `phoneNumber` is omitted, the service searches Twilio with `areaCode`, `contains`, and `country`, then provisions the first match. When Supabase is configured, it refuses to buy a second unreleased active/trial number for the same location.
 - `POST /telephony/release-number` releases a Twilio number by `providerSid` and marks the matching `phone_numbers` row as released.

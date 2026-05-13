@@ -128,6 +128,30 @@ create table onboarding_profiles (
   unique(location_id)
 );
 
+create table billing_accounts (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references organizations(id) on delete cascade,
+  location_id uuid references locations(id) on delete set null,
+  stripe_customer_id text,
+  stripe_subscription_id text,
+  stripe_checkout_session_id text,
+  status text not null default 'not_started',
+  plan_id text,
+  plan_name text,
+  monthly_cents integer,
+  included_interactions integer,
+  overage_label text,
+  current_period_start timestamptz,
+  current_period_end timestamptz,
+  trial_end timestamptz,
+  cancel_at_period_end boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(organization_id),
+  unique(stripe_customer_id),
+  unique(stripe_subscription_id)
+);
+
 create table business_links (
   id uuid primary key default gen_random_uuid(),
   location_id uuid not null references locations(id) on delete cascade,

@@ -67,4 +67,31 @@ describe("billing snapshot", () => {
       phoneNumbers: [{ phoneNumber: "+16175550199", releasedAt: "2026-05-20T12:00:00.000Z", status: "released" }],
     }).canProvisionTrialNumber).toBe(true);
   });
+
+  it("treats an active Stripe subscription as paid even after the trial date", () => {
+    const snapshot = buildBillingSnapshot({
+      billingAccount: {
+        cancelAtPeriodEnd: false,
+        includedInteractions: 1800,
+        monthlyCents: 39900,
+        organizationId: "org_123",
+        planId: "pro",
+        planName: "Scale",
+        status: "active",
+      },
+      draft,
+      now: new Date("2026-05-27T12:00:00.000Z"),
+      phoneNumbers: [{
+        phoneNumber: "+16175550199",
+        status: "in-use",
+        trialEndsAt: "2026-05-12T12:00:00.000Z",
+        trialGraceEndsAt: "2026-05-26T12:00:00.000Z",
+      }],
+    });
+
+    expect(snapshot.billingStatus).toBe("active");
+    expect(snapshot.monthlyPrice).toBe(399);
+    expect(snapshot.planName).toBe("Scale");
+    expect(snapshot.upgradeRequired).toBe(false);
+  });
 });

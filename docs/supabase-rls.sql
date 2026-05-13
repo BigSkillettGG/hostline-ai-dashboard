@@ -158,6 +158,7 @@ alter table staff_alert_events enable row level security;
 alter table knowledge_sections enable row level security;
 alter table faqs enable row level security;
 alter table onboarding_profiles enable row level security;
+alter table billing_accounts enable row level security;
 alter table business_links enable row level security;
 alter table phone_numbers enable row level security;
 alter table menu_categories enable row level security;
@@ -292,6 +293,15 @@ create policy onboarding_manage on onboarding_profiles
 for all to authenticated
 using (public.can_manage_location(location_id))
 with check (public.can_manage_location(location_id));
+
+create policy billing_accounts_read on billing_accounts
+for select to authenticated
+using (public.can_access_organization(organization_id));
+
+create policy billing_accounts_manage on billing_accounts
+for all to authenticated
+using (public.can_manage_organization(organization_id))
+with check (public.can_manage_organization(organization_id));
 
 create policy business_links_read on business_links
 for select to authenticated

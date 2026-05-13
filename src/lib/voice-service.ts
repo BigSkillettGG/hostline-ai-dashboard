@@ -12,6 +12,7 @@ export interface VoiceServiceHealth {
   onboardedContextConfigured?: boolean;
   staffAlertsConfigured?: boolean;
   sharedSmsRoutingConfigured?: boolean;
+  stripeBillingConfigured?: boolean;
   supabaseConfigured: boolean;
   tenantProvisioningConfigured?: boolean;
   twilioProvisioningConfigured?: boolean;
@@ -141,6 +142,25 @@ export interface LiveCallConfig {
   ready: boolean;
   twilioSignatureRequired: boolean;
   voiceWebhookUrl?: string;
+}
+
+export interface BillingAccountStatus {
+  cancelAtPeriodEnd: boolean;
+  currentPeriodEnd?: string;
+  currentPeriodStart?: string;
+  includedInteractions?: number;
+  locationId?: string;
+  monthlyCents?: number;
+  organizationId: string;
+  overageLabel?: string;
+  planId?: string;
+  planName?: string;
+  status: string;
+  stripeCheckoutSessionId?: string;
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
+  trialEnd?: string;
+  updatedAt?: string;
 }
 
 export const voiceServiceBaseUrl = (import.meta.env.VITE_VOICE_SERVICE_URL ?? "").replace(/\/$/, "");
@@ -343,6 +363,87 @@ export async function releaseVoicePhoneNumber(input: {
   }
 
   return (await response.json()) as { phoneNumber: { providerSid: string; status: "released" } };
+}
+
+export async function fetchBillingStatus(locationId = getActiveLocationId()) {
+  if (!voiceServiceBaseUrl) {
+    throw new Error("VITE_VOICE_SERVICE_URL is not configured.");
+  }
+
+  const params = new URLSearchParams();
+  if (locationId?.trim()) params.set("locationId", locationId.trim());
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const response = await fetch(`${voiceServiceBaseUrl}/billing/status${query}`, {
+    headers: buildVoiceAdminHeaders(),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(body || `Billing status failed with ${response.status}.`);
+  }
+
+  return (await response.json()) as { account: BillingAccountStatus | null; configured: boolean };
+}
+
+export async function createBillingCheckoutSession(input: {
+  businessType?: string;
+  cancelUrl?: string;
+  customerEmail?: string;
+  locationId?: string;
+  planId?: string;
+  planName?: string;
+  successUrl?: string;
+}) {
+  if (!voiceServiceBaseUrl) {
+    throw new Error("VITE_VOICE_SERVICE_URL is not configured.");
+  }
+
+  const response = await fetch(`${voiceServiceBaseUrl}/billing/checkout-session`, {
+    body: JSON.stringify({
+      ...input,
+      locationId: input.locationId ?? getActiveLocationId(),
+    }),
+    headers: {
+      "Content-Type": "application/json",
+      ...buildVoiceAdminHeaders(),
+    },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(body || `Stripe checkout failed with ${response.status}.`);
+  }
+
+  return (await response.json()) as { id: string; url: string };
+}
+
+export async function createBillingPortalSession(input: {
+  locationId?: string;
+  returnUrl?: string;
+}) {
+  if (!voiceServiceBaseUrl) {
+    throw new Error("VITE_VOICE_SERVICE_URL is not configured.");
+  }
+
+  const response = await fetch(`${voiceServiceBaseUrl}/billing/customer-portal`, {
+    body: JSON.stringify({
+      ...input,
+      locationId: input.locationId ?? getActiveLocationId(),
+    }),
+    headers: {
+      "Content-Type": "application/json",
+      ...buildVoiceAdminHeaders(),
+    },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(body || `Stripe portal failed with ${response.status}.`);
+  }
+
+  return (await response.json()) as { id: string; url: string };
 }
 
 export async function runNextMenuIngestionJob(input: { jobId?: string; locationId?: string } = {}) {

@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { CreditCard, PhoneForwarded, ReceiptText, TimerReset, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader, PageBody } from "@/components/PageHeader";
@@ -18,11 +18,18 @@ import {
   getActiveSupabaseLocationId,
   isSupabaseConfigured,
 } from "@/lib/supabase-rest";
+import {
+  createBillingCheckoutSession,
+  createBillingPortalSession,
+  fetchBillingStatus,
+  isVoiceServiceConfigured,
+} from "@/lib/voice-service";
 import { cn } from "@/lib/utils";
 
 export default function Billing() {
   const locationId = getActiveSupabaseLocationId();
   const supabaseConfigured = isSupabaseConfigured();
+  const voiceServiceConfigured = isVoiceServiceConfigured();
 
   const onboardingQuery = useQuery({
     enabled: supabaseConfigured && Boolean(locationId),
@@ -39,6 +46,11 @@ export default function Billing() {
     queryFn: () => fetchCallsFromSupabase(locationId),
     queryKey: ["billing-calls", locationId],
   });
+  const billingQuery = useQuery({
+    enabled: voiceServiceConfigured && Boolean(locationId),
+    queryFn: () => fetchBillingStatus(locationId),
+    queryKey: ["billing-status", locationId],
+  });
 
   const localDraft = useMemo(() => loadOnboardingDraft(), []);
   const draft = onboardingQuery.data ?? localDraft;
@@ -48,11 +60,51 @@ export default function Billing() {
     return calls.filter((call) => call.time.slice(0, 7) === monthKey).length;
   }, [callsQuery.data]);
   const snapshot = buildBillingSnapshot({
+    billingAccount: billingQuery.data?.account,
     callsThisMonth,
     draft,
     phoneNumbers: phoneNumbersQuery.data,
   });
   const primaryNumber = snapshot.primaryNumber;
+  const checkoutMutation = useMutation({
+    mutationFn: () => createBillingCheckoutSession({
+      businessType: snapshot.businessType,
+      cancelUrl: `${window.location.origin}/app/billing?checkout=cancelled`,
+      locationId,
+      planId: snapshot.planId,
+      planName: snapshot.planName,
+      successUrl: `${window.location.origin}/app/billing?checkout=success`,
+    }),
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Stripe checkout failed"),
+    onSuccess: (session) => {
+      window.location.href = session.url;
+    },
+  });
+  const portalMutation = useMutation({
+    mutationFn: () => createBillingPortalSession({
+      locationId,
+      returnUrl: `${window.location.origin}/app/billing`,
+    }),
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Stripe portal failed"),
+    onSuccess: (session) => {
+      window.location.href = session.url;
+    },
+  });
+  const billingActionBusy = checkoutMutation.isPending || portalMutation.isPending;
+  const openCheckout = () => {
+    if (!voiceServiceConfigured) {
+      toast.error("Set VITE_VOICE_SERVICE_URL before starting Stripe checkout.");
+      return;
+    }
+    checkoutMutation.mutate();
+  };
+  const openBillingPortal = () => {
+    if (snapshot.billingAccount?.stripeCustomerId) {
+      portalMutation.mutate();
+      return;
+    }
+    openCheckout();
+  };
 
   return (
     <>
@@ -66,10 +118,11 @@ export default function Billing() {
             </Button>
             <Button
               size="sm"
-              onClick={() => toast.info("Stripe checkout is the next billing slice. This button is wired as the payment-method placeholder.")}
+              disabled={billingActionBusy}
+              onClick={openBillingPortal}
             >
               <CreditCard className="mr-1.5 h-3.5 w-3.5" />
-              Add payment method
+              {snapshot.billingAccount?.stripeCustomerId ? "Manage billing" : "Add payment method"}
             </Button>
           </>
         }
@@ -85,17 +138,20 @@ export default function Billing() {
                   </Badge>
                   {primaryNumber?.phoneNumber && <span className="font-mono text-sm text-muted-foreground">{primaryNumber.phoneNumber}</span>}
                 </div>
-                <h2 className="mt-3 text-xl font-semibold">
-                  {snapshot.upgradeRequired ? "Upgrade before this number is cleaned up." : "Your trial number is protected while the account is active."}
-                </h2>
+                <h2 className="mt-3 text-xl font-semibold">{heroTitle(snapshot)}</h2>
                 <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">{snapshot.lifecycleDetail}</p>
+                {billingQuery.data && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Billing status: <span className="font-medium text-foreground">{billingStatusLabel(snapshot.billingStatus)}</span>
+                  </p>
+                )}
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button asChild variant="outline">
                   <Link to="/app/onboarding">Open launch setup</Link>
                 </Button>
-                <Button onClick={() => toast.info("Stripe checkout will connect here next.")}>
-                  Upgrade now
+                <Button disabled={billingActionBusy} onClick={openCheckout}>
+                  {billingActionBusy ? "Opening..." : snapshot.billingStatus === "active" ? "Change plan" : "Upgrade now"}
                 </Button>
               </div>
             </div>
@@ -148,7 +204,7 @@ export default function Billing() {
                     icon={CreditCard}
                     label="Payment method"
                     ready={snapshot.lifecycleStatus === "active"}
-                    text={snapshot.lifecycleStatus === "active" ? "Active" : "Stripe checkout pending"}
+                    text={paymentMethodText(snapshot)}
                   />
                 </div>
               </CardContent>
@@ -178,7 +234,7 @@ export default function Billing() {
               </CardHeader>
               <CardContent>
                 <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
-                  Stripe invoices will appear here after checkout is connected.
+                  Stripe invoices and payment method controls open in the customer portal after checkout is completed.
                 </div>
               </CardContent>
             </Card>
@@ -187,6 +243,15 @@ export default function Billing() {
       </PageBody>
     </>
   );
+}
+
+function heroTitle(snapshot: ReturnType<typeof buildBillingSnapshot>) {
+  if (snapshot.billingStatus === "active" || snapshot.billingStatus === "trialing") {
+    return "Billing is active for this location.";
+  }
+  if (snapshot.billingStatus === "past_due") return "Payment needs attention.";
+  if (snapshot.upgradeRequired) return "Upgrade before this number is cleaned up.";
+  return "Your trial number is protected while the account is active.";
 }
 
 function PlanFact({ label, value }: { label: string; value: string }) {
@@ -244,6 +309,22 @@ function cleanupText(snapshot: ReturnType<typeof buildBillingSnapshot>) {
   if (snapshot.lifecycleStatus === "trialing") return `${snapshot.trialDaysRemaining ?? 0} trial days left`;
   if (snapshot.lifecycleStatus === "not_started") return "Assign a number in onboarding";
   return "No cleanup scheduled";
+}
+
+function billingStatusLabel(status: ReturnType<typeof buildBillingSnapshot>["billingStatus"]) {
+  if (status === "active") return "Active";
+  if (status === "trialing") return "Stripe trialing";
+  if (status === "checkout_started") return "Checkout started";
+  if (status === "past_due") return "Past due";
+  if (status === "unpaid") return "Unpaid or canceled";
+  return "Not connected";
+}
+
+function paymentMethodText(snapshot: ReturnType<typeof buildBillingSnapshot>) {
+  if (snapshot.billingStatus === "active" || snapshot.billingStatus === "trialing") return "Stripe active";
+  if (snapshot.billingStatus === "past_due") return "Payment failed";
+  if (snapshot.billingStatus === "checkout_started") return "Checkout started";
+  return "Stripe checkout pending";
 }
 
 function formatDate(value?: string) {
