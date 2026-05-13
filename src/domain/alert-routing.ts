@@ -1,3 +1,5 @@
+import type { TrustedContact } from "./trusted-contacts";
+
 export type AlertRouteKind =
   | "complaint"
   | "delivery_failure"
@@ -41,6 +43,12 @@ export interface ResolvedAlertRoute {
   enabled: boolean;
   recipients: AlertRecipient[];
   smsRecipients: AlertRecipient[];
+}
+
+export interface TrustedContactAlertRouteInput {
+  contacts: TrustedContact[];
+  kind: AlertRouteKind;
+  severity?: AlertSeverity;
 }
 
 export const alertRouteMetas: AlertRouteMeta[] = [
@@ -209,6 +217,31 @@ export function resolveAlertRoute(
   };
 }
 
+export function resolveTrustedContactAlertRoute(input: TrustedContactAlertRouteInput): ResolvedAlertRoute {
+  const severity = input.severity ?? "medium";
+  const defaultRoute = defaultAlertRoutingConfig.routes[input.kind];
+  const enabled = severityRank[severity] >= severityRank[defaultRoute.severityThreshold];
+  if (!enabled) {
+    return {
+      emailRecipients: [],
+      enabled: false,
+      recipients: [],
+      smsRecipients: [],
+    };
+  }
+
+  const primary = input.contacts.filter((contact) => isPrimaryContactForRoute(contact, input.kind));
+  const fallback = input.contacts.filter((contact) => isFallbackAlertContact(contact));
+  const recipients = dedupeRecipients((primary.length ? primary : fallback).map(alertRecipientFromTrustedContact));
+
+  return {
+    emailRecipients: recipients.filter((recipient) => recipient.email && (recipient.channel === "email" || recipient.channel === "both")),
+    enabled: true,
+    recipients,
+    smsRecipients: recipients.filter((recipient) => recipient.phone && (recipient.channel === "sms" || recipient.channel === "both")),
+  };
+}
+
 function normalizeRouteRule(value: unknown, fallback: AlertRouteRule): AlertRouteRule {
   if (!isObjectRecord(value)) return fallback;
 
@@ -249,6 +282,50 @@ function normalizeSeverity(value: unknown, fallback: AlertSeverity): AlertSeveri
 
 function hasAnyContact(recipient: AlertRecipient) {
   return Boolean(recipient.phone.trim() || recipient.email.trim());
+}
+
+function isPrimaryContactForRoute(contact: TrustedContact, kind: AlertRouteKind) {
+  if (!isFallbackAlertContact(contact)) return false;
+
+  if (kind === "complaint" || kind === "delivery_failure" || kind === "low_confidence" || kind === "sales") {
+    return contact.contactType === "owner" || contact.contactType === "manager";
+  }
+
+  if (kind === "handoff" || kind === "order" || kind === "reservation") {
+    return contact.contactType === "owner" || contact.contactType === "manager" || contact.contactType === "front_desk";
+  }
+
+  return false;
+}
+
+function isFallbackAlertContact(contact: TrustedContact) {
+  return contact.canReceiveAlerts && contact.contactType !== "billing" && Boolean(contact.phone || contact.email);
+}
+
+function alertRecipientFromTrustedContact(contact: TrustedContact): AlertRecipient {
+  return {
+    channel: contact.preferredChannel === "email" || contact.preferredChannel === "both" ? contact.preferredChannel : "sms",
+    email: contact.email ?? "",
+    id: contact.id,
+    name: contact.name,
+    phone: contact.phone ?? "",
+  };
+}
+
+function dedupeRecipients(recipients: AlertRecipient[]) {
+  const seen = new Set<string>();
+  return recipients.filter((recipient) => {
+    if (!hasAnyContact(recipient)) return false;
+    const key = [
+      recipient.id,
+      recipient.phone.trim().toLowerCase(),
+      recipient.email.trim().toLowerCase(),
+      recipient.channel,
+    ].join("|");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {

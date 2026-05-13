@@ -125,6 +125,70 @@ describe("staff alert formatting", () => {
     expect(String(fetchMock.mock.calls[3]?.[1]?.body)).toContain('"status":"sent"');
   });
 
+  it("falls back to trusted owner and manager contacts when no alert route is configured", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              can_receive_alerts: true,
+              contact_type: "owner",
+              email: "owner@example.com",
+              id: "owner",
+              location_id: "00000000-0000-4000-8000-000000000001",
+              name: "Owner",
+              phone: "+15550100",
+              preferred_channel: "sms",
+            },
+            {
+              can_receive_alerts: true,
+              contact_type: "manager",
+              email: "manager@example.com",
+              id: "manager",
+              location_id: "00000000-0000-4000-8000-000000000001",
+              name: "Manager",
+              phone: "+15550200",
+              preferred_channel: "both",
+            },
+            {
+              can_receive_alerts: true,
+              contact_type: "front_desk",
+              email: "",
+              id: "host",
+              location_id: "00000000-0000-4000-8000-000000000001",
+              name: "Host stand",
+              phone: "+15550300",
+              preferred_channel: "sms",
+            },
+          ]),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValue(new Response("{}", { status: 201 }));
+    const service = createStaffNotificationService(env);
+
+    await service.sendStaffAlert({
+      callerPhone: "+17813072672",
+      kind: "complaint",
+      locationId: "00000000-0000-4000-8000-000000000001",
+      restaurantName: "Olive & Ember",
+      severity: "high",
+      summary: "Guest reported a severe allergy concern and requested staff follow-up.",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(fetchMock.mock.calls[0]?.[0]).toContain("/rest/v1/alert_routing_configs?");
+    expect(fetchMock.mock.calls[1]?.[0]).toContain("/rest/v1/business_contacts?");
+    expect(String(fetchMock.mock.calls[2]?.[1]?.body)).toContain("To=%2B15550100");
+    expect(String(fetchMock.mock.calls[3]?.[1]?.body)).toContain("To=%2B15550200");
+    expect(fetchMock.mock.calls[4]?.[0]).toBe("https://example.supabase.co/rest/v1/staff_alert_events");
+    expect(String(fetchMock.mock.calls[4]?.[1]?.body)).toContain('"id":"owner"');
+    expect(String(fetchMock.mock.calls[4]?.[1]?.body)).toContain('"id":"manager"');
+    expect(String(fetchMock.mock.calls[4]?.[1]?.body)).not.toContain('"id":"host"');
+  });
+
   it("creates a staff task when routed delivery fails", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")

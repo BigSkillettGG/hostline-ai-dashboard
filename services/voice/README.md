@@ -26,7 +26,7 @@ This service is the production path for inbound restaurant phone calls.
 - Records a staff-review order delivery attempt for each captured phone order.
 - Creates staff-confirmed reservation requests when a caller provides date, time, party size, and guest details.
 - Generates owner daily reports and can deliver them through SMS or an owner-report webhook.
-- Sends staff alerts by Supabase-configured route for captured orders, reservation requests, complaints, human handoffs, delivery failures, low-confidence reviews, and sales/vendor messages.
+- Sends staff alerts by Supabase-configured route for captured orders, reservation requests, complaints, human handoffs, delivery failures, low-confidence reviews, and sales/vendor messages. If no route is configured yet, the service falls back to trusted owner/manager/front-desk contacts with `can_receive_alerts` enabled before using environment-variable SMS fallback.
 - Writes staff alert delivery audit rows to `staff_alert_events` for sent, skipped, and failed alerts.
 - Provides a direct ElevenLabs preview endpoint at `POST /voice/preview`.
 - Validates Twilio signatures when `REQUIRE_TWILIO_SIGNATURE=true`.

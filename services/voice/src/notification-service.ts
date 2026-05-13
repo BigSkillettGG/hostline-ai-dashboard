@@ -3,11 +3,18 @@ import { buildSupabaseServiceHeaders } from "./supabase-headers";
 import {
   normalizeAlertRoutingConfig,
   resolveAlertRoute,
+  resolveTrustedContactAlertRoute,
   type AlertRecipient,
   type AlertRouteKind,
   type AlertRoutingConfig,
   type AlertSeverity,
 } from "../../../src/domain/alert-routing";
+import {
+  defaultTrustedContactPermissions,
+  normalizeTrustedContactPreferredChannel,
+  normalizeTrustedContactType,
+  type TrustedContact,
+} from "../../../src/domain/trusted-contacts";
 
 export type StaffAlertKind = AlertRouteKind;
 
@@ -49,6 +56,26 @@ interface StaffAlertEventLogInput {
   message: string;
   route: ResolvedStaffAlertRoute;
   status: "failed" | "sent" | "skipped";
+}
+
+interface SupabaseTrustedAlertContactRow {
+  can_add_live_updates?: boolean | null;
+  can_approve_permanent_knowledge?: boolean | null;
+  can_manage_alert_preferences?: boolean | null;
+  can_receive_alerts?: boolean | null;
+  can_resolve_customer_requests?: boolean | null;
+  can_use_owner_assistant?: boolean | null;
+  contact_type?: string | null;
+  created_at?: string | null;
+  email?: string | null;
+  id: string;
+  location_id?: string | null;
+  name?: string | null;
+  phone?: string | null;
+  preferred_channel?: string | null;
+  requires_owner_approval?: boolean | null;
+  trusted_identity_enabled?: boolean | null;
+  updated_at?: string | null;
 }
 
 export function createStaffNotificationService(env: VoiceServiceEnv): StaffNotificationService {
@@ -289,13 +316,17 @@ class SupabaseAlertRoutingProvider implements StaffAlertRoutingProvider {
   }
 
   async resolve(input: StaffAlertInput): Promise<ResolvedStaffAlertRoute> {
+    const severity = input.severity ?? defaultSeverityFor(input.kind);
     const config = await this.fetchConfig(input.locationId);
 
     if (config) {
-      const resolved = resolveAlertRoute(config, input.kind, input.severity ?? defaultSeverityFor(input.kind));
+      const resolved = resolveAlertRoute(config, input.kind, severity);
       if (!resolved.enabled) return { ...resolved, fallbackUsed: false };
       if (resolved.recipients.length) return { ...resolved, fallbackUsed: false };
     }
+
+    const trustedContactRoute = await this.fetchTrustedContactRoute(input, severity);
+    if (trustedContactRoute) return trustedContactRoute;
 
     return this.fallbackRoute();
   }
@@ -331,6 +362,46 @@ class SupabaseAlertRoutingProvider implements StaffAlertRoutingProvider {
     }
   }
 
+  private async fetchTrustedContactRoute(
+    input: StaffAlertInput,
+    severity: AlertSeverity,
+  ): Promise<ResolvedStaffAlertRoute | null> {
+    if (!this.restUrl || !this.key) return null;
+
+    const resolvedLocationId = normalizeLocationId(input.locationId) ?? this.locationId;
+    if (!resolvedLocationId) return null;
+
+    try {
+      const params = new URLSearchParams({
+        can_receive_alerts: "eq.true",
+        location_id: `eq.${resolvedLocationId}`,
+        order: "contact_type.asc,name.asc",
+        select:
+          "id,location_id,contact_type,name,phone,email,preferred_channel,can_receive_alerts,can_use_owner_assistant,can_add_live_updates,can_approve_permanent_knowledge,can_resolve_customer_requests,can_manage_alert_preferences,requires_owner_approval,trusted_identity_enabled,created_at,updated_at",
+      });
+      const response = await fetch(`${this.restUrl}/business_contacts?${params.toString()}`, {
+        headers: buildSupabaseServiceHeaders(this.key),
+      });
+
+      if (!response.ok) return null;
+
+      const rows = (await response.json()) as SupabaseTrustedAlertContactRow[];
+      const contacts = rows.map(mapTrustedAlertContactRow);
+      const resolved = resolveTrustedContactAlertRoute({
+        contacts,
+        kind: input.kind,
+        severity,
+      });
+
+      if (!resolved.enabled) return { ...resolved, fallbackUsed: false };
+      if (!resolved.recipients.length) return null;
+      return { ...resolved, fallbackUsed: false };
+    } catch (error) {
+      console.warn("[staff-alerts] trusted contact routing lookup failed", error);
+      return null;
+    }
+  }
+
   private fallbackRoute(): ResolvedStaffAlertRoute {
     const fallbackRecipient = this.fallbackSmsTo
       ? [
@@ -352,6 +423,30 @@ class SupabaseAlertRoutingProvider implements StaffAlertRoutingProvider {
       smsRecipients: fallbackRecipient,
     };
   }
+}
+
+function mapTrustedAlertContactRow(row: SupabaseTrustedAlertContactRow): TrustedContact {
+  const contactType = normalizeTrustedContactType(row.contact_type);
+  const defaults = defaultTrustedContactPermissions(contactType);
+
+  return {
+    canAddLiveUpdates: row.can_add_live_updates ?? defaults.canAddLiveUpdates,
+    canApprovePermanentKnowledge: row.can_approve_permanent_knowledge ?? defaults.canApprovePermanentKnowledge,
+    canManageAlertPreferences: row.can_manage_alert_preferences ?? defaults.canManageAlertPreferences,
+    canReceiveAlerts: row.can_receive_alerts ?? defaults.canReceiveAlerts,
+    canResolveCustomerRequests: row.can_resolve_customer_requests ?? defaults.canResolveCustomerRequests,
+    canUseOwnerAssistant: row.can_use_owner_assistant ?? defaults.canUseOwnerAssistant,
+    contactType,
+    createdAt: row.created_at ?? undefined,
+    email: row.email ?? undefined,
+    id: row.id,
+    locationId: row.location_id ?? undefined,
+    name: row.name?.trim() || "Owner",
+    phone: row.phone ?? undefined,
+    preferredChannel: normalizeTrustedContactPreferredChannel(row.preferred_channel),
+    requiresOwnerApproval: row.requires_owner_approval ?? defaults.requiresOwnerApproval,
+    updatedAt: row.updated_at ?? undefined,
+  };
 }
 
 class SupabaseStaffAlertEventLogger implements StaffAlertEventLogger {
