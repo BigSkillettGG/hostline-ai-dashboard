@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { URL } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
 import { authorizeVoiceAdminRequest } from "./admin-auth";
+import { generateAgentTestReply, type AgentTestReplyInput } from "./agent-test";
 import { createCallStore } from "./call-store";
 import { createConversationRelayHandler } from "./conversation-relay";
 import { createElevenLabsPreview } from "./elevenlabs";
@@ -574,6 +575,38 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       sendJson(res, 200, result);
     } catch (error) {
       sendCaughtError(res, error, "Web chat message failed");
+    }
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/agent/test-reply") {
+    if (!allowRateLimitedRequest(req, res, "agent-test-reply", 45)) return;
+
+    try {
+      const body = parseJsonRequestBody(await readLimitedRequestBody(req, ADMIN_BODY_LIMIT_BYTES)) as AgentTestReplyInput;
+      const locationId = body.locationId?.trim() || url.searchParams.get("locationId") || currentEnv.SUPABASE_DEMO_LOCATION_ID;
+      const authorization = await authorizeVoiceAdminRequest({
+        currentEnv,
+        locationId,
+        req,
+      });
+      if (!authorization.authorized) {
+        sendJson(res, authorization.status, { error: authorization.reason ?? "Unauthorized" });
+        return;
+      }
+
+      const restaurantContext = await restaurantContextStore.getContext(locationId ?? undefined);
+      const result = await generateAgentTestReply({
+        context: restaurantContext,
+        env: currentEnv,
+        input: {
+          ...body,
+          locationId: locationId ?? body.locationId,
+        },
+      });
+      sendJson(res, 200, result);
+    } catch (error) {
+      sendCaughtError(res, error, "Agent test reply failed");
     }
     return;
   }

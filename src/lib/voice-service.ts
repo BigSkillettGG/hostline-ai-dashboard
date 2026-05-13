@@ -74,6 +74,63 @@ export interface RunMenuIngestionResult {
   summary?: string;
 }
 
+export type AgentTestChannel = "phone" | "website_chat";
+
+export interface AgentTestTurn {
+  at?: string;
+  role: "assistant" | "user";
+  text: string;
+}
+
+export type AgentTestAction =
+  | {
+      link: {
+        description?: string;
+        kind: string;
+        label: string;
+        url: string;
+      };
+      type: "business_link";
+    }
+  | {
+      kind: string;
+      type: "guest_confirmation";
+    }
+  | {
+      requestType: string;
+      type: "customer_request";
+      urgency?: string;
+    }
+  | {
+      kind: string;
+      type: "staff_callback";
+      urgency?: string;
+    }
+  | {
+      type: "reservation_request";
+    }
+  | {
+      itemCount: number;
+      type: "order_capture";
+    }
+  | {
+      type: "pickup_order";
+    }
+  | {
+      reason?: string;
+      type: "finish_call";
+    };
+
+export interface AgentTestReplyResult {
+  actions: AgentTestAction[];
+  businessName: string;
+  channel: AgentTestChannel;
+  locationId?: string;
+  ok: boolean;
+  reply: string;
+  transcript: AgentTestTurn[];
+}
+
 export interface LiveCallConfig {
   actionUrl?: string;
   conversationRelayUrl?: string;
@@ -274,6 +331,37 @@ export async function runNextMenuIngestionJob(input: { jobId?: string; locationI
   }
 
   return (await response.json()) as RunMenuIngestionResult;
+}
+
+export async function fetchAgentTestReply(input: {
+  channel?: AgentTestChannel;
+  locationId?: string;
+  message: string;
+  scenarioId?: string;
+  transcript?: AgentTestTurn[];
+}) {
+  if (!voiceServiceBaseUrl) {
+    throw new Error("VITE_VOICE_SERVICE_URL is not configured.");
+  }
+
+  const response = await fetch(`${voiceServiceBaseUrl}/agent/test-reply`, {
+    body: JSON.stringify({
+      ...input,
+      locationId: input.locationId ?? getActiveLocationId(),
+    }),
+    headers: {
+      "Content-Type": "application/json",
+      ...buildVoiceAdminHeaders(),
+    },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(body || `Agent test reply failed with ${response.status}.`);
+  }
+
+  return (await response.json()) as AgentTestReplyResult;
 }
 
 function buildVoiceAdminHeaders() {

@@ -17,17 +17,26 @@ import {
   type ScenarioVertical,
   type VoiceScenario,
 } from "@/domain/scenario-lab";
+import {
+  fetchAgentTestReply,
+  isVoiceServiceConfigured,
+  type AgentTestAction,
+  type AgentTestTurn,
+} from "@/lib/voice-service";
 import { cn } from "@/lib/utils";
 import {
   AlertTriangle,
+  Bot,
   CheckCircle2,
   Clipboard,
   FileText,
   ListChecks,
+  Loader2,
   MessageSquare,
   PhoneCall,
   RefreshCw,
   Search,
+  Send,
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -204,6 +213,12 @@ function ScenarioCard({
   scenario: VoiceScenario;
 }) {
   const status = run?.status ?? "untested";
+  const voiceConfigured = isVoiceServiceConfigured();
+  const [testMessage, setTestMessage] = useState(() => defaultTestMessage(scenario));
+  const [testTranscript, setTestTranscript] = useState<AgentTestTurn[]>([]);
+  const [testReply, setTestReply] = useState("");
+  const [testActions, setTestActions] = useState<AgentTestAction[]>([]);
+  const [isTesting, setIsTesting] = useState(false);
 
   const copyScript = async () => {
     try {
@@ -212,6 +227,36 @@ function ScenarioCard({
     } catch {
       toast.error("Could not copy script");
     }
+  };
+
+  const runAgentTest = async () => {
+    const message = testMessage.trim();
+    if (!message) return;
+
+    setIsTesting(true);
+    try {
+      const result = await fetchAgentTestReply({
+        channel: scenario.channel === "website_chat" ? "website_chat" : "phone",
+        message,
+        scenarioId: scenario.id,
+        transcript: testTranscript,
+      });
+      setTestReply(result.reply);
+      setTestActions(result.actions);
+      setTestTranscript(result.transcript);
+      toast.success("Vera reply tested");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not test Vera's reply");
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
+  const appendTestToNotes = () => {
+    const actionSummary = testActions.length ? `\nActions: ${testActions.map(labelAgentTestAction).join(", ")}` : "";
+    const note = `\n\nBrain test\nCaller: ${testMessage}\nVera: ${testReply}${actionSummary}`.trim();
+    onUpdate({ notes: [run?.notes?.trim(), note].filter(Boolean).join("\n\n") });
+    toast.success("Test result added to notes");
   };
 
   return (
@@ -235,6 +280,76 @@ function ScenarioCard({
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
         <ScenarioBlock title="Caller script" items={scenario.callerScript} />
         <ScenarioBlock title="Expected behavior" items={scenario.expectedBehavior} />
+      </div>
+
+      <div className="mt-4 rounded-md border border-primary/15 bg-primary/5 p-3">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <Bot className="h-4 w-4" />
+          </div>
+          <div className="min-w-0 flex-1 space-y-2">
+            <div>
+              <div className="text-[11px] font-medium uppercase text-muted-foreground">Brain test</div>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Send one turn to the live voice service without creating real orders, texts, or callbacks.
+              </p>
+            </div>
+            <Textarea
+              value={testMessage}
+              onChange={(event) => setTestMessage(event.target.value)}
+              rows={2}
+              placeholder="Type what the caller or website visitor says..."
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                onClick={runAgentTest}
+                disabled={!voiceConfigured || isTesting || !testMessage.trim()}
+              >
+                {isTesting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
+                Test reply
+              </Button>
+              {testTranscript.length ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setTestTranscript([]);
+                    setTestReply("");
+                    setTestActions([]);
+                  }}
+                >
+                  Reset chat
+                </Button>
+              ) : null}
+              {!voiceConfigured ? (
+                <span className="text-xs text-muted-foreground">Set VITE_VOICE_SERVICE_URL to enable this.</span>
+              ) : null}
+            </div>
+            {testReply ? (
+              <div className="rounded-md border border-border bg-background p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-[11px] font-medium uppercase text-muted-foreground">Vera would say</div>
+                    <p className="mt-1 text-sm">{testReply}</p>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={appendTestToNotes}>
+                    Add to notes
+                  </Button>
+                </div>
+                {testActions.length ? (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {testActions.map((action, index) => (
+                      <Badge key={`${action.type}-${index}`} variant="outline" className="bg-muted/50 text-[10px]">
+                        {labelAgentTestAction(action)}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        </div>
       </div>
 
       <div className="mt-3 rounded-md bg-muted/40 p-3">
@@ -340,6 +455,30 @@ function buildScenarioScript(scenario: VoiceScenario) {
     "",
     `Listen for: ${scenario.listenFor.join(", ")}`,
   ].join("\n");
+}
+
+function defaultTestMessage(scenario: VoiceScenario) {
+  const firstPrompt = scenario.callerScript.find((item) =>
+    /\b(say|ask|type|start|reply|then say|then ask)\b/i.test(item),
+  ) ?? scenario.callerScript[0] ?? "";
+
+  return firstPrompt
+    .replace(/^.*?\b(?:say|ask|type|start|reply)\s*(?:in website chat)?\s*:\s*/i, "")
+    .replace(/^then\s+(?:say|ask)\s*:\s*/i, "")
+    .replace(/^["'“”]+|["'“”]+$/g, "")
+    .trim();
+}
+
+function labelAgentTestAction(action: AgentTestAction) {
+  if (action.type === "business_link") return `link: ${action.link.label}`;
+  if (action.type === "guest_confirmation") return `text: ${action.kind}`;
+  if (action.type === "customer_request") return `request: ${action.requestType}`;
+  if (action.type === "staff_callback") return `staff callback: ${action.kind}`;
+  if (action.type === "reservation_request") return "reservation request";
+  if (action.type === "order_capture") return `order capture: ${action.itemCount}`;
+  if (action.type === "pickup_order") return "pickup order";
+  if (action.type === "finish_call") return "finish call";
+  return "action";
 }
 
 function loadScenarioRuns() {
