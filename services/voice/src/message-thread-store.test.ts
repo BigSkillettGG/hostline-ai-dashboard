@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildSmsTwiML, createMessageThreadStore } from "./message-thread-store";
 import type { VoiceServiceEnv } from "./env";
+import type { OwnerCommandRuntime } from "./owner-command-runtime";
 
 const env: VoiceServiceEnv = {
   ELEVENLABS_MODEL_ID: "eleven_flash_v2_5",
@@ -134,6 +135,64 @@ describe("message thread store", () => {
 
     expect(result.status).toBe("disambiguation_needed");
     expect(result.replyMessage).toBe("Which business is this for? Reply 1 for Olive & Ember, 2 for Schneider Plumbing.");
+  });
+
+  it("runs owner assistant commands for trusted inbound owner texts", async () => {
+    const ownerCommandRuntime: OwnerCommandRuntime = {
+      configured: true,
+      runCommand: vi.fn().mockResolvedValue({
+        applied: true,
+        bullets: ["Tonight's special is lobster ravioli."],
+        decision: "allowed",
+        kind: "live_command",
+        message: "Saved",
+        ok: true,
+        spokenResponse: "Got it. I saved that live update.",
+        title: "Live update saved",
+      }),
+    };
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        {
+          can_add_live_updates: true,
+          can_approve_permanent_knowledge: true,
+          can_manage_alert_preferences: true,
+          can_receive_alerts: true,
+          can_resolve_customer_requests: true,
+          can_use_owner_assistant: true,
+          contact_type: "owner",
+          email: "maria@example.com",
+          id: "contact_1",
+          location_id: "00000000-0000-4000-8000-000000000002",
+          name: "Maria",
+          phone: "+14155550148",
+          preferred_channel: "sms",
+          requires_owner_approval: false,
+          trusted_identity_enabled: true,
+        },
+      ]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const store = createMessageThreadStore(env, { ownerCommandRuntime });
+
+    const result = await store.handleInboundSms({
+      body: "Tonight's special is lobster ravioli",
+      from: "(415) 555-0148",
+      providerMessageSid: "SM_OWNER",
+      to: "+15550000",
+    });
+
+    expect(result.status).toBe("owner_command");
+    expect(result.replyMessage).toContain("Got it. I saved that live update.");
+    expect(ownerCommandRuntime.runCommand).toHaveBeenCalledWith(expect.objectContaining({
+      channel: "sms",
+      locationId: "00000000-0000-4000-8000-000000000002",
+      message: "Tonight's special is lobster ravioli",
+    }));
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toContain('"status":"owner_command"');
+    expect(String(fetchMock.mock.calls[2]?.[1]?.body)).toContain('"status":"owner_command_reply"');
   });
 
   it("escapes SMS TwiML replies", () => {

@@ -1,5 +1,11 @@
 import type { VoiceServiceEnv } from "./env";
+import type { OwnerCommandRuntime, OwnerCommandToolResult } from "./owner-command-runtime";
 import { buildSupabaseServiceHeaders } from "./supabase-headers";
+import {
+  normalizeTrustedContactPreferredChannel,
+  normalizeTrustedContactType,
+  type TrustedContact,
+} from "../../../src/domain/trusted-contacts";
 
 export type MessageThreadType =
   | "business_link"
@@ -32,13 +38,23 @@ export interface HandleInboundSmsInput {
 export interface HandleInboundSmsResult {
   candidateCount?: number;
   replyMessage?: string;
-  status: "disambiguation_needed" | "ignored_stop" | "orphaned" | "routed";
+  status:
+    | "disambiguation_needed"
+    | "ignored_stop"
+    | "orphaned"
+    | "owner_command"
+    | "owner_disambiguation_needed"
+    | "routed";
   threadId?: string;
 }
 
 export interface MessageThreadStore {
   handleInboundSms(input: HandleInboundSmsInput): Promise<HandleInboundSmsResult>;
   recordOutboundMessage(input: RecordOutboundMessageInput): Promise<{ threadId?: string }>;
+}
+
+export interface MessageThreadStoreOptions {
+  ownerCommandRuntime?: OwnerCommandRuntime;
 }
 
 interface MessageThreadRow {
@@ -56,11 +72,36 @@ interface LocationRow {
   name: string | null;
 }
 
-export function createMessageThreadStore(env: VoiceServiceEnv): MessageThreadStore {
+interface PhoneNumberRow {
+  location_id: string;
+}
+
+interface TrustedContactRow {
+  can_add_live_updates?: boolean | null;
+  can_approve_permanent_knowledge?: boolean | null;
+  can_manage_alert_preferences?: boolean | null;
+  can_receive_alerts?: boolean | null;
+  can_resolve_customer_requests?: boolean | null;
+  can_use_owner_assistant?: boolean | null;
+  contact_type?: string | null;
+  created_at?: string | null;
+  email?: string | null;
+  id: string;
+  location_id?: string | null;
+  name?: string | null;
+  phone?: string | null;
+  preferred_channel?: string | null;
+  requires_owner_approval?: boolean | null;
+  trusted_identity_enabled?: boolean | null;
+  updated_at?: string | null;
+}
+
+export function createMessageThreadStore(env: VoiceServiceEnv, options: MessageThreadStoreOptions = {}): MessageThreadStore {
   if (env.SUPABASE_URL && env.SUPABASE_SECRET_KEY && env.SUPABASE_DEMO_LOCATION_ID) {
     return new SupabaseMessageThreadStore({
       defaultLocationId: env.SUPABASE_DEMO_LOCATION_ID,
       key: env.SUPABASE_SECRET_KEY,
+      ownerCommandRuntime: options.ownerCommandRuntime,
       smsThreadTtlDays: env.SIGNALHOST_SMS_THREAD_TTL_DAYS,
       url: env.SUPABASE_URL,
     });
@@ -94,22 +135,26 @@ class NoopMessageThreadStore implements MessageThreadStore {
 class SupabaseMessageThreadStore implements MessageThreadStore {
   private readonly defaultLocationId: string;
   private readonly key: string;
+  private readonly ownerCommandRuntime?: OwnerCommandRuntime;
   private readonly restUrl: string;
   private readonly smsThreadTtlDays?: number;
 
   constructor({
     defaultLocationId,
     key,
+    ownerCommandRuntime,
     smsThreadTtlDays,
     url,
   }: {
     defaultLocationId: string;
     key: string;
+    ownerCommandRuntime?: OwnerCommandRuntime;
     smsThreadTtlDays?: number;
     url: string;
   }) {
     this.defaultLocationId = defaultLocationId;
     this.key = key;
+    this.ownerCommandRuntime = ownerCommandRuntime;
     this.restUrl = `${url.replace(/\/$/, "")}/rest/v1`;
     this.smsThreadTtlDays = smsThreadTtlDays;
   }
@@ -176,6 +221,9 @@ class SupabaseMessageThreadStore implements MessageThreadStore {
       return { status: "ignored_stop" };
     }
 
+    const ownerCommand = await this.tryHandleOwnerCommandSms({ body, from, input, to });
+    if (ownerCommand) return ownerCommand;
+
     const candidates = await this.findCandidateThreads(from, to);
     if (candidates.length === 0) {
       await this.recordMessageEvent({
@@ -238,6 +286,156 @@ class SupabaseMessageThreadStore implements MessageThreadStore {
       status: "routed",
       threadId: selectedThread.id,
     };
+  }
+
+  private async tryHandleOwnerCommandSms({
+    body,
+    from,
+    input,
+    to,
+  }: {
+    body: string;
+    from: string;
+    input: HandleInboundSmsInput;
+    to: string;
+  }): Promise<HandleInboundSmsResult | null> {
+    if (!this.ownerCommandRuntime) return null;
+
+    const candidates = await this.findTrustedOwnerContacts(from);
+    if (!candidates.length) return null;
+
+    const selectedContact = await this.resolveTrustedOwnerContact(candidates, to);
+    if (!selectedContact) {
+      await this.recordMessageEvent({
+        body,
+        direction: "inbound",
+        fromPhone: from,
+        providerMessageSid: input.providerMessageSid,
+        rawPayload: input.rawPayload,
+        status: "owner_needs_disambiguation",
+        toPhone: to,
+      });
+
+      return {
+        candidateCount: candidates.length,
+        replyMessage: await this.buildOwnerDisambiguationReply(candidates),
+        status: "owner_disambiguation_needed",
+      };
+    }
+
+    await this.recordMessageEvent({
+      body,
+      direction: "inbound",
+      fromPhone: from,
+      providerMessageSid: input.providerMessageSid,
+      rawPayload: input.rawPayload,
+      status: "owner_command",
+      toPhone: to,
+    });
+
+    const result = await this.ownerCommandRuntime.runCommand({
+      actor: selectedContact,
+      channel: "sms",
+      locationId: selectedContact.locationId ?? this.defaultLocationId,
+      message: body,
+    });
+
+    await this.recordOwnerCommandReply({
+      from,
+      result,
+      to,
+    });
+
+    return {
+      replyMessage: formatOwnerCommandSmsReply(result),
+      status: "owner_command",
+    };
+  }
+
+  private async findTrustedOwnerContacts(phone: string) {
+    const rows = await this.get<TrustedContactRow[]>(
+      "business_contacts",
+      [
+        `phone=eq.${encodeURIComponent(phone)}`,
+        "trusted_identity_enabled=eq.true",
+        "can_use_owner_assistant=eq.true",
+        "select=id,location_id,contact_type,name,phone,email,preferred_channel,can_receive_alerts,can_use_owner_assistant,can_add_live_updates,can_approve_permanent_knowledge,can_resolve_customer_requests,can_manage_alert_preferences,requires_owner_approval,trusted_identity_enabled,created_at,updated_at",
+        "limit=10",
+      ].join("&"),
+    ).catch(() => []);
+
+    return rows.map(mapTrustedContactRow).filter((contact) => contact.canUseOwnerAssistant);
+  }
+
+  private async resolveTrustedOwnerContact(candidates: TrustedContact[], signalhostPhone: string) {
+    if (candidates.length === 1) return candidates[0];
+
+    const recipientLocationIds = await this.findLocationIdsForRecipient(signalhostPhone);
+    const narrowed = recipientLocationIds.size
+      ? candidates.filter((contact) => contact.locationId && recipientLocationIds.has(contact.locationId))
+      : [];
+
+    if (narrowed.length === 1) return narrowed[0];
+    return null;
+  }
+
+  private async findLocationIdsForRecipient(signalhostPhone: string) {
+    const locationIds = new Set<string>();
+    const phone = normalizePhone(signalhostPhone);
+    if (!phone) return locationIds;
+
+    const [phoneNumbers, locations] = await Promise.all([
+      this.get<PhoneNumberRow[]>(
+        "phone_numbers",
+        [
+          `phone_number=eq.${encodeURIComponent(phone)}`,
+          "status=in.(active,trial)",
+          "select=location_id",
+          "limit=5",
+        ].join("&"),
+      ).catch(() => []),
+      this.get<LocationRow[]>(
+        "locations",
+        [
+          `or=(ai_host_phone.eq.${encodeURIComponent(phone)},phone.eq.${encodeURIComponent(phone)})`,
+          "select=id,name",
+          "limit=5",
+        ].join("&"),
+      ).catch(() => []),
+    ]);
+
+    for (const row of phoneNumbers) {
+      if (row.location_id) locationIds.add(row.location_id);
+    }
+    for (const row of locations) {
+      if (row.id) locationIds.add(row.id);
+    }
+
+    return locationIds;
+  }
+
+  private async buildOwnerDisambiguationReply(candidates: TrustedContact[]) {
+    const choices = await Promise.all(
+      candidates.slice(0, 5).map(async (contact, index) => {
+        const name = contact.locationId ? await this.locationName(contact.locationId) : "a business";
+        return `${index + 1} for ${name}`;
+      }),
+    );
+    return `I found more than one business for your trusted number. For now, text the dedicated business number, or reply in the dashboard. Matches: ${choices.join(", ")}.`;
+  }
+
+  private async recordOwnerCommandReply(input: {
+    from: string;
+    result: OwnerCommandToolResult;
+    to: string;
+  }) {
+    await this.recordMessageEvent({
+      body: formatOwnerCommandSmsReply(input.result),
+      direction: "outbound",
+      fromPhone: input.to,
+      status: input.result.ok ? "owner_command_reply" : "owner_command_failed",
+      toPhone: input.from,
+    });
   }
 
   private async findCandidateThreads(customerPhone: string, signalhostPhone: string) {
@@ -383,6 +581,33 @@ function normalizePhone(value?: string) {
   if (digits.length === 10) return `+1${digits}`;
   if (digits.length > 10 && digits.length <= 15) return `+${digits}`;
   return undefined;
+}
+
+function mapTrustedContactRow(row: TrustedContactRow): TrustedContact {
+  return {
+    canAddLiveUpdates: row.can_add_live_updates ?? false,
+    canApprovePermanentKnowledge: row.can_approve_permanent_knowledge ?? false,
+    canManageAlertPreferences: row.can_manage_alert_preferences ?? false,
+    canReceiveAlerts: row.can_receive_alerts ?? false,
+    canResolveCustomerRequests: row.can_resolve_customer_requests ?? false,
+    canUseOwnerAssistant: row.can_use_owner_assistant ?? false,
+    contactType: normalizeTrustedContactType(row.contact_type),
+    createdAt: row.created_at ?? undefined,
+    email: row.email ?? undefined,
+    id: row.id,
+    locationId: row.location_id ?? undefined,
+    name: row.name?.trim() || "Owner",
+    phone: row.phone ?? undefined,
+    preferredChannel: normalizeTrustedContactPreferredChannel(row.preferred_channel),
+    requiresOwnerApproval: row.requires_owner_approval ?? true,
+    updatedAt: row.updated_at ?? undefined,
+  };
+}
+
+function formatOwnerCommandSmsReply(result: OwnerCommandToolResult) {
+  const lead = result.spokenResponse || result.message || "Done.";
+  const bullets = result.bullets?.length ? ` ${result.bullets.slice(0, 2).join(" ")}` : "";
+  return `${lead}${bullets}`.trim();
 }
 
 function isStopMessage(value: string) {

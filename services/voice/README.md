@@ -128,7 +128,7 @@ When Supabase is configured, Twilio requests can include `locationId` in the web
 - `POST /telephony/release-expired-trials` releases trial numbers whose grace period has ended. This endpoint is internal-key protected and supports `{ "dryRun": true }`.
 - `GET /twilio/live-call-config?locationId=...` returns the generated live call URLs.
 - `GET /twilio/twiml-preview?locationId=...` renders the TwiML preview used to verify ConversationRelay before calling.
-- `POST /twilio/sms` receives inbound SMS replies for the shared SignalHost sender, routes them to the most recent open message thread, asks the customer to disambiguate if needed, and creates a staff task for routed replies.
+- `POST /twilio/sms` receives inbound SMS replies for the shared SignalHost sender. Trusted owner/manager numbers are routed into owner-assistant commands first; customer replies still route to the most recent open message thread, ask for disambiguation if needed, and create a staff task for routed replies.
 - `POST /agent/test-reply` accepts `{ message, locationId, channel, transcript, scenarioId }` and returns Vera's reply plus simulated tool actions. It is admin-protected and does not create real texts, orders, reservations, or staff callbacks.
 - `POST /twilio/recording-status` receives Twilio recording callbacks. Configure Twilio call/SIP recording to send completed recording events to `https://your-voice-service/twilio/recording-status`; the service stores the MP3 URL on `calls.recording_url`.
 - `POST /ingestion/run-next` processes one queued menu ingestion job, fetches URL/text content, parses menu items, replaces `menu_categories` and `menu_items`, and updates `ingestion_jobs` plus `menu_sources`.
