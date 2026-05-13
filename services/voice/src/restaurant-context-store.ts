@@ -10,6 +10,13 @@ import {
   type TemporaryUpdateType,
 } from "../../../src/domain/business-updates";
 import {
+  defaultTrustedContactPermissions,
+  normalizeTrustedContactPreferredChannel,
+  normalizeTrustedContactType,
+  trustedContactTypeLabels,
+  type TrustedContact,
+} from "../../../src/domain/trusted-contacts";
+import {
   demoRestaurantContext,
   isBehaviorTuningSection,
   toSpokenRestaurantName,
@@ -99,6 +106,26 @@ export interface SupabaseFaqRow {
   is_active: boolean | null;
 }
 
+export interface SupabaseTrustedContactRow {
+  can_add_live_updates: boolean | null;
+  can_approve_permanent_knowledge?: boolean | null;
+  can_manage_alert_preferences?: boolean | null;
+  can_receive_alerts: boolean | null;
+  can_resolve_customer_requests?: boolean | null;
+  can_use_owner_assistant: boolean | null;
+  contact_type: string | null;
+  created_at: string | null;
+  email: string | null;
+  id: string;
+  location_id: string;
+  name: string | null;
+  phone: string | null;
+  preferred_channel: string | null;
+  requires_owner_approval?: boolean | null;
+  trusted_identity_enabled?: boolean | null;
+  updated_at: string | null;
+}
+
 export interface BuildRestaurantContextInput {
   agentConfig?: SupabaseAgentConfigRow | null;
   businessLiveSettings?: SupabaseBusinessLiveSettingsRow | null;
@@ -109,6 +136,7 @@ export interface BuildRestaurantContextInput {
   menuCategories?: SupabaseMenuCategoryRow[];
   menuItems?: SupabaseMenuItemRow[];
   onboardingProfile?: SupabaseOnboardingProfileRow | null;
+  trustedContacts?: SupabaseTrustedContactRow[];
 }
 
 export function createRestaurantContextStore(env: VoiceServiceEnv): RestaurantContextStore {
@@ -142,6 +170,7 @@ export function buildRestaurantContext({
   menuCategories = [],
   menuItems = [],
   onboardingProfile,
+  trustedContacts = [],
 }: BuildRestaurantContextInput): RestaurantVoiceContext {
   const draft = normalizeDraft(onboardingProfile?.draft);
   const businessType = normalizeBusinessType(stringValue(draft.businessType));
@@ -180,6 +209,7 @@ export function buildRestaurantContext({
     mode: normalizeBusinessMode(businessLiveSettings?.active_mode) ?? "normal",
     updates: mapBusinessLiveUpdates(businessLiveUpdates),
   });
+  const mappedTrustedContacts = trustedContacts.map(mapTrustedContact);
   const liveUpdatePolicy = buildLiveUpdatePolicy(businessLiveContext.instructionBlock);
   const activeSpecialUpdates = businessLiveContext.activeUpdates
     .filter((update) => update.type === "special" || update.type === "promotion" || update.type === "event")
@@ -242,6 +272,7 @@ export function buildRestaurantContext({
     reservationSettings,
     smsConfirmationsEnabled: agentConfig?.sms_confirmations_enabled ?? true,
     timezone,
+    trustedContacts: mappedTrustedContacts,
     voiceGender: normalizeSignalHostVoiceGender(draft.voiceGender),
   };
 }
@@ -312,7 +343,17 @@ class SupabaseRestaurantContextStore implements RestaurantContextStore {
     const resolvedLocationId = normalizeLocationId(locationId) ?? this.defaultLocationId;
 
     try {
-      const [locations, agentConfigs, onboardingProfiles, menuCategories, knowledgeSections, faqs, businessLiveSettings, businessLiveUpdates] = await Promise.all([
+      const [
+        locations,
+        agentConfigs,
+        onboardingProfiles,
+        menuCategories,
+        knowledgeSections,
+        faqs,
+        businessLiveSettings,
+        businessLiveUpdates,
+        trustedContacts,
+      ] = await Promise.all([
         this.request<SupabaseLocationRow[]>(
           "locations",
           `id=eq.${encodeURIComponent(resolvedLocationId)}&limit=1&select=id,name,cuisine,timezone,phone,ai_host_phone,address`,
@@ -345,6 +386,10 @@ class SupabaseRestaurantContextStore implements RestaurantContextStore {
           "business_live_updates",
           `location_id=eq.${encodeURIComponent(resolvedLocationId)}&cleared_at=is.null&order=created_at.desc&select=id,update_type,title,body,mode,expiration,expires_at,source,created_at,cleared_at`,
         ).catch(() => []),
+        this.request<SupabaseTrustedContactRow[]>(
+          "business_contacts",
+          `location_id=eq.${encodeURIComponent(resolvedLocationId)}&trusted_identity_enabled=eq.true&order=contact_type.asc,name.asc&select=id,location_id,contact_type,name,phone,email,preferred_channel,can_receive_alerts,can_use_owner_assistant,can_add_live_updates,can_approve_permanent_knowledge,can_resolve_customer_requests,can_manage_alert_preferences,requires_owner_approval,trusted_identity_enabled,created_at,updated_at`,
+        ).catch(() => []),
       ]);
 
       const categoryIds = menuCategories.map((category) => category.id);
@@ -365,6 +410,7 @@ class SupabaseRestaurantContextStore implements RestaurantContextStore {
         menuCategories,
         menuItems,
         onboardingProfile: onboardingProfiles[0],
+        trustedContacts,
       });
     } catch (error) {
       console.error("[restaurant-context] falling back to demo context", error);
@@ -879,6 +925,30 @@ function mapBusinessLiveUpdates(rows: SupabaseBusinessLiveUpdateRow[]): Temporar
       type: normalizeTemporaryUpdateType(row.update_type),
     }))
     .filter((update) => update.body && update.title);
+}
+
+function mapTrustedContact(row: SupabaseTrustedContactRow): TrustedContact {
+  const contactType = normalizeTrustedContactType(row.contact_type);
+  const defaults = defaultTrustedContactPermissions(contactType);
+
+  return {
+    canAddLiveUpdates: row.can_add_live_updates ?? defaults.canAddLiveUpdates,
+    canApprovePermanentKnowledge: row.can_approve_permanent_knowledge ?? defaults.canApprovePermanentKnowledge,
+    canManageAlertPreferences: row.can_manage_alert_preferences ?? defaults.canManageAlertPreferences,
+    canReceiveAlerts: row.can_receive_alerts ?? defaults.canReceiveAlerts,
+    canResolveCustomerRequests: row.can_resolve_customer_requests ?? defaults.canResolveCustomerRequests,
+    canUseOwnerAssistant: row.can_use_owner_assistant ?? defaults.canUseOwnerAssistant,
+    contactType,
+    createdAt: row.created_at ?? undefined,
+    email: row.email?.trim() || undefined,
+    id: row.id,
+    locationId: row.location_id,
+    name: row.name?.trim() || trustedContactTypeLabels[contactType],
+    phone: row.phone?.trim() || undefined,
+    preferredChannel: normalizeTrustedContactPreferredChannel(row.preferred_channel),
+    requiresOwnerApproval: row.requires_owner_approval ?? defaults.requiresOwnerApproval,
+    updatedAt: row.updated_at ?? undefined,
+  };
 }
 
 function buildLiveUpdatePolicy(instructionBlock: string) {

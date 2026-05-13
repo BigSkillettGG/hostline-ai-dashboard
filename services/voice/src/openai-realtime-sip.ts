@@ -5,6 +5,7 @@ import type { CallStore } from "./call-store";
 import type { VoiceServiceEnv } from "./env";
 import type { GuestConfirmationService } from "./guest-confirmation-service";
 import type { StaffAlertKind, StaffNotificationService } from "./notification-service";
+import type { OwnerCommandRuntime } from "./owner-command-runtime";
 import type { CapturedOrderItem } from "./order-intake";
 import {
   businessLinkKindLabels,
@@ -18,6 +19,7 @@ import { demoRestaurantContext, toSpokenRestaurantName, type RestaurantVoiceCont
 import type { RestaurantContextStore } from "./restaurant-context-store";
 import type { ReservationPlatformService } from "./reservation-platform-service";
 import type { TranscriptRole, TranscriptTurn } from "./types";
+import type { TrustedContact } from "../../../src/domain/trusted-contacts";
 
 const OPENAI_REALTIME_DEFAULT_MODEL = "gpt-realtime";
 const OPENAI_REALTIME_DEFAULT_FEMALE_VOICE = "marin";
@@ -53,6 +55,7 @@ interface OpenAIRealtimeSipServiceOptions {
   callStore?: CallStore;
   fetchImpl?: typeof fetch;
   guestConfirmationService?: GuestConfirmationService;
+  ownerCommandRuntime?: OwnerCommandRuntime;
   reservationPlatformService?: ReservationPlatformService;
   staffNotificationService?: StaffNotificationService;
   websocketFactory?: (url: string, options: { headers: Record<string, string> }) => RealtimeSocket;
@@ -161,6 +164,7 @@ interface OpenAIRealtimeSidebandSession {
   finishCloseTimer?: ReturnType<typeof setTimeout>;
   finishRequested: boolean;
   locationId: string;
+  ownerContact?: TrustedContact;
   quality: RealtimeQualityMetrics;
   staffCallbackRequested: boolean;
   startedAt: number;
@@ -174,6 +178,7 @@ interface BuildOpenAIRealtimeAcceptPayloadInput {
   context: RestaurantVoiceContext;
   env: OpenAIRealtimeEnv;
   now?: Date;
+  ownerContact?: TrustedContact;
 }
 
 interface OpenAIRealtimeAcceptPayload {
@@ -227,6 +232,7 @@ export function createOpenAIRealtimeSipService(
   const fetchImpl = options.fetchImpl ?? fetch;
   const callStore = options.callStore;
   const guestConfirmationService = options.guestConfirmationService;
+  const ownerCommandRuntime = options.ownerCommandRuntime;
   const reservationPlatformService = options.reservationPlatformService;
   const staffNotificationService = options.staffNotificationService;
   const websocketFactory =
@@ -297,17 +303,22 @@ export function createOpenAIRealtimeSipService(
         "demo-location";
       const context = await restaurantContextStore.getContext(resolvedLocationId);
       const callerPhone = extractOpenAIRealtimeCallerPhone(event);
+      const ownerContact = findTrustedOwnerCaller(context, callerPhone);
       const externalCallId = extractOpenAIRealtimeExternalCallId(event) ?? callId;
       const externalSessionId = extractOpenAIRealtimeSipCallId(event) ?? callId;
       let callRecordId: string | undefined;
       try {
         const result = await callStore?.startRealtimeCall({
+          callerName: ownerContact?.name,
           callerPhone,
           externalCallId,
           externalSessionId,
           locationId: resolvedLocationId,
           providerPayload: {
             openaiCallId: callId,
+            ownerContactId: ownerContact?.id,
+            ownerContactType: ownerContact?.contactType,
+            ownerMode: Boolean(ownerContact),
             sipHeaders: event.data?.sip_headers ?? [],
             webhookEventId: event.id,
           },
@@ -316,7 +327,7 @@ export function createOpenAIRealtimeSipService(
       } catch (error) {
         console.error("[openai-realtime] call start persistence failed", { callId, error });
       }
-      const payload = buildOpenAIRealtimeAcceptPayload({ callerPhone, context, env });
+      const payload = buildOpenAIRealtimeAcceptPayload({ callerPhone, context, env, ownerContact });
 
       await acceptOpenAIRealtimeCall({
         callId,
@@ -336,6 +347,8 @@ export function createOpenAIRealtimeSipService(
         externalCallId,
         guestConfirmationService,
         locationId: resolvedLocationId,
+        ownerCommandRuntime,
+        ownerContact,
         reservationPlatformService,
         staffNotificationService,
         websocketFactory,
@@ -347,6 +360,7 @@ export function createOpenAIRealtimeSipService(
           callId,
           locationId: resolvedLocationId,
           model: payload.model,
+          ownerMode: Boolean(ownerContact),
           voice: payload.audio.output.voice,
           callerPhone,
         },
@@ -455,6 +469,7 @@ export function buildOpenAIRealtimeAcceptPayload({
   context,
   env,
   now,
+  ownerContact,
 }: BuildOpenAIRealtimeAcceptPayloadInput): OpenAIRealtimeAcceptPayload {
   const voice = resolveOpenAIRealtimeVoice(env, context);
 
@@ -474,20 +489,24 @@ export function buildOpenAIRealtimeAcceptPayload({
         voice,
       },
     },
-    instructions: buildOpenAIRealtimeInstructions(context, { callerPhone, now }),
+    instructions: buildOpenAIRealtimeInstructions(context, { callerPhone, now, ownerContact }),
     max_output_tokens: 280,
     model: resolveOpenAIRealtimeModel(env),
     output_modalities: ["audio"],
     tool_choice: "auto",
-    tools: buildOpenAIRealtimeTools(context),
+    tools: buildOpenAIRealtimeTools(context, ownerContact),
     type: "realtime",
   };
 }
 
 export function buildOpenAIRealtimeInstructions(
   context: RestaurantVoiceContext,
-  callContext: { callerPhone?: string; now?: Date } = {},
+  callContext: { callerPhone?: string; now?: Date; ownerContact?: TrustedContact } = {},
 ) {
+  if (callContext.ownerContact) {
+    return buildOwnerRealtimeInstructions(context, callContext.ownerContact, callContext);
+  }
+
   const localTimeContext = buildRestaurantLocalTimeContext(context, callContext.now);
   const callerPhoneContext = callContext.callerPhone
     ? `Caller phone number from SIP caller ID: ${callContext.callerPhone}. If the caller asks for a text or agrees to a confirmation, you may text this number. If offering a text, say the last four digits, not the full number.`
@@ -567,6 +586,37 @@ export function buildOpenAIRealtimeInstructions(
       : `For leads, ${profile.appointmentNoun}s, quote requests, and anything outside the specialized tools, use create_customer_request after collecting the name, callback number, request summary, urgency, and key details.`,
     "If the send_guest_confirmation tool succeeds, tell the caller the text is sent. Do not mention backend setup, SMS providers, or placeholder mode.",
     "Close naturally only after the caller is done. Use finish_call, say a short goodbye, and do not ask another question after goodbye.",
+  ].join("\n");
+}
+
+export function buildOwnerRealtimeInstructions(
+  context: RestaurantVoiceContext,
+  ownerContact: TrustedContact,
+  callContext: { callerPhone?: string; now?: Date } = {},
+) {
+  const profile = getRuntimeBusinessProfile(context);
+  const firstName = firstNameOf(ownerContact.name);
+  const localTimeContext = buildRestaurantLocalTimeContext(context, callContext.now);
+  const phoneContext = callContext.callerPhone
+    ? `Trusted caller ID: ${callContext.callerPhone}. Matched ${ownerContact.contactType} contact ${ownerContact.name}.`
+    : `Trusted contact: ${ownerContact.contactType} ${ownerContact.name}. Caller ID was not available.`;
+
+  return [
+    `You are SignalHost speaking with ${firstName}, a trusted ${ownerContact.contactType.replace(/_/g, " ")} for ${context.restaurantName}.`,
+    `This is an internal owner-assistant call, not a customer call. Never use the public customer greeting for ${context.restaurantName}.`,
+    `Current ${profile.businessNoun} local time: ${localTimeContext}.`,
+    phoneContext,
+    `Opening greeting to use when the call begins: "${buildOwnerOpeningGreeting(ownerContact)}"`,
+    "Say the owner greeting once, then stop and listen.",
+    "The owner may ask for reports, urgent calls, open follow-ups, knowledge gaps, high-value opportunities, orders, reservations, or call volume.",
+    "The owner may also teach permanent knowledge, such as 'remember that the bathroom is white', or give live updates, such as 'we are closed tomorrow' or 'tonight's special is lobster ravioli'.",
+    "For any owner report question, live update, or permanent knowledge update, call run_owner_command with the owner's exact latest request. Do not claim something was saved until the tool says it was applied.",
+    "After run_owner_command returns, summarize the spokenResponse naturally in one or two short sentences. If bullets are present, mention only the most important one or two.",
+    "If the tool says approval is required, tell them it needs owner approval and that live caller behavior has not changed yet.",
+    "If the tool says the command was unclear, ask one short clarifying question.",
+    "Keep the tone friendly, useful, and staff-like. You are briefing the owner, not selling to a customer.",
+    "After answering or saving an update, ask 'Anything else you want me to check or update?'",
+    "Only finish the call after the owner clearly says they are done or says goodbye. Then call finish_call with a short closing line.",
   ].join("\n");
 }
 
@@ -654,6 +704,17 @@ export function extractOpenAIRealtimeCallerPhone(event: OpenAIRealtimeIncomingEv
       stringValue(event.data?.metadata?.callerPhone) ??
       stringValue(event.data?.metadata?.caller_phone) ??
       extractCallerPhoneFromSipHeaders(event.data?.sip_headers),
+  );
+}
+
+export function findTrustedOwnerCaller(context: RestaurantVoiceContext, callerPhone?: string) {
+  const normalizedCallerPhone = normalizeCallerPhone(callerPhone);
+  if (!normalizedCallerPhone) return undefined;
+
+  return context.trustedContacts.find((contact) =>
+    contact.canUseOwnerAssistant &&
+    contact.phone &&
+    normalizeCallerPhone(contact.phone) === normalizedCallerPhone
   );
 }
 
@@ -888,6 +949,8 @@ function startSidebandSocket({
   externalCallId,
   guestConfirmationService,
   locationId,
+  ownerCommandRuntime,
+  ownerContact,
   reservationPlatformService,
   staffNotificationService,
   websocketFactory,
@@ -902,6 +965,8 @@ function startSidebandSocket({
   externalCallId: string;
   guestConfirmationService?: GuestConfirmationService;
   locationId: string;
+  ownerCommandRuntime?: OwnerCommandRuntime;
+  ownerContact?: TrustedContact;
   reservationPlatformService?: ReservationPlatformService;
   staffNotificationService?: StaffNotificationService;
   websocketFactory: (url: string, options: { headers: Record<string, string> }) => RealtimeSocket;
@@ -923,6 +988,7 @@ function startSidebandSocket({
     externalCallId,
     finishRequested: false,
     locationId,
+    ownerContact,
     quality: createRealtimeQualityMetrics(),
     staffCallbackRequested: false,
     startedAt: Date.now(),
@@ -935,16 +1001,16 @@ function startSidebandSocket({
     console.info("[openai-realtime] sideband connected", { callId, locationId });
     sendRealtimeEvent(socket, {
       session: {
-        instructions: buildOpenAIRealtimeInstructions(context, { callerPhone }),
+        instructions: buildOpenAIRealtimeInstructions(context, { callerPhone, ownerContact }),
         tool_choice: "auto",
-        tools: buildOpenAIRealtimeTools(context),
+        tools: buildOpenAIRealtimeTools(context, ownerContact),
         type: "realtime",
       },
       type: "session.update",
     });
     sendRealtimeEvent(socket, {
       response: {
-        instructions: buildOpeningGreetingInstructions(context),
+        instructions: buildOpeningGreetingInstructions(context, ownerContact),
       },
       type: "response.create",
     });
@@ -985,6 +1051,8 @@ function startSidebandSocket({
       context,
       guestConfirmationService,
       locationId,
+      ownerCommandRuntime,
+      ownerContact,
       reservationPlatformService,
       session,
       socket,
@@ -1023,7 +1091,11 @@ function startSidebandSocket({
   });
 }
 
-export function buildOpeningGreetingInstructions(context: RestaurantVoiceContext) {
+export function buildOpeningGreetingInstructions(context: RestaurantVoiceContext, ownerContact?: TrustedContact) {
+  if (ownerContact) {
+    return buildOwnerOpeningGreetingInstructions(ownerContact);
+  }
+
   const greeting = buildShortOpeningGreeting(context);
   const profile = getRuntimeBusinessProfile(context);
   return [
@@ -1036,6 +1108,18 @@ export function buildOpeningGreetingInstructions(context: RestaurantVoiceContext
       ? "Do not add your name, do not say you are virtual or AI, and do not add menu, hours, or reservation information."
       : `Do not add your name, do not say you are virtual or AI, and do not add ${profile.offeringNoun}, hours, or ${profile.appointmentNoun} information.`,
   ].join(" ");
+}
+
+export function buildOwnerOpeningGreetingInstructions(ownerContact: TrustedContact) {
+  return [
+    "Say this exact internal owner greeting once as soon as the call starts, then stop and listen:",
+    buildOwnerOpeningGreeting(ownerContact),
+    "Do not use the public business greeting, do not say you are virtual or AI, and do not mention customer-facing features unless asked.",
+  ].join(" ");
+}
+
+export function buildOwnerOpeningGreeting(ownerContact: TrustedContact) {
+  return `Hi ${firstNameOf(ownerContact.name)}, it's SignalHost. What would you like to check or update?`;
 }
 
 export function buildShortOpeningGreeting(context: RestaurantVoiceContext) {
@@ -1154,7 +1238,9 @@ function markRealtimeToolCalls(session: OpenAIRealtimeSidebandSession, toolCalls
             ? stringValue(toolCall.arguments.request_type)
             : toolCall.name === "send_business_link"
               ? stringValue(toolCall.arguments.link_kind)
-              : stringValue(toolCall.arguments.kind),
+              : toolCall.name === "run_owner_command"
+                ? "owner_command"
+                : stringValue(toolCall.arguments.kind),
       name: toolCall.name,
     });
     if (toolCall.name === "request_staff_callback") {
@@ -1250,6 +1336,15 @@ function classifyOpenAIRealtimeCall(session: OpenAIRealtimeSidebandSession): {
   outcome: string;
   status: "new" | "reviewed" | "needs_review" | "resolved";
 } {
+  if (session.ownerContact) {
+    return {
+      confidence: session.transcript.length ? 90 : 30,
+      intent: "other",
+      outcome: "owner_assistant",
+      status: session.transcript.length ? "resolved" : "needs_review",
+    };
+  }
+
   const combinedText = session.transcript.map((turn) => turn.text).join(" ").toLowerCase();
   const toolNames = new Set(session.toolEvents.map((event) => event.name));
   const toolKinds = new Set(session.toolEvents.map((event) => event.kind).filter(Boolean));
@@ -1303,6 +1398,9 @@ function buildOpenAIRealtimeStructuredSummary(
   const qualitySummary = buildRealtimeQualitySummary(session);
 
   return [
+    session.ownerContact
+      ? `Internal owner-assistant call with ${session.ownerContact.name} (${session.ownerContact.contactType}).`
+      : "",
     `OpenAI Realtime call classified as ${classification.intent}; outcome ${classification.outcome}.`,
     callerTurns.length ? `Caller said: ${callerTurns.slice(-3).join(" / ")}.` : "No caller transcript was captured.",
     agentTurns.length ? `Vera replied: ${agentTurns.slice(-2).join(" / ")}.` : "",
@@ -1349,6 +1447,8 @@ async function handleOpenAIRealtimeToolCalls({
   context,
   guestConfirmationService,
   locationId,
+  ownerCommandRuntime,
+  ownerContact,
   reservationPlatformService,
   session,
   socket,
@@ -1361,6 +1461,8 @@ async function handleOpenAIRealtimeToolCalls({
   context: RestaurantVoiceContext;
   guestConfirmationService?: GuestConfirmationService;
   locationId?: string;
+  ownerCommandRuntime?: OwnerCommandRuntime;
+  ownerContact?: TrustedContact;
   reservationPlatformService?: ReservationPlatformService;
   session: OpenAIRealtimeSidebandSession;
   socket: RealtimeSocket;
@@ -1378,6 +1480,8 @@ async function handleOpenAIRealtimeToolCalls({
         context,
         guestConfirmationService,
         locationId,
+        ownerCommandRuntime,
+        ownerContact,
         reservationPlatformService,
         staffNotificationService,
         toolCall,
@@ -1441,6 +1545,8 @@ async function handleOpenAIRealtimeToolCall({
   context,
   guestConfirmationService,
   locationId,
+  ownerCommandRuntime,
+  ownerContact,
   reservationPlatformService,
   staffNotificationService,
   toolCall,
@@ -1451,12 +1557,23 @@ async function handleOpenAIRealtimeToolCall({
   context: RestaurantVoiceContext;
   guestConfirmationService?: GuestConfirmationService;
   locationId?: string;
+  ownerCommandRuntime?: OwnerCommandRuntime;
+  ownerContact?: TrustedContact;
   reservationPlatformService?: ReservationPlatformService;
   staffNotificationService?: StaffNotificationService;
   toolCall: OpenAIRealtimeToolCall;
 }) {
   if (toolCall.name === "lookup_restaurant_context") {
     return lookupRestaurantContext(context, toolCall.arguments.topic);
+  }
+
+  if (toolCall.name === "run_owner_command") {
+    return runOpenAIRealtimeOwnerCommand({
+      locationId,
+      ownerCommandRuntime,
+      ownerContact,
+      rawArguments: toolCall.arguments,
+    });
   }
 
   if (toolCall.name === "lookup_business_context") {
@@ -1528,6 +1645,48 @@ async function handleOpenAIRealtimeToolCall({
   return {
     error: `Unknown tool: ${toolCall.name}`,
   };
+}
+
+export async function runOpenAIRealtimeOwnerCommand({
+  locationId,
+  ownerCommandRuntime,
+  ownerContact,
+  rawArguments,
+}: {
+  locationId?: string;
+  ownerCommandRuntime?: OwnerCommandRuntime;
+  ownerContact?: TrustedContact;
+  rawArguments: Record<string, unknown>;
+}) {
+  const message = stringValue(rawArguments.message);
+  if (!ownerContact) {
+    return {
+      ok: false,
+      error: "trusted_owner_not_found",
+      message: "This caller is not recognized as a trusted owner or manager.",
+    };
+  }
+  if (!ownerCommandRuntime) {
+    return {
+      ok: false,
+      error: "owner_command_runtime_missing",
+      message: "Owner command runtime is not configured.",
+    };
+  }
+  if (!message) {
+    return {
+      ok: false,
+      error: "missing_owner_command_message",
+      message: "Ask the owner what they want to check or update.",
+    };
+  }
+
+  return ownerCommandRuntime.runCommand({
+    actor: ownerContact,
+    channel: "phone",
+    locationId: locationId ?? "",
+    message,
+  });
 }
 
 export function finishOpenAIRealtimeCall({ rawArguments }: { rawArguments: Record<string, unknown> }) {
@@ -2101,7 +2260,9 @@ async function checkOpenAIRealtimeModel({
   }
 }
 
-function buildOpenAIRealtimeTools(context: RestaurantVoiceContext = demoRestaurantContext) {
+function buildOpenAIRealtimeTools(context: RestaurantVoiceContext = demoRestaurantContext, ownerContact?: TrustedContact) {
+  if (ownerContact) return buildOwnerRealtimeTools();
+
   const profile = getRuntimeBusinessProfile(context);
   const lookupName = profile.isRestaurant ? "lookup_restaurant_context" : "lookup_business_context";
   const tools = [
@@ -2347,6 +2508,50 @@ function buildOpenAIRealtimeTools(context: RestaurantVoiceContext = demoRestaura
   return profile.isRestaurant ? tools : tools.filter((tool) => tool.name !== "create_reservation_request");
 }
 
+function buildOwnerRealtimeTools() {
+  return [
+    {
+      description:
+        "Run a trusted owner or manager command. Use for reports, urgent calls, follow-ups, live business updates, business modes, and permanent knowledge updates. Pass the owner's exact latest request.",
+      name: "run_owner_command",
+      parameters: {
+        additionalProperties: false,
+        properties: {
+          message: {
+            description: "The owner or manager's exact latest request, such as 'what happened today' or 'remember that the bathroom is white'.",
+            type: "string",
+          },
+        },
+        required: ["message"],
+        type: "object",
+      },
+      type: "function" as const,
+    },
+    {
+      description:
+        "Finish the internal owner call only after the owner clearly says they are done, says no to the anything-else question, or says goodbye.",
+      name: "finish_call",
+      parameters: {
+        additionalProperties: false,
+        properties: {
+          closing_line: {
+            description: "Short final sentence to say to the owner before the call ends.",
+            type: "string",
+          },
+          reason: {
+            description: "Why the call is ready to end.",
+            enum: ["caller_done", "caller_goodbye", "wrong_number_complete", "silent_or_abandoned"],
+            type: "string",
+          },
+        },
+        required: ["reason"],
+        type: "object",
+      },
+      type: "function" as const,
+    },
+  ];
+}
+
 function parseOpenAIRealtimeEvent(rawBody: string): OpenAIRealtimeIncomingEvent {
   try {
     const parsed = JSON.parse(rawBody) as unknown;
@@ -2569,6 +2774,10 @@ function normalizeCallerPhone(value?: string) {
   if (digits.length === 10) return `+1${digits}`;
   if (digits.length > 10 && digits.length <= 15) return `+${digits}`;
   return undefined;
+}
+
+function firstNameOf(value: string) {
+  return value.trim().split(/\s+/)[0] || "there";
 }
 
 function parseReservationConfirmationArguments(args: Record<string, unknown>) {

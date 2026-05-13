@@ -1,10 +1,10 @@
-import { classifyOwnerQuestion } from "@/domain/owner-assistant";
-import { parseOwnerLiveCommand, type OwnerLiveCommand } from "@/domain/owner-live-commands";
+import { classifyOwnerQuestion } from "./owner-assistant";
+import { parseOwnerLiveCommand, type OwnerLiveCommand } from "./owner-live-commands";
 import {
   defaultTrustedContactPermissions,
   type TrustedContact,
   type TrustedContactPermissions,
-} from "@/domain/trusted-contacts";
+} from "./trusted-contacts";
 
 export type OwnerCommandChannel = "dashboard" | "email" | "phone" | "sms";
 export type OwnerCommandDecision = "allowed" | "approval_required" | "denied";

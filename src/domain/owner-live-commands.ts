@@ -4,7 +4,7 @@ import {
   type BusinessMode,
   type TemporaryBusinessUpdate,
   type TemporaryUpdateExpiration,
-} from "@/domain/business-updates";
+} from "./business-updates";
 
 export type OwnerLiveCommand =
   | {

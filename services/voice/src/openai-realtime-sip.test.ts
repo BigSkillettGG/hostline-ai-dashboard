@@ -5,6 +5,8 @@ import {
   buildOpenAIRealtimeAcceptPayload,
   buildOpenAIRealtimeInstructions,
   buildOpenAIRealtimeLiveCallConfig,
+  buildOwnerOpeningGreeting,
+  buildOwnerRealtimeInstructions,
   buildOpeningGreetingInstructions,
   buildOpenAIRealtimePreflight,
   buildRestaurantLocalTimeContext,
@@ -18,6 +20,7 @@ import {
   extractOpenAIRealtimeSipCallId,
   extractOpenAIRealtimeTranscriptTurn,
   extractOpenAIRealtimeToolCalls,
+  findTrustedOwnerCaller,
   finishOpenAIRealtimeCall,
   lookupBusinessContext,
   lookupRestaurantContext,
@@ -178,6 +181,28 @@ describe("OpenAI Realtime SIP", () => {
     expect(instructions).toContain("send_guest_confirmation");
   });
 
+  it("switches trusted owner callers into internal owner-assistant mode", () => {
+    const ownerContact = demoRestaurantContext.trustedContacts[0];
+    const payload = buildOpenAIRealtimeAcceptPayload({
+      callerPhone: ownerContact.phone,
+      context: demoRestaurantContext,
+      env: baseEnv,
+      ownerContact,
+    });
+
+    expect(findTrustedOwnerCaller(demoRestaurantContext, "(415) 555-0148")).toMatchObject({
+      contactType: "owner",
+      name: "Maria",
+    });
+    expect(payload.instructions).toContain("internal owner-assistant call");
+    expect(payload.instructions).toContain("run_owner_command");
+    expect(payload.instructions).not.toContain("Hi, thank you for calling Olive and Ember");
+    expect(payload.tools.map((tool) => tool.name)).toEqual(["run_owner_command", "finish_call"]);
+    expect(buildOwnerRealtimeInstructions(demoRestaurantContext, ownerContact)).toContain("trusted owner");
+    expect(buildOwnerOpeningGreeting(ownerContact)).toBe("Hi Maria, it's SignalHost. What would you like to check or update?");
+    expect(buildOpeningGreetingInstructions(demoRestaurantContext, ownerContact)).toContain("internal owner greeting");
+  });
+
   it("formats restaurant-local time in the restaurant timezone", () => {
     expect(buildRestaurantLocalTimeContext(demoRestaurantContext, new Date("2026-05-12T01:30:00.000Z"))).toContain(
       "Monday, May 11, 2026",
@@ -300,6 +325,120 @@ describe("OpenAI Realtime SIP", () => {
       intent: "hours",
       status: "resolved",
     });
+  });
+
+  it("accepts a trusted owner SIP caller with owner tools and identity metadata", async () => {
+    const socket = createFakeRealtimeSocket();
+    const startedCalls: unknown[] = [];
+    const acceptedPayloads: unknown[] = [];
+    const service = createOpenAIRealtimeSipService(
+      baseEnv,
+      {
+        async getContext() {
+          return demoRestaurantContext;
+        },
+      },
+      {
+        callStore: {
+          async addTranscriptTurn() {},
+          async attachCallRecording() {},
+          async completeCall() {},
+          async createCustomerRequest() {
+            return {};
+          },
+          async createStaffReviewOrder() {
+            return {};
+          },
+          async createStaffReviewReservation() {
+            return {};
+          },
+          async createStaffTask() {
+            return {};
+          },
+          async startCall() {
+            return {};
+          },
+          async startRealtimeCall(input) {
+            startedCalls.push(input);
+            return { callId: "call_uuid" };
+          },
+        },
+        fetchImpl: (async (_url, init) => {
+          acceptedPayloads.push(JSON.parse(String(init?.body ?? "{}")));
+          return new Response(null, { status: 200 });
+        }) as typeof fetch,
+        ownerCommandRuntime: {
+          configured: true,
+          async runCommand() {
+            return {
+              applied: false,
+              decision: "allowed",
+              kind: "report_query",
+              message: "Tell the owner: I handled 3 calls today.",
+              ok: true,
+              spokenResponse: "I handled 3 calls today.",
+              title: "Today at a glance",
+            };
+          },
+        },
+        websocketFactory: () => socket as never,
+      },
+    );
+
+    const result = await service.handleIncomingWebhook({
+      headers: {},
+      rawBody: JSON.stringify({
+        data: {
+          call_id: "rtc_owner",
+          sip_headers: [
+            { name: "X-Twilio-CallSid", value: "CAOWNER" },
+            { name: "From", value: "sip:+14155550148@twilio.com" },
+          ],
+        },
+        id: "evt_owner",
+        object: "event",
+        type: "realtime.call.incoming",
+      }),
+    });
+
+    expect(result.status).toBe(200);
+    expect(result.body).toMatchObject({ ownerMode: true });
+    expect(startedCalls[0]).toMatchObject({
+      callerName: "Maria",
+      providerPayload: {
+        ownerContactId: "trusted_demo_owner",
+        ownerMode: true,
+      },
+    });
+    expect(acceptedPayloads[0]).toMatchObject({
+      instructions: expect.stringContaining("internal owner-assistant call"),
+      tools: [
+        expect.objectContaining({ name: "run_owner_command" }),
+        expect.objectContaining({ name: "finish_call" }),
+      ],
+    });
+
+    socket.emit("open");
+    expect(socket.sentEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          session: expect.objectContaining({
+            instructions: expect.stringContaining("internal owner-assistant call"),
+            tools: [
+              expect.objectContaining({ name: "run_owner_command" }),
+              expect.objectContaining({ name: "finish_call" }),
+            ],
+          }),
+          type: "session.update",
+        }),
+        expect.objectContaining({
+          response: expect.objectContaining({
+            instructions: expect.stringContaining("Hi Maria, it's SignalHost"),
+          }),
+          type: "response.create",
+        }),
+      ]),
+    );
   });
 
   it("uses the male OpenAI voice for male configured hosts", () => {

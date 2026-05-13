@@ -22,6 +22,7 @@ import { createMenuIngestionService } from "./menu-ingestion-service";
 import { buildSmsTwiML, createMessageThreadStore } from "./message-thread-store";
 import { createStaffNotificationService } from "./notification-service";
 import { createOpenAIRealtimeSipService } from "./openai-realtime-sip";
+import { createOwnerCommandRuntime } from "./owner-command-runtime";
 import { createOwnerReportService } from "./owner-report-service";
 import { createPlatformIntegrationRegistry } from "./platform-integrations";
 import { createPhoneNumberStore } from "./phone-number-store";
@@ -48,12 +49,14 @@ const guestConfirmationService = createGuestConfirmationService(env);
 const messageThreadStore = createMessageThreadStore(env);
 const menuIngestionService = createMenuIngestionService(env);
 const ownerReportService = createOwnerReportService(env);
+const ownerCommandRuntime = createOwnerCommandRuntime(env, ownerReportService);
 const platformIntegrationRegistry = createPlatformIntegrationRegistry(env);
 const reservationPlatformService = createReservationPlatformService(env);
 const tenantProvisioningService = createTenantProvisioningService(env);
 const openAIRealtimeSipService = createOpenAIRealtimeSipService(env, restaurantContextStore, {
   callStore,
   guestConfirmationService,
+  ownerCommandRuntime,
   reservationPlatformService,
   staffNotificationService,
 });

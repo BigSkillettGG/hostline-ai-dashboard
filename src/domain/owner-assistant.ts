@@ -1,7 +1,7 @@
-import type { Call, Order, Reservation } from "@/data/mock";
-import { buildDailyBrief, type DailyBrief } from "@/domain/daily-brief";
-import { buildInteractionInsight } from "@/domain/interaction-status";
-import { isActiveStaffTask, sortStaffTasks, type StaffTask } from "@/domain/staff-tasks";
+import type { Call, Order, Reservation } from "../data/mock";
+import { buildDailyBrief, type DailyBrief } from "./daily-brief";
+import { buildInteractionInsight } from "./interaction-status";
+import { isActiveStaffTask, sortStaffTasks, type StaffTask } from "./staff-tasks";
 
 export type OwnerAssistantIntent =
   | "calls"

@@ -1,6 +1,7 @@
 import type { SignalHostVoiceGender } from "../../../src/domain/voice-selection";
 import type { BusinessLink } from "../../../src/domain/business-links";
 import type { BusinessLiveContext } from "../../../src/domain/business-updates";
+import type { TrustedContact } from "../../../src/domain/trusted-contacts";
 
 export interface RestaurantVoiceContext {
   behaviorTuningNotes: RestaurantKnowledgeSection[];
@@ -21,6 +22,7 @@ export interface RestaurantVoiceContext {
   policies: Record<string, string>;
   orderSettings: RestaurantOrderSettings;
   reservationSettings: RestaurantReservationSettings;
+  trustedContacts: TrustedContact[];
 }
 
 export interface RestaurantFaq {
@@ -100,6 +102,22 @@ export const demoRestaurantContext: RestaurantVoiceContext = {
   greeting: "Hi, thank you for calling Olive and Ember. How can I help you?",
   defaultPickupEtaMinutes: 25,
   smsConfirmationsEnabled: true,
+  trustedContacts: [
+    {
+      canAddLiveUpdates: true,
+      canApprovePermanentKnowledge: true,
+      canManageAlertPreferences: true,
+      canReceiveAlerts: true,
+      canResolveCustomerRequests: true,
+      canUseOwnerAssistant: true,
+      contactType: "owner",
+      id: "trusted_demo_owner",
+      name: "Maria",
+      phone: "+14155550148",
+      preferredChannel: "both",
+      requiresOwnerApproval: false,
+    },
+  ],
   faqs: [
     {
       answer: "Yes, gift cards are available in person at the host stand.",

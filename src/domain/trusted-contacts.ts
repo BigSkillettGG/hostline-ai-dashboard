@@ -2,7 +2,7 @@ import {
   getRestaurantRoleLabel,
   normalizeRestaurantRole,
   type RestaurantMembershipRole,
-} from "@/domain/access-control";
+} from "./access-control";
 
 export type TrustedContactType = "owner" | "manager" | "front_desk" | "billing";
 export type TrustedContactPreferredChannel = "sms" | "email" | "both";
