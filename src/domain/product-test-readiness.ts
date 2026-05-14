@@ -1,5 +1,6 @@
 import type { AuthMode } from "@/lib/auth";
 import type { VoiceServiceHealth } from "@/lib/voice-service";
+import type { ScenarioRunSummary } from "@/domain/scenario-lab";
 
 export type ProductReadinessStatus = "ready" | "partial" | "needs_setup" | "demo";
 export type ProductReadinessArea =
@@ -48,6 +49,7 @@ export interface ProductTestReadinessInput {
   onboardingProgressPercent?: number;
   openTaskCount?: number;
   recentCallCount?: number;
+  scenarioSummary?: ScenarioRunSummary;
   selectedPlanName?: string;
   supabaseConfigured: boolean;
   voiceHealth?: VoiceServiceHealth | null;
@@ -179,6 +181,7 @@ export function buildProductTestReadiness(input: ProductTestReadinessInput): Pro
         }),
     buildReportsItem(input),
     buildBillingItem(input),
+    buildTestSuiteItem(input),
   ];
 
   const readyCount = items.filter((readinessItem) => readinessItem.status === "ready").length;
@@ -194,17 +197,7 @@ export function buildProductTestReadiness(input: ProductTestReadinessInput): Pro
     : requiredBlockers.length
       ? "setup_first"
       : "ready_to_test";
-  const nextItem = items.find((readinessItem) => readinessItem.status !== "ready") ??
-    item({
-      actionLabel: "Open test suite",
-      actionTo: "/app/test-suite",
-      detail: "Core readiness is green. Run the critical phone and chat scenarios before a customer demo.",
-      id: "test_suite",
-      label: "Full product test suite",
-      status: "ready",
-      statusLabel: "Run now",
-      testPrompt: "Start with speakerphone, multi-turn close-out, allergy handoff, texting links, and owner-command tests.",
-    });
+  const nextItem = items.find((readinessItem) => readinessItem.status !== "ready") ?? items.find((readinessItem) => readinessItem.id === "test_suite") ?? items[0];
 
   return {
     headline: buildHeadline(overallStatus, readyCount, items.length),
@@ -222,6 +215,60 @@ export function buildProductTestReadiness(input: ProductTestReadinessInput): Pro
     testableCount,
     totalCount: items.length,
   };
+}
+
+function buildTestSuiteItem(input: ProductTestReadinessInput): ProductReadinessItem {
+  const summary = input.scenarioSummary;
+
+  if (!summary || summary.total === 0) {
+    return item({
+      actionLabel: "Open test suite",
+      actionTo: "/app/test-suite",
+      detail: "Run the critical phone and chat scenarios before judging the product or demoing it to a customer.",
+      id: "test_suite",
+      label: "Product test suite",
+      status: "partial",
+      statusLabel: "Not run",
+      testPrompt: "Start with speakerphone, multi-turn close-out, allergy handoff, texting links, and owner-command tests.",
+    });
+  }
+
+  if (summary.needs_work > 0) {
+    return item({
+      actionLabel: "Open test suite",
+      actionTo: "/app/test-suite",
+      detail: `${summary.needs_work} scenario${summary.needs_work === 1 ? "" : "s"} are marked needs work. Fix or retest these before calling the product ready.`,
+      id: "test_suite",
+      label: "Product test suite",
+      status: "partial",
+      statusLabel: "Needs work",
+      testPrompt: "Open the failed scenarios, copy the debug packet, and paste it into Codex for tuning.",
+    });
+  }
+
+  if (summary.openCritical > 0) {
+    return item({
+      actionLabel: "Open test suite",
+      actionTo: "/app/test-suite",
+      detail: `${summary.openCritical} critical scenario${summary.openCritical === 1 ? "" : "s"} still need a passing result.`,
+      id: "test_suite",
+      label: "Product test suite",
+      status: "partial",
+      statusLabel: "Open critical",
+      testPrompt: "Pass every critical test before showing this to a real prospect.",
+    });
+  }
+
+  return item({
+    actionLabel: "Open test suite",
+    actionTo: "/app/test-suite",
+    detail: `${summary.passed} of ${summary.total} scenarios are passing, including all critical tests.`,
+    id: "test_suite",
+    label: "Product test suite",
+    status: "ready",
+    statusLabel: "Critical passed",
+    testPrompt: "Run one fresh live phone call after each deploy, then keep going.",
+  });
 }
 
 function buildVoiceItem(input: ProductTestReadinessInput, missing: string[]): ProductReadinessItem {

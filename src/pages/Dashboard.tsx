@@ -47,6 +47,7 @@ import {
   type ProductReadinessItem,
   type ProductReadinessStatus,
 } from "@/domain/product-test-readiness";
+import { summarizeScenarioRuns, voiceScenarios } from "@/domain/scenario-lab";
 import {
   Area,
   AreaChart,
@@ -60,6 +61,7 @@ import {
 import { formatTime, formatMoney } from "@/lib/format";
 import { getAuthReadiness, isPlatformAdminUser, useCurrentUser } from "@/lib/auth";
 import { loadOnboardingDraft } from "@/lib/onboarding-draft";
+import { loadScenarioRuns } from "@/lib/scenario-run-storage";
 import {
   fetchCallsFromSupabase,
   fetchOrdersFromSupabase,
@@ -106,6 +108,7 @@ export default function Dashboard() {
   const liveEnabled = Boolean(supabaseConfigured && activeLocationId);
   const voiceConfigured = isVoiceServiceConfigured();
   const authReadiness = getAuthReadiness();
+  const scenarioSummary = useMemo(() => summarizeScenarioRuns(voiceScenarios, loadScenarioRuns("app")), []);
 
   const callQuery = useQuery({
     enabled: liveEnabled,
@@ -233,6 +236,7 @@ export default function Dashboard() {
     onboardingProgressPercent: onboardingProgress.percent,
     openTaskCount: activeStaffFollowUps,
     recentCallCount: liveEnabled ? recentCalls.length : 0,
+    scenarioSummary,
     selectedPlanName: String(draft.selectedPlanName || ""),
     supabaseConfigured,
     voiceHealth: voiceHealthQuery.data,

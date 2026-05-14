@@ -9,6 +9,11 @@ export interface ScenarioRunState {
   status: ScenarioStatus;
 }
 
+export interface ScenarioRunSummary extends Record<ScenarioStatus, number> {
+  openCritical: number;
+  total: number;
+}
+
 export interface VoiceScenario {
   callerScript: string[];
   channel: ScenarioChannel;
@@ -196,7 +201,7 @@ export const voiceScenarios: VoiceScenario[] = [
 export function summarizeScenarioRuns(
   scenarios: VoiceScenario[],
   runs: Record<string, ScenarioRunState | undefined>,
-) {
+): ScenarioRunSummary {
   return scenarios.reduce(
     (summary, scenario) => {
       const status = runs[scenario.id]?.status ?? "untested";
@@ -211,7 +216,7 @@ export function summarizeScenarioRuns(
       passed: 0,
       total: 0,
       untested: 0,
-    } as Record<ScenarioStatus, number> & { openCritical: number; total: number },
+    } as ScenarioRunSummary,
   );
 }
 

@@ -30,6 +30,7 @@ import {
   type AgentTestAction,
   type AgentTestTurn,
 } from "@/lib/voice-service";
+import { loadScenarioRuns, saveScenarioRuns, type ScenarioRunAudience } from "@/lib/scenario-run-storage";
 import { cn } from "@/lib/utils";
 import {
   AlertTriangle,
@@ -52,17 +53,10 @@ import { toast } from "sonner";
 type ScenarioFilter = "all" | ScenarioStatus;
 type ChannelFilter = "all" | ScenarioChannel;
 type VerticalFilter = "all" | ScenarioVertical;
-type ScenarioLabAudience = "app" | "super";
 
-const storageKeyByAudience: Record<ScenarioLabAudience, string> = {
-  app: "signalhost.appScenarioLab.v1",
-  super: "signalhost.scenarioLab.v1",
-};
-
-export default function ScenarioLab({ audience = "super" }: { audience?: ScenarioLabAudience }) {
-  const storageKey = storageKeyByAudience[audience];
+export default function ScenarioLab({ audience = "super" }: { audience?: ScenarioRunAudience }) {
   const appAudience = audience === "app";
-  const [runs, setRuns] = useState<Record<string, ScenarioRunState>>(() => loadScenarioRuns(storageKey));
+  const [runs, setRuns] = useState<Record<string, ScenarioRunState>>(() => loadScenarioRuns(audience));
   const [statusFilter, setStatusFilter] = useState<ScenarioFilter>("all");
   const [channelFilter, setChannelFilter] = useState<ChannelFilter>("all");
   const [verticalFilter, setVerticalFilter] = useState<VerticalFilter>("all");
@@ -99,14 +93,14 @@ export default function ScenarioLab({ audience = "super" }: { audience?: Scenari
           ...patch,
         },
       };
-      saveScenarioRuns(storageKey, next);
+      saveScenarioRuns(audience, next);
       return next;
     });
   };
 
   const clearRuns = () => {
     setRuns({});
-    saveScenarioRuns(storageKey, {});
+    saveScenarioRuns(audience, {});
     toast.success("Scenario results reset");
   };
 
@@ -712,19 +706,6 @@ function labelAgentTestAction(action: AgentTestAction) {
   if (action.type === "pickup_order") return "pickup order";
   if (action.type === "finish_call") return "finish call";
   return "action";
-}
-
-function loadScenarioRuns(storageKey: string) {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(storageKey) ?? "{}") as Record<string, ScenarioRunState>;
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveScenarioRuns(storageKey: string, runs: Record<string, ScenarioRunState>) {
-  localStorage.setItem(storageKey, JSON.stringify(runs));
 }
 
 function priorityClass(priority: ScenarioPriority) {

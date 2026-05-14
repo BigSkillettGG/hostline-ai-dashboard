@@ -29,6 +29,13 @@ describe("buildProductTestReadiness", () => {
       locationId: "loc_123",
       openTaskCount: 2,
       recentCallCount: 4,
+      scenarioSummary: {
+        needs_work: 0,
+        openCritical: 0,
+        passed: 8,
+        total: 8,
+        untested: 0,
+      },
       selectedPlanName: "Growth",
       supabaseConfigured: true,
       voiceHealth: {
@@ -52,6 +59,47 @@ describe("buildProductTestReadiness", () => {
     expect(readiness.readyCount).toBe(readiness.totalCount);
     expect(readiness.nextItem.id).toBe("test_suite");
     expect(readiness.nextItem.actionTo).toBe("/app/test-suite");
+  });
+
+  it("keeps the test suite open until critical scenarios pass", () => {
+    const readiness = buildProductTestReadiness({
+      assignedPhoneNumber: "+1 (617) 555-0199",
+      authMode: "supabase",
+      authReady: true,
+      hasWebsiteUrl: true,
+      liveEnabled: true,
+      locationId: "loc_123",
+      openTaskCount: 1,
+      recentCallCount: 2,
+      scenarioSummary: {
+        needs_work: 0,
+        openCritical: 3,
+        passed: 2,
+        total: 8,
+        untested: 6,
+      },
+      supabaseConfigured: true,
+      voiceHealth: {
+        ok: true,
+        openAIVoiceConfigured: true,
+        openaiConfigured: true,
+        ownerReportDeliveryConfigured: true,
+        ownerReportsConfigured: true,
+        service: "signalhost-voice",
+        stripeBillingConfigured: true,
+        supabaseConfigured: true,
+        tenantProvisioningConfigured: true,
+        twilioProvisioningConfigured: true,
+        twilioSignatureRequired: true,
+      },
+      voiceServiceConfigured: true,
+    });
+
+    const testSuite = readiness.items.find((item) => item.id === "test_suite");
+
+    expect(testSuite?.status).toBe("partial");
+    expect(testSuite?.statusLabel).toBe("Open critical");
+    expect(readiness.nextItem.id).toBe("test_suite");
   });
 
   it("surfaces missing voice environment without blocking the live-data diagnosis", () => {
