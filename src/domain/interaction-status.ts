@@ -178,6 +178,24 @@ export function buildInteractionInsight({
   };
 }
 
+export function interactionInsightChanged(
+  first: InteractionInsight | null | undefined,
+  second: InteractionInsight | null | undefined,
+) {
+  if (!first || !second) return false;
+  return (
+    first.followUpNeeded !== second.followUpNeeded ||
+    first.knowledgeGap !== second.knowledgeGap ||
+    first.ownerReportBucket !== second.ownerReportBucket ||
+    first.recommendedAction !== second.recommendedAction ||
+    first.urgency !== second.urgency ||
+    first.valueTier !== second.valueTier ||
+    first.workflowStatus !== second.workflowStatus ||
+    first.tags.length !== second.tags.length ||
+    first.tags.some((tag, index) => tag !== second.tags[index])
+  );
+}
+
 function deriveWorkflowStatus({
   bookingLinkSent,
   call,

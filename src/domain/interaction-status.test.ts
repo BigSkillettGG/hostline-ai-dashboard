@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Call } from "@/data/mock";
-import { buildInteractionInsight } from "./interaction-status";
+import { buildInteractionInsight, interactionInsightChanged } from "./interaction-status";
 
 const baseCall: Call = {
   caller: "Test Caller",
@@ -188,5 +188,16 @@ describe("interaction status", () => {
     expect(insight.workflowStatus).toBe("needs_review");
     expect(insight.knowledgeGap).toBe(true);
     expect(insight.recommendedAction).toBe("Review the answer and add missing knowledge if needed.");
+  });
+
+  it("detects meaningful insight changes for feedback-driven reclassification", () => {
+    const first = buildInteractionInsight({ call: baseCall });
+    const second = buildInteractionInsight({
+      call: baseCall,
+      feedback: [{ category: "missing_knowledge" }],
+    });
+
+    expect(interactionInsightChanged(first, second)).toBe(true);
+    expect(interactionInsightChanged(first, { ...first, evidence: ["Different explanation"] })).toBe(false);
   });
 });

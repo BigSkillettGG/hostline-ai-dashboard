@@ -22,10 +22,12 @@ import { toast } from "sonner";
 import { isDemoWorkspace, isPlatformAdminUser, useCurrentUser } from "@/lib/auth";
 import {
   buildInteractionInsight,
+  interactionInsightChanged,
   interactionUrgencyLabels,
   interactionValueLabels,
   interactionWorkflowLabels,
   ownerReportBucketLabels,
+  type InteractionInsight,
   type InteractionUrgency,
   type InteractionValueTier,
   type InteractionWorkflowStatus,
@@ -168,7 +170,11 @@ export default function Calls() {
       ? feedbackQuery.data ?? []
       : localFeedback[selected.id] ?? []
     : [];
+  const baseSelectedInsight = selected ? buildInteractionInsight({ call: selected }) : null;
   const selectedInsight = selected ? buildInteractionInsight({ call: selected, feedback: selectedFeedback }) : null;
+  const feedbackAdjustedInsight = Boolean(
+    selectedFeedback.length && interactionInsightChanged(baseSelectedInsight, selectedInsight),
+  );
   const interactionStats = useMemo(
     () => calls.reduce(
       (stats, call) => {
@@ -498,6 +504,11 @@ export default function Calls() {
                     <InsightBadge color={valueColor[selectedInsight.valueTier]}>
                       {interactionValueLabels[selectedInsight.valueTier]}
                     </InsightBadge>
+                    {feedbackAdjustedInsight && (
+                      <Badge variant="outline" className="border-primary/20 bg-primary/10 text-primary">
+                        Feedback adjusted
+                      </Badge>
+                    )}
                   </div>
                 )}
               </SheetHeader>
@@ -621,6 +632,13 @@ export default function Calls() {
                             <div className="mt-3 text-xs text-muted-foreground">
                               Daily report bucket: {ownerReportBucketLabels[selectedInsight.ownerReportBucket]}
                             </div>
+                            {baseSelectedInsight && feedbackAdjustedInsight && (
+                              <InsightAdjustmentNotice
+                                after={selectedInsight}
+                                before={baseSelectedInsight}
+                                className="mt-3"
+                              />
+                            )}
                           </div>
                         </div>
                       </Card>
@@ -686,10 +704,17 @@ export default function Calls() {
                       <div>
                         <div className="text-sm font-semibold">Tune SignalHost from this call</div>
                         <p className="text-xs text-muted-foreground">
-                          Capture what went well, what sounded odd, and what SignalHost should know next time.
+                          Capture what went well, what sounded odd, and what SignalHost should know next time. Saved feedback can update owner reports and follow-up queues.
                         </p>
                       </div>
                     </div>
+                    {baseSelectedInsight && selectedInsight && selectedFeedback.length > 0 && (
+                      <InsightAdjustmentNotice
+                        after={selectedInsight}
+                        before={baseSelectedInsight}
+                        className="mb-4"
+                      />
+                    )}
 
                     <div className="grid gap-2 sm:grid-cols-2">
                       {reviewOptions.map((option) => (
@@ -892,6 +917,52 @@ function InsightMiniStat({ label, value }: { label: string; value: string }) {
     <div className="rounded-md border border-border bg-muted/30 p-2">
       <div className="text-[10px] font-medium uppercase text-muted-foreground">{label}</div>
       <div className="mt-1 text-xs font-semibold text-foreground">{value}</div>
+    </div>
+  );
+}
+
+function InsightAdjustmentNotice({
+  after,
+  before,
+  className,
+}: {
+  after: InteractionInsight;
+  before: InteractionInsight;
+  className?: string;
+}) {
+  const changed = interactionInsightChanged(before, after);
+
+  return (
+    <div className={cn(
+      "rounded-md border p-3 text-xs",
+      changed
+        ? "border-primary/20 bg-primary/10 text-primary"
+        : "border-border bg-muted/30 text-muted-foreground",
+      className,
+    )}>
+      <div className="font-semibold">
+        {changed ? "Owner feedback changed this call's work signal" : "Owner feedback saved; work signal unchanged"}
+      </div>
+      <div className="mt-2 grid gap-2 sm:grid-cols-3">
+        <div>
+          <div className="text-[10px] uppercase opacity-70">Next step</div>
+          <div className="font-medium">
+            {interactionWorkflowLabels[before.workflowStatus]}{" -> "}{interactionWorkflowLabels[after.workflowStatus]}
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase opacity-70">Urgency</div>
+          <div className="font-medium">
+            {interactionUrgencyLabels[before.urgency]}{" -> "}{interactionUrgencyLabels[after.urgency]}
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase opacity-70">Report bucket</div>
+          <div className="font-medium">
+            {ownerReportBucketLabels[before.ownerReportBucket]}{" -> "}{ownerReportBucketLabels[after.ownerReportBucket]}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

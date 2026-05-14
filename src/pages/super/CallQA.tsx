@@ -26,12 +26,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import type { Call, CallFeedback, CallFeedbackCategory } from "@/data/mock";
 import {
+  buildInteractionInsight,
+  interactionInsightChanged,
+  interactionUrgencyLabels,
+  interactionValueLabels,
+  interactionWorkflowLabels,
+  ownerReportBucketLabels,
+  type InteractionInsight,
+} from "@/domain/interaction-status";
+import {
   createCallFeedbackInSupabase,
   createStaffTaskInSupabase,
   fetchCallFeedbackFromSupabase,
   fetchCallsFromSupabase,
   fetchTenantDirectoryFromSupabase,
   isSupabaseConfigured,
+  updateCallInteractionInsightInSupabase,
   updateCallStatusInSupabase,
 } from "@/lib/supabase-rest";
 import { formatDuration, formatTime } from "@/lib/format";
@@ -133,7 +143,23 @@ export default function CallQA() {
       setReviewNote("");
       setSuggestedAnswer("");
       setAddToKnowledge(false);
-      await queryClient.invalidateQueries({ queryKey: ["call-feedback", feedback.callId] });
+      if (selectedCall) {
+        const nextFeedback = [
+          feedback,
+          ...((feedbackQuery.data ?? []).filter((entry) => entry.id !== feedback.id)),
+        ];
+        const nextInsight = buildInteractionInsight({ call: selectedCall, feedback: nextFeedback });
+        await updateCallInteractionInsightInSupabase({
+          callId: feedback.callId,
+          insight: nextInsight,
+        }).catch((error) => {
+          console.warn("[call-qa] Could not update persisted call insight after QA feedback", error);
+        });
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["call-feedback", feedback.callId] }),
+        queryClient.invalidateQueries({ queryKey: ["qa", "calls", "all"] }),
+      ]);
       toast.success(feedback.addedToKnowledge ? "QA note saved for knowledge approval" : "QA note saved");
     },
   });
@@ -178,6 +204,11 @@ export default function CallQA() {
   const lowConfidenceCount = queue.filter((item) => item.reasons.includes("Low confidence")).length;
   const escalatedCount = queue.filter((item) => item.reasons.includes("Escalated")).length;
   const feedbackHistory = feedbackQuery.data ?? [];
+  const selectedBaseInsight = selectedCall ? buildInteractionInsight({ call: selectedCall }) : null;
+  const selectedInsight = selectedCall ? buildInteractionInsight({ call: selectedCall, feedback: feedbackHistory }) : null;
+  const feedbackAdjustedInsight = Boolean(
+    feedbackHistory.length && interactionInsightChanged(selectedBaseInsight, selectedInsight),
+  );
 
   function saveQuickFeedback(category: CallFeedbackCategory) {
     setReviewCategory(category);
@@ -350,6 +381,31 @@ export default function CallQA() {
                     </div>
                   </div>
 
+                  {selectedInsight && (
+                    <div className="rounded-md border border-primary/20 bg-primary/5 p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs font-medium uppercase text-muted-foreground">Operational signal</div>
+                          <p className="mt-1 text-sm font-semibold">{selectedInsight.recommendedAction}</p>
+                        </div>
+                        {feedbackAdjustedInsight && (
+                          <Badge variant="outline" className="border-primary/20 bg-primary/10 text-primary">
+                            Feedback adjusted
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Badge variant="outline">{interactionWorkflowLabels[selectedInsight.workflowStatus]}</Badge>
+                        <Badge variant="outline">{interactionUrgencyLabels[selectedInsight.urgency]}</Badge>
+                        <Badge variant="outline">{interactionValueLabels[selectedInsight.valueTier]}</Badge>
+                        <Badge variant="outline">{ownerReportBucketLabels[selectedInsight.ownerReportBucket]}</Badge>
+                      </div>
+                      {selectedBaseInsight && feedbackHistory.length > 0 && (
+                        <QaInsightAdjustment before={selectedBaseInsight} after={selectedInsight} />
+                      )}
+                    </div>
+                  )}
+
                   <div className="rounded-md border border-border">
                     <div className="flex items-center justify-between border-b border-border px-3 py-2">
                       <div className="text-sm font-semibold">Transcript</div>
@@ -382,7 +438,7 @@ export default function CallQA() {
                       <Sparkles className="mt-0.5 h-4 w-4 text-primary" />
                       <div>
                         <div className="text-sm font-semibold">Tune from this call</div>
-                        <p className="text-xs text-muted-foreground">Save what happened, what SignalHost should do, and whether this becomes permanent tenant knowledge.</p>
+                        <p className="text-xs text-muted-foreground">Save what happened, what SignalHost should do, and whether this becomes permanent tenant knowledge. QA notes can reclassify the call for reports and follow-up queues.</p>
                       </div>
                     </div>
 
@@ -521,6 +577,46 @@ function FeedbackRow({ feedback }: { feedback: CallFeedback }) {
           Queued for knowledge approval
         </div>
       )}
+    </div>
+  );
+}
+
+function QaInsightAdjustment({
+  after,
+  before,
+}: {
+  after: InteractionInsight;
+  before: InteractionInsight;
+}) {
+  const changed = interactionInsightChanged(before, after);
+
+  return (
+    <div className={`mt-3 rounded-md border p-3 text-xs ${
+      changed ? "border-primary/20 bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground"
+    }`}>
+      <div className="font-semibold">
+        {changed ? "QA feedback changed reporting/follow-up classification" : "QA feedback saved; classification unchanged"}
+      </div>
+      <div className="mt-2 grid gap-2 sm:grid-cols-3">
+        <div>
+          <div className="text-[10px] uppercase opacity-70">Work signal</div>
+          <div className="font-medium">
+            {interactionWorkflowLabels[before.workflowStatus]}{" -> "}{interactionWorkflowLabels[after.workflowStatus]}
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase opacity-70">Urgency</div>
+          <div className="font-medium">
+            {interactionUrgencyLabels[before.urgency]}{" -> "}{interactionUrgencyLabels[after.urgency]}
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase opacity-70">Report bucket</div>
+          <div className="font-medium">
+            {ownerReportBucketLabels[before.ownerReportBucket]}{" -> "}{ownerReportBucketLabels[after.ownerReportBucket]}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
