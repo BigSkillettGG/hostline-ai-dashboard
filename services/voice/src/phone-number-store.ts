@@ -170,23 +170,47 @@ class SupabasePhoneNumberStore implements PhoneNumberStore {
 
   async getLocationProvisioningGuard(locationId?: string, now = new Date()): Promise<LocationProvisioningGuard> {
     const normalizedLocationId = normalizeLocationId(locationId) ?? this.defaultLocationId;
-    const rows = await this.get<Array<{
+    let rows: Array<{
       id: string;
       phone_number: string;
       provider_sid: string | null;
       status: string | null;
       trial_grace_ends_at: string | null;
-    }>>(
-      "phone_numbers",
-      [
-        `location_id=eq.${encodeURIComponent(normalizedLocationId)}`,
-        "released_at=is.null",
-        "status=in.(provisioned,trialing,in-use,active)",
-        "select=id,phone_number,provider_sid,status,trial_grace_ends_at",
-        "order=created_at.desc",
-        "limit=1",
-      ].join("&"),
-    );
+    }>;
+    try {
+      rows = await this.get(
+        "phone_numbers",
+        [
+          `location_id=eq.${encodeURIComponent(normalizedLocationId)}`,
+          "released_at=is.null",
+          "status=in.(provisioned,trialing,in-use,active)",
+          "select=id,phone_number,provider_sid,status,trial_grace_ends_at",
+          "order=created_at.desc",
+          "limit=1",
+        ].join("&"),
+      );
+    } catch (error) {
+      if (!isMissingPhoneNumberLifecycleColumnError(error)) throw error;
+      console.warn("[phone-number-store] phone number lifecycle columns missing; using legacy provisioning guard", {
+        locationId: normalizedLocationId,
+      });
+      rows = await this.get<Array<{
+        id: string;
+        phone_number: string;
+        provider_sid: string | null;
+        status: string | null;
+        trial_grace_ends_at?: null;
+      }>>(
+        "phone_numbers",
+        [
+          `location_id=eq.${encodeURIComponent(normalizedLocationId)}`,
+          "status=in.(provisioned,trialing,in-use,active)",
+          "select=id,phone_number,provider_sid,status",
+          "order=created_at.desc",
+          "limit=1",
+        ].join("&"),
+      ).then((legacyRows) => legacyRows.map((row) => ({ ...row, trial_grace_ends_at: null })));
+    }
     const existingNumber = rows?.[0];
     if (!existingNumber) {
       return { allowed: true, locationId: normalizedLocationId };

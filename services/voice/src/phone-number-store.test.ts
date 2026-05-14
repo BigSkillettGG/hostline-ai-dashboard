@@ -153,6 +153,23 @@ describe("phone number store", () => {
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain("phone_numbers?location_id=eq.00000000-0000-4000-8000-000000000002");
   });
 
+  it("allows provisioning through the legacy guard when lifecycle columns are missing", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response("column phone_numbers.released_at does not exist", { status: 400 }))
+      .mockResolvedValueOnce(new Response("[]", { status: 200 }));
+    const store = createPhoneNumberStore(env);
+
+    const guard = await store.getLocationProvisioningGuard("00000000-0000-4000-8000-000000000002");
+
+    expect(guard).toEqual({
+      allowed: true,
+      locationId: "00000000-0000-4000-8000-000000000002",
+    });
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("select=id,phone_number,provider_sid,status");
+    expect(String(fetchMock.mock.calls[1]?.[0])).not.toContain("released_at");
+  });
+
   it("blocks provisioning when a location already has an active unreleased number", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(JSON.stringify([
       {
