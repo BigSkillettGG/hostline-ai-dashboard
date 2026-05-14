@@ -9,6 +9,7 @@ import { listBillingPlans } from "./billing-plans";
 import { createBillingStore } from "./billing-store";
 import { createCallStore } from "./call-store";
 import { createConversationRelayHandler } from "./conversation-relay";
+import { createCustomerFollowUpService, type CustomerFollowUpInput } from "./customer-follow-up-service";
 import { createEmailDeliveryService } from "./email-delivery-service";
 import { createGuestConfirmationService } from "./guest-confirmation-service";
 import { createOpenAIVoicePreview } from "./openai-voice-preview";
@@ -51,6 +52,7 @@ const billingService = createBillingService(env, billingStore, phoneNumberStore)
 const restaurantContextStore = createRestaurantContextStore(env);
 const telephonyService = createTelephonyService(env);
 const emailDeliveryService = createEmailDeliveryService(env);
+const customerFollowUpService = createCustomerFollowUpService(env, emailDeliveryService);
 const staffNotificationService = createStaffNotificationService(env, { emailDeliveryService });
 const guestConfirmationService = createGuestConfirmationService(env);
 const menuIngestionService = createMenuIngestionService(env);
@@ -165,6 +167,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       ownerReportDeliveryConfigured: ownerReportService.deliveryConfigured,
       ownerReportsConfigured: ownerReportService.configured,
       ownerEmailCommandsConfigured: ownerEmailCommandService.configured,
+      customerFollowUpsConfigured: customerFollowUpService.configured && emailDeliveryService.configured,
       emailDeliveryConfigured: emailDeliveryService.configured,
       resendInboundEmailConfigured: resendInboundEmailService.configured,
       resendInboundEmailVerificationConfigured: resendInboundEmailService.verificationConfigured,
@@ -362,6 +365,29 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       sendJson(res, 200, result);
     } catch (error) {
       sendCaughtError(res, error, "Owner daily report delivery failed");
+    }
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/customer-follow-ups/send") {
+    if (!allowRateLimitedRequest(req, res, "customer-follow-up-send", 30)) return;
+
+    try {
+      const body = parseJsonRequestBody(await readLimitedRequestBody(req, ADMIN_BODY_LIMIT_BYTES)) as CustomerFollowUpInput;
+      const locationId = body.locationId?.trim() || url.searchParams.get("locationId") || currentEnv.SUPABASE_DEMO_LOCATION_ID;
+      const authorization = await authorizeVoiceAdminRequest({ currentEnv, locationId, req });
+      if (!authorization.authorized) {
+        sendJson(res, authorization.status, { error: authorization.reason ?? "Unauthorized" });
+        return;
+      }
+
+      const result = await customerFollowUpService.sendFollowUp({
+        ...body,
+        locationId: locationId ?? body.locationId,
+      });
+      sendJson(res, 200, result);
+    } catch (error) {
+      sendCaughtError(res, error, "Customer follow-up failed");
     }
     return;
   }

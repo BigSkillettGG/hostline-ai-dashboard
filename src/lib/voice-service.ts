@@ -6,6 +6,7 @@ import type { SignalHostVoiceGender, SignalHostVoiceProfileId } from "@/domain/v
 export interface VoiceServiceHealth {
   ok: boolean;
   service: string;
+  customerFollowUpsConfigured?: boolean;
   openaiConfigured: boolean;
   openAIVoiceConfigured?: boolean;
   elevenLabsConfigured?: boolean;
@@ -223,6 +224,16 @@ export interface GeneratedOwnerDailyReport {
   };
   reportId?: string;
   timezone: string;
+}
+
+export interface SendCustomerFollowUpResult {
+  channel: "email";
+  deliveryId?: string;
+  recipient: string;
+  requestId?: string;
+  status: "sent";
+  taskId: string;
+  taskStatus?: "done" | "open";
 }
 
 export const voiceServiceBaseUrl = (import.meta.env.VITE_VOICE_SERVICE_URL ?? "").replace(/\/$/, "");
@@ -598,6 +609,45 @@ export async function deliverOwnerDailyReport(locationId = getActiveLocationId()
   }
 
   return (await response.json()) as GeneratedOwnerDailyReport;
+}
+
+export async function sendCustomerFollowUp(input: {
+  closeTask?: boolean;
+  locationId?: string;
+  message: string;
+  recipientEmail?: string;
+  requestId?: string;
+  subject?: string;
+  taskId: string;
+}) {
+  if (!voiceServiceBaseUrl) {
+    throw new Error("VITE_VOICE_SERVICE_URL is not configured.");
+  }
+
+  const response = await fetch(`${voiceServiceBaseUrl}/customer-follow-ups/send`, {
+    body: JSON.stringify({
+      channel: "email",
+      closeTask: input.closeTask ?? true,
+      locationId: input.locationId ?? getActiveLocationId(),
+      message: input.message,
+      recipientEmail: input.recipientEmail,
+      requestId: input.requestId,
+      subject: input.subject,
+      taskId: input.taskId,
+    }),
+    headers: {
+      "Content-Type": "application/json",
+      ...buildVoiceAdminHeaders(),
+    },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(body || `Customer follow-up failed with ${response.status}.`);
+  }
+
+  return (await response.json()) as SendCustomerFollowUpResult;
 }
 
 export async function runNextMenuIngestionJob(input: { jobId?: string; locationId?: string } = {}) {

@@ -60,6 +60,7 @@ import {
   resolveCustomerRequestInSupabase,
   updateStaffTaskStatusInSupabase,
 } from "@/lib/supabase-rest";
+import { isVoiceServiceConfigured, sendCustomerFollowUp } from "@/lib/voice-service";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -107,7 +108,7 @@ const sampleTasks: StaffTask[] = [
     type: "manager_callback",
   },
   {
-    body: "Website visitor asked for a catering quote and left a phone number. Call back with package options and minimums.",
+    body: "Website visitor asked for a catering quote and left a phone number plus email events@example.com. Follow up with package options and minimums.",
     callId: "c_015",
     createdAt: new Date(Date.now() - 2 * 60 * 60_000).toISOString(),
     dueAt: new Date(Date.now() + 52 * 60_000).toISOString(),
@@ -299,6 +300,16 @@ export default function Tasks() {
       title: task.title,
     }),
   });
+  const followUpMutation = useMutation({
+    mutationFn: ({ message, recipientEmail, task }: { message: string; recipientEmail?: string; task: StaffTask }) => sendCustomerFollowUp({
+      closeTask: true,
+      locationId: task.locationId,
+      message,
+      recipientEmail,
+      requestId: extractCustomerRequestId(task),
+      taskId: task.id,
+    }),
+  });
 
   const setTaskStatus = async (task: StaffTask, status: StaffTaskStatus) => {
     if (!usingSupabase && !superConsole) {
@@ -345,6 +356,25 @@ export default function Tasks() {
       toast.success("Answer saved, task closed, and knowledge updated");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Customer answer could not be saved");
+    } finally {
+      setBusyTaskId(null);
+    }
+  };
+
+  const sendFollowUp = async (task: StaffTask, message: string, recipientEmail?: string) => {
+    if (!isVoiceServiceConfigured()) {
+      toast.error("Voice service URL is not configured, so SignalHost cannot send this email yet.");
+      return;
+    }
+
+    setBusyTaskId(task.id);
+    try {
+      const result = await followUpMutation.mutateAsync({ message, recipientEmail, task });
+      await queryClient.invalidateQueries({ queryKey: ["staff-tasks", "supabase"] });
+      await queryClient.invalidateQueries({ queryKey: ["tenant-detail", "tasks"] });
+      toast.success(`Follow-up sent to ${result.recipient}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? readableActionError(error.message) : "Follow-up could not be sent");
     } finally {
       setBusyTaskId(null);
     }
@@ -555,11 +585,13 @@ export default function Tasks() {
             <ActionDetail
               busy={Boolean(selectedTask && busyTaskId === selectedTask.id)}
               canResolveCustomerRequest={usingSupabase || (!superConsole && !persistenceConfigured)}
+              canSendFollowUp={isVoiceServiceConfigured()}
               consoleBase={consoleBase}
               onAdvance={advanceTask}
               onCopy={(item) => void copyTask(item)}
               onDismiss={dismissTask}
               onResolveCustomerRequest={(task, answer) => void resolveCustomerRequest(task, answer)}
+              onSendFollowUp={(task, message, recipientEmail) => void sendFollowUp(task, message, recipientEmail)}
               superConsole={superConsole}
               task={selectedTask}
             />
@@ -803,21 +835,25 @@ function TaskCard({
 function ActionDetail({
   busy,
   canResolveCustomerRequest,
+  canSendFollowUp,
   consoleBase,
   onAdvance,
   onCopy,
   onDismiss,
   onResolveCustomerRequest,
+  onSendFollowUp,
   superConsole,
   task,
 }: {
   busy: boolean;
   canResolveCustomerRequest: boolean;
+  canSendFollowUp: boolean;
   consoleBase: string;
   onAdvance: (task: StaffTask) => void;
   onCopy: (task: StaffTask) => void;
   onDismiss: (task: StaffTask) => void;
   onResolveCustomerRequest: (task: StaffTask, answer: string) => void;
+  onSendFollowUp: (task: StaffTask, message: string, recipientEmail?: string) => void;
   superConsole: boolean;
   task: StaffTask | null;
 }) {
@@ -853,7 +889,13 @@ function ActionDetail({
 
       <div className="space-y-4">
         <DetailSection label="Recommended next step" value={recommendedAction(task)} />
-        <RecoveryDetailPanel task={task} />
+        <RecoveryDetailPanel
+          busy={busy}
+          canSendFollowUp={canSendFollowUp}
+          key={`${task.id}-recovery`}
+          onSendFollowUp={(message, recipientEmail) => onSendFollowUp(task, message, recipientEmail)}
+          task={task}
+        />
         {task.body && <DetailSection label="Context SignalHost captured" value={task.body} />}
         {(task.type === "customer_request" || task.type === "low_confidence_review") && (
           <CustomerAnswerPanel
@@ -908,15 +950,28 @@ function ActionDetail({
   );
 }
 
-function RecoveryDetailPanel({ task }: { task: StaffTask }) {
+function RecoveryDetailPanel({
+  busy,
+  canSendFollowUp,
+  onSendFollowUp,
+  task,
+}: {
+  busy: boolean;
+  canSendFollowUp: boolean;
+  onSendFollowUp: (message: string, recipientEmail?: string) => void;
+  task: StaffTask;
+}) {
   const insight = buildFollowUpRecoveryInsight(task);
   const shouldShow = insight.revenueRecovery || insight.category === "risk" || insight.category === "knowledge" || task.status !== "done";
+  const [followUpMessage, setFollowUpMessage] = useState(insight.draftMessage);
+  const [recipientEmail, setRecipientEmail] = useState(extractEmail(task.body) ?? "");
+  const canSendEmail = canSendFollowUp && Boolean(followUpMessage.trim()) && isLikelyEmail(recipientEmail) && !busy && task.status !== "done";
 
   if (!shouldShow) return null;
 
   async function copyDraft() {
     try {
-      await navigator.clipboard.writeText(insight.draftMessage);
+      await navigator.clipboard.writeText(followUpMessage);
       toast.success("Follow-up draft copied");
     } catch {
       toast.error("Could not copy follow-up draft");
@@ -961,7 +1016,38 @@ function RecoveryDetailPanel({ task }: { task: StaffTask }) {
             Copy
           </Button>
         </div>
-        <p className="mt-1 text-sm leading-relaxed">{insight.draftMessage}</p>
+        <Textarea
+          className="mt-2 min-h-24 bg-muted/20 text-sm"
+          onChange={(event) => setFollowUpMessage(event.target.value)}
+          value={followUpMessage}
+        />
+        <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
+          <div className="space-y-1.5">
+            <div className="text-xs font-medium uppercase text-muted-foreground">Customer email</div>
+            <Input
+              className="h-9 bg-muted/20"
+              onChange={(event) => setRecipientEmail(event.target.value)}
+              placeholder="customer@example.com"
+              value={recipientEmail}
+            />
+          </div>
+          <Button
+            disabled={!canSendEmail}
+            onClick={() => onSendFollowUp(followUpMessage, recipientEmail)}
+            size="sm"
+          >
+            <Send className="mr-1.5 h-3.5 w-3.5" />
+            {busy ? "Sending..." : "Send and close"}
+          </Button>
+        </div>
+        {!canSendFollowUp && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Connect the voice service URL to send follow-ups from this screen. You can still copy the draft.
+          </p>
+        )}
+        {canSendFollowUp && recipientEmail.trim() && !isLikelyEmail(recipientEmail) && (
+          <p className="mt-2 text-xs text-destructive">Enter a valid customer email before sending.</p>
+        )}
       </div>
     </div>
   );
@@ -1192,6 +1278,24 @@ function recommendedAction(task: StaffTask) {
 function extractCustomerRequestId(task: StaffTask) {
   const match = task.body?.match(/Customer request ID:\s*([0-9a-f-]{36})/i);
   return match?.[1];
+}
+
+function extractEmail(value: string | undefined) {
+  return value?.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0];
+}
+
+function isLikelyEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
+function readableActionError(message: string) {
+  try {
+    const parsed = JSON.parse(message) as { error?: string };
+    if (parsed.error) return parsed.error;
+  } catch {
+    // The voice service sometimes returns plain text errors.
+  }
+  return message;
 }
 
 function sourceQuestionForTask(task: StaffTask) {
