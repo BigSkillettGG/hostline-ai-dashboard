@@ -34,12 +34,15 @@ type OpenAIRealtimeEnv = Pick<
   | "OPENAI_MODEL"
   | "OPENAI_PROJECT_ID"
   | "OPENAI_REPLY_TIMEOUT_MS"
+  | "OPENAI_REALTIME_AIDEN_VOICE"
+  | "OPENAI_REALTIME_AVA_VOICE"
   | "OPENAI_REALTIME_FEMALE_VOICE"
   | "OPENAI_REALTIME_IDLE_TIMEOUT_MS"
   | "OPENAI_REALTIME_INTERRUPT_RESPONSE"
   | "OPENAI_REALTIME_MALE_VOICE"
   | "OPENAI_REALTIME_MARCO_VOICE"
   | "OPENAI_REALTIME_MAYA_VOICE"
+  | "OPENAI_REALTIME_MILES_VOICE"
   | "OPENAI_REALTIME_MODEL"
   | "OPENAI_REALTIME_NOISE_REDUCTION"
   | "OPENAI_REALTIME_SERVER_VAD_PREFIX_PADDING_MS"
@@ -1408,7 +1411,7 @@ function buildOpenAIRealtimeStructuredSummary(
       : "",
     `OpenAI Realtime call classified as ${classification.intent}; outcome ${classification.outcome}.`,
     callerTurns.length ? `Caller said: ${callerTurns.slice(-3).join(" / ")}.` : "No caller transcript was captured.",
-    agentTurns.length ? `Vera replied: ${agentTurns.slice(-2).join(" / ")}.` : "",
+    agentTurns.length ? `AI host replied: ${agentTurns.slice(-2).join(" / ")}.` : "",
     actionSummary,
     qualitySummary,
     closeSummary,
@@ -2686,12 +2689,12 @@ export function resolveOpenAIRealtimeInterruptResponse(env: OpenAIRealtimeEnv) {
 function resolveOpenAIRealtimeVoice(env: OpenAIRealtimeEnv, context: RestaurantVoiceContext) {
   if (env.OPENAI_REALTIME_VOICE?.trim()) return env.OPENAI_REALTIME_VOICE.trim();
   return resolveSignalHostOpenAIVoice(context.voiceProfileId ?? context.hostName ?? context.voiceGender, {
+    aiden: env.OPENAI_REALTIME_AIDEN_VOICE || env.OPENAI_REALTIME_THEO_VOICE || env.OPENAI_REALTIME_MALE_VOICE,
+    ava: env.OPENAI_REALTIME_AVA_VOICE || env.OPENAI_REALTIME_VERA_VOICE || env.OPENAI_REALTIME_FEMALE_VOICE || OPENAI_REALTIME_DEFAULT_FEMALE_VOICE,
     female: env.OPENAI_REALTIME_FEMALE_VOICE,
     male: env.OPENAI_REALTIME_MALE_VOICE,
-    marco: env.OPENAI_REALTIME_MARCO_VOICE || env.OPENAI_REALTIME_MALE_VOICE || OPENAI_REALTIME_DEFAULT_MALE_VOICE,
     maya: env.OPENAI_REALTIME_MAYA_VOICE || env.OPENAI_REALTIME_FEMALE_VOICE,
-    theo: env.OPENAI_REALTIME_THEO_VOICE || env.OPENAI_REALTIME_MALE_VOICE,
-    vera: env.OPENAI_REALTIME_VERA_VOICE || env.OPENAI_REALTIME_FEMALE_VOICE || OPENAI_REALTIME_DEFAULT_FEMALE_VOICE,
+    miles: env.OPENAI_REALTIME_MILES_VOICE || env.OPENAI_REALTIME_MARCO_VOICE || env.OPENAI_REALTIME_MALE_VOICE || OPENAI_REALTIME_DEFAULT_MALE_VOICE,
   });
 }
 

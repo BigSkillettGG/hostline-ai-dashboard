@@ -12,10 +12,13 @@ export async function createOpenAIVoicePreview({
   env: Pick<
     VoiceServiceEnv,
     | "OPENAI_API_KEY"
+    | "OPENAI_REALTIME_AIDEN_VOICE"
+    | "OPENAI_REALTIME_AVA_VOICE"
     | "OPENAI_REALTIME_FEMALE_VOICE"
     | "OPENAI_REALTIME_MALE_VOICE"
     | "OPENAI_REALTIME_MARCO_VOICE"
     | "OPENAI_REALTIME_MAYA_VOICE"
+    | "OPENAI_REALTIME_MILES_VOICE"
     | "OPENAI_REALTIME_THEO_VOICE"
     | "OPENAI_REALTIME_VERA_VOICE"
     | "OPENAI_TTS_MODEL"
@@ -32,12 +35,12 @@ export async function createOpenAIVoicePreview({
   const voice = resolveSignalHostOpenAIVoice(
     typeof voiceProfileId === "string" ? voiceProfileId : typeof voiceGender === "string" ? voiceGender : undefined,
     {
+      aiden: env.OPENAI_REALTIME_AIDEN_VOICE || env.OPENAI_REALTIME_THEO_VOICE || env.OPENAI_REALTIME_MALE_VOICE,
+      ava: env.OPENAI_REALTIME_AVA_VOICE || env.OPENAI_REALTIME_VERA_VOICE || env.OPENAI_REALTIME_FEMALE_VOICE,
       female: env.OPENAI_REALTIME_FEMALE_VOICE,
       male: env.OPENAI_REALTIME_MALE_VOICE,
-      marco: env.OPENAI_REALTIME_MARCO_VOICE || env.OPENAI_REALTIME_MALE_VOICE,
       maya: env.OPENAI_REALTIME_MAYA_VOICE || env.OPENAI_REALTIME_FEMALE_VOICE,
-      theo: env.OPENAI_REALTIME_THEO_VOICE || env.OPENAI_REALTIME_MALE_VOICE,
-      vera: env.OPENAI_REALTIME_VERA_VOICE || env.OPENAI_REALTIME_FEMALE_VOICE,
+      miles: env.OPENAI_REALTIME_MILES_VOICE || env.OPENAI_REALTIME_MARCO_VOICE || env.OPENAI_REALTIME_MALE_VOICE,
     },
   );
   const responseFormat = env.OPENAI_TTS_RESPONSE_FORMAT || "mp3";

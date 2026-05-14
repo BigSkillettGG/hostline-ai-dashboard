@@ -146,10 +146,10 @@ describe("restaurant context store", () => {
     });
 
     expect(context.restaurantName).toBe("Saffron Table");
-    expect(context.hostName).toBe("Marco");
+    expect(context.hostName).toBe("Miles");
     expect(context.voiceGender).toBe("male");
-    expect(context.voiceProfileId).toBe("marco");
-    expect(context.greeting).toBe("Hello from Saffron Table, Marco speaking.");
+    expect(context.voiceProfileId).toBe("miles");
+    expect(context.greeting).toBe("Hello from Saffron Table, Miles speaking.");
     expect(context.defaultPickupEtaMinutes).toBe(20);
     expect(context.smsConfirmationsEnabled).toBe(false);
     expect(context.businessLiveContext?.activeMode.id).toBe("busy");
@@ -362,7 +362,7 @@ describe("restaurant context store", () => {
     });
 
     expect(context.restaurantName).toBe("Olive & Ember");
-    expect(context.greeting).toBe("Thanks for calling Olive and Ember. This is Vera. How can I help you?");
+    expect(context.greeting).toBe("Thanks for calling Olive and Ember. This is Ava. How can I help you?");
   });
 
   it("caches restaurant context lookups by location for the TTL window", async () => {

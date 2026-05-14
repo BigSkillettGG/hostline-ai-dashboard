@@ -251,9 +251,9 @@ function ScenarioCard({
       setTestReply(result.reply);
       setTestActions(result.actions);
       setTestTranscript(result.transcript);
-      toast.success("Vera reply tested");
+      toast.success("AI host reply tested");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not test Vera's reply");
+      toast.error(error instanceof Error ? error.message : "Could not test the AI host's reply");
     } finally {
       setIsTesting(false);
     }
@@ -347,7 +347,7 @@ function ScenarioCard({
               <div className="rounded-md border border-border bg-background p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="text-[11px] font-medium uppercase text-muted-foreground">Vera would say</div>
+                    <div className="text-[11px] font-medium uppercase text-muted-foreground">AI host would say</div>
                     <p className="mt-1 text-sm">{testReply}</p>
                   </div>
                   <Button size="sm" variant="outline" onClick={appendTestToNotes}>

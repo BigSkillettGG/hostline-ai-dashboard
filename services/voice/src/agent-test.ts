@@ -513,7 +513,7 @@ function buildAgentTestInstructions(
 
   return [
     "Channel: Scenario Lab live phone simulation.",
-    "Answer exactly as Vera should sound to a real caller. The dashboard tool calls are safe simulations.",
+    "Answer exactly as the AI host should sound to a real caller. The dashboard tool calls are safe simulations.",
     `Current ${profile.businessNoun} local time: ${buildRestaurantLocalTimeContext(context)}. Use this for today, tonight, tomorrow, open-now, and booking-date questions.`,
     "This is one continuous phone call. Do not repeat the opening greeting unless the transcript is empty and the caller only said hello.",
     "Keep the voice warm, lightly upbeat, specific to the caller's question, and never IVR-like.",

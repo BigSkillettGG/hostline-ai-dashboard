@@ -105,12 +105,12 @@ export const reservationModeLabels: Record<ReservationMode, string> = {
 };
 
 export const defaultRestaurantAgentConfig: RestaurantAgentConfig = {
-  hostName: "Vera",
+  hostName: "Ava",
   voiceGender: "female",
-  voiceProfileId: "vera",
+  voiceProfileId: "ava",
   tone: "warm",
   greetingTemplate:
-    "Thanks for calling {restaurant_name}. This is Vera, the restaurant's virtual host. How can I help you?",
+    "Hi, thank you for calling {restaurant_name}. How can I help you?",
   disclosureEnabled: true,
   callHandlingMode: "answer_after_rings",
   answerAfterRings: 3,

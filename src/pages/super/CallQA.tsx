@@ -38,7 +38,7 @@ import { formatDuration, formatTime } from "@/lib/format";
 import { toast } from "sonner";
 
 const reviewOptions: Array<{ description: string; label: string; value: CallFeedbackCategory }> = [
-  { description: "Vera did exactly what we want.", label: "Good answer", value: "good_answer" },
+  { description: "The AI host did exactly what we want.", label: "Good answer", value: "good_answer" },
   { description: "Factually wrong or misleading.", label: "Wrong answer", value: "wrong_answer" },
   { description: "Technically okay, but unnatural.", label: "Awkward", value: "awkward" },
   { description: "Tenant knowledge is missing.", label: "Missing knowledge", value: "missing_knowledge" },
@@ -382,7 +382,7 @@ export default function CallQA() {
                       <Sparkles className="mt-0.5 h-4 w-4 text-primary" />
                       <div>
                         <div className="text-sm font-semibold">Tune from this call</div>
-                        <p className="text-xs text-muted-foreground">Save what happened, what Vera should do, and whether this becomes permanent tenant knowledge.</p>
+                        <p className="text-xs text-muted-foreground">Save what happened, what the AI host should do, and whether this becomes permanent tenant knowledge.</p>
                       </div>
                     </div>
 
@@ -406,7 +406,7 @@ export default function CallQA() {
 
                     <div className="mt-4 space-y-2">
                       <Label className="text-xs font-medium text-muted-foreground">What happened?</Label>
-                      <Textarea value={reviewNote} onChange={(event) => setReviewNote(event.target.value)} rows={3} placeholder="Example: Caller said they were done, but Vera did not close the call cleanly." />
+                      <Textarea value={reviewNote} onChange={(event) => setReviewNote(event.target.value)} rows={3} placeholder="Example: Caller said they were done, but the AI host did not close the call cleanly." />
                     </div>
 
                     <div className="mt-3 space-y-2">
@@ -613,7 +613,7 @@ function defaultNoteForCategory(category: CallFeedbackCategory, call: Call | nul
   if (!call) return "";
   if (category === "awkward") return "The answer was technically acceptable, but it sounded stiff or unnatural.";
   if (category === "wrong_answer") return "The answer was incorrect or misleading.";
-  if (category === "missing_knowledge") return "Vera did not have enough tenant knowledge to answer confidently.";
+  if (category === "missing_knowledge") return "The AI host did not have enough tenant knowledge to answer confidently.";
   if (category === "should_have_escalated") return "This should have been escalated to staff instead of answered directly.";
   if (category === "good_answer") return "This call is a good example of the behavior we want to keep.";
   return `Review needed for ${call.intent} call.`;

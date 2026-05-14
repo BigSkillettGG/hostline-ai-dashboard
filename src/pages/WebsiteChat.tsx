@@ -245,7 +245,7 @@ export default function WebsiteChat() {
                 {isSending && (
                   <div className="flex justify-start">
                     <div className="rounded-md border border-border bg-card px-3 py-2 text-sm text-muted-foreground shadow-sm">
-                      Vera is checking that.
+                      The AI host is checking that.
                     </div>
                   </div>
                 )}
@@ -314,7 +314,7 @@ function ChatBubble({ message }: { message: ChatMessage }) {
         )}
       >
         <div className="mb-1 flex items-center gap-1.5 text-[11px] font-medium opacity-70">
-          {isAssistant ? "Vera" : "Visitor"}
+          {isAssistant ? "AI host" : "Visitor"}
           {isAssistant && <ExternalLink className="h-3 w-3 opacity-0" aria-hidden="true" />}
         </div>
         <div className="whitespace-pre-wrap leading-relaxed">{message.text}</div>

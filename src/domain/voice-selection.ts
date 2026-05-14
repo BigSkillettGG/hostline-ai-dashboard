@@ -1,5 +1,5 @@
 export type SignalHostVoiceGender = "female" | "male";
-export type SignalHostVoiceProfileId = "marco" | "maya" | "theo" | "vera";
+export type SignalHostVoiceProfileId = "aiden" | "ava" | "maya" | "miles";
 export type SignalHostOpenAIVoiceId = "cedar" | "coral" | "marin" | "verse";
 
 export interface SignalHostVoiceProfile {
@@ -15,12 +15,12 @@ export interface SignalHostVoiceProfile {
 export const signalHostVoiceRoster: SignalHostVoiceProfile[] = [
   {
     description: "Warm, polished, and steady. Best default for restaurants, salons, and hospitality-heavy teams.",
-    employeeName: "Vera",
+    employeeName: "Ava",
     gender: "female",
-    id: "vera",
-    label: "Vera - warm female",
+    id: "ava",
+    label: "Ava - warm female",
     openAIRealtimeVoice: "marin",
-    shortLabel: "Vera",
+    shortLabel: "Ava",
   },
   {
     description: "Bright, friendly, and clear. Good for quick front-desk answers and upbeat service brands.",
@@ -33,21 +33,21 @@ export const signalHostVoiceRoster: SignalHostVoiceProfile[] = [
   },
   {
     description: "Calm, confident, and conversational. Good for trades, dispatch, and professional service teams.",
-    employeeName: "Marco",
+    employeeName: "Miles",
     gender: "male",
-    id: "marco",
-    label: "Marco - calm male",
+    id: "miles",
+    label: "Miles - calm male",
     openAIRealtimeVoice: "cedar",
-    shortLabel: "Marco",
+    shortLabel: "Miles",
   },
   {
     description: "Crisp, measured, and reassuring. Good for urgent calls, estimates, and appointment-heavy workflows.",
-    employeeName: "Theo",
+    employeeName: "Aiden",
     gender: "male",
-    id: "theo",
-    label: "Theo - crisp male",
+    id: "aiden",
+    label: "Aiden - crisp male",
     openAIRealtimeVoice: "verse",
-    shortLabel: "Theo",
+    shortLabel: "Aiden",
   },
 ];
 
@@ -56,8 +56,8 @@ export const signalHostVoiceProfilesById = Object.fromEntries(
 ) as Record<SignalHostVoiceProfileId, SignalHostVoiceProfile>;
 
 export const signalHostVoiceProfiles: Record<SignalHostVoiceGender, SignalHostVoiceProfile> = {
-  female: signalHostVoiceProfilesById.vera,
-  male: signalHostVoiceProfilesById.marco,
+  female: signalHostVoiceProfilesById.ava,
+  male: signalHostVoiceProfilesById.miles,
 };
 
 export function normalizeSignalHostVoiceGender(value: unknown): SignalHostVoiceGender {
@@ -72,20 +72,22 @@ export function normalizeSignalHostVoiceGender(value: unknown): SignalHostVoiceG
 }
 
 export function normalizeSignalHostVoiceProfileId(value: unknown): SignalHostVoiceProfileId {
-  return findSignalHostVoiceProfile(value)?.id ?? "vera";
+  return findSignalHostVoiceProfile(value)?.id ?? "ava";
 }
 
 export function findSignalHostVoiceProfile(value: unknown): SignalHostVoiceProfile | undefined {
   if (typeof value !== "string") return undefined;
 
   const normalized = value.trim().toLowerCase().replace(/[\s_-]+/g, " ");
-  if (normalized.includes("maya")) return signalHostVoiceProfilesById.maya;
-  if (normalized.includes("marco") || normalized.includes("michael") || normalized === "male") {
-    return signalHostVoiceProfilesById.marco;
+  if (normalized.includes("ava") || normalized.includes("vera") || normalized.includes("eve") || normalized === "female") {
+    return signalHostVoiceProfilesById.ava;
   }
-  if (normalized.includes("theo")) return signalHostVoiceProfilesById.theo;
-  if (normalized.includes("vera") || normalized.includes("eve") || normalized === "female") {
-    return signalHostVoiceProfilesById.vera;
+  if (normalized.includes("maya")) return signalHostVoiceProfilesById.maya;
+  if (normalized.includes("miles") || normalized.includes("marco") || normalized.includes("michael") || normalized === "male") {
+    return signalHostVoiceProfilesById.miles;
+  }
+  if (normalized.includes("aiden") || normalized.includes("theo")) {
+    return signalHostVoiceProfilesById.aiden;
   }
   return undefined;
 }

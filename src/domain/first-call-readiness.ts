@@ -77,7 +77,7 @@ export function buildFirstCallReadiness(input: FirstCallReadinessInput): FirstCa
         : "Deployment URLs, CORS, auth, provider keys, and Twilio signature checks are ready.",
       Boolean(input.health?.productionReady),
     ),
-    step("restaurant_context", "Restaurant context", "Vera can load this restaurant's profile, menu, FAQs, and policies.", Boolean(input.health?.onboardedContextConfigured)),
+    step("restaurant_context", "Restaurant context", "The AI host can load this restaurant's profile, menu, FAQs, and policies.", Boolean(input.health?.onboardedContextConfigured)),
     step("webhook_targets", "Webhook targets", "Twilio voice webhook and ConversationRelay websocket URLs are generated.", hasWebhookTargets),
     step("twiml_preview", "TwiML preview", "The Twilio response includes ConversationRelay for the selected location.", rendersConversationRelay),
     step("twilio_signatures", "Twilio signatures", "Incoming Twilio requests require signature validation.", Boolean(input.health?.twilioSignatureRequired)),

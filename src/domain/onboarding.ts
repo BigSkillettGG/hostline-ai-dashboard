@@ -253,8 +253,8 @@ export const onboardingSections: OnboardingSection[] = [
       },
       {
         id: "orderHandlingMode",
-        label: "What Vera should do",
-        prompt: "When a caller wants to order, what should Vera do first?",
+        label: "What the AI host should do",
+        prompt: "When a caller wants to order, what should the AI host do first?",
         control: "select",
         required: true,
         options: [
@@ -267,7 +267,7 @@ export const onboardingSections: OnboardingSection[] = [
       {
         id: "onlineOrderingUrl",
         label: "Online ordering link",
-        prompt: "If callers can order online, what link should Vera text them?",
+        prompt: "If callers can order online, what link should the AI host text them?",
         placeholder: "https://oliveandember.example/order",
         control: "url",
       },
@@ -352,7 +352,7 @@ export const onboardingSections: OnboardingSection[] = [
       {
         id: "takeReservations",
         label: "Handle reservations",
-        prompt: "Should Vera answer reservation questions or collect reservation requests?",
+        prompt: "Should the AI host answer reservation questions or collect reservation requests?",
         control: "toggle",
         required: true,
       },
@@ -377,8 +377,8 @@ export const onboardingSections: OnboardingSection[] = [
       },
       {
         id: "reservationHandlingMode",
-        label: "What Vera should do",
-        prompt: "When a caller asks for a reservation, what should Vera do first?",
+        label: "What the AI host should do",
+        prompt: "When a caller asks for a reservation, what should the AI host do first?",
         control: "select",
         required: true,
         options: [
@@ -394,7 +394,7 @@ export const onboardingSections: OnboardingSection[] = [
       {
         id: "reservationProvider",
         label: "Connected provider",
-        prompt: "If Vera should connect to a reservation system, which one should we integrate with?",
+        prompt: "If the AI host should connect to a reservation system, which one should we integrate with?",
         control: "select",
         required: true,
         options: ["OpenTable", "Yelp Guest Manager", "SevenRooms", "Resy", "Tock", "Google / booking link", "Manual requests only", "No reservations"],
@@ -402,14 +402,14 @@ export const onboardingSections: OnboardingSection[] = [
       {
         id: "reservationBookingUrl",
         label: "Booking link",
-        prompt: "If Vera should text or read a booking link, what URL should she use?",
+        prompt: "If the AI host should text or read a booking link, what URL should it use?",
         placeholder: "https://www.opentable.com/r/olive-and-ember",
         control: "url",
       },
       {
         id: "autoConfirmPartyLimit",
         label: "Auto-confirm party limit",
-        prompt: "What is the largest party Vera may confirm without staff, if auto-confirm is enabled?",
+        prompt: "What is the largest party the AI host may confirm without staff, if auto-confirm is enabled?",
         placeholder: "6",
         control: "short",
       },
@@ -424,7 +424,7 @@ export const onboardingSections: OnboardingSection[] = [
       {
         id: "largePartyThreshold",
         label: "Large-party threshold",
-        prompt: "At what party size should Vera treat the call as a large-party or event inquiry?",
+        prompt: "At what party size should the AI host treat the call as a large-party or event inquiry?",
         placeholder: "8 or more",
         control: "short",
       },
@@ -445,7 +445,7 @@ export const onboardingSections: OnboardingSection[] = [
       {
         id: "reservationCutoffRules",
         label: "Cutoff rules",
-        prompt: "When should Vera stop taking or confirming reservations for a service?",
+        prompt: "When should the AI host stop taking or confirming reservations for a service?",
         placeholder: "No same-day reservations after 4 PM Friday or Saturday.",
         control: "long",
       },
@@ -473,7 +473,7 @@ export const onboardingSections: OnboardingSection[] = [
       {
         id: "lateArrivalPolicy",
         label: "Late-arrival policy",
-        prompt: "How long are tables held, and what should Vera say if someone is running late?",
+        prompt: "How long are tables held, and what should the AI host say if someone is running late?",
         placeholder: "Tables are held for 15 minutes; staff confirmation needed after that.",
         control: "long",
       },
@@ -1696,7 +1696,7 @@ export const sampleOnboardingDraft: OnboardingDraft = {
   forwardingMode: "Forward only unanswered calls",
   hiringPolicy: "Applicants can email a resume or stop by Tuesday through Thursday between 2 and 4 PM.",
   greeting: "Hi, thank you for calling {restaurant_name}. How can I help you?",
-  hostName: "Vera",
+  hostName: "Ava",
   holidayExceptions: "Mother's Day brunch uses a special prix fixe menu and requires staff confirmation.",
   humanHandoffPolicy: "Collect the caller's name, phone, reason, and urgency, then send staff a callback task.",
   lostAndFoundPolicy: "Collect item description, visit date and time, where they sat, name, and callback number.",
@@ -1772,8 +1772,8 @@ export const sampleOnboardingDraft: OnboardingDraft = {
   upsellRules:
     "Suggest tiramisu or affogato with pasta orders, sparkling water with larger pickup orders, and no more than one upsell after the caller declines.",
   vendorCallPolicy: "Collect company, caller name, reason, phone, and email, then route to the owner.",
-  voiceProfileId: "vera",
-  voiceGender: "Vera - warm female",
+  voiceProfileId: "ava",
+  voiceGender: "Ava - warm female",
   waitlistPolicy: "Walk-ins are welcome, but live wait times change quickly and are confirmed at the door.",
   websiteAdminContact: "webmaster@oliveandember.example",
   websitePlatform: "Squarespace",

@@ -22,10 +22,13 @@ describe("OpenAI voice previews", () => {
       const preview = await createOpenAIVoicePreview({
         env: {
           OPENAI_API_KEY: "sk-test",
+          OPENAI_REALTIME_AIDEN_VOICE: undefined,
+          OPENAI_REALTIME_AVA_VOICE: undefined,
           OPENAI_REALTIME_FEMALE_VOICE: undefined,
           OPENAI_REALTIME_MALE_VOICE: undefined,
           OPENAI_REALTIME_MARCO_VOICE: undefined,
           OPENAI_REALTIME_MAYA_VOICE: undefined,
+          OPENAI_REALTIME_MILES_VOICE: undefined,
           OPENAI_REALTIME_THEO_VOICE: undefined,
           OPENAI_REALTIME_VERA_VOICE: undefined,
           OPENAI_TTS_MODEL: "gpt-4o-mini-tts",

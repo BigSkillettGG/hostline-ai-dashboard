@@ -635,7 +635,7 @@ export default function Knowledge() {
                 Active AI tuning notes
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
-                QA notes saved to knowledge are now included in Vera's runtime instructions. They are behavior corrections, not caller-facing facts.
+                QA notes saved to knowledge are now included in the AI host's runtime instructions. They are behavior corrections, not caller-facing facts.
               </p>
               {knowledgeConfigured && (
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -690,7 +690,7 @@ export default function Knowledge() {
                 Business knowledge
               </div>
               <p className="text-xs text-muted-foreground">
-                Facts Vera can use for hours, policies, menu questions, events, directions, and common caller questions.
+                Facts the AI host can use for hours, policies, menu questions, events, directions, and common caller questions.
               </p>
             </div>
             <Badge variant="secondary" className="w-fit text-[10px]">

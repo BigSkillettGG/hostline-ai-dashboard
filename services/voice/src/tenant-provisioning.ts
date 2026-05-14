@@ -477,7 +477,7 @@ function buildAgentConfigPayload({
     disclosure_enabled: false,
     escalation_phone_number: stringValue(draft.escalationPhone) ?? null,
     greeting_template: greeting,
-    host_name: stringValue(draft.hostName) ?? "Vera",
+    host_name: stringValue(draft.hostName) ?? "Ava",
     location_id: locationId,
     order_destinations: ["staff_review"],
     orders_enabled: booleanValue(draft.takeOrders) ?? Boolean(orderMode !== "disabled"),

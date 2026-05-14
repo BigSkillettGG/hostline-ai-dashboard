@@ -20,17 +20,17 @@ describe("voice service selection", () => {
   });
 
   it("uses the selected ElevenLabs voice for ConversationRelay", () => {
-    expect(resolveConversationRelayTtsVoice(env, { voiceGender: "female", voiceProfileId: "vera" })).toBe(
+    expect(resolveConversationRelayTtsVoice(env, { voiceGender: "female", voiceProfileId: "ava" })).toBe(
       "eve-flash_v2_5-1.0_0.5_0.8",
     );
-    expect(resolveConversationRelayTtsVoice(env, { voiceGender: "male", voiceProfileId: "marco" })).toBe(
+    expect(resolveConversationRelayTtsVoice(env, { voiceGender: "male", voiceProfileId: "miles" })).toBe(
       "michael-flash_v2_5-1.0_0.5_0.8",
     );
   });
 
   it("keeps the explicit Twilio voice for non-ElevenLabs providers", () => {
     expect(
-      resolveConversationRelayTtsVoice({ ...env, TWILIO_TTS_PROVIDER: "Google" }, { voiceGender: "male", voiceProfileId: "marco" }),
+      resolveConversationRelayTtsVoice({ ...env, TWILIO_TTS_PROVIDER: "Google" }, { voiceGender: "male", voiceProfileId: "miles" }),
     ).toBe("fallback");
   });
 
