@@ -86,6 +86,8 @@ node dist-voice/server.mjs
 
 The voice service `/health` response includes `productionReady` and `readinessChecks`. The `/ready` endpoint returns `200` only when required checks pass and `503` otherwise. The super admin Overview page displays these checks when `VITE_VOICE_SERVICE_URL` is set.
 
+For billing, the owner Billing page calls `GET /billing/readiness?locationId=...`. Use that card before the first checkout test. It shows the exact Stripe webhook endpoint, required Stripe events, return URLs, test/live mode, and whether Supabase can persist billing state and convert the trial number to paid.
+
 Required production checks:
 
 - Public HTTP and WebSocket URLs are set.

@@ -3,6 +3,7 @@ import { URL } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
 import { authorizeVoiceAdminRequest } from "./admin-auth";
 import { generateAgentTestReply, type AgentTestReplyInput } from "./agent-test";
+import { getStripeBillingReadiness } from "./billing-readiness";
 import { createBillingService } from "./billing-service";
 import { listBillingPlans } from "./billing-plans";
 import { createBillingStore } from "./billing-store";
@@ -213,6 +214,18 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
     sendJson(res, 200, {
       plans: listBillingPlans({ businessType }),
     });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/billing/readiness") {
+    const locationId = url.searchParams.get("locationId") ?? currentEnv.SUPABASE_DEMO_LOCATION_ID;
+    const authorization = await authorizeVoiceAdminRequest({ currentEnv, locationId, req });
+    if (!authorization.authorized) {
+      sendJson(res, authorization.status, { error: authorization.reason ?? "Unauthorized" });
+      return;
+    }
+
+    sendJson(res, 200, getStripeBillingReadiness(currentEnv));
     return;
   }
 

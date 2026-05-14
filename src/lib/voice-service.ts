@@ -176,6 +176,27 @@ export interface BillingPlanOption {
   slug: string;
 }
 
+export interface BillingReadinessCheck {
+  detail: string;
+  id: string;
+  label: string;
+  ready: boolean;
+  required: boolean;
+}
+
+export interface BillingReadiness {
+  checks: BillingReadinessCheck[];
+  expectedWebhookEvents: string[];
+  mode: "live" | "test" | "unknown";
+  ready: boolean;
+  returnUrls: {
+    cancelUrl?: string;
+    portalReturnUrl?: string;
+    successUrl?: string;
+  };
+  webhookUrl?: string;
+}
+
 export interface GeneratedOwnerDailyReport {
   configured: boolean;
   delivery?: {
@@ -449,6 +470,26 @@ export async function fetchBillingPlans(businessType?: string) {
   }
 
   return (await response.json()) as { plans: BillingPlanOption[] };
+}
+
+export async function fetchBillingReadiness(locationId = getActiveLocationId()) {
+  if (!voiceServiceBaseUrl) {
+    throw new Error("VITE_VOICE_SERVICE_URL is not configured.");
+  }
+
+  const params = new URLSearchParams();
+  if (locationId?.trim()) params.set("locationId", locationId.trim());
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const response = await fetch(`${voiceServiceBaseUrl}/billing/readiness${query}`, {
+    headers: buildVoiceAdminHeaders(),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(body || `Billing readiness failed with ${response.status}.`);
+  }
+
+  return (await response.json()) as BillingReadiness;
 }
 
 export async function createBillingCheckoutSession(input: {

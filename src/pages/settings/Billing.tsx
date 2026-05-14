@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertCircle, ArrowRight, Check, CheckCircle2, CreditCard, Info, PhoneForwarded, ReceiptText, RefreshCw, TimerReset, type LucideIcon } from "lucide-react";
+import { AlertCircle, ArrowRight, Check, CheckCircle2, Copy, CreditCard, Info, PhoneForwarded, ReceiptText, RefreshCw, ShieldCheck, TimerReset, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader, PageBody } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,8 +25,10 @@ import {
   createBillingCheckoutSession,
   createBillingPortalSession,
   fetchBillingPlans,
+  fetchBillingReadiness,
   fetchBillingStatus,
   isVoiceServiceConfigured,
+  type BillingReadiness,
   type BillingPlanOption,
 } from "@/lib/voice-service";
 import { cn } from "@/lib/utils";
@@ -58,6 +60,11 @@ export default function Billing() {
     enabled: voiceServiceConfigured && Boolean(locationId),
     queryFn: () => fetchBillingStatus(locationId),
     queryKey: ["billing-status", locationId],
+  });
+  const billingReadinessQuery = useQuery({
+    enabled: voiceServiceConfigured && Boolean(locationId),
+    queryFn: () => fetchBillingReadiness(locationId),
+    queryKey: ["billing-readiness", locationId],
   });
 
   const localDraft = useMemo(() => loadOnboardingDraft(), []);
@@ -207,6 +214,14 @@ export default function Billing() {
             </AlertDescription>
           </Alert>
         ) : null}
+
+        <StripeReadinessCard
+          error={billingReadinessQuery.error}
+          loading={billingReadinessQuery.isFetching}
+          onRefresh={() => void billingReadinessQuery.refetch()}
+          readiness={billingReadinessQuery.data}
+          voiceServiceConfigured={voiceServiceConfigured}
+        />
 
         <Card className={cn("border-border", snapshot.upgradeRequired && "border-warning/40 bg-warning/5")}>
           <CardContent className="p-4">
@@ -385,6 +400,156 @@ function heroTitle(snapshot: ReturnType<typeof buildBillingSnapshot>) {
   if (snapshot.billingStatus === "past_due") return "Payment needs attention.";
   if (snapshot.upgradeRequired) return "Upgrade before this number is cleaned up.";
   return "Your trial number is protected while the account is active.";
+}
+
+function StripeReadinessCard({
+  error,
+  loading,
+  onRefresh,
+  readiness,
+  voiceServiceConfigured,
+}: {
+  error: unknown;
+  loading: boolean;
+  onRefresh: () => void;
+  readiness?: BillingReadiness;
+  voiceServiceConfigured: boolean;
+}) {
+  const requiredChecks = readiness?.checks.filter((check) => check.required) ?? [];
+  const readyRequiredChecks = requiredChecks.filter((check) => check.ready).length;
+  const missingRequired = requiredChecks.filter((check) => !check.ready);
+  const ready = Boolean(readiness?.ready);
+
+  return (
+    <Card className={cn("border-border", ready && "border-success/30 bg-success/5", !voiceServiceConfigured && "border-warning/30 bg-warning/5")}>
+      <CardContent className="p-4">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline" className={ready ? "border-success/30 bg-success/10 text-success" : "border-warning/30 bg-warning/10 text-warning"}>
+                {ready ? "Stripe ready" : "Stripe setup check"}
+              </Badge>
+              {readiness?.mode && (
+                <Badge variant="outline" className="capitalize">
+                  {readiness.mode} mode
+                </Badge>
+              )}
+              <span className="text-xs text-muted-foreground">
+                {voiceServiceConfigured
+                  ? `${readyRequiredChecks}/${requiredChecks.length || 4} required checks ready`
+                  : "Voice service URL is not configured"}
+              </span>
+            </div>
+            <h2 className="mt-3 flex items-center gap-2 text-base font-semibold">
+              <ShieldCheck className="h-4 w-4 text-primary" />
+              Stripe activation test
+            </h2>
+            <p className="mt-1 max-w-4xl text-sm leading-6 text-muted-foreground">
+              This confirms checkout can create subscriptions, Stripe can call the voice service webhook, Supabase can store billing state, and paid customers keep their SignalHost number.
+            </p>
+            {error ? (
+              <div className="mt-3 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs leading-5 text-warning">
+                {error instanceof Error ? error.message : "Billing readiness could not be checked."}
+              </div>
+            ) : null}
+          </div>
+          <Button size="sm" variant="outline" disabled={!voiceServiceConfigured || loading} onClick={onRefresh}>
+            <RefreshCw className={cn("mr-1.5 h-3.5 w-3.5", loading && "animate-spin")} />
+            Check Stripe
+          </Button>
+        </div>
+
+        <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+          <div className="space-y-3 rounded-md border border-border bg-background/70 p-3">
+            <SetupCopyRow
+              copyable={Boolean(readiness?.webhookUrl)}
+              label="Webhook endpoint"
+              value={readiness?.webhookUrl ?? "Set PUBLIC_HTTP_BASE_URL in Render, then refresh."}
+            />
+            <SetupCopyRow
+              copyable={Boolean(readiness?.returnUrls.successUrl)}
+              label="Success URL"
+              value={readiness?.returnUrls.successUrl ?? "Uses the dashboard URL passed from checkout."}
+            />
+            <SetupCopyRow
+              copyable={Boolean(readiness?.returnUrls.portalReturnUrl)}
+              label="Customer portal return"
+              value={readiness?.returnUrls.portalReturnUrl ?? "Uses the dashboard URL passed from checkout."}
+            />
+          </div>
+
+          <div className="rounded-md border border-border bg-background/70 p-3">
+            <div className="text-xs font-semibold uppercase text-muted-foreground">Stripe webhook events</div>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {(readiness?.expectedWebhookEvents ?? [
+                "checkout.session.completed",
+                "customer.subscription.*",
+                "invoice.payment_succeeded",
+                "invoice.payment_failed",
+              ]).map((eventName) => (
+                <Badge key={eventName} variant="outline" className="font-mono text-[11px]">
+                  {eventName}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {readiness?.checks.length ? (
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+            {readiness.checks.map((check) => (
+              <div key={check.id} className="rounded-md border border-border bg-muted/20 p-3">
+                <div className="flex items-start gap-2">
+                  <span className={cn("mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full", check.ready ? "bg-success/10 text-success" : "bg-warning/10 text-warning")}>
+                    {check.ready ? <Check className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold">{check.label}</div>
+                    <div className="mt-1 text-[11px] leading-4 text-muted-foreground">{check.detail}</div>
+                    {!check.required && <div className="mt-1 text-[10px] font-medium uppercase text-muted-foreground">Optional</div>}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {missingRequired.length ? (
+          <div className="mt-3 text-xs leading-5 text-warning">
+            Missing before a clean live checkout test: {missingRequired.map((check) => check.label).join(", ")}.
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function SetupCopyRow({
+  copyable,
+  label,
+  value,
+}: {
+  copyable?: boolean;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex min-w-0 items-start justify-between gap-3">
+      <div className="min-w-0">
+        <div className="text-[11px] font-semibold uppercase text-muted-foreground">{label}</div>
+        <div className="mt-1 break-all font-mono text-xs text-foreground">{value}</div>
+      </div>
+      <Button
+        size="icon"
+        variant="outline"
+        disabled={!copyable}
+        onClick={() => void copyToClipboard(value)}
+        title={`Copy ${label}`}
+      >
+        <Copy className="h-3.5 w-3.5" />
+      </Button>
+    </div>
+  );
 }
 
 function PlanFact({ label, value }: { label: string; value: string }) {
@@ -571,6 +736,15 @@ function formatMoney(value: number) {
     maximumFractionDigits: 2,
     style: "currency",
   }).format(value / 100);
+}
+
+async function copyToClipboard(value: string) {
+  try {
+    await navigator.clipboard.writeText(value);
+    toast.success("Copied");
+  } catch {
+    toast.error("Copy failed");
+  }
 }
 
 function fallbackBillingPlans(businessType: string): BillingPlanOption[] {

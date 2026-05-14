@@ -107,6 +107,7 @@ POST https://your-tunnel.ngrok.app/twilio/voice
 - Optional `OWNER_REPORT_WEBHOOK_URL` for delivering owner daily report payloads to Zapier, Make, Slack, email automation, or another internal worker.
 - `STAFF_ALERT_WEBHOOK_URL` for webhook alerts. Email recipients configured in the dashboard are included in the webhook payload for your email/helpdesk/Zapier layer.
 - `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` for checkout, customer portal, and subscription status webhooks.
+- Set `PUBLIC_HTTP_BASE_URL` so Stripe can reach `https://your-voice-service/stripe/webhook`. Add `DASHBOARD_PUBLIC_URL` or explicit Stripe return URLs for cleaner production checkout returns.
 - Supabase project with `docs/supabase-schema.sql` applied.
 - `SUPABASE_PUBLISHABLE_KEY` for validating Supabase user sessions.
 - `SUPABASE_SECRET_KEY` or legacy service role key stored only on the voice-service backend.
@@ -117,6 +118,7 @@ When Supabase is configured, Twilio requests can include `locationId` in the web
 ## Internal Telephony Endpoints
 
 - `POST /tenant/bootstrap` creates the signed-in user's organization, owner membership, first location, onboarding profile, and default agent config after website signup. It requires a Supabase bearer token and uses the backend-only service role key.
+- `GET /billing/readiness?locationId=...` returns a safe Stripe activation checklist, the exact webhook endpoint URL, return URLs, mode, and required Stripe event names. It does not expose secrets.
 - `GET /billing/status?locationId=...` returns the stored Stripe subscription state for the location's organization.
 - `POST /billing/checkout-session` creates a Stripe subscription checkout session from SignalHost's server-side plan catalog and stores checkout-started state.
 - `POST /billing/customer-portal` creates a Stripe customer portal session once a Stripe customer exists.
