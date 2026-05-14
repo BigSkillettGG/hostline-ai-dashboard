@@ -42,9 +42,8 @@ The voice service reads active live updates into restaurant/business context and
 
 The baseline Supabase schema now includes `business_live_settings` and `business_live_updates`.
 
-Next backend step:
+Operational wrap-up:
 
-1. Apply the `20260513170000_business_live_updates.sql` migration in the live Lovable Supabase database.
-2. Add verified owner SMS commands on top of the same command parser.
-3. Add dashboard history/audit for who created or cleared each update.
-4. Add optional expiry cleanup for old cleared updates.
+1. Apply the `20260513170000_business_live_updates.sql` migration in the live Lovable Supabase database if it is not already applied.
+2. Apply the `20260513222000_message_events_location_owner_activity.sql` migration so owner command activity can be queried by location.
+3. Optional later improvement: add expiry cleanup for old cleared updates.

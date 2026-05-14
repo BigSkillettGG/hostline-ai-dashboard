@@ -507,6 +507,27 @@ describe("Supabase owner command activity", () => {
       direction: "outbound",
       title: "SignalHost text reply",
     });
+
+    expect(
+      mapSupabaseOwnerCommandActivity({
+        body: "Any urgent calls today?",
+        created_at: "2026-05-13T20:00:02.000Z",
+        direction: "inbound",
+        from_phone: "signalhost-dashboard",
+        id: "event_dashboard",
+        location_id: "location_1",
+        provider: "dashboard",
+        provider_message_sid: null,
+        raw_payload: {},
+        status: "owner_dashboard_command",
+        thread_id: null,
+        to_phone: "signalhost",
+      }),
+    ).toMatchObject({
+      channel: "dashboard",
+      direction: "inbound",
+      title: "Dashboard command",
+    });
   });
 });
 

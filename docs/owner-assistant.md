@@ -1,6 +1,6 @@
 # Owner Assistant
 
-This slice starts the "SignalHost feels like an employee" layer.
+This layer makes SignalHost feel more like a front-desk employee that the owner can brief, question, and correct.
 
 ## Owner Identity
 
@@ -14,12 +14,12 @@ Those fields are the trusted identity foundation for:
 
 - Daily reports
 - Urgent escalation alerts
-- Future owner SMS commands
+- Owner dashboard, phone, SMS, and email commands
 - Owner-approved knowledge suggestions from rough calls
-- Future owner-approved follow-up
-- Future temporary knowledge updates by text
+- Owner-approved follow-up
+- Temporary live updates and permanent knowledge updates
 
-The baseline schema now includes `business_contacts` so the live database can store owner, manager, front desk, and billing contacts outside the onboarding draft.
+The live schema includes `business_contacts` so each business can store owner, manager, front desk, and billing contacts outside the onboarding draft. Contact permissions control whether a person can use owner assistant commands, receive alerts, add temporary updates, approve permanent knowledge, resolve customer requests, or manage alert preferences.
 
 ## Dashboard Assistant
 
@@ -34,7 +34,7 @@ The new `/app/assistant` page lets an owner ask operational questions such as:
 - How many orders came in?
 - How many reservation requests?
 
-The first version uses deterministic business logic over calls, orders, reservations, staff tasks, interaction insight, and the daily brief. That keeps answers fast and grounded before adding an LLM layer for broader natural language.
+The first version uses deterministic business logic over calls, orders, reservations, staff tasks, interaction insight, and the daily brief. That keeps answers fast and grounded.
 
 ## Live Update Commands
 
@@ -49,11 +49,23 @@ The dashboard assistant can now also act on simple owner instructions:
 
 Those commands create the same temporary live updates and business modes shown on the Knowledge Base page. When Supabase live-update tables are migrated, the assistant saves them to Supabase so the voice and website-chat runtime can use them. Local browser storage remains the preview fallback.
 
-## Next Steps
+## Owner Command Channels
 
-1. Persist `business_contacts` from onboarding into Supabase.
-2. Add owner SMS verification before accepting text commands.
-3. Add owner SMS commands on top of the now-shared live-update parser.
-4. Add an LLM answer layer with the deterministic report as tool/context.
-5. Expand the learning loop so owner answers can respond back to waiting customers, not just train future calls.
-6. Log owner assistant questions and useful missing intents for product tuning.
+The shared owner command router is used by:
+
+- Dashboard chat on `/app/assistant`
+- Trusted owner or manager phone calls recognized by caller ID
+- Trusted owner or manager SMS messages sent to the SignalHost SMS webhook
+- Trusted owner or manager email messages sent through the provider-neutral `/owner/email-command` endpoint
+
+Every channel runs through the same permission checks. Temporary live updates can be applied immediately for contacts with permission. Permanent knowledge can require owner approval depending on the contact's role and `requires_owner_approval` flag.
+
+## Activity And Audit
+
+Owner commands and SignalHost replies are written to `message_events` with `location_id`, channel provider, direction, status, and raw metadata. The Owner Assistant shows recent dashboard, phone, SMS, and email activity for the active location.
+
+## Remaining Later Work
+
+1. Add direct email delivery once a production email provider is selected.
+2. Expand the learning loop so owner answers can respond back to waiting customers, not just train future calls.
+3. Add richer owner-command analytics, such as common update types and command success rates.

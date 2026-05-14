@@ -38,6 +38,7 @@ import { isPlatformAdminUser, useCurrentUser } from "@/lib/auth";
 import { loadBusinessLiveState, saveBusinessLiveState } from "@/lib/business-live-updates-storage";
 import { loadOnboardingDraft } from "@/lib/onboarding-draft";
 import {
+  createOwnerCommandActivityInSupabase,
   createBusinessLiveUpdateInSupabase,
   applyKnowledgeSuggestionInSupabase,
   createKnowledgeSuggestionInSupabase,
@@ -190,6 +191,13 @@ export default function OwnerAssistant() {
       useKnowledgeSupabase: liveEnabled,
       useLiveSupabase: liveUpdatesEnabled,
     });
+    await logDashboardOwnerActivity({
+      activeLocationId,
+      commandRoute,
+      liveEnabled,
+      message: trimmed,
+      response,
+    });
     if (commandRoute.kind === "live_command") {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["business-live-state", activeLocationId] }),
@@ -334,7 +342,7 @@ export default function OwnerAssistant() {
                 <IdentityLine icon={Mail} label="Trusted email" value={ownerEmail || "Not set"} warning={!ownerEmail} />
                 <Separator />
                 <p className="text-xs leading-5 text-muted-foreground">
-                  These fields identify who can receive owner reports, escalation alerts, and future text commands like "what happened today?".
+                  These fields identify who can receive owner reports, escalation alerts, and text commands like "what happened today?".
                 </p>
                 <Button variant="outline" size="sm" className="w-full" asChild>
                   <Link to="/app/onboarding">Edit in onboarding</Link>
@@ -352,7 +360,7 @@ export default function OwnerAssistant() {
               <CardContent className="space-y-3">
                 {!liveEnabled ? (
                   <p className="text-sm leading-5 text-muted-foreground">
-                    Connect Supabase to show owner commands from phone, text, and email.
+                    Connect Supabase to show owner commands from dashboard, phone, text, and email.
                   </p>
                 ) : ownerActivityQuery.isLoading ? (
                   <p className="text-sm text-muted-foreground">Loading owner activity...</p>
@@ -362,7 +370,7 @@ export default function OwnerAssistant() {
                   ))
                 ) : (
                   <p className="text-sm leading-5 text-muted-foreground">
-                    No owner phone, text, or email commands have been recorded for this location yet.
+                    No owner dashboard, phone, text, or email commands have been recorded for this location yet.
                   </p>
                 )}
               </CardContent>
@@ -388,9 +396,9 @@ export default function OwnerAssistant() {
 
             <Card className="border-primary/20 bg-primary/5">
               <CardContent className="p-4">
-                <div className="text-sm font-medium">Next evolution</div>
+                <div className="text-sm font-medium">Owner command layer</div>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  Verified owner SMS can use the same command layer next, so an owner can text "we are closed tomorrow" and brief SignalHost without opening the dashboard.
+                  Dashboard, phone, SMS, and email commands now share the same parser, permission checks, approval behavior, and activity log.
                 </p>
               </CardContent>
             </Card>
@@ -399,6 +407,46 @@ export default function OwnerAssistant() {
       </PageBody>
     </>
   );
+}
+
+async function logDashboardOwnerActivity({
+  activeLocationId,
+  commandRoute,
+  liveEnabled,
+  message,
+  response,
+}: {
+  activeLocationId?: string;
+  commandRoute: OwnerCommandRoute;
+  liveEnabled: boolean;
+  message: string;
+  response: OwnerAssistantResponse;
+}) {
+  if (!liveEnabled || !activeLocationId) return;
+
+  await Promise.all([
+    createOwnerCommandActivityInSupabase({
+      body: message,
+      direction: "inbound",
+      rawPayload: {
+        decision: commandRoute.decision,
+        kind: commandRoute.kind,
+      },
+      status: "owner_dashboard_command",
+    }, activeLocationId),
+    createOwnerCommandActivityInSupabase({
+      body: response.answer,
+      direction: "outbound",
+      rawPayload: {
+        confidence: response.confidence,
+        intent: response.intent,
+        title: response.title,
+      },
+      status: "owner_dashboard_reply",
+    }, activeLocationId),
+  ]).catch((error) => {
+    console.warn("[owner-assistant] owner activity log failed", error);
+  });
 }
 
 async function handleOwnerCommandRoute(

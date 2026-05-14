@@ -63,6 +63,9 @@ There are 12 production workstreams:
 - Call QA can now queue owner-approved `knowledge_suggestions`, and the Knowledge Base page can approve/reject them before they become active AI knowledge.
 - The Owner Assistant page now lets owners ask dashboard-chat questions about today's summary, urgent calls, follow-ups, opportunities, knowledge gaps, complaints, orders, and reservations. Onboarding now captures trusted owner name, phone, and email, and the schema baseline includes `business_contacts`.
 - The Owner Assistant can now create local live updates and switch business modes from plain owner commands like "tonight's special is lobster ravioli," "we're closed tomorrow," and "set busy mode." These updates share state with the Knowledge Base live-updates panel.
+- Trusted contacts now support role-based permissions for owner commands, live updates, permanent knowledge approval, customer-request resolution, alert preference management, and alert receipt.
+- Owner commands now share one parser/runtime across dashboard, phone, SMS, and email, with phone calls recognized by trusted caller ID and SMS/email matched against `business_contacts`.
+- Owner command activity now writes to `message_events` by location and appears in the Owner Assistant recent activity panel for audit visibility.
 - Business live updates now have Supabase persistence via `business_live_settings` and `business_live_updates`; the voice and website-chat runtime loads active updates into model instructions and gives them priority over permanent knowledge.
 - The onboarding phone launch flow tracks direct-call, no-answer forwarding, and busy-line forwarding verification before no-busy-signal coverage is treated as ready.
 - The live voice service includes Supabase FAQs and knowledge sections in model instructions and deterministic fallback replies.

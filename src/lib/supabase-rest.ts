@@ -703,7 +703,7 @@ export interface CreateMenuSourceInput {
   url: string;
 }
 
-export type OwnerCommandActivityChannel = "email" | "phone" | "sms" | "unknown";
+export type OwnerCommandActivityChannel = "dashboard" | "email" | "phone" | "sms" | "unknown";
 
 export interface OwnerCommandActivity {
   body: string;
@@ -713,6 +713,13 @@ export interface OwnerCommandActivity {
   id: string;
   status: string;
   title: string;
+}
+
+export interface CreateOwnerCommandActivityInput {
+  body: string;
+  direction: "inbound" | "outbound";
+  rawPayload?: Record<string, unknown>;
+  status?: string;
 }
 
 export function isSupabaseConfigured() {
@@ -884,11 +891,40 @@ export async function fetchOwnerCommandActivityFromSupabase(
       location_id: `eq.${locationId}`,
       order: "created_at.desc",
       select: messageEventSelectColumns,
-      status: "in.(owner_command,owner_command_reply,owner_command_failed,owner_email_command,owner_email_reply,owner_email_failed,owner_email_unknown,owner_email_ambiguous,owner_needs_disambiguation)",
+      status: "in.(owner_command,owner_command_reply,owner_command_failed,owner_dashboard_command,owner_dashboard_reply,owner_dashboard_failed,owner_email_command,owner_email_reply,owner_email_failed,owner_email_unknown,owner_email_ambiguous,owner_needs_disambiguation)",
     }),
   );
 
   return rows.map(mapSupabaseOwnerCommandActivity);
+}
+
+export async function createOwnerCommandActivityInSupabase(
+  input: CreateOwnerCommandActivityInput,
+  locationId = getActiveSupabaseLocationId(),
+): Promise<void> {
+  if (!isOwnerCommandActivityPersistenceConfigured(locationId)) {
+    throw new Error("Supabase owner command activity is not configured.");
+  }
+
+  await supabaseRequest(
+    "message_events",
+    new URLSearchParams(),
+    {
+      body: {
+        body: input.body.trim() || "No message body captured.",
+        direction: input.direction,
+        from_phone: input.direction === "inbound" ? "signalhost-dashboard" : "signalhost",
+        location_id: locationId,
+        provider: "dashboard",
+        provider_message_sid: null,
+        raw_payload: input.rawPayload ?? {},
+        status: input.status ?? (input.direction === "inbound" ? "owner_dashboard_command" : "owner_dashboard_reply"),
+        thread_id: null,
+        to_phone: input.direction === "inbound" ? "signalhost" : "signalhost-dashboard",
+      },
+      method: "POST",
+    },
+  );
 }
 
 export async function createTrustedContactInSupabase(
@@ -3372,6 +3408,7 @@ export function mapSupabaseOwnerCommandActivity(row: SupabaseMessageEventRow): O
 function ownerCommandActivityChannel(row: SupabaseMessageEventRow): OwnerCommandActivityChannel {
   const provider = row.provider?.trim().toLowerCase();
   const status = row.status?.trim().toLowerCase() ?? "";
+  if (provider === "dashboard" || status.startsWith("owner_dashboard")) return "dashboard";
   if (provider === "email" || status.startsWith("owner_email")) return "email";
   if (provider === "phone" || status.startsWith("owner_phone")) return "phone";
   if (provider === "twilio" || status.startsWith("owner_command") || status === "owner_needs_disambiguation") {
@@ -3382,6 +3419,12 @@ function ownerCommandActivityChannel(row: SupabaseMessageEventRow): OwnerCommand
 
 function ownerCommandActivityTitle(status: string, direction: "inbound" | "outbound") {
   switch (status) {
+    case "owner_dashboard_command":
+      return "Dashboard command";
+    case "owner_dashboard_reply":
+      return "Dashboard reply";
+    case "owner_dashboard_failed":
+      return "Dashboard command failed";
     case "owner_command":
       return "Owner text command";
     case "owner_command_reply":
