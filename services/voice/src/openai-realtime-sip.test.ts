@@ -155,7 +155,7 @@ describe("OpenAI Realtime SIP", () => {
       env: baseEnv,
     });
 
-    expect(payload.audio.input.transcription.prompt).toContain("Summit Air, a HVAC company");
+    expect(payload.audio.input.transcription.prompt).toContain("Transcription vocabulary hints for Summit Air (HVAC company)");
     expect(payload.audio.input.transcription.prompt).toContain("no heat");
     expect(payload.instructions).toContain("Business profile: HVAC company");
     expect(payload.instructions).toContain("dispatcher");
@@ -310,12 +310,22 @@ describe("OpenAI Realtime SIP", () => {
         type: "conversation.item.input_audio_transcription.completed",
       })),
     );
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "prompt_leak",
+        transcript:
+          "Hi, this is a phone call with Olive & Ember, a restaurant. Expect restaurant words: reservations, pickup orders, specials, menu, happy hour, parking, allergies, delivery drivers, hours, waitlist, private events. Menu terms include: Neighborhood Italian restaurant with wood-fired pizza, handmade pasta, seasonal cocktails, and weekend brunch.",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
     await Promise.resolve();
     expect(transcriptTurns[0]).toMatchObject({
       callId: "call_uuid",
       speaker: "caller",
       text: "What time do you close tonight?",
     });
+    expect(transcriptTurns).toHaveLength(1);
 
     socket.emit("close", 1000, Buffer.from("normal"));
     await Promise.resolve();

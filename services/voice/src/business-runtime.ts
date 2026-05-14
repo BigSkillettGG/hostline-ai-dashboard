@@ -224,9 +224,9 @@ export function buildBusinessTranscriptionPrompt(context: RestaurantVoiceContext
   const profile = getRuntimeBusinessProfile(context);
   const offeringTerms = context.menuHighlights.slice(0, 16).join(", ");
   return [
-    `This is a phone call with ${context.restaurantName}, a ${profile.businessNoun}.`,
-    `Expect ${profile.businessNoun} words: ${profile.commonIntents.join(", ")}.`,
-    offeringTerms && `${capitalize(profile.offeringNoun)} terms include: ${offeringTerms}.`,
+    `Transcription vocabulary hints for ${context.restaurantName} (${profile.businessNoun}).`,
+    `Likely caller topics: ${profile.commonIntents.join(", ")}.`,
+    offeringTerms && `Likely ${profile.offeringNoun} terms: ${offeringTerms}.`,
   ]
     .filter(Boolean)
     .join(" ");

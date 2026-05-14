@@ -1203,6 +1203,13 @@ async function persistOpenAIRealtimeTranscriptTurn({
 }) {
   const text = turn.text.trim();
   if (!text) return;
+  if (isOpenAIRealtimeTranscriptionPromptLeak(text)) {
+    console.warn("[openai-realtime] ignored leaked transcription prompt", {
+      externalCallId: session.externalCallId,
+      role: turn.role,
+    });
+    return;
+  }
 
   const key = `${turn.role}:${turn.itemId ?? text}`;
   if (session.transcriptKeys.has(key)) return;
@@ -1353,14 +1360,26 @@ function classifyOpenAIRealtimeCall(session: OpenAIRealtimeSidebandSession): {
     };
   }
 
-  const combinedText = session.transcript.map((turn) => turn.text).join(" ").toLowerCase();
+  const callerText = session.transcript
+    .filter((turn) => turn.role === "caller")
+    .map((turn) => turn.text)
+    .join(" ")
+    .toLowerCase();
   const toolNames = new Set(session.toolEvents.map((event) => event.name));
   const toolKinds = new Set(session.toolEvents.map((event) => event.kind).filter(Boolean));
-  const intent = toolKinds.has("order") || /\b(order|pickup|takeout|to go|pizza|salad|pasta)\b/.test(combinedText)
+  const hasOrderIntent =
+    toolKinds.has("order") ||
+    /\b(place|make|put in|start|take)\s+(an?\s+)?(pickup\s+|takeout\s+|to\s+go\s+)?order\b/.test(callerText) ||
+    /\b(can|could|may)\s+i\s+(order|get|have)\b/.test(callerText) ||
+    /\b(i('|’)d like|i would like|let me get|can i get|i'll have|we'll have)\b/.test(callerText);
+  const hasReservationIntent =
+    toolKinds.has("reservation") || /\b(reservation|reserve|book|table for|party of)\b/.test(callerText);
+  const hasHoursIntent = /\b(hour|hours|open|close|closing|tonight|today|tomorrow)\b/.test(callerText);
+  const intent = hasOrderIntent
     ? "order"
-    : toolKinds.has("reservation") || /\b(reservation|reserve|book|table for|party of)\b/.test(combinedText)
+    : hasReservationIntent
       ? "reservation"
-      : /\b(hour|open|close|closing|tonight)\b/.test(combinedText)
+      : hasHoursIntent
         ? "hours"
         : session.transcript.length
           ? "faq"
@@ -1446,6 +1465,18 @@ function buildRealtimeQualitySummary(session: OpenAIRealtimeSidebandSession) {
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+function isOpenAIRealtimeTranscriptionPromptLeak(text: string) {
+  const normalized = text.toLowerCase().replace(/\s+/g, " ").trim();
+  return (
+    /^hi,?\s+this is a phone call with\b/.test(normalized) ||
+    /^this is a phone call with\b/.test(normalized) ||
+    normalized.includes("expect restaurant words:") ||
+    (normalized.includes("expect ") && normalized.includes(" words:") && normalized.includes("terms include:")) ||
+    normalized.startsWith("transcription vocabulary hints for ") ||
+    (normalized.includes("likely caller topics:") && normalized.includes("likely ") && normalized.includes(" terms:"))
+  );
 }
 
 async function handleOpenAIRealtimeToolCalls({
