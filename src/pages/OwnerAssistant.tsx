@@ -32,8 +32,10 @@ import {
   type OwnerAssistantContext,
   type OwnerAssistantResponse,
 } from "@/domain/owner-assistant";
+import { getVerticalOwnerSuggestions } from "@/domain/vertical-insights";
 import type { StaffTask } from "@/domain/staff-tasks";
 import { defaultTrustedContactPermissions, trustedContactTypeFromRole } from "@/domain/trusted-contacts";
+import { adaptDemoDataForBusiness } from "@/domain/vertical-demo-data";
 import { isPlatformAdminUser, useCurrentUser } from "@/lib/auth";
 import { loadBusinessLiveState, saveBusinessLiveState } from "@/lib/business-live-updates-storage";
 import { loadOnboardingDraft } from "@/lib/onboarding-draft";
@@ -129,6 +131,7 @@ export default function OwnerAssistant() {
   });
 
   const activeTenant = tenantQuery.data?.find((tenant) => tenant.locationId === activeLocationId);
+  const businessType = activeTenant?.businessType ?? draft.businessType;
   const businessName = activeTenant?.locationName ?? String(draft.restaurantName || "your business");
   const ownerName = String(draft.ownerName || activeTenant?.ownerName || "Owner");
   const ownerPhone = String(draft.ownerPhone || draft.escalationPhone || "");
@@ -148,11 +151,20 @@ export default function OwnerAssistant() {
       permissions: defaultTrustedContactPermissions(contactType),
     };
   }, [ownerName, ownerPhone, platformAdmin, user?.email, user?.name, user?.restaurantMembershipRole]);
-  const calls = useMemo(() => liveEnabled ? callQuery.data ?? emptyCalls : sampleCalls, [callQuery.data, liveEnabled]);
-  const orders = useMemo(() => liveEnabled ? orderQuery.data ?? emptyOrders : sampleOrders, [liveEnabled, orderQuery.data]);
+  const demoData = useMemo(
+    () => adaptDemoDataForBusiness({
+      businessType,
+      calls: sampleCalls,
+      orders: sampleOrders,
+      reservations: sampleReservations,
+    }),
+    [businessType],
+  );
+  const calls = useMemo(() => liveEnabled ? callQuery.data ?? emptyCalls : demoData.calls, [callQuery.data, demoData.calls, liveEnabled]);
+  const orders = useMemo(() => liveEnabled ? orderQuery.data ?? emptyOrders : demoData.orders, [demoData.orders, liveEnabled, orderQuery.data]);
   const reservations = useMemo(
-    () => liveEnabled ? reservationQuery.data ?? emptyReservations : sampleReservations,
-    [liveEnabled, reservationQuery.data],
+    () => liveEnabled ? reservationQuery.data ?? emptyReservations : demoData.reservations,
+    [demoData.reservations, liveEnabled, reservationQuery.data],
   );
   const tasks = useMemo(() => liveEnabled ? taskQuery.data ?? emptyTasks : emptyTasks, [liveEnabled, taskQuery.data]);
   const ownerActivity = useMemo(
@@ -160,8 +172,12 @@ export default function OwnerAssistant() {
     [liveEnabled, ownerActivityQuery.data],
   );
   const assistantContext = useMemo(
-    () => ({ businessName, calls, orders, reservations, tasks }),
-    [businessName, calls, orders, reservations, tasks],
+    () => ({ businessName, businessType: String(businessType ?? ""), calls, orders, reservations, tasks }),
+    [businessName, businessType, calls, orders, reservations, tasks],
+  );
+  const suggestedReportQuestions = useMemo(
+    () => getVerticalOwnerSuggestions(businessType),
+    [businessType],
   );
   const [messages, setMessages] = useState<OwnerChatMessage[]>([
     {
@@ -289,7 +305,7 @@ export default function OwnerAssistant() {
 
               <div className="border-t border-border p-4 md:p-5">
                 <div className="mb-3 flex flex-wrap gap-2">
-                  {ownerAssistantSuggestions.slice(0, 5).map((item) => (
+                  {(suggestedReportQuestions.length ? suggestedReportQuestions : ownerAssistantSuggestions).slice(0, 5).map((item) => (
                     <Button key={item} type="button" size="sm" variant="outline" onClick={() => askOwnerAssistant(item)}>
                       {item}
                     </Button>

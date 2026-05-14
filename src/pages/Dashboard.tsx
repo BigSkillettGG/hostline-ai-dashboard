@@ -24,6 +24,12 @@ import { calls as sampleCalls, orders as sampleOrders, reservations as sampleRes
 import type { Call, Order, Reservation } from "@/data/mock";
 import { buildDailyBrief, type DailyBriefFollowUp, type DailyBriefSuggestion } from "@/domain/daily-brief";
 import type { StaffTask } from "@/domain/staff-tasks";
+import { adaptDemoDataForBusiness } from "@/domain/vertical-demo-data";
+import {
+  formatVerticalIntent,
+  getVerticalInsightProfile,
+  type VerticalInsightProfile,
+} from "@/domain/vertical-insights";
 import {
   Area,
   AreaChart,
@@ -108,42 +114,54 @@ export default function Dashboard() {
     staleTime: 60_000,
   });
 
-  const dashboardCalls = useMemo(
-    () => liveEnabled ? callQuery.data ?? emptyCalls : sampleCalls,
-    [callQuery.data, liveEnabled],
-  );
-  const dashboardOrders = useMemo(
-    () => liveEnabled ? orderQuery.data ?? emptyOrders : sampleOrders,
-    [liveEnabled, orderQuery.data],
-  );
-  const dashboardReservations = useMemo(
-    () => liveEnabled ? reservationQuery.data ?? emptyReservations : sampleReservations,
-    [liveEnabled, reservationQuery.data],
-  );
   const dashboardTasks = useMemo(
     () => liveEnabled ? taskQuery.data ?? emptyTasks : emptyTasks,
     [liveEnabled, taskQuery.data],
   );
   const activeTenant = tenantQuery.data?.find((tenant) => tenant.locationId === activeLocationId);
   const draft = loadOnboardingDraft();
+  const businessType = activeTenant?.businessType ?? draft.businessType;
+  const verticalProfile = useMemo(() => getVerticalInsightProfile(businessType), [businessType]);
   const businessName = activeTenant?.locationName ?? String(draft.restaurantName || "your business");
   const aiHostPhone = activeTenant?.aiHostPhone ?? String(draft.assignedPhoneNumber || "(415) 555-0142");
+  const demoData = useMemo(
+    () => adaptDemoDataForBusiness({
+      businessType,
+      calls: sampleCalls,
+      orders: sampleOrders,
+      reservations: sampleReservations,
+    }),
+    [businessType],
+  );
+  const dashboardCalls = useMemo(
+    () => liveEnabled ? callQuery.data ?? emptyCalls : demoData.calls,
+    [callQuery.data, demoData.calls, liveEnabled],
+  );
+  const dashboardOrders = useMemo(
+    () => liveEnabled ? orderQuery.data ?? emptyOrders : demoData.orders,
+    [demoData.orders, liveEnabled, orderQuery.data],
+  );
+  const dashboardReservations = useMemo(
+    () => liveEnabled ? reservationQuery.data ?? emptyReservations : demoData.reservations,
+    [demoData.reservations, liveEnabled, reservationQuery.data],
+  );
   const recentCalls = useMemo(() => dashboardCalls.filter((call) => isWithinLastHours(call.time, 24)), [dashboardCalls]);
   const recentOrders = useMemo(() => dashboardOrders.filter((order) => isWithinLastHours(order.createdAt, 24)), [dashboardOrders]);
   const recentTasks = useMemo(() => dashboardTasks.filter((task) => isWithinLastHours(task.createdAt, 24)), [dashboardTasks]);
   const dailyBrief = useMemo(
     () => buildDailyBrief({
+      businessType: String(businessType ?? ""),
       businessName,
       calls: dashboardCalls,
       orders: dashboardOrders,
       reservations: dashboardReservations,
       tasks: dashboardTasks,
     }),
-    [businessName, dashboardCalls, dashboardOrders, dashboardReservations, dashboardTasks],
+    [businessName, businessType, dashboardCalls, dashboardOrders, dashboardReservations, dashboardTasks],
   );
   const callVolume = useMemo(() => buildHourlyCallVolume(recentCalls), [recentCalls]);
   const peakHour = callVolume.reduce((max, item) => (item.calls > max.calls ? item : max), callVolume[0]);
-  const topIntents = useMemo(() => buildTopIntents(recentCalls), [recentCalls]);
+  const topIntents = useMemo(() => buildTopIntents(recentCalls, businessType), [businessType, recentCalls]);
   const totalCalls = recentCalls.length;
   const activeStaffFollowUps = dashboardTasks.filter((task) => task.status === "open" || task.status === "in_progress").length;
   const ordersCaptured = recentOrders.length;
@@ -217,8 +235,10 @@ export default function Dashboard() {
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">
                 SignalHost handled <span className="font-medium text-foreground tabular-nums">{totalCalls}</span> calls in the last 24 hours
-                {ordersCaptured > 0 ? (
-                  <> and captured <span className="font-medium text-foreground">{formatMoney(revenueCaptured)}</span> in order value.</>
+                {ordersCaptured > 0 && revenueCaptured > 0 ? (
+                  <> and captured <span className="font-medium text-foreground">{formatMoney(revenueCaptured)}</span> in {verticalProfile.primaryWorkflow.ownerPhrase} value.</>
+                ) : ordersCaptured > 0 ? (
+                  <> and logged <span className="font-medium text-foreground tabular-nums">{ordersCaptured}</span> {ordersCaptured === 1 ? verticalProfile.primaryWorkflow.singular : verticalProfile.primaryWorkflow.plural}.</>
                 ) : (
                   <> with <span className="font-medium text-foreground tabular-nums">{activeStaffFollowUps}</span> open staff follow-ups.</>
                 )}
@@ -334,13 +354,13 @@ export default function Dashboard() {
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
           <StatCard label="Calls answered" value={totalCalls} delta={0} icon={Phone} accent />
           <StatCard label="Missed recovered" value={missedRecovered} delta={0} icon={PhoneIncoming} />
-          <StatCard label="Orders captured" value={ordersCaptured} delta={0} icon={ShoppingBag} />
-          <StatCard label="Reservation requests" value={reservationRequests} delta={0} icon={CalendarDays} />
+          <StatCard label={verticalProfile.primaryWorkflow.metricLabel} value={ordersCaptured} delta={0} icon={ShoppingBag} />
+          <StatCard label={verticalProfile.secondaryWorkflow.metricLabel} value={reservationRequests} delta={0} icon={CalendarDays} />
           <Link to="/app/tasks" className="contents">
-            <StatCard label="Needs staff" value={activeStaffFollowUps} delta={0} icon={AlertTriangle} />
+            <StatCard label={verticalProfile.dashboard.staffFollowUpsLabel} value={activeStaffFollowUps} delta={0} icon={AlertTriangle} />
           </Link>
           <Link to="/app/calls?intent=sales" className="contents">
-            <StatCard label="Sales / vendor calls" value={salesCalls} delta={0} icon={Megaphone} />
+            <StatCard label={verticalProfile.vendorMetricLabel} value={salesCalls} delta={0} icon={Megaphone} />
           </Link>
         </div>
 
@@ -417,7 +437,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-base">Top intents</CardTitle>
-                  <p className="mt-0.5 text-xs text-muted-foreground">What callers asked for</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{verticalProfile.dashboard.topIntentSubtitle}</p>
                 </div>
                 <Sparkles className="h-4 w-4 text-primary/60" />
               </div>
@@ -480,9 +500,9 @@ export default function Dashboard() {
               <ul className="divide-y divide-border">
                 {activity.map((activityItem) => (
                   <li key={`${activityItem.type}-${activityItem.t}-${activityItem.item.id}`} className="group flex items-center gap-3 px-6 py-3 text-sm transition-colors hover:bg-muted/30">
-                    {activityItem.type === "call" && <CallActivity item={activityItem.item} />}
-                    {activityItem.type === "order" && <OrderActivity item={activityItem.item} />}
-                    {activityItem.type === "reservation" && <ReservationActivity item={activityItem.item} />}
+                    {activityItem.type === "call" && <CallActivity businessType={businessType} item={activityItem.item} />}
+                    {activityItem.type === "order" && <OrderActivity item={activityItem.item} profile={verticalProfile} />}
+                    {activityItem.type === "reservation" && <ReservationActivity item={activityItem.item} profile={verticalProfile} />}
                     {activityItem.type === "task" && <TaskActivity item={activityItem.item} />}
                     <div className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">{formatTime(activityItem.t)}</div>
                     <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground" />
@@ -497,7 +517,7 @@ export default function Dashboard() {
   );
 }
 
-function CallActivity({ item }: { item: Call }) {
+function CallActivity({ businessType, item }: { businessType: unknown; item: Call }) {
   return (
     <>
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-info/10 text-info ring-4 ring-info/5">
@@ -506,7 +526,7 @@ function CallActivity({ item }: { item: Call }) {
       <div className="min-w-0 flex-1">
         <div className="truncate">
           <span className="font-medium">{item.caller}</span>
-          <span className={`ml-2 text-xs font-medium capitalize ${intentColor[item.intent]}`}>{item.intent}</span>
+          <span className={`ml-2 text-xs font-medium ${intentColor[item.intent]}`}>{formatVerticalIntent(item.intent, businessType)}</span>
         </div>
         <div className="truncate text-xs text-muted-foreground">{item.summary}</div>
       </div>
@@ -514,30 +534,33 @@ function CallActivity({ item }: { item: Call }) {
   );
 }
 
-function OrderActivity({ item }: { item: Order }) {
+function OrderActivity({ item, profile }: { item: Order; profile: VerticalInsightProfile }) {
   return (
     <>
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary ring-4 ring-primary/5">
         <ShoppingBag className="h-3.5 w-3.5" />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="truncate"><span className="font-medium">New order</span> · {item.customer}</div>
+        <div className="truncate"><span className="font-medium">{profile.primaryWorkflow.activityTitle}</span> - {item.customer}</div>
         <div className="text-xs text-muted-foreground">
-          {formatMoney(item.total)} · ETA {item.etaMinutes}m
+          {item.total > 0 ? `${formatMoney(item.total)} - ` : ""}{item.etaMinutes ? `ETA ${item.etaMinutes}m` : item.status.replace(/_/g, " ")}
         </div>
       </div>
     </>
   );
 }
 
-function ReservationActivity({ item }: { item: Reservation }) {
+function ReservationActivity({ item, profile }: { item: Reservation; profile: VerticalInsightProfile }) {
   return (
     <>
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-warning/15 text-warning ring-4 ring-warning/5">
         <CalendarDays className="h-3.5 w-3.5" />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="truncate"><span className="font-medium">{item.guest}</span> · party of {item.partySize}</div>
+        <div className="truncate">
+          <span className="font-medium">{profile.businessType === "restaurant" ? item.guest : profile.secondaryWorkflow.activityTitle}</span>
+          {profile.businessType === "restaurant" ? ` - party of ${item.partySize}` : ` - ${item.guest}`}
+        </div>
         <div className="text-xs text-muted-foreground">{item.date} at {item.time}</div>
       </div>
     </>
@@ -639,7 +662,7 @@ function buildHourlyCallVolume(calls: Call[]) {
   return buckets.map(({ hour, calls }) => ({ hour, calls }));
 }
 
-function buildTopIntents(calls: Call[]) {
+function buildTopIntents(calls: Call[], businessType: unknown) {
   const counts = new Map<string, number>();
   for (const call of calls) counts.set(call.intent, (counts.get(call.intent) ?? 0) + 1);
   const total = calls.length || 1;
@@ -648,7 +671,7 @@ function buildTopIntents(calls: Call[]) {
     .sort((first, second) => second[1] - first[1])
     .slice(0, 5)
     .map(([intent, value]) => ({
-      name: titleCase(intent),
+      name: formatVerticalIntent(intent, businessType),
       percent: Math.round((value / total) * 100),
       value,
     }));
@@ -671,8 +694,4 @@ function formatHour(date: Date) {
   const period = hour < 12 ? "AM" : "PM";
   const display = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
   return `${display}${period}`;
-}
-
-function titleCase(value: string) {
-  return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }

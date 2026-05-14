@@ -23,7 +23,7 @@ describe("restaurant context store", () => {
           cleared_at: null,
           created_at: "2026-05-13T19:55:00.000Z",
           expiration: "today_close",
-          expires_at: "2026-05-13T23:59:59.999Z",
+          expires_at: "2099-05-13T23:59:59.999Z",
           id: "live_1",
           mode: null,
           source: "owner_text",

@@ -2,6 +2,11 @@ import type { Call, Order, Reservation } from "../data/mock";
 import { buildDailyBrief, type DailyBrief } from "./daily-brief";
 import { buildInteractionInsight } from "./interaction-status";
 import { isActiveStaffTask, sortStaffTasks, type StaffTask } from "./staff-tasks";
+import {
+  getVerticalInsightProfile,
+  getVerticalOwnerSuggestions,
+  type VerticalInsightProfile,
+} from "./vertical-insights";
 
 export type OwnerAssistantIntent =
   | "calls"
@@ -26,6 +31,7 @@ export interface OwnerAssistantResponse {
 }
 
 export interface OwnerAssistantContext {
+  businessType?: string;
   businessName: string;
   calls: Call[];
   now?: Date;
@@ -34,19 +40,11 @@ export interface OwnerAssistantContext {
   tasks: StaffTask[];
 }
 
-export const ownerAssistantSuggestions = [
-  "What happened today?",
-  "Any urgent calls?",
-  "What needs follow-up?",
-  "Any high-value opportunities?",
-  "What questions did you not know?",
-  "Any complaints?",
-  "How many orders came in?",
-  "How many reservation requests?",
-];
+export const ownerAssistantSuggestions = getVerticalOwnerSuggestions("restaurant");
 
 export function buildOwnerAssistantResponse(question: string, context: OwnerAssistantContext): OwnerAssistantResponse {
   const intent = classifyOwnerQuestion(question);
+  const profile = getVerticalInsightProfile(context.businessType);
   const brief = buildDailyBrief(context);
   const recentCalls = recentItems(context.calls, (call) => call.time, context.now);
   const recentOrders = recentItems(context.orders, (order) => order.createdAt, context.now);
@@ -56,13 +54,13 @@ export function buildOwnerAssistantResponse(question: string, context: OwnerAssi
   if (intent === "daily_summary") return dailySummaryResponse(brief);
   if (intent === "urgent") return urgentResponse({ activeTasks, brief, recentCalls });
   if (intent === "follow_ups") return followUpsResponse(brief, activeTasks);
-  if (intent === "opportunities") return opportunitiesResponse({ brief, recentCalls });
+  if (intent === "opportunities") return opportunitiesResponse({ brief, profile, recentCalls });
   if (intent === "knowledge_gaps") return knowledgeGapsResponse(brief);
   if (intent === "complaints") return complaintResponse(recentCalls);
-  if (intent === "orders") return orderResponse(recentOrders);
-  if (intent === "reservations") return reservationResponse(recentReservations);
+  if (intent === "orders") return orderResponse(recentOrders, profile);
+  if (intent === "reservations") return reservationResponse(recentReservations, profile);
   if (intent === "calls") return callsResponse({ brief, recentCalls });
-  return fallbackResponse(brief);
+  return fallbackResponse(brief, profile);
 }
 
 export function classifyOwnerQuestion(question: string): OwnerAssistantIntent {
@@ -144,9 +142,11 @@ function followUpsResponse(brief: DailyBrief, activeTasks: StaffTask[]): OwnerAs
 
 function opportunitiesResponse({
   brief,
+  profile,
   recentCalls,
 }: {
   brief: DailyBrief;
+  profile: VerticalInsightProfile;
   recentCalls: Call[];
 }): OwnerAssistantResponse {
   const opportunities = recentCalls
@@ -164,7 +164,7 @@ function opportunitiesResponse({
     confidence: "high",
     intent: "opportunities",
     suggestedActions: opportunities.length ? ["Open follow-up queue", "Review high-value calls"] : ["Ask for call volume"],
-    title: "Revenue opportunities",
+    title: profile.highValueLabel,
   };
 }
 
@@ -200,36 +200,44 @@ function complaintResponse(recentCalls: Call[]): OwnerAssistantResponse {
   };
 }
 
-function orderResponse(recentOrders: Order[]): OwnerAssistantResponse {
+function orderResponse(recentOrders: Order[], profile: VerticalInsightProfile): OwnerAssistantResponse {
   const total = recentOrders.reduce((sum, order) => sum + order.total, 0);
+  const label = profile.primaryWorkflow;
+  const valueLine = total > 0 ? [`Captured ${label.ownerPhrase} value: ${formatMoney(total)}`] : [];
 
   return {
-    answer: `There ${recentOrders.length === 1 ? "was" : "were"} ${recentOrders.length} order${recentOrders.length === 1 ? "" : "s"} in the last 24 hours.`,
+    answer: `There ${recentOrders.length === 1 ? "was" : "were"} ${recentOrders.length} ${recentOrders.length === 1 ? label.singular : label.plural} in the last 24 hours.`,
     bullets: recentOrders.length
       ? [
-          `Captured order value: ${formatMoney(total)}`,
-          ...recentOrders.slice(0, 4).map((order) => `${order.customer}: ${formatMoney(order.total)} - ${order.status.replace(/_/g, " ")}`),
+          ...valueLine,
+          ...recentOrders.slice(0, 4).map((order) =>
+            `${order.customer}: ${order.total > 0 ? `${formatMoney(order.total)} - ` : ""}${order.status.replace(/_/g, " ")}`,
+          ),
         ]
-      : ["No orders captured in the last 24 hours."],
+      : [`No ${label.plural} captured in the last 24 hours.`],
     confidence: "high",
     intent: "orders",
-    suggestedActions: recentOrders.length ? ["Open Orders", "Review delivery status"] : ["Ask for today's summary"],
-    title: "Orders",
+    suggestedActions: recentOrders.length ? [`Open ${label.metricLabel}`, "Review follow-up status"] : ["Ask for today's summary"],
+    title: label.metricLabel,
   };
 }
 
-function reservationResponse(recentReservations: Reservation[]): OwnerAssistantResponse {
+function reservationResponse(recentReservations: Reservation[], profile: VerticalInsightProfile): OwnerAssistantResponse {
+  const label = profile.secondaryWorkflow;
+
   return {
-    answer: `There ${recentReservations.length === 1 ? "was" : "were"} ${recentReservations.length} reservation or appointment request${recentReservations.length === 1 ? "" : "s"} in the last 24 hours.`,
+    answer: `There ${recentReservations.length === 1 ? "was" : "were"} ${recentReservations.length} ${recentReservations.length === 1 ? label.ownerPhrase : label.plural} in the last 24 hours.`,
     bullets: recentReservations.length
       ? recentReservations.slice(0, 5).map((reservation) =>
-          `${reservation.guest}: party of ${reservation.partySize} on ${reservation.date} at ${reservation.time} - ${reservation.status}`,
+          profile.businessType === "restaurant"
+            ? `${reservation.guest}: party of ${reservation.partySize} on ${reservation.date} at ${reservation.time} - ${reservation.status}`
+            : `${reservation.guest}: ${reservation.date} at ${reservation.time} - ${reservation.status}`,
         )
-      : ["No reservation or appointment requests captured in the last 24 hours."],
+      : [`No ${label.plural} captured in the last 24 hours.`],
     confidence: "high",
     intent: "reservations",
-    suggestedActions: recentReservations.length ? ["Open Reservations", "Review pending requests"] : ["Ask for open follow-ups"],
-    title: "Reservations and appointments",
+    suggestedActions: recentReservations.length ? [`Open ${label.metricLabel}`, "Review pending requests"] : ["Ask for open follow-ups"],
+    title: label.metricLabel,
   };
 }
 
@@ -257,10 +265,12 @@ function callsResponse({
   };
 }
 
-function fallbackResponse(brief: DailyBrief): OwnerAssistantResponse {
+function fallbackResponse(brief: DailyBrief, profile: VerticalInsightProfile): OwnerAssistantResponse {
+  const suggestions = getVerticalOwnerSuggestions(profile.businessType);
+
   return {
-    answer: `I can help with today's summary, urgent calls, open follow-ups, high-value opportunities, complaints, orders, reservations, and knowledge gaps. For now: ${brief.headline}`,
-    bullets: ownerAssistantSuggestions.slice(0, 5),
+    answer: `I can help with today's summary, urgent calls, open follow-ups, ${profile.highValueLabel.toLowerCase()}, complaints, ${profile.primaryWorkflow.plural}, ${profile.secondaryWorkflow.plural}, and knowledge gaps. For now: ${brief.headline}`,
+    bullets: suggestions.slice(0, 5),
     confidence: "medium",
     intent: "unknown",
     suggestedActions: ["Try a suggested question", "Open daily brief"],

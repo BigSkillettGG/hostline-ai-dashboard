@@ -1,6 +1,7 @@
 import type { Call, Order, Reservation } from "../data/mock";
 import { buildInteractionInsight, interactionValueLabels, type InteractionInsight } from "./interaction-status";
 import { isActiveStaffTask, type StaffTask } from "./staff-tasks";
+import { formatVerticalIntent, getVerticalInsightProfile, type VerticalInsightProfile } from "./vertical-insights";
 
 export interface DailyBriefMetric {
   label: string;
@@ -47,6 +48,7 @@ export interface DailyBrief {
 type DailyBriefCall = Call & { insight?: InteractionInsight };
 
 export function buildDailyBrief({
+  businessType,
   businessName,
   calls,
   now = new Date(),
@@ -54,6 +56,7 @@ export function buildDailyBrief({
   reservations,
   tasks,
 }: {
+  businessType?: string;
   businessName: string;
   calls: Call[];
   now?: Date;
@@ -61,6 +64,7 @@ export function buildDailyBrief({
   reservations: Reservation[];
   tasks: StaffTask[];
 }): DailyBrief {
+  const profile = getVerticalInsightProfile(businessType);
   const recentCalls = calls.filter((call) => isWithinLastHours(call.time, 24, now));
   const recentOrders = orders.filter((order) => isWithinLastHours(order.createdAt, 24, now));
   const recentReservations = reservations.filter((reservation) =>
@@ -81,7 +85,7 @@ export function buildDailyBrief({
   const chats = recentCalls.filter((call) => call.channel === "web_chat").length;
   const revenueCents = Math.round(recentOrders.reduce((sum, order) => sum + order.total, 0) * 100);
   const followUps = buildFollowUps(followUpCalls, activeTasks);
-  const suggestedUpdates = buildSuggestedUpdates(knowledgeGapCalls, callsWithInsight);
+  const suggestedUpdates = buildSuggestedUpdates(knowledgeGapCalls, callsWithInsight, businessType);
   const openFollowUps = followUps.length;
   const totals = {
     calls: recentCalls.length,
@@ -101,18 +105,18 @@ export function buildDailyBrief({
     weekday: "long",
   }).format(now);
   const headline = buildHeadline(totals, businessName);
-  const ownerMessage = buildOwnerMessage({ businessName, dateLabel, totals });
+  const ownerMessage = buildOwnerMessage({ businessName, dateLabel, profile, totals });
   const metrics = [
     { label: "Calls", value: String(totals.calls) },
     { label: "Chats", value: String(totals.chats) },
-    { label: "Orders", value: String(totals.orders) },
-    { label: "Reservations", value: String(totals.reservations) },
+    { label: profile.primaryWorkflow.metricLabel, value: String(totals.orders) },
+    { label: profile.secondaryWorkflow.metricLabel, value: String(totals.reservations) },
     { label: "Open follow-ups", value: String(totals.openFollowUps) },
     { label: "High-value", value: String(totals.highValue) },
   ];
 
   return {
-    copyText: buildCopyText({ businessName, dateLabel, followUps, ownerMessage, suggestedUpdates, totals }),
+    copyText: buildCopyText({ businessName, dateLabel, followUps, ownerMessage, profile, suggestedUpdates, totals }),
     dateLabel,
     followUps,
     headline,
@@ -134,17 +138,19 @@ function buildHeadline(totals: DailyBrief["totals"], businessName: string) {
 function buildOwnerMessage({
   businessName,
   dateLabel,
+  profile,
   totals,
 }: {
   businessName: string;
   dateLabel: string;
+  profile: VerticalInsightProfile;
   totals: DailyBrief["totals"];
 }) {
   const handled = [
     `${totals.calls} call${plural(totals.calls)}`,
     totals.chats ? `${totals.chats} website chat${plural(totals.chats)}` : "",
-    totals.orders ? `${totals.orders} order${plural(totals.orders)}` : "",
-    totals.reservations ? `${totals.reservations} reservation request${plural(totals.reservations)}` : "",
+    totals.orders ? `${totals.orders} ${pluralPhrase(totals.orders, profile.primaryWorkflow.singular, profile.primaryWorkflow.plural)}` : "",
+    totals.reservations ? `${totals.reservations} ${pluralPhrase(totals.reservations, profile.secondaryWorkflow.ownerPhrase, profile.secondaryWorkflow.plural)}` : "",
   ].filter(Boolean);
   const attention = [
     totals.urgent ? `${totals.urgent} urgent` : "",
@@ -152,7 +158,9 @@ function buildOwnerMessage({
     totals.knowledgeGaps ? `${totals.knowledgeGaps} answer${plural(totals.knowledgeGaps)} to improve` : "",
     totals.openFollowUps ? `${totals.openFollowUps} open follow-up${plural(totals.openFollowUps)}` : "",
   ].filter(Boolean);
-  const revenue = totals.revenueCents > 0 ? ` I captured about ${formatMoneyFromCents(totals.revenueCents)} in order value.` : "";
+  const revenue = totals.revenueCents > 0
+    ? ` I captured about ${formatMoneyFromCents(totals.revenueCents)} in ${profile.primaryWorkflow.ownerPhrase} value.`
+    : "";
   const attentionSentence = attention.length
     ? ` I flagged ${joinHumanList(attention)}.`
     : " Nothing needs immediate attention right now.";
@@ -183,7 +191,11 @@ function buildFollowUps(calls: DailyBriefCall[], tasks: StaffTask[]): DailyBrief
     .slice(0, 5);
 }
 
-function buildSuggestedUpdates(knowledgeGapCalls: DailyBriefCall[], calls: DailyBriefCall[]): DailyBriefSuggestion[] {
+function buildSuggestedUpdates(
+  knowledgeGapCalls: DailyBriefCall[],
+  calls: DailyBriefCall[],
+  businessType?: string,
+): DailyBriefSuggestion[] {
   const suggestions: DailyBriefSuggestion[] = knowledgeGapCalls.slice(0, 3).map((call) => ({
     detail: call.summary,
     id: `knowledge-${call.id}`,
@@ -200,7 +212,7 @@ function buildSuggestedUpdates(knowledgeGapCalls: DailyBriefCall[], calls: Daily
 
   if (repeatedTopic && !suggestions.some((suggestion) => suggestion.id === `topic-${repeatedTopic[0]}`)) {
     suggestions.push({
-      detail: `${repeatedTopic[1]} people asked about ${repeatedTopic[0].replace(/_/g, " ")} in the last 24 hours.`,
+      detail: `${repeatedTopic[1]} people asked about ${formatVerticalIntent(repeatedTopic[0], businessType).toLowerCase()} in the last 24 hours.`,
       id: `topic-${repeatedTopic[0]}`,
       title: "Consider making this easier to find",
     });
@@ -214,6 +226,7 @@ function buildCopyText({
   dateLabel,
   followUps,
   ownerMessage,
+  profile,
   suggestedUpdates,
   totals,
 }: {
@@ -221,6 +234,7 @@ function buildCopyText({
   dateLabel: string;
   followUps: DailyBriefFollowUp[];
   ownerMessage: string;
+  profile: VerticalInsightProfile;
   suggestedUpdates: DailyBriefSuggestion[];
   totals: DailyBrief["totals"];
 }) {
@@ -232,8 +246,8 @@ function buildCopyText({
     "Numbers:",
     `- Calls: ${totals.calls}`,
     `- Website chats: ${totals.chats}`,
-    `- Orders: ${totals.orders}`,
-    `- Reservation requests: ${totals.reservations}`,
+    `- ${profile.primaryWorkflow.copyLabel}: ${totals.orders}`,
+    `- ${profile.secondaryWorkflow.copyLabel}: ${totals.reservations}`,
     `- High-value opportunities: ${totals.highValue}`,
     `- Open follow-ups: ${totals.openFollowUps}`,
     `- Knowledge gaps: ${totals.knowledgeGaps}`,
@@ -276,6 +290,10 @@ function joinHumanList(items: string[]) {
 
 function plural(count: number) {
   return count === 1 ? "" : "s";
+}
+
+function pluralPhrase(count: number, singular: string, pluralValue: string) {
+  return count === 1 ? singular : pluralValue;
 }
 
 function formatMoneyFromCents(cents: number) {

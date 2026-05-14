@@ -113,4 +113,32 @@ describe("owner assistant", () => {
     expect(response.confidence).toBe("medium");
     expect(response.bullets[0]).toBe("What happened today?");
   });
+
+  it("answers workflow questions with vertical-specific language", () => {
+    const orderResponse = buildOwnerAssistantResponse("How many orders came in?", {
+      businessName: "Summit Air",
+      businessType: "hvac",
+      calls: [],
+      now,
+      orders: [{ ...order, total: 0 }],
+      reservations: [],
+      tasks: [],
+    });
+    const bookingResponse = buildOwnerAssistantResponse("How many appointments?", {
+      businessName: "RidgeLine Roofing",
+      businessType: "roofing",
+      calls: [],
+      now,
+      orders: [],
+      reservations: [reservation],
+      tasks: [],
+    });
+
+    expect(orderResponse.title).toBe("Service requests");
+    expect(orderResponse.answer).toContain("service request");
+    expect(orderResponse.answer).not.toContain("order");
+    expect(bookingResponse.title).toBe("Inspections");
+    expect(bookingResponse.answer).toContain("inspection request");
+    expect(bookingResponse.answer).not.toContain("reservation");
+  });
 });

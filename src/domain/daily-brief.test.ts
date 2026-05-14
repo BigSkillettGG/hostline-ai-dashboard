@@ -109,6 +109,31 @@ describe("daily brief", () => {
     expect(brief.suggestedUpdates[0]?.title).toBe("Review or add missing knowledge");
   });
 
+  it("uses vertical-specific report labels for trades", () => {
+    const brief = buildDailyBrief({
+      businessName: "BrightWire Electric",
+      businessType: "electrical",
+      calls: [{
+        ...baseCall,
+        id: "call_panel",
+        intent: "reservation",
+        summary: "Caller asked for an appointment for a panel upgrade estimate.",
+      }],
+      now,
+      orders: [{ ...order, total: 0 }],
+      reservations: [reservation],
+      tasks: [],
+    });
+
+    expect(brief.metrics.map((metric) => metric.label)).toContain("Service requests");
+    expect(brief.metrics.map((metric) => metric.label)).toContain("Appointments");
+    expect(brief.ownerMessage).toContain("service request");
+    expect(brief.ownerMessage).toContain("appointment request");
+    expect(brief.copyText).toContain("- Service requests: 1");
+    expect(brief.copyText).toContain("- Appointment requests: 1");
+    expect(brief.copyText).not.toContain("Reservation requests");
+  });
+
   it("ignores interactions outside the 24 hour window", () => {
     const brief = buildDailyBrief({
       businessName: "SignalHost Demo",

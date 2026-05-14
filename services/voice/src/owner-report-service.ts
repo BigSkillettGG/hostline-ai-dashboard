@@ -43,6 +43,7 @@ export interface OwnerReportDeliveryResult extends OwnerReportResult {
 }
 
 interface SupabaseLocationRow {
+  cuisine: string | null;
   id: string;
   name: string | null;
   timezone: string | null;
@@ -252,6 +253,7 @@ class SupabaseOwnerReportService implements OwnerReportService {
       this.fetchStaffTasks(locationId, period.start),
     ]);
     const report = buildDailyBrief({
+      businessType: location?.cuisine ?? undefined,
       businessName: location?.name?.trim() || "your business",
       calls,
       now,
@@ -280,7 +282,7 @@ class SupabaseOwnerReportService implements OwnerReportService {
   private async fetchLocation(locationId: string) {
     const rows = await this.request<SupabaseLocationRow[]>("locations", {
       method: "GET",
-      query: `id=eq.${encodeURIComponent(locationId)}&limit=1&select=id,name,timezone`,
+      query: `id=eq.${encodeURIComponent(locationId)}&limit=1&select=id,name,timezone,cuisine`,
     });
     return rows[0] ?? null;
   }

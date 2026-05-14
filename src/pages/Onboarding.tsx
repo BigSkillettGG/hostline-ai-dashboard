@@ -49,6 +49,7 @@ import {
   type OnboardingFieldOption,
   type OnboardingStepId,
 } from "@/domain/onboarding";
+import { getVerticalInsightProfile } from "@/domain/vertical-insights";
 import { loadOnboardingDraft, saveOnboardingDraft } from "@/lib/onboarding-draft";
 import {
   fetchOnboardingProfileFromSupabase,
@@ -120,6 +121,7 @@ export default function Onboarding() {
   const [savingVerificationKey, setSavingVerificationKey] = useState<string | null>(null);
   const [searchingNumbers, setSearchingNumbers] = useState(false);
   const businessTemplate = useMemo(() => getOnboardingBusinessTemplate(draft), [draft]);
+  const verticalProfile = useMemo(() => getVerticalInsightProfile(businessTemplate.id), [businessTemplate.id]);
   const activeOnboardingSections = useMemo(() => getBusinessOnboardingSections(draft), [draft]);
   const progress = useMemo(() => calculateOnboardingProgress(draft, activeOnboardingSections), [draft, activeOnboardingSections]);
   const activeSection = activeOnboardingSections.find((section) => section.id === activeSectionId) ?? activeOnboardingSections[0];
@@ -469,6 +471,31 @@ export default function Onboarding() {
                 <Button variant="outline" size="sm" onClick={jumpToFirstMissing}>
                   Find next blank
                 </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,0.82fr)_minmax(280px,1fr)] lg:items-start">
+              <div>
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <ShieldCheck className="h-4 w-4 text-primary" />
+                  {businessTemplate.workspaceLabel} coverage checklist
+                </div>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  These are the call types this interview is designed to cover for {businessTemplate.label.toLowerCase()}.
+                  The owner reports and dashboard analytics will use this same vertical language.
+                </p>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {verticalProfile.firstCallChecks.map((item) => (
+                  <div key={item} className="flex gap-2 rounded-md border border-border bg-muted/20 p-3 text-xs leading-5">
+                    <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" />
+                    <span>{item}</span>
+                  </div>
+                ))}
               </div>
             </div>
           </CardContent>
