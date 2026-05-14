@@ -7,6 +7,8 @@ export type PlatformBillingUsageStatus = "near_limit" | "normal" | "not_configur
 
 export interface PlatformBillingTenant {
   aiHostPhone?: string;
+  billingStatus?: string;
+  billingUpdatedAt?: string;
   businessLabel: string;
   callsThisMonth: number;
   estimatedOverageCents: number;
@@ -15,6 +17,7 @@ export interface PlatformBillingTenant {
   locationId: string;
   monthlyPrice: number;
   name: string;
+  overageLabel?: string;
   overageInteractions: number;
   ownerEmail: string;
   planName: string;
@@ -52,6 +55,9 @@ export function mapDirectoryTenantToBillingTenant(
     locationId: tenant.locationId,
     monthlyPrice: tenant.monthlyPrice,
     name: tenant.locationName,
+    billingStatus: tenant.billingStatus,
+    billingUpdatedAt: tenant.billingUpdatedAt,
+    overageLabel: tenant.overageLabel,
     ownerEmail: tenant.ownerEmail,
     phoneReleasedAt: tenant.phoneReleasedAt,
     phoneStatus: tenant.phoneStatus,
@@ -106,6 +112,9 @@ function buildBillingTenant(input: {
   locationId: string;
   monthlyPrice: number;
   name: string;
+  billingStatus?: string;
+  billingUpdatedAt?: string;
+  overageLabel?: string;
   ownerEmail: string;
   phoneReleasedAt?: string;
   phoneStatus?: string;
@@ -124,14 +133,17 @@ function buildBillingTenant(input: {
 
   return {
     aiHostPhone: input.aiHostPhone,
+    billingStatus: input.billingStatus,
+    billingUpdatedAt: input.billingUpdatedAt,
     businessLabel: input.businessLabel,
     callsThisMonth,
-    estimatedOverageCents: overageInteractions * defaultOverageCents(input.planName),
+    estimatedOverageCents: overageInteractions * overageCents(input.overageLabel ?? input.planName),
     id: input.id,
     includedInteractions,
     locationId: input.locationId,
     monthlyPrice: Math.max(0, Math.round(input.monthlyPrice)),
     name: input.name,
+    overageLabel: input.overageLabel,
     overageInteractions,
     ownerEmail: input.ownerEmail,
     planName: input.planName || "Unassigned",
@@ -175,8 +187,14 @@ function getTrialStatus(input: {
   return trialEndsAt ? "trialing" : "active";
 }
 
-function defaultOverageCents(planName: string) {
-  const normalized = planName.toLowerCase();
+function overageCents(labelOrPlanName: string) {
+  const explicitRate = labelOrPlanName.match(/\$?\s*(\d+(?:\.\d+)?)/);
+  if (explicitRate) {
+    const dollars = Number.parseFloat(explicitRate[1]);
+    if (Number.isFinite(dollars)) return Math.round(dollars * 100);
+  }
+
+  const normalized = labelOrPlanName.toLowerCase();
   if (normalized.includes("pro") || normalized.includes("scale")) return 25;
   if (normalized.includes("starter") || normalized.includes("basic")) return 45;
   return 35;

@@ -20,8 +20,10 @@ describe("platform billing", () => {
       organizationName: "Summit Air",
       ownerEmail: "owner@summit.test",
       ownerName: "Owner",
+      overageLabel: "$0.40 per extra call or chat",
       phoneStatus: "in-use",
       planName: "Dispatch",
+      billingStatus: "active",
       status: "healthy",
       timezone: "America/New_York",
       trialEndsAt: "2026-05-10T12:00:00.000Z",
@@ -31,8 +33,9 @@ describe("platform billing", () => {
 
     expect(tenant.usageStatus).toBe("over_limit");
     expect(tenant.overageInteractions).toBe(60);
-    expect(tenant.estimatedOverageCents).toBe(2100);
+    expect(tenant.estimatedOverageCents).toBe(2400);
     expect(tenant.trialStatus).toBe("grace_period");
+    expect(tenant.billingStatus).toBe("active");
   });
 
   it("does not flag paid phone numbers for trial cleanup when stale trial dates remain", () => {

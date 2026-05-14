@@ -949,6 +949,18 @@ describe("Supabase onboarding profile payload", () => {
 describe("Supabase tenant directory mapping", () => {
   it("combines organizations, locations, onboarding, phone numbers, owners, and usage", () => {
     const rows = mapSupabaseTenantDirectory({
+      billingAccounts: [{
+        cancel_at_period_end: false,
+        current_period_end: "2026-06-12T12:00:00.000Z",
+        included_interactions: 700,
+        location_id: "loc_1",
+        monthly_cents: 24900,
+        organization_id: "org_1",
+        overage_label: "$0.40 per extra call or chat",
+        plan_name: "Dispatch",
+        status: "active",
+        updated_at: "2026-05-12T12:05:00.000Z",
+      }],
       locations: [{
         address: "Waltham, MA",
         ai_host_phone: "+17815550100",
@@ -1004,13 +1016,17 @@ describe("Supabase tenant directory mapping", () => {
       businessLabel: "HVAC",
       businessType: "hvac",
       callsThisMonth: 2,
-      includedInteractions: 800,
+      billingCurrentPeriodEnd: "2026-06-12T12:00:00.000Z",
+      billingStatus: "active",
+      billingUpdatedAt: "2026-05-12T12:05:00.000Z",
+      includedInteractions: 700,
       locationId: "loc_1",
       monthlyPrice: 249,
       onboardingProgressPercent: 100,
+      overageLabel: "$0.40 per extra call or chat",
       ownerEmail: "owner@summitair.test",
       phoneStatus: "provisioned",
-      planName: "Growth",
+      planName: "Dispatch",
       status: "healthy",
       trialEndsAt: "2026-05-19T12:00:00.000Z",
       trialGraceEndsAt: "2026-06-02T12:00:00.000Z",

@@ -137,7 +137,14 @@ function BillingTenantRow({ tenant }: { tenant: PlatformBillingTenant }) {
       </td>
       <td className="px-4 py-3">
         <Badge variant="outline">{tenant.planName}</Badge>
-        <div className="mt-1 text-xs text-muted-foreground">{tenant.source === "live" ? "Live" : "Demo"}</div>
+        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+          <span className="text-xs text-muted-foreground">{tenant.source === "live" ? "Live" : "Demo"}</span>
+          {tenant.billingStatus ? (
+            <Badge variant="outline" className={billingStatusBadgeClass(tenant.billingStatus)}>
+              {billingStatusLabel(tenant.billingStatus)}
+            </Badge>
+          ) : null}
+        </div>
       </td>
       <td className="min-w-52 px-4 py-3">
         <div className="mb-1.5 flex items-center justify-between gap-3">
@@ -239,6 +246,24 @@ function usageBadgeClass(status: PlatformBillingUsageStatus) {
   if (status === "near_limit") return "border-warning/30 bg-warning/10 text-warning";
   if (status === "not_configured") return "bg-muted text-muted-foreground";
   return "border-success/30 bg-success/10 text-success";
+}
+
+function billingStatusLabel(status: string) {
+  const normalized = status.toLowerCase().replace(/_/g, " ");
+  if (normalized === "active") return "Paid";
+  if (normalized === "trialing") return "Stripe trial";
+  if (normalized === "past due") return "Past due";
+  if (normalized === "checkout started") return "Checkout";
+  if (normalized === "canceled") return "Canceled";
+  return normalized;
+}
+
+function billingStatusBadgeClass(status: string) {
+  const normalized = status.toLowerCase();
+  if (normalized === "active" || normalized === "trialing") return "border-success/30 bg-success/10 text-success";
+  if (normalized === "past_due" || normalized === "unpaid") return "border-destructive/30 bg-destructive/10 text-destructive";
+  if (normalized === "checkout_started" || normalized === "incomplete") return "border-warning/30 bg-warning/10 text-warning";
+  return "bg-muted text-muted-foreground";
 }
 
 function trialLabel(status: PlatformBillingTrialStatus) {

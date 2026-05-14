@@ -191,6 +191,19 @@ interface SupabasePhoneNumberDirectoryRow {
   voice_webhook_url: string | null;
 }
 
+interface SupabaseBillingAccountDirectoryRow {
+  cancel_at_period_end: boolean | null;
+  current_period_end: string | null;
+  included_interactions: number | null;
+  location_id: string | null;
+  monthly_cents: number | null;
+  organization_id: string;
+  overage_label: string | null;
+  plan_name: string | null;
+  status: string | null;
+  updated_at: string | null;
+}
+
 interface SupabaseTranscriptTurnRow {
   call_id: string;
   speaker: string;
@@ -566,6 +579,10 @@ export type TenantDirectoryStatus = "attention" | "critical" | "healthy";
 export interface TenantDirectoryRecord {
   addressOrArea: string;
   aiHostPhone?: string;
+  billingCancelAtPeriodEnd?: boolean;
+  billingCurrentPeriodEnd?: string;
+  billingStatus?: string;
+  billingUpdatedAt?: string;
   businessLabel: string;
   businessType: BusinessType;
   callsThisMonth: number;
@@ -581,6 +598,7 @@ export interface TenantDirectoryRecord {
   organizationName: string;
   ownerEmail: string;
   ownerName: string;
+  overageLabel?: string;
   phoneReleasedAt?: string;
   phoneStatus?: string;
   planName: string;
@@ -1062,7 +1080,7 @@ export async function fetchTenantDirectoryFromSupabase(): Promise<TenantDirector
   );
 
   const locationIds = locations.map((location) => location.id);
-  const [memberships, onboardingProfiles, phoneNumbers, monthlyCalls] = await Promise.all([
+  const [memberships, onboardingProfiles, phoneNumbers, monthlyCalls, billingAccounts] = await Promise.all([
     supabaseRequest<SupabaseMembershipDirectoryRow[]>(
       "user_memberships",
       new URLSearchParams({
@@ -1100,9 +1118,17 @@ export async function fetchTenantDirectoryFromSupabase(): Promise<TenantDirector
           }),
         ).catch(() => [])
       : Promise.resolve([]),
+    supabaseRequest<SupabaseBillingAccountDirectoryRow[]>(
+      "billing_accounts",
+      new URLSearchParams({
+        organization_id: `in.(${organizationIds.join(",")})`,
+        select: "organization_id,location_id,status,plan_name,monthly_cents,included_interactions,overage_label,current_period_end,cancel_at_period_end,updated_at",
+      }),
+    ).catch(() => []),
   ]);
 
   return mapSupabaseTenantDirectory({
+    billingAccounts,
     locations,
     memberships,
     monthlyCalls,
@@ -2993,6 +3019,7 @@ function getSupabaseCallChannel(call: SupabaseCallRow) {
 }
 
 export function mapSupabaseTenantDirectory(input: {
+  billingAccounts?: SupabaseBillingAccountDirectoryRow[];
   locations: SupabaseLocationDirectoryRow[];
   memberships: SupabaseMembershipDirectoryRow[];
   monthlyCalls: Array<Pick<SupabaseCallRow, "id" | "location_id">>;
@@ -3000,6 +3027,7 @@ export function mapSupabaseTenantDirectory(input: {
   organizations: SupabaseOrganizationRow[];
   phoneNumbers: SupabasePhoneNumberDirectoryRow[];
 }): TenantDirectoryRecord[] {
+  const billingByOrganizationId = groupBy(input.billingAccounts ?? [], (account) => account.organization_id);
   const membershipsByOrganizationId = groupBy(input.memberships, (membership) => membership.organization_id);
   const locationsByOrganizationId = groupBy(input.locations, (location) => location.organization_id);
   const onboardingByLocationId = new Map(input.onboardingProfiles.map((profile) => [profile.location_id, profile]));
@@ -3011,6 +3039,7 @@ export function mapSupabaseTenantDirectory(input: {
 
     if (!organizationLocations.length) {
       return [buildTenantDirectoryRecord({
+        billingAccount: billingByOrganizationId.get(organization.id)?.[0] ?? null,
         callsThisMonth: 0,
         location: null,
         memberships: membershipsByOrganizationId.get(organization.id) ?? [],
@@ -3021,6 +3050,7 @@ export function mapSupabaseTenantDirectory(input: {
     }
 
     return organizationLocations.map((location) => buildTenantDirectoryRecord({
+      billingAccount: selectBillingAccountForLocation(billingByOrganizationId.get(organization.id) ?? [], location.id),
       callsThisMonth: callsByLocationId.get(location.id)?.length ?? 0,
       location,
       memberships: membershipsByOrganizationId.get(organization.id) ?? [],
@@ -3032,6 +3062,7 @@ export function mapSupabaseTenantDirectory(input: {
 }
 
 function buildTenantDirectoryRecord(input: {
+  billingAccount: SupabaseBillingAccountDirectoryRow | null;
   callsThisMonth: number;
   location: SupabaseLocationDirectoryRow | null;
   memberships: SupabaseMembershipDirectoryRow[];
@@ -3057,6 +3088,7 @@ function buildTenantDirectoryRecord(input: {
     onboardingStatus: input.onboarding?.status,
     progress,
   });
+  const billing = input.billingAccount;
 
   return {
     addressOrArea:
@@ -3064,24 +3096,35 @@ function buildTenantDirectoryRecord(input: {
       stringValue(draft.primaryLocation) ??
       "Location not set",
     aiHostPhone,
+    billingCancelAtPeriodEnd: billing?.cancel_at_period_end ?? undefined,
+    billingCurrentPeriodEnd: stringValue(billing?.current_period_end),
+    billingStatus: stringValue(billing?.status),
+    billingUpdatedAt: stringValue(billing?.updated_at),
     businessLabel: template.label,
     businessType,
     callsThisMonth: input.callsThisMonth,
     createdAt: input.location?.created_at ?? input.organization.created_at ?? "",
-    includedInteractions: readInteger(draft.selectedPlanIncludedInteractions) ?? defaultIncludedInteractions(draft.selectedPlanName),
+    includedInteractions:
+      billing?.included_interactions ??
+      readInteger(draft.selectedPlanIncludedInteractions) ??
+      defaultIncludedInteractions(billing?.plan_name ?? draft.selectedPlanName),
     locationId: input.location?.id ?? "not-created",
     locationName: businessName,
     mainPhone: stringValue(input.location?.phone) ?? stringValue(draft.mainPhone),
-    monthlyPrice: readInteger(draft.selectedPlanMonthly) ?? defaultMonthlyPrice(draft.selectedPlanName),
+    monthlyPrice:
+      centsToMonthlyDollars(billing?.monthly_cents) ??
+      readInteger(draft.selectedPlanMonthly) ??
+      defaultMonthlyPrice(billing?.plan_name ?? draft.selectedPlanName),
     onboardingProgressPercent: progress,
     onboardingStatus: input.onboarding?.status ?? "not_started",
     organizationId: input.organization.id,
     organizationName: input.organization.name,
     ownerEmail: stringValue(owner?.member_email) ?? stringValue(draft.ownerEmail) ?? "Unknown",
     ownerName: stringValue(owner?.member_name) ?? stringValue(draft.ownerName) ?? "Owner",
+    overageLabel: stringValue(billing?.overage_label),
     phoneReleasedAt: stringValue(input.phoneNumber?.released_at),
     phoneStatus: stringValue(input.phoneNumber?.status),
-    planName: stringValue(draft.selectedPlanName) ?? "Unassigned",
+    planName: stringValue(billing?.plan_name) ?? stringValue(draft.selectedPlanName) ?? "Unassigned",
     status,
     timezone:
       stringValue(input.location?.timezone) ??
@@ -3092,6 +3135,18 @@ function buildTenantDirectoryRecord(input: {
     trialStartedAt: stringValue(input.phoneNumber?.trial_started_at),
     voiceWebhookUrl: stringValue(input.phoneNumber?.voice_webhook_url),
   };
+}
+
+function selectBillingAccountForLocation(
+  accounts: SupabaseBillingAccountDirectoryRow[],
+  locationId: string,
+) {
+  return (
+    accounts.find((account) => account.location_id === locationId) ??
+    accounts.find((account) => !account.location_id) ??
+    accounts[0] ??
+    null
+  );
 }
 
 function deriveTenantDirectoryStatus({
@@ -3123,6 +3178,10 @@ function defaultMonthlyPrice(planName: unknown) {
   if (normalized.includes("growth") || normalized.includes("standard")) return 249;
   if (normalized.includes("starter") || normalized.includes("basic")) return 99;
   return 0;
+}
+
+function centsToMonthlyDollars(value?: number | null) {
+  return typeof value === "number" && Number.isFinite(value) ? Math.round(value / 100) : undefined;
 }
 
 function firstDayOfCurrentMonthIso() {
