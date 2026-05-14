@@ -111,6 +111,33 @@ describe("phone number store", () => {
     expect(String(fetchMock.mock.calls[1]?.[1]?.body)).not.toContain("provisioning_source");
   });
 
+  it("falls back to plain insert when the phone number upsert constraint is missing", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response("there is no unique or exclusion constraint matching the ON CONFLICT specification", { status: 400 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const store = createPhoneNumberStore(env);
+
+    await store.saveProvisionedNumber(
+      {
+        locationId: "00000000-0000-4000-8000-000000000002",
+        phoneNumber: "+14155550199",
+      },
+      {
+        capabilities: { sms: true, voice: true },
+        phoneNumber: "+14155550199",
+        providerSid: "PN123",
+        status: "active",
+      },
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("on_conflict=provider,phone_number");
+    expect(String(fetchMock.mock.calls[1]?.[0])).toBe("https://example.supabase.co/rest/v1/phone_numbers");
+    expect(fetchMock.mock.calls[1]?.[1]).toEqual(expect.objectContaining({ method: "POST" }));
+  });
+
   it("allows provisioning when a location has no active unreleased number", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")

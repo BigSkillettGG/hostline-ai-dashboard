@@ -140,13 +140,31 @@ class SupabasePhoneNumberStore implements PhoneNumberStore {
   }
 
   private async upsertPhoneNumber(body: Record<string, unknown>) {
-    await this.request("phone_numbers", {
+    const options = {
       body,
       headers: {
         Prefer: "return=minimal,resolution=merge-duplicates",
       },
-      method: "POST",
+      method: "POST" as const,
       query: "on_conflict=provider,phone_number",
+    };
+
+    try {
+      await this.request("phone_numbers", options);
+      return;
+    } catch (error) {
+      if (!isMissingPhoneNumberUpsertConstraintError(error)) throw error;
+      console.warn("[phone-number-store] phone number unique upsert constraint missing; inserted phone row without on_conflict", {
+        phoneNumber: body.phone_number,
+      });
+    }
+
+    await this.request("phone_numbers", {
+      body,
+      headers: {
+        Prefer: "return=minimal",
+      },
+      method: "POST",
     });
   }
 
@@ -344,4 +362,9 @@ function inputTrialGraceDays(input: ProvisionPhoneNumberInput) {
 function isMissingPhoneNumberLifecycleColumnError(error: unknown) {
   if (!(error instanceof Error)) return false;
   return /provisioning_source|trial_started_at|trial_ends_at|trial_grace_ends_at|released_at|release_reason|sms_webhook_url|column .* does not exist|schema cache|PGRST204|42703/i.test(error.message);
+}
+
+function isMissingPhoneNumberUpsertConstraintError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  return /no unique or exclusion constraint|42P10|on conflict|on_conflict|provider,phone_number/i.test(error.message);
 }
