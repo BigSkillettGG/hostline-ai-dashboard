@@ -1105,6 +1105,41 @@ function buildCallQueryParams(locationId: string | null | undefined, select: str
   return callParams;
 }
 
+function buildPhoneNumberQueryParams(locationId: string, select: string) {
+  return new URLSearchParams({
+    location_id: `eq.${locationId}`,
+    order: "created_at.desc",
+    select,
+  });
+}
+
+async function updatePhoneVerification(
+  phoneNumberId: string,
+  forwardingStatus: string,
+  verification: ForwardingVerification,
+  select: string,
+) {
+  return supabaseRequest<SupabasePhoneNumberRow[]>(
+    "phone_numbers",
+    new URLSearchParams({
+      id: `eq.${phoneNumberId}`,
+      select,
+    }),
+    {
+      body: {
+        forwarding_status: forwardingStatus,
+        last_verified_at: forwardingStatus === "verified" ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString(),
+        verification_results: verification,
+      },
+      headers: {
+        Prefer: "return=representation",
+      },
+      method: "PATCH",
+    },
+  );
+}
+
 export async function fetchTenantDirectoryFromSupabase(): Promise<TenantDirectoryRecord[]> {
   if (!isSupabaseConfigured()) {
     throw new Error("Supabase tenant directory is not configured.");
@@ -1157,7 +1192,17 @@ export async function fetchTenantDirectoryFromSupabase(): Promise<TenantDirector
           order: "created_at.desc",
           select: "location_id,phone_number,status,forwarding_status,voice_webhook_url,trial_started_at,trial_ends_at,trial_grace_ends_at,released_at",
         }),
-      )
+      ).catch((error) => {
+        if (!isMissingPhoneNumberLifecycleColumnError(error)) throw error;
+        return supabaseRequest<SupabasePhoneNumberDirectoryRow[]>(
+          "phone_numbers",
+          new URLSearchParams({
+            location_id: `in.(${locationIds.join(",")})`,
+            order: "created_at.desc",
+            select: "location_id,phone_number,status,forwarding_status,voice_webhook_url",
+          }),
+        );
+      })
       : Promise.resolve([]),
     locationIds.length
       ? supabaseRequest<Array<Pick<SupabaseCallRow, "id" | "location_id">>>(
@@ -1925,15 +1970,19 @@ export async function fetchPhoneNumbersFromSupabase(
     throw new Error("Supabase phone-number persistence is not configured.");
   }
 
-  const rows = await supabaseRequest<SupabasePhoneNumberRow[]>(
-    "phone_numbers",
-    new URLSearchParams({
-      location_id: `eq.${locationId}`,
-      order: "created_at.desc",
-      select:
-        "id,phone_number,provider,provider_sid,provisioning_source,restaurant_main_line,forwarding_mode,forwarding_status,status,voice_webhook_url,sms_webhook_url,verification_results,last_verified_at,trial_started_at,trial_ends_at,trial_grace_ends_at,released_at,release_reason,created_at,updated_at",
-    }),
-  );
+  let rows: SupabasePhoneNumberRow[];
+  try {
+    rows = await supabaseRequest<SupabasePhoneNumberRow[]>(
+      "phone_numbers",
+      buildPhoneNumberQueryParams(locationId, phoneNumberSelectColumns),
+    );
+  } catch (error) {
+    if (!isMissingPhoneNumberLifecycleColumnError(error)) throw error;
+    rows = await supabaseRequest<SupabasePhoneNumberRow[]>(
+      "phone_numbers",
+      buildPhoneNumberQueryParams(locationId, legacyPhoneNumberSelectColumns),
+    );
+  }
 
   return rows.map(mapSupabasePhoneNumber);
 }
@@ -1947,26 +1996,13 @@ export async function savePhoneNumberVerificationToSupabase(
   }
 
   const forwardingStatus = calculateForwardingStatus(verification);
-  const rows = await supabaseRequest<SupabasePhoneNumberRow[]>(
-    "phone_numbers",
-    new URLSearchParams({
-      id: `eq.${phoneNumberId}`,
-      select:
-        "id,phone_number,provider,provider_sid,provisioning_source,restaurant_main_line,forwarding_mode,forwarding_status,status,voice_webhook_url,sms_webhook_url,verification_results,last_verified_at,trial_started_at,trial_ends_at,trial_grace_ends_at,released_at,release_reason,created_at,updated_at",
-    }),
-    {
-      body: {
-        forwarding_status: forwardingStatus,
-        last_verified_at: forwardingStatus === "verified" ? new Date().toISOString() : null,
-        updated_at: new Date().toISOString(),
-        verification_results: verification,
-      },
-      headers: {
-        Prefer: "return=representation",
-      },
-      method: "PATCH",
-    },
-  );
+  let rows: SupabasePhoneNumberRow[];
+  try {
+    rows = await updatePhoneVerification(phoneNumberId, forwardingStatus, verification, phoneNumberSelectColumns);
+  } catch (error) {
+    if (!isMissingPhoneNumberLifecycleColumnError(error)) throw error;
+    rows = await updatePhoneVerification(phoneNumberId, forwardingStatus, verification, legacyPhoneNumberSelectColumns);
+  }
 
   return rows?.[0] ? mapSupabasePhoneNumber(rows[0]) : undefined;
 }
@@ -3646,6 +3682,11 @@ function isMissingCallInsightColumnError(error: unknown) {
   return /workflow_status|urgency|value_tier|follow_up_needed|knowledge_gap|owner_report_bucket|recommended_action|tags|column .* does not exist|PGRST204/i.test(error.message);
 }
 
+function isMissingPhoneNumberLifecycleColumnError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  return /provisioning_source|sms_webhook_url|trial_started_at|trial_ends_at|trial_grace_ends_at|released_at|release_reason|column .* does not exist|PGRST204/i.test(error.message);
+}
+
 function formatShortDate(value: string) {
   try {
     return new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(new Date(value));
@@ -3714,6 +3755,12 @@ const customerRequestSelectColumns =
 
 const callFeedbackSelectColumns =
   "id,call_id,category,note,suggested_answer,add_to_knowledge,created_by,created_at";
+
+const legacyPhoneNumberSelectColumns =
+  "id,phone_number,provider,provider_sid,restaurant_main_line,forwarding_mode,forwarding_status,status,voice_webhook_url,verification_results,last_verified_at,created_at,updated_at";
+
+const phoneNumberSelectColumns =
+  `${legacyPhoneNumberSelectColumns},provisioning_source,sms_webhook_url,trial_started_at,trial_ends_at,trial_grace_ends_at,released_at,release_reason`;
 
 const knowledgeSectionSelectColumns =
   "id,location_id,title,body,is_active,updated_at";
