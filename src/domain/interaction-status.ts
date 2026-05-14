@@ -39,6 +39,7 @@ type InsightCall = Pick<
   | "confidence"
   | "escalation"
   | "intent"
+  | "interactionInsight"
   | "orderId"
   | "outcome"
   | "reservationId"
@@ -92,6 +93,20 @@ export function buildInteractionInsight({
   call: InsightCall;
   feedback?: InsightFeedback[];
 }): InteractionInsight {
+  if (!feedback.length && call.interactionInsight) {
+    return {
+      evidence: ["Persisted SignalHost insight from the live interaction."],
+      followUpNeeded: call.interactionInsight.followUpNeeded,
+      knowledgeGap: call.interactionInsight.knowledgeGap,
+      ownerReportBucket: call.interactionInsight.ownerReportBucket,
+      recommendedAction: call.interactionInsight.recommendedAction,
+      tags: [...call.interactionInsight.tags],
+      urgency: call.interactionInsight.urgency,
+      valueTier: call.interactionInsight.valueTier,
+      workflowStatus: call.interactionInsight.workflowStatus,
+    };
+  }
+
   const text = normalizedInteractionText(call);
   const evidence: string[] = [];
   const feedbackNeedsReview = feedback.some((entry) =>
@@ -184,14 +199,15 @@ function deriveWorkflowStatus({
   quoteRequest: boolean;
   vendorOrSales: boolean;
 }): InteractionWorkflowStatus {
+  const resolvedInteraction = isResolvedInteraction(call);
   if (vendorOrSales) return "spam_vendor";
-  if (isResolvedInteraction(call)) return "resolved";
-  if (pendingEscalation || call.outcome === "escalated" || call.outcome === "manager_alerted") return "escalated";
+  if (!resolvedInteraction && (pendingEscalation || call.outcome === "escalated" || call.outcome === "manager_alerted")) return "escalated";
   if (missedOrVoicemail || call.outcome === "message_taken") return "needs_follow_up";
   if (quoteRequest) return "quote_requested";
   if (bookingLinkSent) return "booking_link_sent";
   if (customerWaiting) return "waiting_on_customer";
   if (knowledgeGap) return "needs_review";
+  if (resolvedInteraction) return "resolved";
   if (!followUpNeeded && (call.status === "resolved" || call.status === "reviewed" || call.outcome === "resolved" || call.outcome === "order_placed" || call.outcome === "reservation_booked")) {
     return "resolved";
   }

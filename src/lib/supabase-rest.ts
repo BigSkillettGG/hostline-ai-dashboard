@@ -2,7 +2,11 @@ import type {
   Call,
   CallFeedback,
   CallFeedbackCategory,
+  CallInteractionUrgency,
+  CallInteractionValueTier,
+  CallInteractionWorkflowStatus,
   CallIntent,
+  CallOwnerReportBucket,
   CallOutcome,
   CallStatus,
   MenuItem,
@@ -122,6 +126,27 @@ const callFeedbackCategories: CallFeedbackCategory[] = [
   "should_have_escalated",
   "other",
 ];
+const callInteractionWorkflowStatuses: CallInteractionWorkflowStatus[] = [
+  "new",
+  "resolved",
+  "needs_follow_up",
+  "needs_review",
+  "waiting_on_customer",
+  "booking_link_sent",
+  "quote_requested",
+  "escalated",
+  "spam_vendor",
+];
+const callInteractionUrgencies: CallInteractionUrgency[] = ["low", "normal", "high", "urgent"];
+const callInteractionValueTiers: CallInteractionValueTier[] = ["low", "medium", "high", "very_high", "risk"];
+const callOwnerReportBuckets: CallOwnerReportBucket[] = [
+  "handled",
+  "knowledge_gap",
+  "low_value",
+  "open_follow_up",
+  "revenue_opportunity",
+  "risk_or_complaint",
+];
 const transcriptSpeakers: TranscriptSpeaker[] = ["agent", "caller", "staff"];
 const orderStatuses: OrderStatus[] = ["new", "accepted", "in_progress", "completed", "canceled"];
 const orderDeliveryStatuses: OrderDeliveryStatus[] = ["pending", "sent", "failed", "not_configured"];
@@ -141,14 +166,22 @@ interface SupabaseCallRow {
   caller_name: string | null;
   caller_phone: string | null;
   external_call_sid?: string | null;
+  follow_up_needed?: boolean | null;
   started_at: string;
   duration_seconds: number | null;
   intent: string | null;
+  knowledge_gap?: boolean | null;
   location_id?: string | null;
   outcome: string | null;
+  owner_report_bucket?: string | null;
   confidence: number | null;
+  recommended_action?: string | null;
   status: string | null;
   summary: string | null;
+  tags?: unknown;
+  urgency?: string | null;
+  value_tier?: string | null;
+  workflow_status?: string | null;
   recording_url: string | null;
   twilio_payload?: unknown;
 }
@@ -1011,17 +1044,19 @@ export async function fetchCallsFromSupabase(
     throw new Error("Supabase is not configured.");
   }
 
-  const callParams = new URLSearchParams({
-    limit: "100",
-    order: "started_at.desc",
-    select: "id,caller_name,caller_phone,external_call_sid,started_at,duration_seconds,intent,location_id,outcome,confidence,status,summary,recording_url,twilio_payload",
-  });
-  if (locationId) callParams.set("location_id", `eq.${locationId}`);
-
-  const calls = await supabaseRequest<SupabaseCallRow[]>(
-    "calls",
-    callParams,
-  );
+  let calls: SupabaseCallRow[];
+  try {
+    calls = await supabaseRequest<SupabaseCallRow[]>(
+      "calls",
+      buildCallQueryParams(locationId, callSelectColumns),
+    );
+  } catch (error) {
+    if (!isMissingCallInsightColumnError(error)) throw error;
+    calls = await supabaseRequest<SupabaseCallRow[]>(
+      "calls",
+      buildCallQueryParams(locationId, legacyCallSelectColumns),
+    );
+  }
 
   const callIds = calls.map((call) => call.id);
   const [transcriptTurns, orderLinks, reservationLinks] = callIds.length
@@ -1052,6 +1087,16 @@ export async function fetchCallsFromSupabase(
     : [[], [], []];
 
   return mapSupabaseCalls(calls, transcriptTurns, { orderLinks, reservationLinks });
+}
+
+function buildCallQueryParams(locationId: string | null | undefined, select: string) {
+  const callParams = new URLSearchParams({
+    limit: "100",
+    order: "started_at.desc",
+    select,
+  });
+  if (locationId) callParams.set("location_id", `eq.${locationId}`);
+  return callParams;
 }
 
 export async function fetchTenantDirectoryFromSupabase(): Promise<TenantDirectoryRecord[]> {
@@ -2997,6 +3042,7 @@ export function mapSupabaseCalls(
       confidence: call.confidence ?? 0,
       status: normalizeEnum(call.status, callStatuses, "new"),
       summary: call.summary?.trim() || "No summary available yet.",
+      interactionInsight: mapSupabaseCallInteractionInsight(call),
       recordingUrl: call.recording_url?.trim() || undefined,
       orderId: orderIdByCallId.get(call.id),
       reservationId: reservationIdByCallId.get(call.id),
@@ -3016,6 +3062,31 @@ function getSupabaseCallChannel(call: SupabaseCallRow) {
     : "";
   if (provider === "web_chat" || call.external_call_sid?.startsWith("webchat_")) return "web_chat" as const;
   return "phone" as const;
+}
+
+function mapSupabaseCallInteractionInsight(call: SupabaseCallRow): Call["interactionInsight"] | undefined {
+  const hasPersistedInsight = Boolean(
+    call.workflow_status ||
+    call.urgency ||
+    call.value_tier ||
+    call.owner_report_bucket ||
+    call.recommended_action ||
+    call.tags ||
+    call.follow_up_needed !== undefined ||
+    call.knowledge_gap !== undefined,
+  );
+  if (!hasPersistedInsight) return undefined;
+
+  return {
+    followUpNeeded: call.follow_up_needed ?? false,
+    knowledgeGap: call.knowledge_gap ?? false,
+    ownerReportBucket: normalizeEnum(call.owner_report_bucket, callOwnerReportBuckets, "handled"),
+    recommendedAction: call.recommended_action?.trim() || "No action needed.",
+    tags: normalizeStringArray(call.tags) ?? [],
+    urgency: normalizeEnum(call.urgency, callInteractionUrgencies, "normal"),
+    valueTier: normalizeEnum(call.value_tier, callInteractionValueTiers, "low"),
+    workflowStatus: normalizeEnum(call.workflow_status, callInteractionWorkflowStatuses, "new"),
+  };
 }
 
 export function mapSupabaseTenantDirectory(input: {
@@ -3538,6 +3609,11 @@ function isBehaviorTuningKnowledgeSection(title: string, body: string) {
   return /^call tuning\s*-/i.test(title.trim()) || /\b(preferred answer|source call):/i.test(body);
 }
 
+function isMissingCallInsightColumnError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  return /workflow_status|urgency|value_tier|follow_up_needed|knowledge_gap|owner_report_bucket|recommended_action|tags|column .* does not exist|PGRST204/i.test(error.message);
+}
+
 function formatShortDate(value: string) {
   try {
     return new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(new Date(value));
@@ -3582,6 +3658,12 @@ const reservationSelectColumns =
 
 const agentConfigSelectColumns =
   "id,host_name,tone,greeting_template,disclosure_enabled,call_handling_mode,answer_after_rings,after_hours_behavior,escalation_phone_number,answer_faqs_enabled,orders_enabled,reservations_enabled,sms_confirmations_enabled,staff_escalation_enabled,order_destinations,payment_mode,reservation_mode,reservation_provider,updated_at";
+
+const legacyCallSelectColumns =
+  "id,caller_name,caller_phone,external_call_sid,started_at,duration_seconds,intent,location_id,outcome,confidence,status,summary,recording_url,twilio_payload";
+
+const callSelectColumns =
+  `${legacyCallSelectColumns},workflow_status,urgency,value_tier,follow_up_needed,knowledge_gap,owner_report_bucket,recommended_action,tags`;
 
 const menuSourceSelectColumns =
   "id,source_type,label,url,file_name,sync_frequency,status,last_synced_at,last_error,created_at,updated_at";

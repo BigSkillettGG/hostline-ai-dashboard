@@ -4,6 +4,25 @@ export type CallIntent = "order" | "reservation" | "faq" | "hours" | "complaint"
 export type CallOutcome = "resolved" | "order_placed" | "reservation_booked" | "escalated" | "manager_alerted" | "message_taken" | "voicemail" | "missed" | "unknown";
 export type CallStatus = "new" | "reviewed" | "needs_review" | "resolved";
 export type CallChannel = "phone" | "web_chat";
+export type CallInteractionWorkflowStatus =
+  | "new"
+  | "resolved"
+  | "needs_follow_up"
+  | "needs_review"
+  | "waiting_on_customer"
+  | "booking_link_sent"
+  | "quote_requested"
+  | "escalated"
+  | "spam_vendor";
+export type CallInteractionUrgency = "low" | "normal" | "high" | "urgent";
+export type CallInteractionValueTier = "low" | "medium" | "high" | "very_high" | "risk";
+export type CallOwnerReportBucket =
+  | "handled"
+  | "knowledge_gap"
+  | "low_value"
+  | "open_follow_up"
+  | "revenue_opportunity"
+  | "risk_or_complaint";
 export type TranscriptSpeaker = "agent" | "caller" | "staff";
 export type CallFeedbackCategory =
   | "good_answer"
@@ -40,6 +59,17 @@ export interface CallFeedback {
   createdBy?: string;
 }
 
+export interface CallInteractionInsight {
+  followUpNeeded: boolean;
+  knowledgeGap: boolean;
+  ownerReportBucket: CallOwnerReportBucket;
+  recommendedAction: string;
+  tags: string[];
+  urgency: CallInteractionUrgency;
+  valueTier: CallInteractionValueTier;
+  workflowStatus: CallInteractionWorkflowStatus;
+}
+
 export interface Call {
   id: string;
   caller: string;
@@ -54,6 +84,7 @@ export interface Call {
   status: CallStatus;
   summary: string;
   transcript: { speaker: TranscriptSpeaker; text: string; t: string }[];
+  interactionInsight?: CallInteractionInsight;
   recordingUrl?: string;
   orderId?: string;
   reservationId?: string;

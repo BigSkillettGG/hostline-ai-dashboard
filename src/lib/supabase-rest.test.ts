@@ -51,13 +51,21 @@ describe("Supabase call mapping", () => {
           confidence: null,
           duration_seconds: 42,
           id: "call_1",
+          follow_up_needed: true,
           intent: "faq",
+          knowledge_gap: true,
           location_id: "location_1",
           outcome: "unknown",
+          owner_report_bucket: "knowledge_gap",
           recording_url: "https://api.twilio.com/recording.mp3",
+          recommended_action: "Review the answer and add missing knowledge.",
           started_at: "2026-05-04T20:00:00.000Z",
           status: "new",
           summary: null,
+          tags: ["phone", "faq", "knowledge gap"],
+          urgency: "high",
+          value_tier: "low",
+          workflow_status: "needs_review",
         },
       ],
       [
@@ -92,6 +100,16 @@ describe("Supabase call mapping", () => {
       reservationId: "reservation_1",
       recordingUrl: "https://api.twilio.com/recording.mp3",
       status: "new",
+    });
+    expect(calls[0].interactionInsight).toMatchObject({
+      followUpNeeded: true,
+      knowledgeGap: true,
+      ownerReportBucket: "knowledge_gap",
+      recommendedAction: "Review the answer and add missing knowledge.",
+      tags: ["phone", "faq", "knowledge gap"],
+      urgency: "high",
+      valueTier: "low",
+      workflowStatus: "needs_review",
     });
     expect(calls[0].transcript).toEqual([
       { speaker: "caller", t: "00:02", text: "What time do you close?" },

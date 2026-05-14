@@ -141,4 +141,52 @@ describe("interaction status", () => {
     expect(insight.followUpNeeded).toBe(false);
     expect(insight.ownerReportBucket).toBe("risk_or_complaint");
   });
+
+  it("prefers persisted live-call insight when no owner feedback is present", () => {
+    const insight = buildInteractionInsight({
+      call: {
+        ...baseCall,
+        interactionInsight: {
+          followUpNeeded: true,
+          knowledgeGap: true,
+          ownerReportBucket: "knowledge_gap",
+          recommendedAction: "Add the missing answer before the next call.",
+          tags: ["phone", "knowledge gap"],
+          urgency: "high",
+          valueTier: "low",
+          workflowStatus: "needs_review",
+        },
+        status: "resolved",
+        summary: "Raw fields alone would look resolved.",
+      },
+    });
+
+    expect(insight.workflowStatus).toBe("needs_review");
+    expect(insight.knowledgeGap).toBe(true);
+    expect(insight.recommendedAction).toBe("Add the missing answer before the next call.");
+    expect(insight.evidence).toEqual(["Persisted SignalHost insight from the live interaction."]);
+  });
+
+  it("re-derives insight when owner feedback should override persisted call state", () => {
+    const insight = buildInteractionInsight({
+      call: {
+        ...baseCall,
+        interactionInsight: {
+          followUpNeeded: false,
+          knowledgeGap: false,
+          ownerReportBucket: "handled",
+          recommendedAction: "No action needed.",
+          tags: ["phone", "resolved"],
+          urgency: "low",
+          valueTier: "low",
+          workflowStatus: "resolved",
+        },
+      },
+      feedback: [{ category: "missing_knowledge" }],
+    });
+
+    expect(insight.workflowStatus).toBe("needs_review");
+    expect(insight.knowledgeGap).toBe(true);
+    expect(insight.recommendedAction).toBe("Review the answer and add missing knowledge if needed.");
+  });
 });
