@@ -37,6 +37,7 @@ import {
   getActiveSupabaseLocationId,
   isCallFeedbackPersistenceConfigured,
   isSupabaseConfigured,
+  updateCallInteractionInsightInSupabase,
 } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
 
@@ -132,8 +133,26 @@ export default function Calls() {
       toast.error(error instanceof Error ? error.message : "Could not save feedback");
     },
     onSuccess: (savedFeedback) => {
+      const selectedCall = selected?.id === savedFeedback.callId ? selected : calls.find((call) => call.id === savedFeedback.callId);
       resetFeedbackForm();
       void queryClient.invalidateQueries({ queryKey: ["call-feedback", savedFeedback.callId] });
+      if (selectedCall) {
+        const nextFeedback = [
+          savedFeedback,
+          ...((feedbackQuery.data ?? []).filter((feedback) => feedback.id !== savedFeedback.id)),
+        ];
+        const nextInsight = buildInteractionInsight({ call: selectedCall, feedback: nextFeedback });
+        void updateCallInteractionInsightInSupabase({
+          callId: savedFeedback.callId,
+          insight: nextInsight,
+        })
+          .then(() => {
+            void queryClient.invalidateQueries({ queryKey: ["calls", "supabase"] });
+          })
+          .catch((error) => {
+            console.warn("[calls] Could not update persisted call insight after feedback", error);
+          });
+      }
       toast.success(savedFeedback.addedToKnowledge ? "Feedback saved and added to the knowledge base" : "Feedback saved");
     },
   });

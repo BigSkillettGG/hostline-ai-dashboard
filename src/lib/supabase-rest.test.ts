@@ -5,6 +5,7 @@ import {
   buildAgentConfigPayload,
   buildAlertRoutingConfigPayload,
   buildCallFeedbackInsertPayload,
+  buildCallInteractionInsightUpdatePayload,
   buildBusinessLiveUpdateInsertPayload,
   buildIngestionJobInsertPayload,
   buildKnowledgeSectionUpdatePayload,
@@ -256,6 +257,31 @@ describe("Supabase call feedback", () => {
       id: "feedback_1",
       note: "Too stiff.",
       suggestedAnswer: "Say it more naturally.",
+    });
+  });
+
+  it("builds persisted call insight update payloads after owner feedback", () => {
+    expect(
+      buildCallInteractionInsightUpdatePayload({
+        evidence: ["Owner marked the answer as missing knowledge."],
+        followUpNeeded: true,
+        knowledgeGap: true,
+        ownerReportBucket: "knowledge_gap",
+        recommendedAction: "Review the answer and add missing knowledge if needed.",
+        tags: ["phone", "knowledge gap", "follow-up"],
+        urgency: "high",
+        valueTier: "low",
+        workflowStatus: "needs_review",
+      }),
+    ).toEqual({
+      follow_up_needed: true,
+      knowledge_gap: true,
+      owner_report_bucket: "knowledge_gap",
+      recommended_action: "Review the answer and add missing knowledge if needed.",
+      tags: ["phone", "knowledge gap", "follow-up"],
+      urgency: "high",
+      value_tier: "low",
+      workflow_status: "needs_review",
     });
   });
 });

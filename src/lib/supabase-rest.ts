@@ -21,6 +21,7 @@ import { getActiveLocationId, getActiveOrganizationId, getSupabaseAccessToken } 
 import type { ParsedMenuCategory } from "@/domain/menu-ingestion";
 import { calculateOnboardingProgress, type OnboardingDraft } from "@/domain/onboarding";
 import { getBusinessTemplate, normalizeBusinessType, type BusinessType } from "@/domain/business-templates";
+import type { InteractionInsight } from "@/domain/interaction-status";
 import {
   defaultAlertRoutingConfig,
   normalizeAlertRoutingConfig,
@@ -694,6 +695,11 @@ export interface CreateCallFeedbackInput {
 export interface UpdateCallStatusInput {
   callId: string;
   status: CallStatus;
+}
+
+export interface UpdateCallInteractionInsightInput {
+  callId: string;
+  insight: InteractionInsight;
 }
 
 export interface KnowledgeSectionRecord {
@@ -1546,6 +1552,19 @@ export async function updateCallStatusInSupabase(input: UpdateCallStatusInput): 
     body: {
       status: normalizeEnum(input.status, callStatuses, "new"),
     },
+    method: "PATCH",
+  });
+}
+
+export async function updateCallInteractionInsightInSupabase(
+  input: UpdateCallInteractionInsightInput,
+): Promise<void> {
+  if (!isSupabaseConfigured()) {
+    throw new Error("Supabase call persistence is not configured.");
+  }
+
+  await supabaseRequest("calls", new URLSearchParams({ id: `eq.${input.callId}` }), {
+    body: buildCallInteractionInsightUpdatePayload(input.insight),
     method: "PATCH",
   });
 }
@@ -2416,6 +2435,19 @@ export function buildCallFeedbackInsertPayload(input: CreateCallFeedbackInput, l
     location_id: locationId,
     note: input.note?.trim() || null,
     suggested_answer: input.suggestedAnswer?.trim() || null,
+  };
+}
+
+export function buildCallInteractionInsightUpdatePayload(insight: InteractionInsight) {
+  return {
+    follow_up_needed: insight.followUpNeeded,
+    knowledge_gap: insight.knowledgeGap,
+    owner_report_bucket: normalizeEnum(insight.ownerReportBucket, callOwnerReportBuckets, "handled"),
+    recommended_action: insight.recommendedAction.trim() || null,
+    tags: insight.tags,
+    urgency: normalizeEnum(insight.urgency, callInteractionUrgencies, "normal"),
+    value_tier: normalizeEnum(insight.valueTier, callInteractionValueTiers, "low"),
+    workflow_status: normalizeEnum(insight.workflowStatus, callInteractionWorkflowStatuses, "new"),
   };
 }
 
