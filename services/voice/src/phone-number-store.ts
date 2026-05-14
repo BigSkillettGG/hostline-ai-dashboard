@@ -23,6 +23,7 @@ export interface LocationProvisioningGuard {
 export interface PhoneNumberStore {
   getLocationProvisioningGuard(locationId?: string, now?: Date): Promise<LocationProvisioningGuard>;
   listExpiredTrialNumbers(input?: { limit?: number; now?: Date }): Promise<TrialPhoneNumberReleaseCandidate[]>;
+  markLocationNumberPaid(input: { locationId?: string; reason?: string }): Promise<void>;
   markNumberReleased(input: {
     id?: string;
     locationId?: string;
@@ -54,6 +55,13 @@ class NoopPhoneNumberStore implements PhoneNumberStore {
   async listExpiredTrialNumbers(): Promise<TrialPhoneNumberReleaseCandidate[]> {
     console.info("[phone-number-store] Supabase not configured; expired trial numbers not loaded");
     return [];
+  }
+
+  async markLocationNumberPaid(input: { locationId?: string; reason?: string }) {
+    console.info("[phone-number-store] Supabase not configured; paid phone-number lifecycle not persisted", {
+      locationId: input.locationId,
+      reason: input.reason,
+    });
   }
 
   async markNumberReleased(input: { phoneNumber?: string; providerSid?: string }) {
@@ -195,6 +203,28 @@ class SupabasePhoneNumberStore implements PhoneNumberStore {
         providerSid: row.provider_sid ?? "",
         trialGraceEndsAt: row.trial_grace_ends_at ?? undefined,
       }));
+  }
+
+  async markLocationNumberPaid(input: { locationId?: string; reason?: string }) {
+    const normalizedLocationId = normalizeLocationId(input.locationId) ?? this.defaultLocationId;
+    const updatedAt = new Date().toISOString();
+
+    await this.request("phone_numbers", {
+      body: {
+        provisioning_source: "paid",
+        release_reason: null,
+        status: "active",
+        trial_ends_at: null,
+        trial_grace_ends_at: null,
+        updated_at: updatedAt,
+      },
+      method: "PATCH",
+      query: [
+        `location_id=eq.${encodeURIComponent(normalizedLocationId)}`,
+        "released_at=is.null",
+        "status=in.(provisioned,trialing,in-use,active)",
+      ].join("&"),
+    });
   }
 
   async markNumberReleased(input: {

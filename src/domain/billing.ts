@@ -137,13 +137,13 @@ export function buildBillingSnapshot(input: {
     readInteger(input.draft.selectedPlanIncludedInteractions) ??
     defaultIncludedInteractions(selectedPlanName);
   const primaryNumber = selectPrimaryPhoneNumber(input.phoneNumbers ?? []);
-  const lifecycle = deriveBillingLifecycle(primaryNumber, now);
   const overageLabel = billingAccount?.overageLabel ?? stringValue(input.draft.selectedPlanOverage) ?? defaultOverageLabel(selectedPlanName);
   const remainingInteractions = includedInteractions > 0 ? Math.max(0, includedInteractions - usedInteractions) : 0;
   const overageInteractions = includedInteractions > 0 ? Math.max(0, usedInteractions - includedInteractions) : 0;
   const estimatedOverageCents = overageInteractions * (parseOverageCents(overageLabel) ?? 0);
   const usagePercent = includedInteractions > 0 ? Math.min(100, Math.round((usedInteractions / includedInteractions) * 100)) : 0;
   const billingStatus = deriveBillingStatus(billingAccount);
+  const lifecycle = deriveBillingLifecycle(primaryNumber, now, billingStatus);
   const usage = deriveUsageState({
     estimatedOverageCents,
     includedInteractions,
@@ -197,7 +197,11 @@ function selectPrimaryPhoneNumber(phoneNumbers: BillingPhoneNumberRecord[]) {
   return phoneNumbers.find((number) => !isReleased(number)) ?? phoneNumbers[0];
 }
 
-function deriveBillingLifecycle(number: BillingPhoneNumberRecord | undefined, now: Date) {
+function deriveBillingLifecycle(
+  number: BillingPhoneNumberRecord | undefined,
+  now: Date,
+  billingStatus: BillingSnapshot["billingStatus"],
+) {
   if (!number) {
     return {
       detail: "No trial number has been assigned yet.",
@@ -211,6 +215,14 @@ function deriveBillingLifecycle(number: BillingPhoneNumberRecord | undefined, no
       detail: "This trial number has been released and no longer receives calls.",
       label: "Released",
       status: "released" as const,
+    };
+  }
+
+  if (isPaidBillingStatus(billingStatus) || number.status === "active" || number.provisioningSource === "paid") {
+    return {
+      detail: "Billing is active and this SignalHost number is protected from trial cleanup.",
+      label: "Active",
+      status: "active" as const,
     };
   }
 

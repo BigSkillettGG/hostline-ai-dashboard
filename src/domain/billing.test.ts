@@ -94,8 +94,27 @@ describe("billing snapshot", () => {
     });
 
     expect(snapshot.billingStatus).toBe("active");
+    expect(snapshot.lifecycleStatus).toBe("active");
+    expect(snapshot.lifecycleLabel).toBe("Active");
     expect(snapshot.monthlyPrice).toBe(399);
     expect(snapshot.planName).toBe("Scale");
+    expect(snapshot.upgradeRequired).toBe(false);
+  });
+
+  it("treats a paid phone-number row as active even if old trial dates are still present", () => {
+    const snapshot = buildBillingSnapshot({
+      draft,
+      now: new Date("2026-05-27T12:00:00.000Z"),
+      phoneNumbers: [{
+        phoneNumber: "+16175550199",
+        provisioningSource: "paid",
+        status: "active",
+        trialEndsAt: "2026-05-12T12:00:00.000Z",
+        trialGraceEndsAt: "2026-05-26T12:00:00.000Z",
+      }],
+    });
+
+    expect(snapshot.lifecycleStatus).toBe("active");
     expect(snapshot.upgradeRequired).toBe(false);
   });
 

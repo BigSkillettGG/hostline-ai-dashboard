@@ -77,7 +77,8 @@ describe("billing service", () => {
 
   it("persists completed checkout webhooks after verifying the Stripe signature", async () => {
     const store = createStore();
-    const service = createBillingService(env, store);
+    const phoneNumberStore = createPhoneNumberStore();
+    const service = createBillingService(env, store, phoneNumberStore);
     const rawBody = JSON.stringify({
       data: {
         object: {
@@ -108,6 +109,53 @@ describe("billing service", () => {
       stripeCustomerId: "cus_123",
       stripeSubscriptionId: "sub_123",
     });
+    expect(phoneNumberStore.markLocationNumberPaid).toHaveBeenCalledWith({
+      locationId: "loc_123",
+      reason: "stripe_checkout_completed",
+    });
+  });
+
+  it("marks a location number paid when Stripe sends an active subscription webhook", async () => {
+    const store = createStore();
+    const phoneNumberStore = createPhoneNumberStore();
+    const service = createBillingService(env, store, phoneNumberStore);
+    const rawBody = JSON.stringify({
+      data: {
+        object: {
+          cancel_at_period_end: false,
+          current_period_end: 1770000000,
+          current_period_start: 1767408000,
+          customer: "cus_123",
+          id: "sub_123",
+          metadata: {
+            included_interactions: "800",
+            location_id: "loc_123",
+            organization_id: "org_123",
+            plan_id: "growth",
+            plan_name: "Service",
+          },
+          status: "active",
+        },
+      },
+      type: "customer.subscription.updated",
+    });
+
+    const result = await service.handleWebhook({
+      rawBody,
+      signature: signStripePayload(rawBody, env.STRIPE_WEBHOOK_SECRET ?? ""),
+    });
+
+    expect(result).toEqual({ handled: true, type: "customer.subscription.updated" });
+    expect(store.upserts.at(-1)).toMatchObject({
+      currentPeriodEnd: new Date(1770000000 * 1000).toISOString(),
+      organizationId: "org_123",
+      status: "active",
+      stripeSubscriptionId: "sub_123",
+    });
+    expect(phoneNumberStore.markLocationNumberPaid).toHaveBeenCalledWith({
+      locationId: "loc_123",
+      reason: "stripe_subscription_active",
+    });
   });
 });
 
@@ -125,6 +173,12 @@ function createStore(): BillingStore & { upserts: unknown[] } {
     async upsertAccount(input) {
       upserts.push(input);
     },
+  };
+}
+
+function createPhoneNumberStore() {
+  return {
+    markLocationNumberPaid: vi.fn(async () => undefined),
   };
 }
 

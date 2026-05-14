@@ -42,9 +42,9 @@ import { createWebChatService, type WebChatMessageInput } from "./web-chat";
 
 const env = loadEnv();
 const billingStore = createBillingStore(env);
-const billingService = createBillingService(env, billingStore);
 const callStore = createCallStore(env);
 const phoneNumberStore = createPhoneNumberStore(env);
+const billingService = createBillingService(env, billingStore, phoneNumberStore);
 const restaurantContextStore = createRestaurantContextStore(env);
 const telephonyService = createTelephonyService(env);
 const staffNotificationService = createStaffNotificationService(env);

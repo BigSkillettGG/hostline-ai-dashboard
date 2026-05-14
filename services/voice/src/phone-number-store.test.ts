@@ -149,4 +149,27 @@ describe("phone number store", () => {
       trialGraceEndsAt: "2026-05-01T00:00:00.000Z",
     });
   });
+
+  it("marks the active location number as paid after billing activation", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const store = createPhoneNumberStore(env);
+
+    await store.markLocationNumberPaid({
+      locationId: "00000000-0000-4000-8000-000000000002",
+      reason: "stripe_checkout_completed",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://example.supabase.co/rest/v1/phone_numbers?location_id=eq.00000000-0000-4000-8000-000000000002&released_at=is.null&status=in.(provisioned,trialing,in-use,active)",
+      expect.objectContaining({
+        body: expect.stringContaining('"provisioning_source":"paid"'),
+        method: "PATCH",
+      }),
+    );
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain('"trial_ends_at":null');
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain('"trial_grace_ends_at":null');
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain('"status":"active"');
+  });
 });

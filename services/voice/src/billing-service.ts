@@ -4,6 +4,7 @@ import type { BillingStore } from "./billing-store";
 import { resolveBillingPlan } from "./billing-plans";
 import type { VoiceServiceEnv } from "./env";
 import { HttpRequestError } from "./http-safety";
+import type { PhoneNumberStore } from "./phone-number-store";
 
 export interface CreateCheckoutSessionInput {
   businessType?: string;
@@ -28,18 +29,24 @@ export interface BillingService {
   handleWebhook(input: { rawBody: string; signature?: string }): Promise<{ handled: boolean; type?: string }>;
 }
 
-export function createBillingService(env: VoiceServiceEnv, store: BillingStore): BillingService {
-  return new StripeBillingService(env, store);
+export function createBillingService(
+  env: VoiceServiceEnv,
+  store: BillingStore,
+  phoneNumberStore?: Pick<PhoneNumberStore, "markLocationNumberPaid">,
+): BillingService {
+  return new StripeBillingService(env, store, phoneNumberStore);
 }
 
 class StripeBillingService implements BillingService {
   configured: boolean;
   private readonly env: VoiceServiceEnv;
+  private readonly phoneNumberStore?: Pick<PhoneNumberStore, "markLocationNumberPaid">;
   private readonly store: BillingStore;
 
-  constructor(env: VoiceServiceEnv, store: BillingStore) {
+  constructor(env: VoiceServiceEnv, store: BillingStore, phoneNumberStore?: Pick<PhoneNumberStore, "markLocationNumberPaid">) {
     this.configured = Boolean(env.STRIPE_SECRET_KEY);
     this.env = env;
+    this.phoneNumberStore = phoneNumberStore;
     this.store = store;
   }
 
@@ -217,6 +224,7 @@ class StripeBillingService implements BillingService {
       stripeCustomerId: stringId(session.customer),
       stripeSubscriptionId: stringId(session.subscription),
     });
+    await this.markLocationNumberPaid(metadata.location_id, "stripe_checkout_completed");
   }
 
   private async handleSubscription(subscription: StripeSubscription) {
@@ -239,6 +247,9 @@ class StripeBillingService implements BillingService {
       stripeSubscriptionId: subscription.id,
       trialEnd: timestampToIso(subscription.trial_end),
     });
+    if (isPhoneNumberProtectedBySubscription(subscription.status)) {
+      await this.markLocationNumberPaid(metadata.location_id, `stripe_subscription_${subscription.status ?? "unknown"}`);
+    }
   }
 
   private async handleInvoice(invoice: StripeInvoice, status: string) {
@@ -246,6 +257,7 @@ class StripeBillingService implements BillingService {
     if (!subscriptionId) return;
     const organizationId = invoice.subscription_details?.metadata?.organization_id;
     if (!organizationId) return;
+    const locationId = invoice.subscription_details?.metadata?.location_id;
 
     await this.store.upsertAccount({
       organizationId,
@@ -253,6 +265,14 @@ class StripeBillingService implements BillingService {
       stripeCustomerId: stringId(invoice.customer),
       stripeSubscriptionId: subscriptionId,
     });
+    if (status === "active") {
+      await this.markLocationNumberPaid(locationId, "stripe_invoice_payment_succeeded");
+    }
+  }
+
+  private async markLocationNumberPaid(locationId?: string, reason?: string) {
+    if (!locationId || !this.phoneNumberStore) return;
+    await this.phoneNumberStore.markLocationNumberPaid({ locationId, reason });
   }
 
   private async stripeRequest<T>(path: string, params: Record<string, string | undefined>) {
@@ -388,6 +408,11 @@ function verifyStripeSignature({
 
 function timestampToIso(value?: number | null) {
   return typeof value === "number" && Number.isFinite(value) ? new Date(value * 1000).toISOString() : undefined;
+}
+
+function isPhoneNumberProtectedBySubscription(status?: string | null) {
+  const normalized = status?.toLowerCase();
+  return normalized === "active" || normalized === "trialing" || normalized === "past_due";
 }
 
 function stringId(value?: string | { id?: string } | null) {

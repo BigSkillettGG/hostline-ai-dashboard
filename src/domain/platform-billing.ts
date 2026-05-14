@@ -164,6 +164,7 @@ function getTrialStatus(input: {
 }, now: Date): PlatformBillingTrialStatus {
   if (input.phoneReleasedAt || input.phoneStatus === "released") return "released";
   if (!input.aiHostPhone) return "no_number";
+  if (input.phoneStatus === "active") return "active";
 
   const trialEndsAt = parseDate(input.trialEndsAt);
   const trialGraceEndsAt = parseDate(input.trialGraceEndsAt);

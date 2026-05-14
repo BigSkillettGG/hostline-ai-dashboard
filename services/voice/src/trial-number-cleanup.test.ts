@@ -154,6 +154,9 @@ function createPhoneNumberStore(candidates: TrialPhoneNumberReleaseCandidate[]):
     async listExpiredTrialNumbers() {
       return candidates;
     },
+    async markLocationNumberPaid() {
+      return undefined;
+    },
     markNumberReleased: vi.fn(async () => undefined),
     async saveProvisionedNumber() {
       return undefined;

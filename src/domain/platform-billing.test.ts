@@ -35,6 +35,36 @@ describe("platform billing", () => {
     expect(tenant.trialStatus).toBe("grace_period");
   });
 
+  it("does not flag paid phone numbers for trial cleanup when stale trial dates remain", () => {
+    const tenant = mapDirectoryTenantToBillingTenant({
+      addressOrArea: "Waltham, MA",
+      aiHostPhone: "+17815550100",
+      businessLabel: "HVAC",
+      businessType: "hvac",
+      callsThisMonth: 400,
+      createdAt: "2026-05-01T12:00:00.000Z",
+      includedInteractions: 800,
+      locationId: "loc_1",
+      locationName: "Summit Air",
+      monthlyPrice: 249,
+      onboardingProgressPercent: 100,
+      onboardingStatus: "ready_for_test_call",
+      organizationId: "org_1",
+      organizationName: "Summit Air",
+      ownerEmail: "owner@summit.test",
+      ownerName: "Owner",
+      phoneStatus: "active",
+      planName: "Dispatch",
+      status: "healthy",
+      timezone: "America/New_York",
+      trialEndsAt: "2026-05-10T12:00:00.000Z",
+      trialGraceEndsAt: "2026-05-24T12:00:00.000Z",
+      trialStartedAt: "2026-05-03T12:00:00.000Z",
+    }, new Date("2026-05-25T12:00:00.000Z"));
+
+    expect(tenant.trialStatus).toBe("active");
+  });
+
   it("summarizes platform billing risk across tenants", () => {
     const rows = [
       mapMockTenantToBillingTenant({
