@@ -32,6 +32,7 @@ import { createRestaurantContextStore } from "./restaurant-context-store";
 import { createReservationPlatformService } from "./reservation-platform-service";
 import { createTenantProvisioningService, type TenantBootstrapInput } from "./tenant-provisioning";
 import { createTelephonyService } from "./telephony";
+import { releaseExpiredTrialNumbers } from "./trial-number-cleanup";
 import { demoRestaurantContext } from "./restaurant-context";
 import { generateRestaurantReply } from "./restaurant-agent";
 import { validateTwilioSignature } from "./twilio-signature";
@@ -604,39 +605,20 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       const body: { dryRun?: boolean; limit?: number; now?: string } = rawBody.trim()
         ? parseJsonRequestBody(rawBody) as { dryRun?: boolean; limit?: number; now?: string }
         : {};
-      const candidates = await phoneNumberStore.listExpiredTrialNumbers({
-        limit: body.limit,
-        now: body.now ? new Date(body.now) : undefined,
-      });
-      const released: Array<{ phoneNumber: string; providerSid: string; status: string }> = [];
-      const failed: Array<{ error: string; phoneNumber: string; providerSid: string }> = [];
+      const result = await releaseExpiredTrialNumbers(
+        {
+          billingService,
+          phoneNumberStore,
+          telephonyService,
+        },
+        {
+          dryRun: body.dryRun,
+          limit: body.limit,
+          now: body.now ? new Date(body.now) : undefined,
+        },
+      );
 
-      for (const candidate of candidates) {
-        if (body.dryRun) {
-          released.push({ phoneNumber: candidate.phoneNumber, providerSid: candidate.providerSid, status: "dry_run" });
-          continue;
-        }
-
-        try {
-          await telephonyService.releasePhoneNumber({ providerSid: candidate.providerSid });
-          await phoneNumberStore.markNumberReleased({
-            id: candidate.id,
-            locationId: candidate.locationId,
-            phoneNumber: candidate.phoneNumber,
-            providerSid: candidate.providerSid,
-            releaseReason: "trial_grace_expired",
-          });
-          released.push({ phoneNumber: candidate.phoneNumber, providerSid: candidate.providerSid, status: "released" });
-        } catch (error) {
-          failed.push({
-            error: error instanceof Error ? error.message : "Release failed",
-            phoneNumber: candidate.phoneNumber,
-            providerSid: candidate.providerSid,
-          });
-        }
-      }
-
-      sendJson(res, failed.length ? 207 : 200, { candidateCount: candidates.length, failed, released });
+      sendJson(res, result.failed.length ? 207 : 200, result);
     } catch (error) {
       sendCaughtError(res, error, "Expired trial release failed");
     }

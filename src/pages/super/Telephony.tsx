@@ -277,7 +277,7 @@ export default function Telephony() {
               <CardContent className="space-y-3">
                 <UrlRow label="Expired-trial release endpoint" value={expiredTrialReleaseUrl} />
                 <div className="rounded-md border border-border p-3 text-xs text-muted-foreground">
-                  This endpoint is intentionally internal-key protected. Use it from Render cron or a manual ops call with <code className="font-mono">x-signalhost-api-key</code>. Send <code className="font-mono">{`{"dryRun":true}`}</code> first to preview releases.
+                  This endpoint is intentionally internal-key protected. Use it from Render cron or a manual ops call with <code className="font-mono">x-signalhost-api-key</code>. Send <code className="font-mono">{`{"dryRun":true}`}</code> first to preview releases. Active, trialing, past-due, checkout-started, and incomplete Stripe accounts are skipped.
                 </div>
               </CardContent>
             </Card>

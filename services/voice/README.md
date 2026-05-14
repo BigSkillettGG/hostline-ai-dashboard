@@ -126,7 +126,7 @@ When Supabase is configured, Twilio requests can include `locationId` in the web
 - `GET /telephony/available-numbers?areaCode=415&limit=5` searches Twilio local numbers with voice and SMS enabled.
 - `POST /telephony/provision-number` purchases a selected number, sets its voice webhook to `/twilio/voice?locationId=...`, writes `phone_numbers`, and updates `locations.ai_host_phone`. If `phoneNumber` is omitted, the service searches Twilio with `areaCode`, `contains`, and `country`, then provisions the first match. When Supabase is configured, it refuses to buy a second unreleased active/trial number for the same location.
 - `POST /telephony/release-number` releases a Twilio number by `providerSid` and marks the matching `phone_numbers` row as released.
-- `POST /telephony/release-expired-trials` releases trial numbers whose grace period has ended. This endpoint is internal-key protected and supports `{ "dryRun": true }`.
+- `POST /telephony/release-expired-trials` releases trial numbers whose grace period has ended. This endpoint is internal-key protected, supports `{ "dryRun": true }`, and skips numbers for accounts with active, trialing, past-due, checkout-started, or incomplete billing status.
 - `GET /twilio/live-call-config?locationId=...` returns the generated live call URLs.
 - `GET /twilio/twiml-preview?locationId=...` renders the TwiML preview used to verify ConversationRelay before calling.
 - `POST /twilio/sms` receives inbound SMS replies for the shared SignalHost sender. Trusted owner/manager numbers are routed into owner-assistant commands first; customer replies still route to the most recent open message thread, ask for disambiguation if needed, and create a staff task for routed replies.
