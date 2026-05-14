@@ -43,8 +43,10 @@ export function resolveBillingPlan(input: { businessType?: string; planId?: stri
   );
 }
 
-export function listBillingPlans() {
-  return [...plans];
+export function listBillingPlans(input: { businessType?: string } = {}) {
+  const businessKey = normalizeBusinessKey(input.businessType);
+  const matches = plans.filter((candidate) => candidate.slug === businessKey || candidate.businessType === businessKey);
+  return matches.length ? matches : plans.filter((candidate) => candidate.slug === "restaurants");
 }
 
 function plan(

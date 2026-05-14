@@ -4,6 +4,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { authorizeVoiceAdminRequest } from "./admin-auth";
 import { generateAgentTestReply, type AgentTestReplyInput } from "./agent-test";
 import { createBillingService } from "./billing-service";
+import { listBillingPlans } from "./billing-plans";
 import { createBillingStore } from "./billing-store";
 import { createCallStore } from "./call-store";
 import { createConversationRelayHandler } from "./conversation-relay";
@@ -203,6 +204,14 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
     } catch (error) {
       sendCaughtError(res, error, "Tenant provisioning failed");
     }
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/billing/plans") {
+    const businessType = url.searchParams.get("businessType") ?? undefined;
+    sendJson(res, 200, {
+      plans: listBillingPlans({ businessType }),
+    });
     return;
   }
 

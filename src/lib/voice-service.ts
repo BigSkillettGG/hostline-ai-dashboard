@@ -166,6 +166,16 @@ export interface BillingAccountStatus {
   updatedAt?: string;
 }
 
+export interface BillingPlanOption {
+  businessType: string;
+  includedInteractions: number;
+  monthlyCents: number;
+  name: string;
+  overageLabel: string;
+  planId: "basic" | "growth" | "pro";
+  slug: string;
+}
+
 export interface GeneratedOwnerDailyReport {
   configured: boolean;
   delivery?: {
@@ -419,6 +429,26 @@ export async function fetchBillingStatus(locationId = getActiveLocationId()) {
   }
 
   return (await response.json()) as { account: BillingAccountStatus | null; configured: boolean };
+}
+
+export async function fetchBillingPlans(businessType?: string) {
+  if (!voiceServiceBaseUrl) {
+    throw new Error("VITE_VOICE_SERVICE_URL is not configured.");
+  }
+
+  const params = new URLSearchParams();
+  if (businessType?.trim()) params.set("businessType", businessType.trim());
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const response = await fetch(`${voiceServiceBaseUrl}/billing/plans${query}`, {
+    headers: buildVoiceAdminHeaders(),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(body || `Billing plans failed with ${response.status}.`);
+  }
+
+  return (await response.json()) as { plans: BillingPlanOption[] };
 }
 
 export async function createBillingCheckoutSession(input: {

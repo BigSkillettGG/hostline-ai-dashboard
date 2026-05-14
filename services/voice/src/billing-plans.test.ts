@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveBillingPlan } from "./billing-plans";
+import { listBillingPlans, resolveBillingPlan } from "./billing-plans";
 
 describe("billing plans", () => {
   it("resolves vertical-specific plan prices instead of trusting client-submitted dollars", () => {
@@ -20,5 +20,14 @@ describe("billing plans", () => {
       monthlyCents: 14900,
       planId: "growth",
     });
+  });
+
+  it("lists only the plans for the selected vertical", () => {
+    expect(listBillingPlans({ businessType: "plumbing" }).map((plan) => plan.monthlyCents)).toEqual([7900, 22900, 49900]);
+    expect(listBillingPlans({ businessType: "unknown" }).map((plan) => plan.businessType)).toEqual([
+      "restaurant",
+      "restaurant",
+      "restaurant",
+    ]);
   });
 });

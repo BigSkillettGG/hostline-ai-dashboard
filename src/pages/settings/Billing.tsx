@@ -1,7 +1,7 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertCircle, CheckCircle2, CreditCard, Info, PhoneForwarded, ReceiptText, RefreshCw, TimerReset, type LucideIcon } from "lucide-react";
+import { AlertCircle, ArrowRight, Check, CheckCircle2, CreditCard, Info, PhoneForwarded, ReceiptText, RefreshCw, TimerReset, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader, PageBody } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { calls as demoCalls } from "@/data/mock";
 import { buildBillingCheckoutNotice, buildBillingSnapshot, normalizeCheckoutReturn, type BillingLifecycleStatus, type BillingNoticeTone } from "@/domain/billing";
+import type { BusinessType } from "@/domain/business-templates";
+import { getIndustryByBusinessType } from "@/data/industry-solutions";
 import { loadOnboardingDraft } from "@/lib/onboarding-draft";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -22,13 +24,16 @@ import {
 import {
   createBillingCheckoutSession,
   createBillingPortalSession,
+  fetchBillingPlans,
   fetchBillingStatus,
   isVoiceServiceConfigured,
+  type BillingPlanOption,
 } from "@/lib/voice-service";
 import { cn } from "@/lib/utils";
 
 export default function Billing() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const [selectedPlanId, setSelectedPlanId] = useState<BillingPlanOption["planId"] | undefined>();
   const checkoutReturn = normalizeCheckoutReturn(searchParams.get("checkout"));
   const locationId = getActiveSupabaseLocationId();
   const supabaseConfigured = isSupabaseConfigured();
@@ -57,6 +62,13 @@ export default function Billing() {
 
   const localDraft = useMemo(() => loadOnboardingDraft(), []);
   const draft = onboardingQuery.data ?? localDraft;
+  const billingBusinessType = String(draft.businessType || "restaurant");
+  const planQuery = useQuery({
+    enabled: voiceServiceConfigured,
+    queryFn: () => fetchBillingPlans(billingBusinessType),
+    queryKey: ["billing-plans", billingBusinessType],
+    staleTime: 5 * 60_000,
+  });
   const callsThisMonth = useMemo(() => {
     const calls = callsQuery.data ?? demoCalls;
     const monthKey = new Date().toISOString().slice(0, 7);
@@ -68,6 +80,18 @@ export default function Billing() {
     draft,
     phoneNumbers: phoneNumbersQuery.data,
   });
+  const planOptions = useMemo(
+    () => planQuery.data?.plans.length ? planQuery.data.plans : fallbackBillingPlans(billingBusinessType),
+    [billingBusinessType, planQuery.data?.plans],
+  );
+  const checkoutPlan = useMemo(
+    () =>
+      planOptions.find((plan) => plan.planId === selectedPlanId) ??
+      planOptions.find((plan) => plan.planId === snapshot.planId) ??
+      planOptions[1] ??
+      planOptions[0],
+    [planOptions, selectedPlanId, snapshot.planId],
+  );
   const checkoutNotice = buildBillingCheckoutNotice({
     checkoutReturn,
     configured: billingQuery.data?.configured,
@@ -82,13 +106,21 @@ export default function Billing() {
     }
   }, [billingQuery.refetch, checkoutReturn, locationId, voiceServiceConfigured]);
 
+  useEffect(() => {
+    if (!planOptions.length) return;
+    const selectedStillExists = selectedPlanId && planOptions.some((plan) => plan.planId === selectedPlanId);
+    if (!selectedStillExists) {
+      setSelectedPlanId((snapshot.planId as BillingPlanOption["planId"] | undefined) ?? planOptions[1]?.planId ?? planOptions[0]?.planId);
+    }
+  }, [planOptions, selectedPlanId, snapshot.planId]);
+
   const checkoutMutation = useMutation({
     mutationFn: () => createBillingCheckoutSession({
-      businessType: snapshot.businessType,
+      businessType: checkoutPlan?.businessType ?? snapshot.businessType,
       cancelUrl: `${window.location.origin}/app/billing?checkout=cancelled`,
       locationId,
-      planId: snapshot.planId,
-      planName: snapshot.planName,
+      planId: checkoutPlan?.planId ?? snapshot.planId,
+      planName: checkoutPlan?.name ?? snapshot.planName,
       successUrl: `${window.location.origin}/app/billing?checkout=success`,
     }),
     onError: (error) => toast.error(error instanceof Error ? error.message : "Stripe checkout failed"),
@@ -211,6 +243,43 @@ export default function Billing() {
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-base">
+                  <CreditCard className="h-4 w-4 text-primary" />
+                  Choose checkout plan
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {planQuery.isError ? (
+                  <div className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs leading-5 text-warning">
+                    Could not load the live Stripe plan catalog, so this page is showing the saved public pricing. Checkout still uses the server-side price catalog.
+                  </div>
+                ) : null}
+                <div className="grid gap-3 md:grid-cols-3">
+                  {planOptions.map((plan) => (
+                    <BillingPlanCard
+                      current={snapshot.planId === plan.planId || snapshot.planName.toLowerCase() === plan.name.toLowerCase()}
+                      key={`${plan.businessType}-${plan.planId}`}
+                      onSelect={() => setSelectedPlanId(plan.planId)}
+                      plan={plan}
+                      selected={checkoutPlan?.planId === plan.planId}
+                    />
+                  ))}
+                </div>
+                <div className="flex flex-col gap-3 rounded-md border border-border bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm leading-6 text-muted-foreground">
+                    Stripe checkout will open for <span className="font-medium text-foreground">{checkoutPlan?.name ?? snapshot.planName}</span>
+                    {checkoutPlan ? ` at ${formatMoney(checkoutPlan.monthlyCents)} per month.` : "."}
+                  </p>
+                  <Button disabled={billingActionBusy || !checkoutPlan} onClick={openCheckout}>
+                    {billingActionBusy ? "Opening..." : "Continue to checkout"}
+                    {!billingActionBusy && <ArrowRight className="ml-1.5 h-3.5 w-3.5" />}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
                   <ReceiptText className="h-4 w-4 text-primary" />
                   Current plan
                 </CardTitle>
@@ -324,6 +393,51 @@ function PlanFact({ label, value }: { label: string; value: string }) {
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
       <div className="mt-1 text-lg font-semibold">{value}</div>
     </div>
+  );
+}
+
+function BillingPlanCard({
+  current,
+  onSelect,
+  plan,
+  selected,
+}: {
+  current: boolean;
+  onSelect: () => void;
+  plan: BillingPlanOption;
+  selected: boolean;
+}) {
+  return (
+    <button
+      className={cn(
+        "flex h-full min-h-44 flex-col rounded-md border p-4 text-left transition hover:border-primary/45 hover:bg-primary/5",
+        selected ? "border-primary bg-primary/5 shadow-sm" : "border-border bg-background",
+      )}
+      onClick={onSelect}
+      type="button"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold">{plan.name}</div>
+          <div className="mt-1 text-2xl font-semibold tabular-nums">{formatMoney(plan.monthlyCents)}</div>
+          <div className="text-xs text-muted-foreground">per month</div>
+        </div>
+        <span className={cn("flex h-6 w-6 items-center justify-center rounded-full border", selected ? "border-primary bg-primary text-primary-foreground" : "border-border")}>
+          {selected && <Check className="h-3.5 w-3.5" />}
+        </span>
+      </div>
+      <div className="mt-4 space-y-2 text-xs leading-5 text-muted-foreground">
+        <div>{plan.includedInteractions.toLocaleString()} calls or chats included</div>
+        <div>{plan.overageLabel}</div>
+      </div>
+      <div className="mt-auto pt-4">
+        {current ? (
+          <Badge variant="outline" className="border-success/30 bg-success/10 text-success">Current plan</Badge>
+        ) : (
+          <Badge variant="outline">Available</Badge>
+        )}
+      </div>
+    </button>
   );
 }
 
@@ -457,6 +571,26 @@ function formatMoney(value: number) {
     maximumFractionDigits: 2,
     style: "currency",
   }).format(value / 100);
+}
+
+function fallbackBillingPlans(businessType: string): BillingPlanOption[] {
+  const solution = getIndustryByBusinessType(normalizeBusinessTypeForPlans(businessType));
+  return solution.pricing.map((tier) => ({
+    businessType: solution.businessType,
+    includedInteractions: tier.includedInteractions,
+    monthlyCents: tier.monthly * 100,
+    name: tier.name,
+    overageLabel: tier.overage,
+    planId: tier.id,
+    slug: solution.slug,
+  }));
+}
+
+function normalizeBusinessTypeForPlans(value: string): BusinessType {
+  if (value === "restaurant" || value === "hvac" || value === "plumbing" || value === "roofing" || value === "electrical" || value === "salon_barber") {
+    return value;
+  }
+  return "restaurant";
 }
 
 function formatDate(value?: string) {
