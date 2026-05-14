@@ -121,6 +121,7 @@ When Supabase is configured, Twilio requests can include `locationId` in the web
 
 - `POST /tenant/bootstrap` creates the signed-in user's organization, owner membership, first location, onboarding profile, and default agent config after website signup. It requires a Supabase bearer token and uses the backend-only service role key.
 - `GET /billing/readiness?locationId=...` returns a safe Stripe activation checklist, the exact webhook endpoint URL, return URLs, mode, and required Stripe event names. It does not expose secrets.
+- `GET /email/readiness?locationId=...` returns the safe Resend activation checklist, inbound webhook URL, receiving domain, fallback address, and outbound sender status. It does not expose secrets.
 - `GET /billing/status?locationId=...` returns the stored Stripe subscription state for the location's organization.
 - `POST /billing/checkout-session` creates a Stripe subscription checkout session from SignalHost's server-side plan catalog and stores checkout-started state.
 - `POST /billing/customer-portal` creates a Stripe customer portal session once a Stripe customer exists.

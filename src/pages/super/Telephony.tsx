@@ -6,6 +6,7 @@ import {
   CircleDashed,
   ClipboardCheck,
   Copy,
+  MailCheck,
   MessageSquareText,
   PhoneCall,
   RefreshCw,
@@ -26,6 +27,7 @@ import { buildFirstCallReadiness, type FirstCallReadinessStep } from "@/domain/f
 import { fetchPhoneNumbersFromSupabase, isSupabaseConfigured, type PhoneNumberRecord } from "@/lib/supabase-rest";
 import {
   fetchLiveCallConfig,
+  fetchEmailReadiness,
   fetchTwiMLPreview,
   fetchVoiceServiceHealth,
   isVoiceServiceConfigured,
@@ -60,6 +62,12 @@ export default function Telephony() {
     queryKey: ["twiml-preview", locationId],
   });
 
+  const emailReadinessQuery = useQuery({
+    enabled: voiceConfigured,
+    queryFn: () => fetchEmailReadiness(locationId),
+    queryKey: ["email-readiness", locationId],
+  });
+
   const phoneNumbersQuery = useQuery({
     enabled: supabaseConfigured && Boolean(locationId.trim()),
     queryFn: () => fetchPhoneNumbersFromSupabase(locationId),
@@ -80,6 +88,7 @@ export default function Telephony() {
 
   const refreshAll = () => {
     void healthQuery.refetch();
+    void emailReadinessQuery.refetch();
     void liveCallQuery.refetch();
     void twimlQuery.refetch();
     void phoneNumbersQuery.refetch();
@@ -97,6 +106,7 @@ export default function Telephony() {
   });
   const sharedSmsWebhookUrl = voiceServiceBaseUrl ? `${voiceServiceBaseUrl}/twilio/sms` : "Set VITE_VOICE_SERVICE_URL";
   const expiredTrialReleaseUrl = voiceServiceBaseUrl ? `${voiceServiceBaseUrl}/telephony/release-expired-trials` : "Set VITE_VOICE_SERVICE_URL";
+  const emailReadiness = emailReadinessQuery.data;
 
   const releaseNumber = (record: PhoneNumberRecord) => {
     if (!record.providerSid) {
@@ -264,6 +274,53 @@ export default function Telephony() {
                 <div className="rounded-md border border-border p-3 text-xs text-muted-foreground">
                   In Twilio, set the shared texting number or Messaging Service inbound message webhook to this URL using HTTP POST.
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-start justify-between gap-3 pb-3">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <MailCheck className="h-4 w-4 text-primary" />
+                    Agent email
+                  </CardTitle>
+                  <p className="mt-1 text-xs text-muted-foreground">Resend receiving, owner-command routing, and email replies.</p>
+                </div>
+                <Badge
+                  variant="outline"
+                  className={emailReadiness?.ready ? "border-success/30 bg-success/10 text-success" : "border-warning/30 bg-warning/10 text-warning"}
+                >
+                  {emailReadiness?.ready ? "Ready" : voiceConfigured ? "Needs setup" : "Not connected"}
+                </Badge>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <UrlRow label="Resend inbound webhook" value={emailReadiness?.webhookUrl ?? (voiceConfigured ? "Unavailable" : "Set VITE_VOICE_SERVICE_URL")} />
+                <UrlRow label="Receiving domain" value={emailReadiness?.receivingDomain ?? "agents.signalhost.ai"} />
+                <UrlRow label="Fallback agent inbox" value={emailReadiness?.fallbackInboundAddress ?? "Set OWNER_EMAIL_INBOUND_ADDRESS"} />
+                <UrlRow label="Outbound from" value={emailReadiness?.outboundFrom ?? "Set EMAIL_FROM"} />
+
+                <div className="grid gap-2">
+                  {(emailReadiness?.checks ?? []).map((check) => (
+                    <StatusRow key={check.id} label={check.label} ready={check.ready} value={check.ready ? "Configured" : check.detail} />
+                  ))}
+                </div>
+
+                <div className="rounded-md border border-border p-3 text-xs text-muted-foreground">
+                  <div className="mb-2 font-medium text-foreground">Activation steps</div>
+                  <ol className="list-decimal space-y-1 pl-4">
+                    {(emailReadiness?.setupSteps ?? [
+                      "Set VITE_VOICE_SERVICE_URL so the dashboard can load email readiness.",
+                    ]).map((step) => (
+                      <li key={step}>{step}</li>
+                    ))}
+                  </ol>
+                </div>
+
+                {emailReadinessQuery.isError && (
+                  <div className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
+                    {emailReadinessQuery.error instanceof Error ? emailReadinessQuery.error.message : "Email readiness could not be loaded."}
+                  </div>
+                )}
               </CardContent>
             </Card>
 

@@ -201,6 +201,31 @@ export interface BillingReadiness {
   webhookUrl?: string;
 }
 
+export interface EmailReadiness {
+  checks: VoiceServiceReadinessCheck[];
+  fallbackInboundAddress?: string;
+  outboundFrom?: string;
+  ready: boolean;
+  receivingDomain: string;
+  setupSteps: string[];
+  webhookUrl?: string;
+}
+
+export interface OwnerEmailCommandResult {
+  contactId?: string;
+  contactName?: string;
+  locationId?: string;
+  replyMessage: string;
+  status: "ambiguous" | "invalid" | "not_found" | "processed";
+  toolResult?: {
+    applied?: boolean;
+    message?: string;
+    ok?: boolean;
+    spokenResponse?: string;
+    title?: string;
+  };
+}
+
 export interface GeneratedOwnerDailyReport {
   configured: boolean;
   delivery?: {
@@ -506,6 +531,27 @@ export async function fetchBillingReadiness(locationId = getActiveLocationId()) 
   return (await response.json()) as BillingReadiness;
 }
 
+export async function fetchEmailReadiness(locationId = getActiveLocationId()) {
+  if (!voiceServiceBaseUrl) {
+    throw new Error("VITE_VOICE_SERVICE_URL is not configured.");
+  }
+
+  const params = new URLSearchParams();
+  if (locationId?.trim()) params.set("locationId", locationId.trim());
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const response = await fetch(`${voiceServiceBaseUrl}/email/readiness${query}`, {
+    headers: buildVoiceAdminHeaders(),
+  });
+  const text = await response.text();
+  const payload = text ? JSON.parse(text) as EmailReadiness | { error?: string } : undefined;
+
+  if (!response.ok && !isEmailReadinessPayload(payload)) {
+    throw new Error(payload?.error || text || `Email readiness failed with ${response.status}.`);
+  }
+
+  return payload as EmailReadiness;
+}
+
 export async function createBillingCheckoutSession(input: {
   businessType?: string;
   cancelUrl?: string;
@@ -611,6 +657,42 @@ export async function deliverOwnerDailyReport(locationId = getActiveLocationId()
   return (await response.json()) as GeneratedOwnerDailyReport;
 }
 
+export async function sendOwnerEmailCommandTest(input: {
+  fromEmail: string;
+  locationId?: string;
+  message: string;
+  subject?: string;
+  toEmail: string;
+}) {
+  if (!voiceServiceBaseUrl) {
+    throw new Error("VITE_VOICE_SERVICE_URL is not configured.");
+  }
+
+  const response = await fetch(`${voiceServiceBaseUrl}/owner/email-command`, {
+    body: JSON.stringify({
+      fromEmail: input.fromEmail,
+      locationId: input.locationId ?? getActiveLocationId(),
+      providerMessageId: `dashboard-email-test-${Date.now()}`,
+      rawPayload: { source: "dashboard_email_test" },
+      subject: input.subject ?? "SignalHost owner email test",
+      text: input.message,
+      toEmail: input.toEmail,
+    }),
+    headers: {
+      "Content-Type": "application/json",
+      ...buildVoiceAdminHeaders(),
+    },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(body || `Owner email command test failed with ${response.status}.`);
+  }
+
+  return (await response.json()) as OwnerEmailCommandResult;
+}
+
 export async function sendCustomerFollowUp(input: {
   closeTask?: boolean;
   locationId?: string;
@@ -709,4 +791,8 @@ export async function fetchAgentTestReply(input: {
 function buildVoiceAdminHeaders() {
   const token = getSupabaseAccessToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function isEmailReadinessPayload(value: unknown): value is EmailReadiness {
+  return Boolean(value && typeof value === "object" && Array.isArray((value as EmailReadiness).checks));
 }

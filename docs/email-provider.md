@@ -64,6 +64,14 @@ resendInboundEmailConfigured: true
 resendInboundEmailVerificationConfigured: true
 ```
 
+You can also open the internal Telephony page and use the Agent email card. It calls:
+
+```text
+GET /email/readiness
+```
+
+That card shows the exact Resend inbound webhook URL, receiving domain, fallback inbound address, outbound from address, and any missing Render variables. The Owner Assistant page also has a "Simulate owner email" button. It bypasses Resend and tests the same trusted-contact command runtime, which is useful before DNS has fully propagated.
+
 Inbound owner emails only run commands when the sender matches a trusted `business_contacts.email` with owner-assistant permissions enabled. The launch center generates the per-business address from the selected SignalHost name, business name, and live `locations.id`.
 
 ## Still Later

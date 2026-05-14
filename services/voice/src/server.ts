@@ -11,6 +11,7 @@ import { createCallStore } from "./call-store";
 import { createConversationRelayHandler } from "./conversation-relay";
 import { createCustomerFollowUpService, type CustomerFollowUpInput } from "./customer-follow-up-service";
 import { createEmailDeliveryService } from "./email-delivery-service";
+import { getEmailReadiness } from "./email-readiness";
 import { createGuestConfirmationService } from "./guest-confirmation-service";
 import { createOpenAIVoicePreview } from "./openai-voice-preview";
 import { getVoiceServiceReadiness, loadEnv, type VoiceServiceEnv } from "./env";
@@ -241,6 +242,19 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
     }
 
     sendJson(res, 200, getStripeBillingReadiness(currentEnv));
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/email/readiness") {
+    const locationId = url.searchParams.get("locationId") ?? currentEnv.SUPABASE_DEMO_LOCATION_ID;
+    const authorization = await authorizeVoiceAdminRequest({ currentEnv, locationId, req });
+    if (!authorization.authorized) {
+      sendJson(res, authorization.status, { error: authorization.reason ?? "Unauthorized" });
+      return;
+    }
+
+    const readiness = getEmailReadiness(currentEnv);
+    sendJson(res, readiness.ready ? 200 : 503, readiness);
     return;
   }
 

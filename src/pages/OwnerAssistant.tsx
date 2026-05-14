@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowRight,
@@ -15,6 +15,7 @@ import {
   Sparkles,
   UserRound,
 } from "lucide-react";
+import { toast } from "sonner";
 import { PageBody, PageHeader } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,7 @@ import { Separator } from "@/components/ui/separator";
 import { calls as sampleCalls, orders as sampleOrders, reservations as sampleReservations } from "@/data/mock";
 import type { Call, Order, Reservation } from "@/data/mock";
 import { getBusinessMode } from "@/domain/business-updates";
+import { buildAgentEmailIdentity } from "@/domain/agent-email";
 import { routeOwnerCommand, type OwnerCommandRoute } from "@/domain/owner-command-router";
 import type { OwnerLiveCommand } from "@/domain/owner-live-commands";
 import {
@@ -36,9 +38,15 @@ import { getVerticalOwnerSuggestions } from "@/domain/vertical-insights";
 import type { StaffTask } from "@/domain/staff-tasks";
 import { defaultTrustedContactPermissions, trustedContactTypeFromRole } from "@/domain/trusted-contacts";
 import { adaptDemoDataForBusiness } from "@/domain/vertical-demo-data";
+import { getSignalHostVoiceProfile } from "@/domain/voice-selection";
 import { isPlatformAdminUser, useCurrentUser } from "@/lib/auth";
 import { loadBusinessLiveState, saveBusinessLiveState } from "@/lib/business-live-updates-storage";
 import { loadOnboardingDraft } from "@/lib/onboarding-draft";
+import {
+  isVoiceServiceConfigured,
+  sendOwnerEmailCommandTest,
+  type OwnerEmailCommandResult,
+} from "@/lib/voice-service";
 import {
   createOwnerCommandActivityInSupabase,
   createBusinessLiveUpdateInSupabase,
@@ -90,8 +98,11 @@ export default function OwnerAssistant() {
   const activeLocationId = getActiveSupabaseLocationId();
   const liveEnabled = Boolean(isSupabaseConfigured() && activeLocationId);
   const liveUpdatesEnabled = isBusinessLiveUpdatesPersistenceConfigured();
+  const voiceConfigured = isVoiceServiceConfigured();
   const draft = loadOnboardingDraft();
   const [question, setQuestion] = useState("");
+  const [emailTestMessage, setEmailTestMessage] = useState("Send me today's urgent calls and open follow-ups.");
+  const [emailTestResult, setEmailTestResult] = useState<OwnerEmailCommandResult | null>(null);
 
   const callQuery = useQuery({
     enabled: liveEnabled,
@@ -136,6 +147,19 @@ export default function OwnerAssistant() {
   const ownerName = String(draft.ownerName || activeTenant?.ownerName || "Owner");
   const ownerPhone = String(draft.ownerPhone || draft.escalationPhone || "");
   const ownerEmail = String(draft.ownerEmail || activeTenant?.ownerEmail || draft.salesManagerEmail || "");
+  const voiceProfile = getSignalHostVoiceProfile(
+    String(draft.voiceProfileId || draft.hostName || draft.voiceGender || ""),
+  );
+  const agentEmailIdentity = useMemo(
+    () =>
+      buildAgentEmailIdentity({
+        businessName,
+        domain: import.meta.env.VITE_AGENT_EMAIL_DOMAIN,
+        hostName: voiceProfile.employeeName,
+        locationId: activeLocationId,
+      }),
+    [activeLocationId, businessName, voiceProfile.employeeName],
+  );
   const commandActor = useMemo(() => {
     const contactType = platformAdmin || !user?.restaurantMembershipRole
       ? "owner"
@@ -192,6 +216,23 @@ export default function OwnerAssistant() {
     ownerActivityQuery.isError ||
     reservationQuery.isError ||
     taskQuery.isError;
+  const emailCommandTestMutation = useMutation({
+    mutationFn: () =>
+      sendOwnerEmailCommandTest({
+        fromEmail: ownerEmail,
+        locationId: activeLocationId,
+        message: emailTestMessage,
+        toEmail: agentEmailIdentity.address,
+      }),
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Email command test failed");
+    },
+    onSuccess: async (result) => {
+      setEmailTestResult(result);
+      toast.success(result.status === "processed" ? "Email command processed" : result.replyMessage);
+      await queryClient.invalidateQueries({ queryKey: ["owner-command-activity", activeLocationId] });
+    },
+  });
 
   async function askOwnerAssistant(nextQuestion: string) {
     const trimmed = nextQuestion.trim();
@@ -363,6 +404,52 @@ export default function OwnerAssistant() {
                 <Button variant="outline" size="sm" className="w-full" asChild>
                   <Link to="/app/onboarding">Edit in onboarding</Link>
                 </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Mail className="h-4 w-4 text-primary" />
+                  Email command test
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="rounded-md border border-border p-3">
+                  <div className="text-xs font-medium text-muted-foreground">Agent email</div>
+                  <div className="mt-1 break-all font-mono text-xs">{agentEmailIdentity.address}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">{agentEmailIdentity.displayName}</div>
+                </div>
+                <Input
+                  value={emailTestMessage}
+                  onChange={(event) => setEmailTestMessage(event.target.value)}
+                  placeholder="Email command to test..."
+                />
+                <Button
+                  className="w-full"
+                  disabled={
+                    emailCommandTestMutation.isPending ||
+                    !voiceConfigured ||
+                    !liveEnabled ||
+                    !ownerEmail ||
+                    !agentEmailIdentity.routable
+                  }
+                  onClick={() => emailCommandTestMutation.mutate()}
+                  size="sm"
+                >
+                  <Send className="mr-1.5 h-3.5 w-3.5" />
+                  {emailCommandTestMutation.isPending ? "Testing..." : "Simulate owner email"}
+                </Button>
+                <p className="text-xs leading-5 text-muted-foreground">
+                  This bypasses Resend and sends the same command payload the webhook will create. A real email still needs
+                  Resend receiving on the agent email domain.
+                </p>
+                {emailTestResult && (
+                  <div className="rounded-md border border-border bg-muted/20 p-3 text-xs leading-5">
+                    <div className="font-medium text-foreground">{emailTestResult.status}</div>
+                    <div className="mt-1 text-muted-foreground">{emailTestResult.replyMessage}</div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
