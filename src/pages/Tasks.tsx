@@ -16,8 +16,11 @@ import {
   Phone,
   RefreshCw,
   Search,
+  Send,
+  ShieldCheck,
   Sparkles,
   ShoppingBag,
+  TrendingUp,
   UserCheck,
   XCircle,
   type LucideIcon,
@@ -32,6 +35,13 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { buildCustomerRequestResolutionDraft } from "@/domain/customer-requests";
+import {
+  buildFollowUpRecoveryInsight,
+  formatRecoveryChannel,
+  summarizeFollowUpRecovery,
+  type FollowUpRecoveryInsight,
+  type FollowUpRecoverySummary,
+} from "@/domain/follow-up-recovery";
 import {
   isActiveStaffTask,
   nextStaffTaskStatus,
@@ -167,6 +177,13 @@ function statusBadgeClass(status: StaffTaskStatus) {
   return "bg-muted text-muted-foreground";
 }
 
+function recoveryBadgeClass(insight: FollowUpRecoveryInsight) {
+  if (insight.category === "risk") return "border-destructive/20 bg-destructive/10 text-destructive";
+  if (insight.valueTier === "very_high" || insight.valueTier === "high") return "border-success/20 bg-success/10 text-success";
+  if (insight.category === "knowledge") return "border-info/20 bg-info/10 text-info";
+  return "bg-muted text-muted-foreground";
+}
+
 function typeAccent(type: StaffTaskType) {
   if (type === "customer_request") return "border-l-primary";
   if (type === "delivery_issue") return "border-l-destructive";
@@ -252,6 +269,7 @@ export default function Tasks() {
     [tasks],
   );
   const activeTasks = useMemo(() => sortedTasks.filter(isActiveStaffTask), [sortedTasks]);
+  const recoverySummary = useMemo(() => summarizeFollowUpRecovery(activeTasks), [activeTasks]);
   const urgentTasks = activeTasks.filter((task) => task.priority === "urgent" || task.priority === "high").length;
   const overdueTasks = activeTasks.filter((task) => taskDueState(task) === "overdue").length;
   const customerRequests = activeTasks.filter((task) => task.type === "customer_request").length;
@@ -440,13 +458,19 @@ export default function Tasks() {
           </Card>
         )}
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
           <MetricCard icon={ListTodo} label="Active" value={counts.active.toString()} />
           <MetricCard icon={AlertTriangle} label="High priority" value={urgentTasks.toString()} />
           <MetricCard icon={Clock} label="Overdue" value={overdueTasks.toString()} />
           <MetricCard icon={MessageCircle} label="Customer requests" value={customerRequests.toString()} />
+          <MetricCard icon={TrendingUp} label="Recovery" value={recoverySummary.revenueOpportunities.toString()} />
           <MetricCard icon={CheckCircle2} label="Done today" value={doneToday.toString()} />
         </div>
+
+        <RecoverySnapshot
+          onSelect={(task) => setSelectedTaskId(task.id)}
+          summary={recoverySummary}
+        />
 
         <Card className="p-3">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -569,6 +593,88 @@ function MetricCard({
   );
 }
 
+function RecoverySnapshot({
+  onSelect,
+  summary,
+}: {
+  onSelect: (task: StaffTask) => void;
+  summary: FollowUpRecoverySummary;
+}) {
+  const hasRecovery = summary.recoveryTasks.length > 0;
+
+  return (
+    <Card className="overflow-hidden border-primary/15">
+      <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_minmax(20rem,0.8fr)]">
+        <div className="p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+              <TrendingUp className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-sm font-semibold">Revenue recovery</div>
+              <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted-foreground">
+                SignalHost turns unresolved calls into an owner-approved follow-up queue so promising leads, complaints, and unanswered questions do not quietly go stale.
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-3">
+            <RecoveryStat label="Revenue chances" value={summary.revenueOpportunities} />
+            <RecoveryStat label="Needs approval" value={summary.ownerApproval} />
+            <RecoveryStat label="Risk items" value={summary.riskItems} />
+          </div>
+        </div>
+        <div className="border-t border-border bg-muted/20 p-4 xl:border-l xl:border-t-0">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-xs font-medium uppercase text-muted-foreground">Next follow-ups</div>
+            {summary.highValue > 0 && (
+              <Badge variant="outline" className="border-success/20 bg-success/10 text-success">
+                {summary.highValue} high value
+              </Badge>
+            )}
+          </div>
+          <div className="mt-3 space-y-2">
+            {summary.topTasks.map((task) => {
+              const insight = buildFollowUpRecoveryInsight(task);
+              return (
+                <button
+                  className="w-full rounded-md border border-border bg-background p-3 text-left transition-colors hover:border-primary/30 hover:bg-primary/5"
+                  key={task.id}
+                  onClick={() => onSelect(task)}
+                  type="button"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="line-clamp-1 text-sm font-medium">{task.title}</div>
+                      <div className="mt-1 line-clamp-1 text-xs text-muted-foreground">{insight.reason}</div>
+                    </div>
+                    <Badge variant="outline" className="shrink-0 bg-muted text-[10px] text-muted-foreground">
+                      {formatRecoveryChannel(insight.suggestedChannel)}
+                    </Badge>
+                  </div>
+                </button>
+              );
+            })}
+            {!hasRecovery && (
+              <div className="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
+                No revenue or risk follow-ups need owner attention right now.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function RecoveryStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-md border border-border bg-background px-3 py-2">
+      <div className="text-lg font-semibold tabular-nums">{value}</div>
+      <div className="text-xs text-muted-foreground">{label}</div>
+    </div>
+  );
+}
+
 function TaskCard({
   busy,
   consoleBase,
@@ -592,6 +698,7 @@ function TaskCard({
 }) {
   const dueState = taskDueState(task);
   const primaryIcon = task.status === "in_progress" ? Check : task.status === "open" ? UserCheck : RefreshCw;
+  const recovery = buildFollowUpRecoveryInsight(task);
 
   return (
     <Card
@@ -612,6 +719,16 @@ function TaskCard({
               {task.priority}
             </Badge>
             <Badge variant="secondary">{taskTypeLabels[task.type]}</Badge>
+            {(recovery.revenueRecovery || recovery.category === "risk" || recovery.category === "knowledge") && (
+              <Badge variant="outline" className={recoveryBadgeClass(recovery)}>
+                {recovery.valueLabel}
+              </Badge>
+            )}
+            {recovery.approvalRequired && isActiveStaffTask(task) && (
+              <Badge variant="outline" className="border-primary/20 bg-primary/10 text-primary">
+                Owner approval
+              </Badge>
+            )}
             {superConsole && task.locationId && (
               <Badge variant="outline" className="bg-muted text-muted-foreground">
                 Tenant
@@ -673,6 +790,10 @@ function TaskCard({
           <MessageCircle className="h-3.5 w-3.5" />
           {sourceLabelForTask(task)}
         </span>
+        <span className="inline-flex items-center gap-1 text-muted-foreground">
+          <Send className="h-3.5 w-3.5" />
+          {formatRecoveryChannel(recovery.suggestedChannel)}
+        </span>
         <RelatedLinks consoleBase={consoleBase} superConsole={superConsole} task={task} />
       </div>
     </Card>
@@ -732,6 +853,7 @@ function ActionDetail({
 
       <div className="space-y-4">
         <DetailSection label="Recommended next step" value={recommendedAction(task)} />
+        <RecoveryDetailPanel task={task} />
         {task.body && <DetailSection label="Context SignalHost captured" value={task.body} />}
         {(task.type === "customer_request" || task.type === "low_confidence_review") && (
           <CustomerAnswerPanel
@@ -784,6 +906,81 @@ function ActionDetail({
       </div>
     </Card>
   );
+}
+
+function RecoveryDetailPanel({ task }: { task: StaffTask }) {
+  const insight = buildFollowUpRecoveryInsight(task);
+  const shouldShow = insight.revenueRecovery || insight.category === "risk" || insight.category === "knowledge" || task.status !== "done";
+
+  if (!shouldShow) return null;
+
+  async function copyDraft() {
+    try {
+      await navigator.clipboard.writeText(insight.draftMessage);
+      toast.success("Follow-up draft copied");
+    } catch {
+      toast.error("Could not copy follow-up draft");
+    }
+  }
+
+  return (
+    <div className="rounded-md border border-border bg-muted/20 p-3">
+      <div className="flex items-start gap-2">
+        <div className={cn("mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md", recoveryIconClass(insight))}>
+          {insight.category === "risk" ? <ShieldCheck className="h-3.5 w-3.5" /> : <TrendingUp className="h-3.5 w-3.5" />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-sm font-semibold">Recovery guidance</div>
+            <Badge variant="outline" className={recoveryBadgeClass(insight)}>
+              {insight.valueLabel}
+            </Badge>
+            <Badge variant="outline" className="bg-background text-muted-foreground">
+              {formatRecoveryChannel(insight.suggestedChannel)}
+            </Badge>
+          </div>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{insight.reason}</p>
+        </div>
+      </div>
+      <div className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
+        <RecoveryMiniStat label="Cadence" value={insight.cadenceLabel} />
+        <RecoveryMiniStat label="Risk" value={insight.riskLabel} />
+        <RecoveryMiniStat label="Approval" value={insight.approvalRequired ? "Owner should approve" : "Staff can close"} />
+      </div>
+      <div className="mt-3 rounded-md border border-border bg-background p-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-xs font-medium uppercase text-muted-foreground">Suggested owner question</div>
+        </div>
+        <p className="mt-1 text-sm leading-relaxed">{insight.ownerPrompt}</p>
+      </div>
+      <div className="mt-3 rounded-md border border-border bg-background p-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-xs font-medium uppercase text-muted-foreground">Follow-up draft</div>
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={copyDraft}>
+            <Clipboard className="mr-1 h-3 w-3" />
+            Copy
+          </Button>
+        </div>
+        <p className="mt-1 text-sm leading-relaxed">{insight.draftMessage}</p>
+      </div>
+    </div>
+  );
+}
+
+function RecoveryMiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-border bg-background px-2.5 py-2">
+      <div className="font-medium">{value}</div>
+      <div className="mt-0.5 uppercase text-muted-foreground">{label}</div>
+    </div>
+  );
+}
+
+function recoveryIconClass(insight: FollowUpRecoveryInsight) {
+  if (insight.category === "risk") return "bg-destructive/10 text-destructive";
+  if (insight.category === "knowledge") return "bg-info/10 text-info";
+  if (insight.revenueRecovery) return "bg-success/10 text-success";
+  return "bg-primary/10 text-primary";
 }
 
 function CustomerAnswerPanel({
