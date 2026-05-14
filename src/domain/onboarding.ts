@@ -96,7 +96,7 @@ export const onboardingSections: OnboardingSection[] = [
       {
         id: "ownerName",
         label: "Owner or manager name",
-        prompt: "Who should SignalHost treat as the trusted owner or manager for reports, alerts, and future owner-assistant messages?",
+        prompt: "Who should SignalHost treat as the trusted owner or manager for reports, alerts, and owner-assistant messages?",
         placeholder: "Maria Lombardi",
         control: "short",
         required: true,
@@ -104,7 +104,7 @@ export const onboardingSections: OnboardingSection[] = [
       {
         id: "ownerPhone",
         label: "Owner mobile phone",
-        prompt: "Which mobile number can receive urgent alerts and future verified owner-assistant text commands?",
+        prompt: "Which mobile number can receive urgent alerts and verified owner-assistant text commands?",
         placeholder: "+1 (415) 555-0148",
         control: "short",
         required: true,

@@ -10,6 +10,10 @@ import {
   ClipboardCheck,
   Copy,
   FileText,
+  HelpCircle,
+  Info,
+  Lightbulb,
+  ListChecks,
   Loader2,
   PhoneForwarded,
   Rocket,
@@ -32,6 +36,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   assignedDemoPhoneNumber,
   calculateOnboardingProgress,
@@ -91,6 +96,7 @@ type LaunchAssistantStep = {
 const FIRST_AVAILABLE_NUMBER_TOKEN = "__first_available__";
 const TRIAL_DAYS = 7;
 const TRIAL_GRACE_DAYS = 14;
+const REQUIRED_ONLY_MESSAGE = "Not sure yet? Answer the required fields first. Optional details can be improved after the first test call.";
 
 export default function Onboarding() {
   const [activeSectionId, setActiveSectionId] = useState<OnboardingStepId>("basics");
@@ -117,6 +123,9 @@ export default function Onboarding() {
   const activeOnboardingSections = useMemo(() => getBusinessOnboardingSections(draft), [draft]);
   const progress = useMemo(() => calculateOnboardingProgress(draft, activeOnboardingSections), [draft, activeOnboardingSections]);
   const activeSection = activeOnboardingSections.find((section) => section.id === activeSectionId) ?? activeOnboardingSections[0];
+  const activeSectionIndex = Math.max(0, activeOnboardingSections.findIndex((section) => section.id === activeSection.id));
+  const previousSection = activeOnboardingSections[activeSectionIndex - 1];
+  const nextSection = activeOnboardingSections[activeSectionIndex + 1];
   const ActiveIcon = sectionIcons[activeSection.id];
   const assignedNumber = String(draft.assignedSignalHostNumber || draft.assignedHostLineNumber || assignedDemoPhoneNumber);
   const assignedNumberIsDemo = assignedNumber === assignedDemoPhoneNumber;
@@ -242,6 +251,22 @@ export default function Onboarding() {
 
   const saveDraft = async () => {
     await persistDraft(draft);
+  };
+
+  const saveAndContinue = async () => {
+    await persistDraft(draft, nextSection ? "Saved. Moving to the next section." : "Onboarding draft saved");
+    if (nextSection) setActiveSectionId(nextSection.id);
+  };
+
+  const jumpToFirstMissing = () => {
+    const sectionWithMissingRequired = activeOnboardingSections.find((section) =>
+      section.fields.some((field) => field.required && !hasDraftValue(draft[field.id])),
+    );
+    if (sectionWithMissingRequired) {
+      setActiveSectionId(sectionWithMissingRequired.id);
+      return;
+    }
+    setActiveSectionId("launch");
   };
 
   const searchPhoneNumbers = async () => {
@@ -423,6 +448,32 @@ export default function Onboarding() {
           </CardContent>
         </Card>
 
+        <Card>
+          <CardContent className="p-4">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+              <div>
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <ListChecks className="h-4 w-4 text-primary" />
+                  Plain-English setup
+                </div>
+                <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
+                  Answer like you are training a new front-desk employee. Short, imperfect answers are fine.
+                  SignalHost uses these details to decide what to answer, what to collect, when to send a link,
+                  and when to ask staff for help.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="secondary">Use examples</Badge>
+                <Badge variant="secondary">Required first</Badge>
+                <Badge variant="secondary">Save anytime</Badge>
+                <Button variant="outline" size="sm" onClick={jumpToFirstMissing}>
+                  Find next blank
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
           <div className="space-y-4">
             <div className="grid gap-3 md:grid-cols-4">
@@ -440,7 +491,7 @@ export default function Onboarding() {
               <Card>
                 <CardContent className="p-4">
                   <div className="text-xs font-medium text-muted-foreground">Selected plan</div>
-                  <div className="mt-2 truncate text-2xl font-semibold">{selectedPlanName}</div>
+                  <div className="mt-2 text-xl font-semibold leading-tight">{selectedPlanName}</div>
                   <div className="mt-1 text-xs text-muted-foreground">
                     {selectedPlanMonthly ? `$${selectedPlanMonthly}/mo from signup` : "Choose pricing before launch"}
                   </div>
@@ -519,10 +570,20 @@ export default function Onboarding() {
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
                         <Bot className="h-4 w-4" />
                       </div>
-                      <div>
-                        <div className="text-sm font-medium">Setup interview</div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="text-sm font-medium">Setup interview</div>
+                          <Badge variant="outline" className="bg-background/70">
+                            Section {activeSectionIndex + 1} of {activeOnboardingSections.length}
+                          </Badge>
+                        </div>
                         <p className="mt-1 text-sm text-muted-foreground">{activeSection.assistantPrompt}</p>
                         <p className="mt-2 text-xs font-medium text-foreground">{activeSection.outcome}</p>
+                        <div className="mt-3 grid gap-2 2xl:grid-cols-3">
+                          <GuidancePill icon={Lightbulb} label="How to answer" value="Use normal staff language." />
+                          <GuidancePill icon={Info} label="Good enough" value="Bullets or fragments are okay." />
+                          <GuidancePill icon={HelpCircle} label="Not sure?" value={REQUIRED_ONLY_MESSAGE} />
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -536,6 +597,26 @@ export default function Onboarding() {
                         onChange={(value) => updateField(field.id, value)}
                       />
                     ))}
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={!previousSection}
+                      onClick={() => previousSection && setActiveSectionId(previousSection.id)}
+                    >
+                      Back
+                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" variant="outline" onClick={saveDraft} disabled={savingDraft}>
+                        {savingDraft ? "Saving..." : "Save only"}
+                      </Button>
+                      <Button type="button" onClick={saveAndContinue} disabled={savingDraft}>
+                        {savingDraft ? "Saving..." : nextSection ? "Save and continue" : "Save and finish"}
+                        {nextSection && <ArrowRight className="ml-1.5 h-3.5 w-3.5" />}
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -839,6 +920,18 @@ function LaunchAssistantStepCard({ step }: { step: LaunchAssistantStep }) {
   );
 }
 
+function GuidancePill({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-primary/15 bg-background/70 p-2.5">
+      <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase text-muted-foreground">
+        <Icon className="h-3.5 w-3.5 text-primary" />
+        {label}
+      </div>
+      <div className="mt-1 text-xs leading-5 text-foreground">{value}</div>
+    </div>
+  );
+}
+
 function OnboardingFieldControl({
   draft,
   field,
@@ -849,13 +942,64 @@ function OnboardingFieldControl({
   onChange: (value: string | boolean) => void;
 }) {
   const value = draft[field.id];
+  const guidance = getFieldGuidance(field);
+  const completed = hasDraftValue(value);
 
+  return (
+    <div className={cn("rounded-md border p-4", field.required && !completed ? "border-warning/30 bg-warning/5" : "border-border")}>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(240px,0.42fr)]">
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <FieldLabel field={field} tooltip={guidance.tooltip} />
+            {completed ? (
+              <Badge variant="outline" className="border-success/30 bg-success/10 text-success">Answered</Badge>
+            ) : field.required ? (
+              <Badge variant="outline" className="border-warning/30 bg-warning/10 text-warning">Needed for launch</Badge>
+            ) : (
+              <Badge variant="secondary">Optional</Badge>
+            )}
+          </div>
+          <div>
+            <div className="text-sm font-medium leading-6">{field.prompt}</div>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">{guidance.why}</p>
+          </div>
+          {renderFieldInput({ field, onChange, value })}
+        </div>
+
+        <div className="space-y-3 rounded-md border border-border bg-muted/20 p-3">
+          <div className="flex items-center gap-2 text-xs font-medium uppercase text-muted-foreground">
+            <Lightbulb className="h-3.5 w-3.5 text-primary" />
+            Help
+          </div>
+          <div>
+            <div className="text-xs font-medium text-foreground">Example answer</div>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              {guidance.example}
+            </p>
+          </div>
+          <Separator />
+          <p className="text-xs leading-5 text-muted-foreground">{guidance.tip}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function renderFieldInput({
+  field,
+  onChange,
+  value,
+}: {
+  field: OnboardingField;
+  onChange: (value: string | boolean) => void;
+  value: string | boolean | undefined;
+}) {
   if (field.control === "toggle") {
     return (
-      <div className="flex items-center justify-between gap-4 rounded-md border border-border p-3">
+      <div className="flex items-center justify-between gap-4 rounded-md border border-border bg-background p-3">
         <div>
-          <Label className="text-sm">{field.label}</Label>
-          <div className="mt-1 text-xs text-muted-foreground">{field.prompt}</div>
+          <div className="text-sm font-medium">{value === true ? "Yes" : "No"}</div>
+          <div className="mt-1 text-xs text-muted-foreground">Switch this on only if the AI should offer this capability.</div>
         </div>
         <Switch checked={value === true} onCheckedChange={onChange} />
       </div>
@@ -864,61 +1008,148 @@ function OnboardingFieldControl({
 
   if (field.control === "select") {
     return (
-      <div className="space-y-1.5">
-        <FieldLabel field={field} />
-        <Select value={String(value ?? "")} onValueChange={onChange}>
-          <SelectTrigger>
-            <SelectValue placeholder="Select option" />
-          </SelectTrigger>
-          <SelectContent>
-            {(field.options ?? []).map((option) => (
-              <SelectItem key={optionValue(option)} value={optionValue(option)}>
-                {optionLabel(option)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-muted-foreground">{field.prompt}</p>
-      </div>
+      <Select value={String(value ?? "")} onValueChange={onChange}>
+        <SelectTrigger className="bg-background">
+          <SelectValue placeholder="Choose the closest option" />
+        </SelectTrigger>
+        <SelectContent>
+          {(field.options ?? []).map((option) => (
+            <SelectItem key={optionValue(option)} value={optionValue(option)}>
+              {optionLabel(option)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     );
   }
 
   if (field.control === "long") {
     return (
-      <div className="space-y-1.5">
-        <FieldLabel field={field} />
-        <Textarea
-          rows={3}
-          value={String(value ?? "")}
-          onChange={(event) => onChange(event.target.value)}
-          placeholder={field.placeholder}
-        />
-        <p className="text-xs text-muted-foreground">{field.prompt}</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-1.5">
-      <FieldLabel field={field} />
-      <Input
-        type={field.control === "url" ? "url" : "text"}
+      <Textarea
+        className="bg-background"
+        rows={4}
         value={String(value ?? "")}
         onChange={(event) => onChange(event.target.value)}
         placeholder={field.placeholder}
       />
-      <p className="text-xs text-muted-foreground">{field.prompt}</p>
+    );
+  }
+
+  return (
+    <Input
+      className="bg-background"
+      type={field.control === "url" ? "url" : "text"}
+      value={String(value ?? "")}
+      onChange={(event) => onChange(event.target.value)}
+      placeholder={field.placeholder}
+    />
+  );
+}
+
+function FieldLabel({ field, tooltip }: { field: OnboardingField; tooltip: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <Label>{field.label}</Label>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button type="button" className="text-muted-foreground hover:text-foreground">
+              <HelpCircle className="h-3.5 w-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs">
+            <p>{tooltip}</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     </div>
   );
 }
 
-function FieldLabel({ field }: { field: OnboardingField }) {
-  return (
-    <div className="flex items-center gap-2">
-      <Label>{field.label}</Label>
-      {field.required && <Badge variant="secondary" className="text-[10px]">Required</Badge>}
-    </div>
-  );
+function getFieldGuidance(field: OnboardingField) {
+  const example = field.placeholder?.trim() || exampleForControl(field);
+  const specificTip = fieldTips[field.id];
+  const specificWhy = fieldWhy[field.id];
+
+  return {
+    example,
+    tip: specificTip ?? defaultTipForField(field),
+    tooltip: `${field.label}: ${specificWhy ?? defaultWhyForField(field)}`,
+    why: specificWhy ?? defaultWhyForField(field),
+  };
+}
+
+const fieldWhy: Record<string, string> = {
+  businessType: "This chooses the right questions, vocabulary, call handling rules, and reporting categories.",
+  restaurantName: "The AI uses this in the greeting, confirmations, staff alerts, and customer texts.",
+  concept: "This helps the AI answer broad questions in the right voice without making things up.",
+  primaryLocation: "Callers ask for directions, parking, service area, pickup, and arrival details constantly.",
+  timezone: "Hours, after-hours handling, daily specials, reservations, and reports all depend on local time.",
+  ownerName: "This identifies who owns the setup and who SignalHost can address in owner-assistant mode.",
+  ownerPhone: "Trusted caller ID and urgent alert routing use this number.",
+  ownerEmail: "Reports, billing notices, and email owner commands use this address.",
+  escalationPhone: "When the AI needs help, this is the human path.",
+  menuUrl: "A menu link gives the system a source to ingest instead of relying only on manual notes.",
+  menuCategories: "Categories teach the AI how to organize orders and answer menu questions naturally.",
+  modifiers: "Most ordering mistakes happen around sizes, substitutions, add-ons, removals, and sauces.",
+  substitutionPolicy: "This prevents the AI from overpromising off-menu items or custom requests.",
+  regularHours: "The AI needs this to answer open/closed questions and choose after-hours behavior.",
+  holidayExceptions: "Special days cause the most wrong answers unless they are written down.",
+  takeOrders: "This tells SignalHost whether to capture orders or only send links/messages.",
+  orderHandlingMode: "This controls whether order requests become staff tasks, links, or handoffs.",
+  reservationMode: "This controls whether reservation requests become links, staff-confirmed requests, or direct bookings later.",
+  reservationBookingUrl: "When you already have a booking page, sending the right link is the safest first workflow.",
+  allergyPolicy: "Severe allergies need careful wording and staff confirmation rules.",
+  complaintPolicy: "Complaints need consistent empathy, information capture, and fast routing.",
+  greeting: "This is the first thing callers hear, so shorter and clearer is usually better.",
+  voiceGender: "For V1 this maps to the approved SignalHost male or female voice.",
+  forwardingMode: "This decides whether SignalHost answers all calls, missed calls, or after-hours calls.",
+};
+
+const fieldTips: Record<string, string> = {
+  businessType: "Pick the closest fit. You can change it later, and the form will keep shared answers where it can.",
+  restaurantName: "Use the name customers know from Google, signage, or the website.",
+  concept: "One plain sentence is enough. Mention style, main services, and anything callers often ask about.",
+  ownerPhone: "Use a mobile number that can receive texts and can be recognized if the owner calls SignalHost.",
+  ownerEmail: "Use the address the owner or manager actually checks.",
+  escalationPhone: "This can match the owner phone for now. Add managers later from Team settings.",
+  menuUrl: "If there are multiple menus, paste the main page here and describe the others in the notes field.",
+  menuUploadNotes: "You do not need perfect formatting. Tell staff what files or links still need to be added.",
+  modifiers: "Write the things a real staff member would ask back: size, sauce, temperature, add-ons, removals.",
+  substitutionPolicy: "If unsure, say which requests should be entered as notes and confirmed by staff.",
+  timedPricing: "Include happy hour, lunch pricing, weekend pricing, seasonal prices, and limited-time promos.",
+  regularHours: "Use whatever format is fastest. Example: Mon closed, Tue-Thu 9-5, Fri 9-7.",
+  servicePeriods: "Only fill this if service windows differ from normal hours.",
+  holidayExceptions: "Add known holidays now. Owners can later text temporary closures or special hours.",
+  takeOrders: "Turn this off if the AI should avoid taking orders and only send the online order link.",
+  orderHandlingMode: "For early pilots, staff review or link-first is safer than promising direct POS completion.",
+  reservationBookingUrl: "Use the public link a customer would click from your website or Google profile.",
+  partyRules: "Mention large-party thresholds, deposits, private rooms, patio requests, and blackout dates.",
+  allergyPolicy: "For severe allergies, prefer staff confirmation over certainty.",
+  complaintPolicy: "Do not promise refunds unless the business explicitly allows that.",
+  greeting: "Keep it short. The strongest default is: Hi, thank you for calling {restaurant_name}. How can I help you?",
+  firstTestCall: "Write the calls you want the owner to try first, like hours, pricing, booking, and complaints.",
+};
+
+function defaultWhyForField(field: OnboardingField) {
+  if (field.required) return "This is part of the minimum setup SignalHost needs before a strong first test call.";
+  if (field.control === "url") return "A link lets the AI send customers to the right place instead of guessing.";
+  if (field.control === "toggle") return "This turns an AI capability on or off for callers.";
+  return "This gives SignalHost more business context for better answers and safer handoffs.";
+}
+
+function defaultTipForField(field: OnboardingField) {
+  if (field.required) return REQUIRED_ONLY_MESSAGE;
+  if (field.control === "select") return "Choose the closest option. You can fine-tune the policy in the text fields around it.";
+  if (field.control === "toggle") return "When in doubt, leave it off until the first test call proves the workflow is ready.";
+  return "Optional. Leave this blank if it is not relevant or you do not know yet.";
+}
+
+function exampleForControl(field: OnboardingField) {
+  if (field.control === "toggle") return "Yes, if callers should be offered this. No, if staff should handle it manually.";
+  if (field.control === "select") return "Choose the option closest to how the business works today.";
+  if (field.control === "url") return "https://business.example/link";
+  return "A short plain-English answer is enough.";
 }
 
 function optionValue(option: OnboardingFieldOption) {
