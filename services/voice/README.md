@@ -26,7 +26,7 @@ This service is the production path for inbound restaurant phone calls.
 - Records a staff-review order delivery attempt for each captured phone order.
 - Creates staff-confirmed reservation requests when a caller provides date, time, party size, and guest details.
 - Generates owner daily reports and can deliver them through SMS, direct email, or an owner-report webhook.
-- Accepts provider-neutral owner email command webhooks at `POST /owner/email-command`, matching trusted owner/manager email addresses before applying live updates, report questions, or permanent knowledge updates.
+- Accepts provider-neutral owner email command webhooks at `POST /owner/email-command`, plus signed Resend inbound email webhooks at `POST /resend/inbound-email`, matching trusted owner/manager email addresses before applying live updates, report questions, or permanent knowledge updates.
 - Sends staff alerts by Supabase-configured route for captured orders, reservation requests, complaints, human handoffs, delivery failures, low-confidence reviews, and sales/vendor messages. If no route is configured yet, the service falls back to trusted owner/manager/front-desk contacts with `can_receive_alerts` enabled before using environment-variable SMS fallback.
 - Writes staff alert delivery audit rows to `staff_alert_events` for sent, skipped, and failed alerts.
 - Provides an OpenAI voice preview endpoint at `POST /voice/preview`.
@@ -105,6 +105,7 @@ POST https://your-tunnel.ngrok.app/twilio/voice
 - OpenAI Realtime voice configuration for the four SignalHost voice profiles.
 - `TWILIO_SMS_FROM_NUMBER` or `TWILIO_MESSAGING_SERVICE_SID` for direct SMS staff alerts, guest confirmations, and owner daily reports. `STAFF_ALERT_SMS_TO` remains the fallback recipient when no Supabase route is configured.
 - Optional direct email with `EMAIL_PROVIDER=resend`, `EMAIL_FROM`, and `RESEND_API_KEY` for owner reports and staff alerts.
+- Optional inbound owner email with `RESEND_WEBHOOK_SECRET` and `OWNER_EMAIL_INBOUND_ADDRESS` after configuring a receiving subdomain such as `inbound.signalhost.ai`.
 - Optional `OWNER_REPORT_WEBHOOK_URL` for delivering owner daily report payloads to Zapier, Make, Slack, email automation, or another internal worker.
 - `STAFF_ALERT_WEBHOOK_URL` for webhook alerts. Email recipients configured in the dashboard are delivered directly when email is configured and are also included in webhook payloads for your helpdesk/Zapier layer.
 - `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` for checkout, customer portal, and subscription status webhooks.
@@ -134,6 +135,7 @@ When Supabase is configured, Twilio requests can include `locationId` in the web
 - `GET /twilio/twiml-preview?locationId=...` renders the TwiML preview used to verify ConversationRelay before calling.
 - `POST /twilio/sms` receives inbound SMS replies for the shared SignalHost sender. Trusted owner/manager numbers are routed into owner-assistant commands first; customer replies still route to the most recent open message thread, ask for disambiguation if needed, and create a staff task for routed replies.
 - `POST /owner/email-command` accepts provider-neutral email webhook JSON such as `{ "fromEmail": "owner@example.com", "toEmail": "updates@signalhost.ai", "subject": "Closed tomorrow", "text": "We're closed tomorrow", "locationId": "..." }`. It requires Supabase admin auth or `SIGNALHOST_INTERNAL_API_KEY`, matches `business_contacts.email`, runs the owner command runtime with channel `email`, and returns a reply body your email provider can send back.
+- `POST /resend/inbound-email` accepts signed Resend `email.received` webhooks, fetches the full received email from Resend, routes it through owner email commands, and replies to the trusted sender when direct email delivery is configured.
 - `POST /agent/test-reply` accepts `{ message, locationId, channel, transcript, scenarioId }` and returns Vera's reply plus simulated tool actions. It is admin-protected and does not create real texts, orders, reservations, or staff callbacks.
 - `POST /twilio/recording-status` receives Twilio recording callbacks. Configure Twilio call/SIP recording to send completed recording events to `https://your-voice-service/twilio/recording-status`; the service stores the MP3 URL on `calls.recording_url`.
 - `POST /ingestion/run-next` processes one queued menu ingestion job, fetches URL/text content, parses menu items, replaces `menu_categories` and `menu_items`, and updates `ingestion_jobs` plus `menu_sources`.

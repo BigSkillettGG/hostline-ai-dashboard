@@ -39,7 +39,9 @@ TWILIO_LANGUAGE=en-US
 EMAIL_PROVIDER=resend
 EMAIL_FROM=SignalHost <reports@signalhost.ai>
 EMAIL_REPLY_TO=support@signalhost.ai
+OWNER_EMAIL_INBOUND_ADDRESS=updates@inbound.signalhost.ai
 RESEND_API_KEY=re_...
+RESEND_WEBHOOK_SECRET=whsec_...
 
 OPENAI_API_KEY=sk-...
 OPENAI_MODEL=gpt-5-mini

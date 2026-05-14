@@ -46,7 +46,9 @@ OWNER_REPORT_WEBHOOK_URL=https://hooks.example.com/signalhost-owner-report  # op
 EMAIL_PROVIDER=resend
 EMAIL_FROM=SignalHost <reports@signalhost.ai>
 EMAIL_REPLY_TO=support@signalhost.ai
+OWNER_EMAIL_INBOUND_ADDRESS=updates@inbound.signalhost.ai
 RESEND_API_KEY=re_...
+RESEND_WEBHOOK_SECRET=whsec_...
 REQUIRE_TWILIO_SIGNATURE=true
 TWILIO_SPEECH_TIMEOUT_MS=1800
 

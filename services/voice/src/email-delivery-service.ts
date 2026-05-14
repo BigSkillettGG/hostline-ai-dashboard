@@ -1,6 +1,7 @@
 import type { VoiceServiceEnv } from "./env";
 
 export interface EmailDeliveryInput {
+  headers?: Record<string, string>;
   html?: string;
   replyTo?: string;
   subject: string;
@@ -66,6 +67,7 @@ class ResendEmailDeliveryService implements EmailDeliveryService {
     const response = await fetch("https://api.resend.com/emails", {
       body: JSON.stringify({
         from: this.options.from,
+        headers: input.headers,
         html: input.html,
         reply_to: input.replyTo ?? this.options.replyTo,
         subject: input.subject,

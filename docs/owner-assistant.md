@@ -57,6 +57,7 @@ The shared owner command router is used by:
 - Trusted owner or manager phone calls recognized by caller ID
 - Trusted owner or manager SMS messages sent to the SignalHost SMS webhook
 - Trusted owner or manager email messages sent through the provider-neutral `/owner/email-command` endpoint
+- Trusted owner or manager emails received through Resend at `/resend/inbound-email`
 
 Every channel runs through the same permission checks. Temporary live updates can be applied immediately for contacts with permission. Permanent knowledge can require owner approval depending on the contact's role and `requires_owner_approval` flag.
 
@@ -66,6 +67,5 @@ Owner commands and SignalHost replies are written to `message_events` with `loca
 
 ## Remaining Later Work
 
-1. Add direct email delivery once a production email provider is selected.
-2. Expand the learning loop so owner answers can respond back to waiting customers, not just train future calls.
-3. Add richer owner-command analytics, such as common update types and command success rates.
+1. Expand the learning loop so owner answers can respond back to waiting customers, not just train future calls.
+2. Add richer owner-command analytics, such as common update types and command success rates.

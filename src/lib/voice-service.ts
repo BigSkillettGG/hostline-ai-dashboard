@@ -14,6 +14,8 @@ export interface VoiceServiceHealth {
   onboardedContextConfigured?: boolean;
   ownerReportDeliveryConfigured?: boolean;
   ownerReportsConfigured?: boolean;
+  resendInboundEmailConfigured?: boolean;
+  resendInboundEmailVerificationConfigured?: boolean;
   staffAlertsConfigured?: boolean;
   sharedSmsRoutingConfigured?: boolean;
   stripeBillingConfigured?: boolean;

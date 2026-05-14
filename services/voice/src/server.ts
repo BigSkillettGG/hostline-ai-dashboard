@@ -32,6 +32,7 @@ import { createPlatformIntegrationRegistry } from "./platform-integrations";
 import { createPhoneNumberStore } from "./phone-number-store";
 import { createRestaurantContextStore } from "./restaurant-context-store";
 import { createReservationPlatformService } from "./reservation-platform-service";
+import { createResendInboundEmailService } from "./resend-inbound-email-service";
 import { createTenantProvisioningService, type TenantBootstrapInput } from "./tenant-provisioning";
 import { createTelephonyService } from "./telephony";
 import { releaseExpiredTrialNumbers } from "./trial-number-cleanup";
@@ -56,6 +57,11 @@ const menuIngestionService = createMenuIngestionService(env);
 const ownerReportService = createOwnerReportService(env, { emailDeliveryService });
 const ownerCommandRuntime = createOwnerCommandRuntime(env, ownerReportService);
 const ownerEmailCommandService = createOwnerEmailCommandService(env, ownerCommandRuntime);
+const resendInboundEmailService = createResendInboundEmailService(
+  env,
+  ownerEmailCommandService,
+  emailDeliveryService,
+);
 const messageThreadStore = createMessageThreadStore(env, { ownerCommandRuntime });
 const platformIntegrationRegistry = createPlatformIntegrationRegistry(env);
 const reservationPlatformService = createReservationPlatformService(env);
@@ -73,6 +79,7 @@ const BILLING_BODY_LIMIT_BYTES = 32 * 1024;
 const OPENAI_WEBHOOK_BODY_LIMIT_BYTES = 32 * 1024;
 const OWNER_EMAIL_BODY_LIMIT_BYTES = 64 * 1024;
 const PREVIEW_BODY_LIMIT_BYTES = 4 * 1024;
+const RESEND_INBOUND_BODY_LIMIT_BYTES = 128 * 1024;
 const TENANT_BOOTSTRAP_BODY_LIMIT_BYTES = 64 * 1024;
 const TWILIO_BODY_LIMIT_BYTES = 16 * 1024;
 const WEB_CHAT_BODY_LIMIT_BYTES = 16 * 1024;
@@ -159,6 +166,8 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       ownerReportsConfigured: ownerReportService.configured,
       ownerEmailCommandsConfigured: ownerEmailCommandService.configured,
       emailDeliveryConfigured: emailDeliveryService.configured,
+      resendInboundEmailConfigured: resendInboundEmailService.configured,
+      resendInboundEmailVerificationConfigured: resendInboundEmailService.verificationConfigured,
       platformIntegrations: platformIntegrationRegistry.summary,
       tenantProvisioningConfigured: tenantProvisioningService.configured,
       stripeBillingConfigured: billingService.configured,
@@ -919,6 +928,25 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       sendJson(res, statusCode, result);
     } catch (error) {
       sendCaughtError(res, error, "Owner email command failed");
+    }
+    return;
+  }
+
+  if (req.method === "POST" && (url.pathname === "/resend/inbound-email" || url.pathname === "/email/resend-inbound")) {
+    if (!allowRateLimitedRequest(req, res, "resend-inbound-email", 120)) return;
+
+    try {
+      const result = await resendInboundEmailService.handleWebhook({
+        headers: req.headers,
+        rawBody: await readLimitedRequestBody(req, RESEND_INBOUND_BODY_LIMIT_BYTES),
+      });
+      sendJson(res, 200, result);
+    } catch (error) {
+      if (error instanceof Error && /resend webhook|signature|timestamp/i.test(error.message)) {
+        sendJson(res, 401, { error: error.message });
+        return;
+      }
+      sendCaughtError(res, error, "Resend inbound email failed");
     }
     return;
   }

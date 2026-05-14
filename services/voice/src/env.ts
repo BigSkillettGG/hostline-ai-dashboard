@@ -31,7 +31,9 @@ const envSchema = z.object({
   EMAIL_PROVIDER: z.enum(["resend"]).optional(),
   EMAIL_REPLY_TO: z.string().optional(),
   OWNER_REPORT_WEBHOOK_URL: z.string().url().optional(),
+  OWNER_EMAIL_INBOUND_ADDRESS: z.string().optional(),
   RESEND_API_KEY: z.string().optional(),
+  RESEND_WEBHOOK_SECRET: z.string().optional(),
   STAFF_ALERT_SMS_TO: z.string().optional(),
   STAFF_ALERT_WEBHOOK_URL: z.string().url().optional(),
   REQUIRE_TWILIO_SIGNATURE: z
@@ -212,6 +214,13 @@ export function getVoiceServiceReadiness(env: VoiceServiceEnv): VoiceServiceRead
       id: "email_delivery",
       label: "Email delivery",
       ready: Boolean((env.EMAIL_PROVIDER === "resend" || env.RESEND_API_KEY) && env.RESEND_API_KEY && env.EMAIL_FROM),
+      required: false,
+    },
+    {
+      detail: "Receives trusted owner or manager emails and routes them into owner-assistant commands.",
+      id: "inbound_owner_email",
+      label: "Inbound owner email",
+      ready: Boolean(env.RESEND_API_KEY && env.RESEND_WEBHOOK_SECRET),
       required: false,
     },
     {

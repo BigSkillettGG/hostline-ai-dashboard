@@ -66,6 +66,7 @@ There are 12 production workstreams:
 - Trusted contacts now support role-based permissions for owner commands, live updates, permanent knowledge approval, customer-request resolution, alert preference management, and alert receipt.
 - Owner commands now share one parser/runtime across dashboard, phone, SMS, and email, with phone calls recognized by trusted caller ID and SMS/email matched against `business_contacts`.
 - Owner command activity now writes to `message_events` by location and appears in the Owner Assistant recent activity panel for audit visibility.
+- Resend inbound email webhooks can now fetch received owner emails, route trusted senders through owner commands, and reply by email when direct email delivery is configured.
 - Business live updates now have Supabase persistence via `business_live_settings` and `business_live_updates`; the voice and website-chat runtime loads active updates into model instructions and gives them priority over permanent knowledge.
 - The onboarding phone launch flow tracks direct-call, no-answer forwarding, and busy-line forwarding verification before no-busy-signal coverage is treated as ready.
 - The live voice service includes Supabase FAQs and knowledge sections in model instructions and deterministic fallback replies.
