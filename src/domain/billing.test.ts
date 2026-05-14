@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildBillingSnapshot } from "./billing";
+import { buildBillingCheckoutNotice, buildBillingSnapshot, normalizeCheckoutReturn } from "./billing";
 
 const draft = {
   selectedPlanIncludedInteractions: "800",
@@ -93,5 +93,39 @@ describe("billing snapshot", () => {
     expect(snapshot.monthlyPrice).toBe(399);
     expect(snapshot.planName).toBe("Scale");
     expect(snapshot.upgradeRequired).toBe(false);
+  });
+
+  it("normalizes Stripe return parameters", () => {
+    expect(normalizeCheckoutReturn("success")).toBe("success");
+    expect(normalizeCheckoutReturn("cancelled")).toBe("cancelled");
+    expect(normalizeCheckoutReturn("canceled")).toBe("cancelled");
+    expect(normalizeCheckoutReturn("anything-else")).toBeUndefined();
+  });
+
+  it("explains checkout return states for owners", () => {
+    expect(buildBillingCheckoutNotice({
+      checkoutReturn: "cancelled",
+      status: "unconfigured",
+    })).toMatchObject({
+      title: "Checkout was canceled.",
+      tone: "warning",
+    });
+
+    expect(buildBillingCheckoutNotice({
+      checkoutReturn: "success",
+      status: "active",
+    })).toMatchObject({
+      title: "Payment is active.",
+      tone: "success",
+    });
+
+    expect(buildBillingCheckoutNotice({
+      checkoutReturn: "success",
+      fetching: false,
+      status: "checkout_started",
+    })).toMatchObject({
+      title: "Waiting for Stripe confirmation.",
+      tone: "info",
+    });
   });
 });

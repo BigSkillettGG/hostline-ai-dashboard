@@ -1,6 +1,8 @@
 import type { OnboardingDraft } from "./onboarding";
 
 export type BillingLifecycleStatus = "active" | "grace_period" | "not_started" | "released" | "release_due" | "trialing";
+export type BillingCheckoutReturn = "cancelled" | "success";
+export type BillingNoticeTone = "danger" | "info" | "success" | "warning";
 
 export interface BillingAccountRecord {
   cancelAtPeriodEnd?: boolean;
@@ -45,6 +47,73 @@ export interface BillingSnapshot {
   upgradeRequired: boolean;
   usagePercent: number;
   usedInteractions: number;
+}
+
+export interface BillingCheckoutNotice {
+  detail: string;
+  title: string;
+  tone: BillingNoticeTone;
+}
+
+export function normalizeCheckoutReturn(value?: string | null): BillingCheckoutReturn | undefined {
+  if (value === "success") return "success";
+  if (value === "cancelled" || value === "canceled") return "cancelled";
+  return undefined;
+}
+
+export function buildBillingCheckoutNotice(input: {
+  checkoutReturn?: BillingCheckoutReturn;
+  configured?: boolean;
+  fetching?: boolean;
+  status: BillingSnapshot["billingStatus"];
+}): BillingCheckoutNotice | undefined {
+  if (input.checkoutReturn === "cancelled") {
+    return {
+      detail: "No payment method or subscription change was saved. You can restart checkout whenever you are ready.",
+      title: "Checkout was canceled.",
+      tone: "warning",
+    };
+  }
+
+  if (input.checkoutReturn !== "success") return undefined;
+
+  if (input.status === "active" || input.status === "trialing") {
+    return {
+      detail: "Stripe has confirmed the subscription. The trial number stays attached to this location.",
+      title: "Payment is active.",
+      tone: "success",
+    };
+  }
+
+  if (input.status === "past_due" || input.status === "unpaid") {
+    return {
+      detail: "Stripe returned a billing problem. Open checkout or the customer portal to fix the payment method.",
+      title: "Payment still needs attention.",
+      tone: "danger",
+    };
+  }
+
+  if (input.fetching) {
+    return {
+      detail: "Stripe sent you back to SignalHost. I am checking the subscription status now.",
+      title: "Checking payment status.",
+      tone: "info",
+    };
+  }
+
+  if (input.configured === false) {
+    return {
+      detail: "The app returned from checkout, but the voice service says Stripe is not configured. Add Stripe env vars and redeploy before relying on billing state.",
+      title: "Checkout returned, but Stripe is not live.",
+      tone: "warning",
+    };
+  }
+
+  return {
+    detail: "Stripe may still be sending the webhook. Refresh status in a few seconds; if it remains stuck, check the Stripe webhook secret and Render logs.",
+    title: "Waiting for Stripe confirmation.",
+    tone: "info",
+  };
 }
 
 export function buildBillingSnapshot(input: {
