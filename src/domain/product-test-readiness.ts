@@ -11,7 +11,8 @@ export type ProductReadinessArea =
   | "owner_commands"
   | "website_chat"
   | "reports"
-  | "billing";
+  | "billing"
+  | "test_suite";
 
 export interface ProductReadinessItem {
   actionLabel: string;
@@ -194,8 +195,16 @@ export function buildProductTestReadiness(input: ProductTestReadinessInput): Pro
       ? "setup_first"
       : "ready_to_test";
   const nextItem = items.find((readinessItem) => readinessItem.status !== "ready") ??
-    items.find((readinessItem) => readinessItem.id === "phone_number") ??
-    items[0];
+    item({
+      actionLabel: "Open test suite",
+      actionTo: "/app/test-suite",
+      detail: "Core readiness is green. Run the critical phone and chat scenarios before a customer demo.",
+      id: "test_suite",
+      label: "Full product test suite",
+      status: "ready",
+      statusLabel: "Run now",
+      testPrompt: "Start with speakerphone, multi-turn close-out, allergy handoff, texting links, and owner-command tests.",
+    });
 
   return {
     headline: buildHeadline(overallStatus, readyCount, items.length),

@@ -71,6 +71,7 @@ const App = () => (
             <Route path="assistant" element={<OwnerAssistant />} />
             <Route path="onboarding" element={<Onboarding />} />
             <Route path="alert-log" element={<AlertLog />} />
+            <Route path="test-suite" element={<ScenarioLab audience="app" />} />
             <Route path="tasks" element={<Tasks />} />
             <Route path="action-center" element={<Tasks />} />
             <Route path="calls" element={<Calls />} />

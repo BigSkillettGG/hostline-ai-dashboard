@@ -609,6 +609,9 @@ function ProductTestReadinessCard({ readiness }: { readiness: ReturnType<typeof 
               <Button size="sm" variant="outline" asChild>
                 <Link to="/app/onboarding">Open launch center</Link>
               </Button>
+              <Button size="sm" variant="outline" asChild>
+                <Link to="/app/test-suite">Open test suite</Link>
+              </Button>
             </div>
           </div>
         </div>
@@ -657,6 +660,7 @@ function readinessIcon(item: ProductReadinessItem) {
   if (item.id === "owner_commands") return <ShieldCheck className={className} />;
   if (item.id === "website_chat") return <MessageSquare className={className} />;
   if (item.id === "reports") return <Globe2 className={className} />;
+  if (item.id === "test_suite") return <ListChecks className={className} />;
   return <CreditCard className={className} />;
 }
 

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { PageBody, PageHeader } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   AlertTriangle,
+  ArrowRight,
   Bot,
   CheckCircle2,
   Clipboard,
@@ -48,11 +50,17 @@ import { toast } from "sonner";
 type ScenarioFilter = "all" | ScenarioStatus;
 type ChannelFilter = "all" | ScenarioChannel;
 type VerticalFilter = "all" | ScenarioVertical;
+type ScenarioLabAudience = "app" | "super";
 
-const storageKey = "signalhost.scenarioLab.v1";
+const storageKeyByAudience: Record<ScenarioLabAudience, string> = {
+  app: "signalhost.appScenarioLab.v1",
+  super: "signalhost.scenarioLab.v1",
+};
 
-export default function ScenarioLab() {
-  const [runs, setRuns] = useState<Record<string, ScenarioRunState>>(() => loadScenarioRuns());
+export default function ScenarioLab({ audience = "super" }: { audience?: ScenarioLabAudience }) {
+  const storageKey = storageKeyByAudience[audience];
+  const appAudience = audience === "app";
+  const [runs, setRuns] = useState<Record<string, ScenarioRunState>>(() => loadScenarioRuns(storageKey));
   const [statusFilter, setStatusFilter] = useState<ScenarioFilter>("all");
   const [channelFilter, setChannelFilter] = useState<ChannelFilter>("all");
   const [verticalFilter, setVerticalFilter] = useState<VerticalFilter>("all");
@@ -89,14 +97,14 @@ export default function ScenarioLab() {
           ...patch,
         },
       };
-      saveScenarioRuns(next);
+      saveScenarioRuns(storageKey, next);
       return next;
     });
   };
 
   const clearRuns = () => {
     setRuns({});
-    saveScenarioRuns({});
+    saveScenarioRuns(storageKey, {});
     toast.success("Scenario results reset");
   };
 
@@ -112,8 +120,11 @@ export default function ScenarioLab() {
   return (
     <>
       <PageHeader
-        title="Scenario Lab"
-        description="Repeatable call and chat tests for the behaviors we cannot afford to regress"
+        title={appAudience ? "Test Suite" : "Scenario Lab"}
+        description={appAudience
+          ? "Guided phone and chat tests for the behaviors that matter before a customer demo"
+          : "Repeatable call and chat tests for the behaviors we cannot afford to regress"
+        }
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" onClick={copyReport}>
@@ -128,6 +139,8 @@ export default function ScenarioLab() {
         }
       />
       <PageBody className="space-y-5">
+        {appAudience && <AdminTestRunGuide />}
+
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <MiniStat icon={ListChecks} label="Scenarios" value={summary.total} />
           <MiniStat icon={CheckCircle2} label="Passed" value={summary.passed} tone="success" />
@@ -460,6 +473,77 @@ function MiniStat({
   );
 }
 
+function AdminTestRunGuide() {
+  const steps = [
+    {
+      detail: "Use the critical phone scripts first. Make the call, then mark Pass or Needs work and write exactly what felt wrong.",
+      label: "Run the live phone tests",
+      to: "/app/calls",
+    },
+    {
+      detail: "After each call, confirm the transcript, intent, summary, task, and owner follow-up appeared in the right place.",
+      label: "Check the proof",
+      to: "/app/tasks",
+    },
+    {
+      detail: "Use Brain test when you want to test one reply without sending texts, creating real bookings, or calling staff.",
+      label: "Isolate the response",
+      to: "/app/voice-agent",
+    },
+    {
+      detail: "Run the same core question in website chat so phone and chat share the same business knowledge.",
+      label: "Compare chat",
+      to: "/app/website-chat",
+    },
+  ];
+
+  return (
+    <Card className="border-primary/20">
+      <CardContent className="p-5 md:p-6">
+        <div className="grid gap-5 lg:grid-cols-[0.8fr_1.4fr]">
+          <div>
+            <Badge className="border-0 bg-primary/10 text-primary">
+              <ListChecks className="mr-1 h-3.5 w-3.5" />
+              Product test run
+            </Badge>
+            <h2 className="mt-3 text-xl font-semibold tracking-tight">Use this like a preflight checklist.</h2>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              These are not marketing demos. They are the exact rough edges that make SignalHost feel either like a real employee or like an old IVR.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button size="sm" asChild>
+                <Link to="/app/onboarding">Launch center<ArrowRight className="ml-1.5 h-3.5 w-3.5" /></Link>
+              </Button>
+              <Button size="sm" variant="outline" asChild>
+                <Link to="/app/calls">Open calls</Link>
+              </Button>
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {steps.map((step, index) => (
+              <div key={step.label} className="rounded-md border border-border bg-muted/20 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                    {index + 1}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold">{step.label}</div>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">{step.detail}</p>
+                    <Link to={step.to} className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+                      Open
+                      <ArrowRight className="h-3 w-3" />
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function buildScenarioScript(scenario: VoiceScenario) {
   return [
     scenario.title,
@@ -486,7 +570,7 @@ function labelAgentTestAction(action: AgentTestAction) {
   return "action";
 }
 
-function loadScenarioRuns() {
+function loadScenarioRuns(storageKey: string) {
   try {
     const parsed = JSON.parse(localStorage.getItem(storageKey) ?? "{}") as Record<string, ScenarioRunState>;
     return parsed && typeof parsed === "object" ? parsed : {};
@@ -495,7 +579,7 @@ function loadScenarioRuns() {
   }
 }
 
-function saveScenarioRuns(runs: Record<string, ScenarioRunState>) {
+function saveScenarioRuns(storageKey: string, runs: Record<string, ScenarioRunState>) {
   localStorage.setItem(storageKey, JSON.stringify(runs));
 }
 

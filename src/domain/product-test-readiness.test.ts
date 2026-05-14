@@ -50,7 +50,8 @@ describe("buildProductTestReadiness", () => {
 
     expect(readiness.overallStatus).toBe("ready_to_test");
     expect(readiness.readyCount).toBe(readiness.totalCount);
-    expect(readiness.nextItem.id).toBe("phone_number");
+    expect(readiness.nextItem.id).toBe("test_suite");
+    expect(readiness.nextItem.actionTo).toBe("/app/test-suite");
   });
 
   it("surfaces missing voice environment without blocking the live-data diagnosis", () => {
