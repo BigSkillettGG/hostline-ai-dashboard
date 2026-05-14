@@ -13,7 +13,9 @@ import {
   extractScenarioTestMessages,
   getScenarioNextTestMessage,
   getScenarioTestChannel,
+  reviewScenarioReplies,
   summarizeScenarioRuns,
+  type ScenarioReplyReviewTurn,
   voiceScenarios,
   type ScenarioChannel,
   type ScenarioPriority,
@@ -239,6 +241,14 @@ function ScenarioCard({
   const scriptPromptCount = extractScenarioTestMessages(scenario).length;
   const completedUserTurns = testTranscript.filter((turn) => turn.role === "user").length;
   const nextScriptPrompt = getScenarioNextTestMessage(scenario, completedUserTurns);
+  const reviewTurns = useMemo(
+    () => buildReviewTurnsFromTranscript(testTranscript, testActions),
+    [testActions, testTranscript],
+  );
+  const detectedIssues = useMemo(
+    () => reviewScenarioReplies(scenario, reviewTurns),
+    [reviewTurns, scenario],
+  );
 
   const copyScript = async () => {
     try {
@@ -264,7 +274,12 @@ function ScenarioCard({
       setTestReply(result.reply);
       setTestActions(result.actions);
       setTestTranscript(result.transcript);
-      toast.success("SignalHost reply tested");
+      const issues = reviewScenarioReplies(scenario, buildReviewTurnsFromTranscript(result.transcript, result.actions));
+      if (issues.length) {
+        toast.warning(`${issues.length} possible issue${issues.length === 1 ? "" : "s"} detected`);
+      } else {
+        toast.success("SignalHost reply tested");
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not test SignalHost's reply");
     } finally {
@@ -274,9 +289,36 @@ function ScenarioCard({
 
   const appendTestToNotes = () => {
     const actionSummary = testActions.length ? `\nActions: ${testActions.map(labelAgentTestAction).join(", ")}` : "";
-    const note = `\n\nBrain test\nCaller: ${testMessage}\nSignalHost: ${testReply}${actionSummary}`.trim();
+    const issueSummary = detectedIssues.length ? `\nPossible issues:\n${detectedIssues.map((issue) => `- ${issue}`).join("\n")}` : "";
+    const note = `\n\nBrain test\nCaller: ${testMessage}\nSignalHost: ${testReply}${actionSummary}${issueSummary}`.trim();
     onUpdate({ notes: [run?.notes?.trim(), note].filter(Boolean).join("\n\n") });
     toast.success("Test result added to notes");
+  };
+
+  const markNeedsWorkFromIssues = () => {
+    const issueSummary = detectedIssues.map((issue) => `- ${issue}`).join("\n");
+    const note = [
+      run?.notes?.trim(),
+      `Detected Brain Test issue\n${issueSummary}`,
+    ].filter(Boolean).join("\n\n");
+    onUpdate({ notes: note, status: "needs_work" });
+    toast.success("Scenario marked needs work");
+  };
+
+  const copyDebugPacket = async () => {
+    try {
+      await navigator.clipboard.writeText(buildScenarioDebugPacket({
+        actions: testActions,
+        issues: detectedIssues,
+        reply: testReply,
+        run,
+        scenario,
+        transcript: testTranscript,
+      }));
+      toast.success("Debug packet copied");
+    } catch {
+      toast.error("Could not copy debug packet");
+    }
   };
 
   return (
@@ -363,9 +405,14 @@ function ScenarioCard({
                     <div className="text-[11px] font-medium uppercase text-muted-foreground">SignalHost would say</div>
                     <p className="mt-1 text-sm">{testReply}</p>
                   </div>
-                  <Button size="sm" variant="outline" onClick={appendTestToNotes}>
-                    Add to notes
-                  </Button>
+                  <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                    <Button size="sm" variant="outline" onClick={copyDebugPacket}>
+                      Copy packet
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={appendTestToNotes}>
+                      Add to notes
+                    </Button>
+                  </div>
                 </div>
                 {testActions.length ? (
                   <div className="mt-3 flex flex-wrap gap-1.5">
@@ -374,6 +421,33 @@ function ScenarioCard({
                         {labelAgentTestAction(action)}
                       </Badge>
                     ))}
+                  </div>
+                ) : null}
+                {detectedIssues.length ? (
+                  <div className="mt-3 rounded-md border border-warning/25 bg-warning/10 p-3">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-semibold text-foreground">Possible regression detected</div>
+                        <ul className="mt-1 space-y-1 text-xs leading-5 text-muted-foreground">
+                          {detectedIssues.map((issue) => (
+                            <li key={issue}>- {issue}</li>
+                          ))}
+                        </ul>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button size="sm" variant="outline" onClick={markNeedsWorkFromIssues}>
+                            Mark needs work
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={copyDebugPacket}>
+                            Copy for Codex
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : reviewTurns.length ? (
+                  <div className="mt-3 rounded-md border border-success/20 bg-success/5 p-3 text-xs text-success">
+                    No obvious scripted regression detected in this Brain Test transcript.
                   </div>
                 ) : null}
               </div>
@@ -556,6 +630,76 @@ function buildScenarioScript(scenario: VoiceScenario) {
     "",
     `Listen for: ${scenario.listenFor.join(", ")}`,
   ].join("\n");
+}
+
+function buildReviewTurnsFromTranscript(
+  transcript: AgentTestTurn[],
+  actions: AgentTestAction[],
+): ScenarioReplyReviewTurn[] {
+  const reviewTurns: ScenarioReplyReviewTurn[] = [];
+  let pendingCallerMessage = "";
+
+  for (const turn of transcript) {
+    if (turn.role === "user") {
+      pendingCallerMessage = turn.text;
+      continue;
+    }
+
+    if (turn.role === "assistant" && pendingCallerMessage) {
+      reviewTurns.push({
+        callerMessage: pendingCallerMessage,
+        reply: turn.text,
+      });
+      pendingCallerMessage = "";
+    }
+  }
+
+  if (actions.length && reviewTurns.length) {
+    reviewTurns[reviewTurns.length - 1] = {
+      ...reviewTurns[reviewTurns.length - 1],
+      actions,
+    };
+  }
+
+  return reviewTurns;
+}
+
+function buildScenarioDebugPacket({
+  actions,
+  issues,
+  reply,
+  run,
+  scenario,
+  transcript,
+}: {
+  actions: AgentTestAction[];
+  issues: string[];
+  reply: string;
+  run?: ScenarioRunState;
+  scenario: VoiceScenario;
+  transcript: AgentTestTurn[];
+}) {
+  return [
+    `Scenario: ${scenario.title}`,
+    `Priority: ${scenario.priority}`,
+    `Channel: ${channelLabel(scenario.channel)}`,
+    `Status: ${run?.status ?? "untested"}`,
+    "",
+    "Expected behavior:",
+    ...scenario.expectedBehavior.map((item) => `- ${item}`),
+    "",
+    "Transcript:",
+    ...(transcript.length ? transcript.map((turn) => `${turn.role === "assistant" ? "SignalHost" : "Caller"}: ${turn.text}`) : ["No Brain Test transcript captured."]),
+    reply && !transcript.some((turn) => turn.role === "assistant" && turn.text === reply) ? `SignalHost: ${reply}` : undefined,
+    "",
+    "Actions:",
+    actions.length ? actions.map((action) => `- ${labelAgentTestAction(action)}`).join("\n") : "- none",
+    "",
+    "Detected issues:",
+    issues.length ? issues.map((issue) => `- ${issue}`).join("\n") : "- none detected",
+    "",
+    run?.notes ? `Run notes:\n${run.notes}` : undefined,
+  ].filter(Boolean).join("\n");
 }
 
 function labelAgentTestAction(action: AgentTestAction) {
