@@ -7,13 +7,21 @@ import {
   Activity,
   AlertTriangle,
   ArrowRight,
+  Bot,
+  Brain,
   Calendar,
   CalendarDays,
   CheckCircle2,
   ClipboardList,
+  CreditCard,
+  Database,
+  Globe2,
+  ListChecks,
   Megaphone,
+  MessageSquare,
   Phone,
   PhoneIncoming,
+  ShieldCheck,
   ShoppingBag,
   Sparkles,
 } from "lucide-react";
@@ -31,6 +39,15 @@ import {
   type VerticalInsightProfile,
 } from "@/domain/vertical-insights";
 import {
+  assignedDemoPhoneNumber,
+  calculateOnboardingProgress,
+} from "@/domain/onboarding";
+import {
+  buildProductTestReadiness,
+  type ProductReadinessItem,
+  type ProductReadinessStatus,
+} from "@/domain/product-test-readiness";
+import {
   Area,
   AreaChart,
   CartesianGrid,
@@ -41,7 +58,7 @@ import {
   YAxis,
 } from "recharts";
 import { formatTime, formatMoney } from "@/lib/format";
-import { isPlatformAdminUser, useCurrentUser } from "@/lib/auth";
+import { getAuthReadiness, isPlatformAdminUser, useCurrentUser } from "@/lib/auth";
 import { loadOnboardingDraft } from "@/lib/onboarding-draft";
 import {
   fetchCallsFromSupabase,
@@ -52,7 +69,12 @@ import {
   getActiveSupabaseLocationId,
   isSupabaseConfigured,
 } from "@/lib/supabase-rest";
-import { deliverOwnerDailyReport, generateOwnerDailyReport, isVoiceServiceConfigured } from "@/lib/voice-service";
+import {
+  deliverOwnerDailyReport,
+  fetchVoiceServiceHealth,
+  generateOwnerDailyReport,
+  isVoiceServiceConfigured,
+} from "@/lib/voice-service";
 import { toast } from "sonner";
 
 const intentColor: Record<string, string> = {
@@ -82,6 +104,8 @@ export default function Dashboard() {
   const activeLocationId = getActiveSupabaseLocationId();
   const supabaseConfigured = isSupabaseConfigured();
   const liveEnabled = Boolean(supabaseConfigured && activeLocationId);
+  const voiceConfigured = isVoiceServiceConfigured();
+  const authReadiness = getAuthReadiness();
 
   const callQuery = useQuery({
     enabled: liveEnabled,
@@ -113,6 +137,13 @@ export default function Dashboard() {
     queryKey: ["tenant-directory", "dashboard", activeLocationId],
     staleTime: 60_000,
   });
+  const voiceHealthQuery = useQuery({
+    enabled: voiceConfigured,
+    queryFn: fetchVoiceServiceHealth,
+    queryKey: ["dashboard", "voice-health"],
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
 
   const dashboardTasks = useMemo(
     () => liveEnabled ? taskQuery.data ?? emptyTasks : emptyTasks,
@@ -123,7 +154,13 @@ export default function Dashboard() {
   const businessType = activeTenant?.businessType ?? draft.businessType;
   const verticalProfile = useMemo(() => getVerticalInsightProfile(businessType), [businessType]);
   const businessName = activeTenant?.locationName ?? String(draft.restaurantName || "your business");
-  const aiHostPhone = activeTenant?.aiHostPhone ?? String(draft.assignedPhoneNumber || "(415) 555-0142");
+  const assignedPhoneNumber = activeTenant?.aiHostPhone ??
+    String(draft.assignedSignalHostNumber || draft.assignedHostLineNumber || draft.assignedPhoneNumber || "");
+  const aiHostPhone = assignedPhoneNumber || "(415) 555-0142";
+  const assignedPhoneNumberIsDemo = !assignedPhoneNumber ||
+    assignedPhoneNumber === assignedDemoPhoneNumber ||
+    assignedPhoneNumber.includes("555");
+  const onboardingProgress = calculateOnboardingProgress(draft);
   const demoData = useMemo(
     () => adaptDemoDataForBusiness({
       businessType,
@@ -184,6 +221,24 @@ export default function Dashboard() {
     recentTasks,
   ]);
   const hasLiveError = callQuery.isError || orderQuery.isError || reservationQuery.isError || taskQuery.isError;
+  const productReadiness = buildProductTestReadiness({
+    assignedPhoneNumber,
+    assignedPhoneNumberIsDemo,
+    authMode: authReadiness.mode,
+    authReady: authReadiness.ready,
+    businessName,
+    hasWebsiteUrl: Boolean(String(draft.websiteUrl || draft.website || "").trim()),
+    liveEnabled,
+    locationId: activeLocationId,
+    onboardingProgressPercent: onboardingProgress.percent,
+    openTaskCount: activeStaffFollowUps,
+    recentCallCount: liveEnabled ? recentCalls.length : 0,
+    selectedPlanName: String(draft.selectedPlanName || ""),
+    supabaseConfigured,
+    voiceHealth: voiceHealthQuery.data,
+    voiceHealthError: voiceHealthQuery.isError,
+    voiceServiceConfigured: voiceConfigured,
+  });
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
   const saveReportMutation = useMutation({
     mutationFn: () => generateOwnerDailyReport(activeLocationId),
@@ -263,7 +318,7 @@ export default function Dashboard() {
                 </div>
               </div>
               <Button
-                disabled={!isVoiceServiceConfigured() || reportActionBusy}
+                disabled={!voiceConfigured || reportActionBusy}
                 onClick={() => saveReportMutation.mutate()}
                 size="sm"
                 variant="outline"
@@ -271,7 +326,7 @@ export default function Dashboard() {
                 {saveReportMutation.isPending ? "Saving..." : "Save report"}
               </Button>
               <Button
-                disabled={!isVoiceServiceConfigured() || reportActionBusy}
+                disabled={!voiceConfigured || reportActionBusy}
                 onClick={() => deliverReportMutation.mutate()}
                 size="sm"
                 variant="outline"
@@ -300,6 +355,8 @@ export default function Dashboard() {
             Some live dashboard panels could not load. Calls, orders, reservations, and tasks will update automatically once Supabase responds.
           </Card>
         )}
+
+        <ProductTestReadinessCard readiness={productReadiness} />
 
         <Card className="overflow-hidden border-primary/15">
           <div className="grid gap-0 lg:grid-cols-[1.4fr_0.9fr]">
@@ -515,6 +572,112 @@ export default function Dashboard() {
       </PageBody>
     </>
   );
+}
+
+function ProductTestReadinessCard({ readiness }: { readiness: ReturnType<typeof buildProductTestReadiness> }) {
+  const next = readiness.nextItem;
+
+  return (
+    <Card className="overflow-hidden border-primary/20">
+      <div className="grid gap-0 xl:grid-cols-[0.9fr_1.6fr]">
+        <div className="border-b border-border bg-muted/20 p-5 md:p-6 xl:border-b-0 xl:border-r">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge className={overallStatusClass(readiness.overallStatus)}>
+              <ListChecks className="mr-1 h-3.5 w-3.5" />
+              {readiness.readyCount}/{readiness.totalCount} ready
+            </Badge>
+            <span className="text-xs text-muted-foreground">{readiness.testableCount} testable now</span>
+          </div>
+          <h2 className="mt-3 text-xl font-semibold tracking-tight">{readiness.headline}</h2>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">{readiness.summary}</p>
+
+          <div className="mt-5 rounded-md border border-primary/20 bg-primary/5 p-4">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                {readinessIcon(next)}
+              </div>
+              <div className="min-w-0">
+                <div className="text-xs font-medium uppercase text-muted-foreground">Next best test</div>
+                <div className="mt-1 text-sm font-semibold">{next.label}</div>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">{next.testPrompt ?? next.detail}</p>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button size="sm" asChild>
+                <Link to={next.actionTo}>{next.actionLabel}<ArrowRight className="ml-1.5 h-3.5 w-3.5" /></Link>
+              </Button>
+              <Button size="sm" variant="outline" asChild>
+                <Link to="/app/onboarding">Open launch center</Link>
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-3 p-5 md:p-6 sm:grid-cols-2">
+          {readiness.items.map((item) => (
+            <div key={item.id} className="rounded-md border border-border bg-card p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-start gap-3">
+                  <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${readinessIconClass(item.status)}`}>
+                    {readinessIcon(item)}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold">{item.label}</div>
+                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{item.detail}</p>
+                  </div>
+                </div>
+                <Badge variant="outline" className={`shrink-0 ${readinessBadgeClass(item.status)}`}>
+                  {item.statusLabel}
+                </Badge>
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <div className="text-[11px] text-muted-foreground">
+                  {item.testPrompt ? "Has test prompt" : "Review setup"}
+                </div>
+                <Link to={item.actionTo} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+                  {item.actionLabel}
+                  <ArrowRight className="h-3 w-3" />
+                </Link>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function readinessIcon(item: ProductReadinessItem) {
+  const className = "h-4 w-4";
+  if (item.id === "workspace") return <Database className={className} />;
+  if (item.id === "voice") return <Bot className={className} />;
+  if (item.id === "phone_number") return <Phone className={className} />;
+  if (item.id === "call_logging") return <ClipboardList className={className} />;
+  if (item.id === "owner_learning") return <Brain className={className} />;
+  if (item.id === "owner_commands") return <ShieldCheck className={className} />;
+  if (item.id === "website_chat") return <MessageSquare className={className} />;
+  if (item.id === "reports") return <Globe2 className={className} />;
+  return <CreditCard className={className} />;
+}
+
+function readinessIconClass(status: ProductReadinessStatus) {
+  if (status === "ready") return "bg-success/10 text-success";
+  if (status === "partial") return "bg-warning/15 text-warning";
+  if (status === "needs_setup") return "bg-destructive/10 text-destructive";
+  return "bg-muted text-muted-foreground";
+}
+
+function readinessBadgeClass(status: ProductReadinessStatus) {
+  if (status === "ready") return "border-success/20 bg-success/10 text-success";
+  if (status === "partial") return "border-warning/20 bg-warning/10 text-warning";
+  if (status === "needs_setup") return "border-destructive/20 bg-destructive/10 text-destructive";
+  return "border-border bg-muted/40 text-muted-foreground";
+}
+
+function overallStatusClass(status: ReturnType<typeof buildProductTestReadiness>["overallStatus"]) {
+  if (status === "ready_to_test") return "border-0 bg-success/15 text-success";
+  if (status === "setup_first") return "border-0 bg-warning/15 text-warning";
+  return "border-0 bg-muted text-muted-foreground";
 }
 
 function CallActivity({ businessType, item }: { businessType: unknown; item: Call }) {

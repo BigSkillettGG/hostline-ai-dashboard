@@ -2583,8 +2583,9 @@ export function mapSupabaseAgentConfig(
 ): RestaurantAgentConfig {
   const ordersEnabled = row.orders_enabled ?? fallbackConfig.orders.enabled;
   const reservationsEnabled = row.reservations_enabled ?? fallbackConfig.capabilities.handleReservations;
+  const hostName = normalizeStringField(row.host_name, fallbackConfig.hostName);
   const voiceProfile =
-    [fallbackConfig.voiceProfileId, row.host_name, fallbackConfig.hostName]
+    [row.host_name, fallbackConfig.voiceProfileId, fallbackConfig.hostName]
       .map(findSignalHostVoiceProfile)
       .find(Boolean) ?? getSignalHostVoiceProfile(undefined);
 
@@ -2604,7 +2605,7 @@ export function mapSupabaseAgentConfig(
     disclosureEnabled: row.disclosure_enabled ?? fallbackConfig.disclosureEnabled,
     escalationPhoneNumber: normalizeStringField(row.escalation_phone_number, fallbackConfig.escalationPhoneNumber),
     greetingTemplate: normalizeStringField(row.greeting_template, fallbackConfig.greetingTemplate),
-    hostName: voiceProfile.employeeName,
+    hostName,
     orders: {
       ...fallbackConfig.orders,
       destinations: normalizeStringArrayWithFallback(row.order_destinations, fallbackConfig.orders.destinations),

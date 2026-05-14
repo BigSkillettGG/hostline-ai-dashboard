@@ -107,7 +107,7 @@ export function resolveSignalHostVoiceId(
 }
 
 export function resolveSignalHostOpenAIVoice(
-  voice: SignalHostVoiceGender | SignalHostVoiceProfileId | undefined,
+  voice: SignalHostVoiceGender | SignalHostVoiceProfileId | string | undefined,
   overrides: Partial<Record<SignalHostVoiceGender | SignalHostVoiceProfileId, string>> = {},
 ) {
   const profile = getSignalHostVoiceProfile(voice);
@@ -132,5 +132,5 @@ export function buildTwilioElevenLabsVoice({
   speed?: string;
   stability?: string;
 }) {
-  return `${resolveSignalHostVoiceId(voiceProfileId ?? gender, overrides)}-${modelId}-${speed}_${stability}_${similarityBoost}`;
+  return `${resolveSignalHostVoiceId(normalizeSignalHostVoiceProfileId(voiceProfileId ?? gender), overrides)}-${modelId}-${speed}_${stability}_${similarityBoost}`;
 }
