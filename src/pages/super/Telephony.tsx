@@ -35,6 +35,7 @@ import {
 } from "@/lib/supabase-rest";
 import {
   fetchLiveCallConfig,
+  attachExistingVoicePhoneNumber,
   fetchEmailReadiness,
   fetchOpenAIRealtimeLiveCallConfig,
   fetchOpenAIRealtimePreflight,
@@ -50,6 +51,8 @@ const defaultLocationId = import.meta.env.VITE_SUPABASE_DEMO_LOCATION_ID ?? "";
 export default function Telephony() {
   const queryClient = useQueryClient();
   const [locationId, setLocationId] = useState(defaultLocationId);
+  const [attachPhoneNumber, setAttachPhoneNumber] = useState("");
+  const [attachProviderSid, setAttachProviderSid] = useState("");
   const voiceConfigured = isVoiceServiceConfigured();
   const supabaseConfigured = isSupabaseConfigured();
 
@@ -121,6 +124,20 @@ export default function Telephony() {
     },
   });
 
+  const attachMutation = useMutation({
+    mutationFn: attachExistingVoicePhoneNumber,
+    onSuccess: async () => {
+      toast.success("SignalHost number attached");
+      setAttachPhoneNumber("");
+      setAttachProviderSid("");
+      await queryClient.invalidateQueries({ queryKey: ["phone-numbers"] });
+      await queryClient.invalidateQueries({ queryKey: ["pilot-readiness-calls"] });
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Could not attach number");
+    },
+  });
+
   const refreshAll = () => {
     void healthQuery.refetch();
     void emailReadinessQuery.refetch();
@@ -174,6 +191,19 @@ export default function Telephony() {
       phoneNumber: record.phoneNumber,
       providerSid: record.providerSid,
       releaseReason: "manual_dashboard_release",
+    });
+  };
+
+  const attachExistingNumber = () => {
+    const phoneNumber = attachPhoneNumber.trim();
+    if (!phoneNumber) {
+      toast.error("Enter the Twilio phone number first.");
+      return;
+    }
+    attachMutation.mutate({
+      locationId,
+      phoneNumber,
+      providerSid: attachProviderSid.trim() || undefined,
     });
   };
 
@@ -278,6 +308,42 @@ export default function Telephony() {
                     {phoneNumbersQuery.error instanceof Error ? phoneNumbersQuery.error.message : "Phone numbers could not be loaded."}
                   </div>
                 )}
+                <div className="rounded-md border border-border bg-muted/20 p-3">
+                  <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="attach-phone-number">Attach existing Twilio number</Label>
+                      <Input
+                        id="attach-phone-number"
+                        placeholder="+1 617 555 0100"
+                        value={attachPhoneNumber}
+                        onChange={(event) => setAttachPhoneNumber(event.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="attach-provider-sid">Twilio SID optional</Label>
+                      <Input
+                        id="attach-provider-sid"
+                        className="font-mono text-xs"
+                        placeholder="PN..."
+                        value={attachProviderSid}
+                        onChange={(event) => setAttachProviderSid(event.target.value)}
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <Button
+                        variant="outline"
+                        onClick={attachExistingNumber}
+                        disabled={!voiceConfigured || !locationId.trim() || attachMutation.isPending}
+                      >
+                        {attachMutation.isPending ? <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" />}
+                        Attach
+                      </Button>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Use this when the number already exists in Twilio/OpenAI SIP and only needs to be saved for dashboard readiness.
+                  </p>
+                </div>
                 {(phoneNumbersQuery.data ?? []).map((record) => (
                   <PhoneNumberLifecycleRow
                     key={record.id}

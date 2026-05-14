@@ -96,32 +96,38 @@ class SupabasePhoneNumberStore implements PhoneNumberStore {
     const trialEndsAt = addDays(trialStartedAt, inputTrialDays(input));
     const trialGraceEndsAt = addDays(trialEndsAt, inputTrialGraceDays(input));
 
-    await this.request("phone_numbers", {
-      body: {
-        capabilities: provisioned.capabilities,
-        forwarding_mode: input.forwardingMode ?? "forward_unanswered",
-        forwarding_status: "pending_verification",
-        location_id: locationId,
-        phone_number: provisioned.phoneNumber,
-        provider: "twilio",
-        provider_sid: provisioned.providerSid || null,
+    const legacyBody = {
+      capabilities: provisioned.capabilities,
+      forwarding_mode: input.forwardingMode ?? "forward_unanswered",
+      forwarding_status: "pending_verification",
+      location_id: locationId,
+      phone_number: provisioned.phoneNumber,
+      provider: "twilio",
+      provider_sid: provisioned.providerSid || null,
+      restaurant_main_line: input.restaurantMainLine ?? null,
+      status: provisioned.status,
+      updated_at: new Date().toISOString(),
+      voice_webhook_url: provisioned.voiceWebhookUrl ?? null,
+    };
+
+    try {
+      await this.upsertPhoneNumber({
+        ...legacyBody,
         provisioning_source: "trial",
-        restaurant_main_line: input.restaurantMainLine ?? null,
         released_at: null,
         release_reason: null,
-        status: provisioned.status,
         trial_ends_at: trialEndsAt.toISOString(),
         trial_grace_ends_at: trialGraceEndsAt.toISOString(),
         trial_started_at: trialStartedAt.toISOString(),
-        updated_at: new Date().toISOString(),
-        voice_webhook_url: provisioned.voiceWebhookUrl ?? null,
-      },
-      headers: {
-        Prefer: "return=minimal,resolution=merge-duplicates",
-      },
-      method: "POST",
-      query: "on_conflict=provider,phone_number",
-    });
+      });
+    } catch (error) {
+      if (!isMissingPhoneNumberLifecycleColumnError(error)) throw error;
+      console.warn("[phone-number-store] phone number lifecycle columns missing; saved legacy phone row only", {
+        locationId,
+        phoneNumber: provisioned.phoneNumber,
+      });
+      await this.upsertPhoneNumber(legacyBody);
+    }
 
     await this.request("locations", {
       body: {
@@ -130,6 +136,17 @@ class SupabasePhoneNumberStore implements PhoneNumberStore {
       },
       method: "PATCH",
       query: `id=eq.${encodeURIComponent(locationId)}`,
+    });
+  }
+
+  private async upsertPhoneNumber(body: Record<string, unknown>) {
+    await this.request("phone_numbers", {
+      body,
+      headers: {
+        Prefer: "return=minimal,resolution=merge-duplicates",
+      },
+      method: "POST",
+      query: "on_conflict=provider,phone_number",
     });
   }
 
@@ -322,4 +339,9 @@ function inputTrialDays(input: ProvisionPhoneNumberInput) {
 function inputTrialGraceDays(input: ProvisionPhoneNumberInput) {
   const value = Number((input as { trialGraceDays?: unknown }).trialGraceDays);
   return Number.isFinite(value) ? Math.max(0, Math.min(60, Math.round(value))) : 14;
+}
+
+function isMissingPhoneNumberLifecycleColumnError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  return /provisioning_source|trial_started_at|trial_ends_at|trial_grace_ends_at|released_at|release_reason|sms_webhook_url|column .* does not exist|schema cache|PGRST204|42703/i.test(error.message);
 }

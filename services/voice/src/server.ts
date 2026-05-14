@@ -26,7 +26,7 @@ import {
 import { createMenuIngestionService } from "./menu-ingestion-service";
 import { buildSmsTwiML, createMessageThreadStore } from "./message-thread-store";
 import { createStaffNotificationService } from "./notification-service";
-import { createOpenAIRealtimeSipService } from "./openai-realtime-sip";
+import { buildOpenAIRealtimeLiveCallConfig, createOpenAIRealtimeSipService } from "./openai-realtime-sip";
 import { createOwnerCommandRuntime } from "./owner-command-runtime";
 import { createOwnerEmailCommandService, type OwnerEmailCommandInput } from "./owner-email-command-service";
 import { createOwnerReportService } from "./owner-report-service";
@@ -618,6 +618,87 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
     return;
   }
 
+  if (req.method === "POST" && url.pathname === "/telephony/attach-number") {
+    if (!allowRateLimitedRequest(req, res, "number-attach", 20)) return;
+
+    try {
+      const body = parseJsonRequestBody(await readLimitedRequestBody(req, ADMIN_BODY_LIMIT_BYTES)) as {
+        capabilities?: Record<string, boolean>;
+        forwardingMode?: string;
+        locationId?: string;
+        phoneNumber?: string;
+        providerSid?: string;
+        restaurantMainLine?: string;
+        status?: string;
+        trialDays?: number;
+        trialGraceDays?: number;
+        voiceWebhookUrl?: string;
+      };
+      const locationId = body.locationId ?? currentEnv.SUPABASE_DEMO_LOCATION_ID;
+      const phoneNumber = normalizeAttachedPhoneNumber(body.phoneNumber);
+      if (!phoneNumber) {
+        sendJson(res, 400, { error: "phoneNumber is required." });
+        return;
+      }
+
+      const authorization = await authorizeVoiceAdminRequest({
+        currentEnv,
+        locationId,
+        req,
+      });
+      if (!authorization.authorized) {
+        sendJson(res, authorization.status, { error: authorization.reason ?? "Unauthorized" });
+        return;
+      }
+
+      const guard = await phoneNumberStore.getLocationProvisioningGuard(locationId);
+      if (!guard.allowed && guard.existingPhoneNumber !== phoneNumber) {
+        sendJson(res, 409, {
+          code: guard.reason,
+          error: "This location already has another active SignalHost phone number.",
+          locationId: guard.locationId,
+          phoneNumber: guard.existingPhoneNumber,
+          trialGraceEndsAt: guard.trialGraceEndsAt,
+        });
+        return;
+      }
+
+      const twilioNumber = body.providerSid?.trim()
+        ? undefined
+        : await telephonyService.findIncomingPhoneNumber({ phoneNumber }).catch((error) => {
+            console.warn("[voice-service] existing Twilio number lookup failed", { error, phoneNumber });
+            return undefined;
+          });
+      const providerSid = body.providerSid?.trim() || twilioNumber?.providerSid;
+      if (!providerSid) {
+        sendJson(res, 400, {
+          error: "Could not find this number in Twilio. Paste the Twilio Incoming Phone Number SID, or confirm the number belongs to the connected Twilio account.",
+        });
+        return;
+      }
+
+      const attached = {
+        capabilities: body.capabilities ?? twilioNumber?.capabilities ?? {},
+        phoneNumber,
+        providerSid,
+        status: body.status?.trim() || twilioNumber?.status || "active",
+        voiceWebhookUrl: body.voiceWebhookUrl?.trim() || twilioNumber?.voiceWebhookUrl || buildOpenAIRealtimeLiveCallConfig(currentEnv, locationId).webhookUrl,
+      };
+      await phoneNumberStore.saveProvisionedNumber({
+        forwardingMode: body.forwardingMode,
+        locationId,
+        phoneNumber,
+        restaurantMainLine: body.restaurantMainLine,
+        trialDays: body.trialDays,
+        trialGraceDays: body.trialGraceDays,
+      }, attached);
+      sendJson(res, 200, { phoneNumber: attached });
+    } catch (error) {
+      sendCaughtError(res, error, "Existing Twilio number attach failed");
+    }
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/telephony/release-number") {
     if (!allowRateLimitedRequest(req, res, "number-release", 20)) return;
 
@@ -1192,6 +1273,16 @@ async function findFirstAvailablePhoneNumber(input: {
     limit: 1,
   });
   return numbers[0]?.phoneNumber;
+}
+
+function normalizeAttachedPhoneNumber(value?: string) {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.startsWith("+")) return trimmed.replace(/[^\d+]/g, "");
+  const digits = trimmed.replace(/\D/g, "");
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  return trimmed;
 }
 
 function isValidInternalRequest(req: IncomingMessage, currentEnv: VoiceServiceEnv) {

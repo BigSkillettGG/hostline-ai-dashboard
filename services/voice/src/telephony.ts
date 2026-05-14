@@ -13,6 +13,8 @@ export interface ProvisionPhoneNumberInput {
   locationId?: string;
   phoneNumber: string;
   restaurantMainLine?: string;
+  trialDays?: number;
+  trialGraceDays?: number;
 }
 
 export interface ReleasePhoneNumberInput {
@@ -34,6 +36,7 @@ export interface ReleasedPhoneNumber {
 
 export interface TelephonyService {
   configured: boolean;
+  findIncomingPhoneNumber(input: { phoneNumber: string }): Promise<ProvisionedPhoneNumber | undefined>;
   searchAvailableNumbers(input: {
     areaCode?: string;
     contains?: string;
@@ -93,6 +96,10 @@ export function mapTwilioAvailableNumbers(response: TwilioAvailableNumberRespons
 class NotConfiguredTelephonyService implements TelephonyService {
   configured = false;
 
+  async findIncomingPhoneNumber(): Promise<ProvisionedPhoneNumber | undefined> {
+    throw new Error("Twilio provisioning is not configured.");
+  }
+
   async searchAvailableNumbers(): Promise<AvailableTwilioNumber[]> {
     throw new Error("Twilio provisioning is not configured.");
   }
@@ -142,6 +149,26 @@ class TwilioTelephonyService implements TelephonyService {
     );
 
     return mapTwilioAvailableNumbers(response);
+  }
+
+  async findIncomingPhoneNumber(input: { phoneNumber: string }) {
+    const params = new URLSearchParams({
+      PageSize: "1",
+      PhoneNumber: input.phoneNumber,
+    });
+    const response = await this.twilioRequest<{ incoming_phone_numbers?: TwilioIncomingPhoneNumberResponse[] }>(
+      `/2010-04-01/Accounts/${encodeURIComponent(this.accountSid)}/IncomingPhoneNumbers.json?${params.toString()}`,
+    );
+    const number = response.incoming_phone_numbers?.[0];
+    if (!number?.phone_number) return undefined;
+
+    return {
+      capabilities: number.capabilities ?? {},
+      phoneNumber: number.phone_number,
+      providerSid: number.sid ?? "",
+      status: number.status ?? "active",
+      voiceWebhookUrl: number.voice_url,
+    };
   }
 
   async provisionPhoneNumber(input: ProvisionPhoneNumberInput) {

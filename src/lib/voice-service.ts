@@ -515,6 +515,37 @@ export async function provisionVoicePhoneNumber(input: {
   return (await response.json()) as { phoneNumber: ProvisionedVoicePhoneNumber };
 }
 
+export async function attachExistingVoicePhoneNumber(input: {
+  forwardingMode?: string;
+  locationId?: string;
+  phoneNumber: string;
+  providerSid?: string;
+  restaurantMainLine?: string;
+}) {
+  if (!voiceServiceBaseUrl) {
+    throw new Error("VITE_VOICE_SERVICE_URL is not configured.");
+  }
+
+  const response = await fetch(`${voiceServiceBaseUrl}/telephony/attach-number`, {
+    body: JSON.stringify({
+      ...input,
+      locationId: input.locationId ?? getActiveLocationId(),
+    }),
+    headers: {
+      "Content-Type": "application/json",
+      ...buildVoiceAdminHeaders(),
+    },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(body || `Phone number attach failed with ${response.status}.`);
+  }
+
+  return (await response.json()) as { phoneNumber: ProvisionedVoicePhoneNumber };
+}
+
 export async function releaseVoicePhoneNumber(input: {
   id?: string;
   locationId?: string;

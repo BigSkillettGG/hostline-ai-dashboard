@@ -83,6 +83,34 @@ describe("phone number store", () => {
     );
   });
 
+  it("falls back to legacy phone number columns when lifecycle migration is missing", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response("Could not find the 'provisioning_source' column of 'phone_numbers' in the schema cache", { status: 400 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const store = createPhoneNumberStore(env);
+
+    await store.saveProvisionedNumber(
+      {
+        locationId: "00000000-0000-4000-8000-000000000002",
+        phoneNumber: "+14155550199",
+      },
+      {
+        capabilities: { sms: true, voice: true },
+        phoneNumber: "+14155550199",
+        providerSid: "PN123",
+        status: "active",
+        voiceWebhookUrl: "https://voice.signalhost.test/openai/realtime/webhook?locationId=loc",
+      },
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain('"provisioning_source":"trial"');
+    expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toContain('"provider_sid":"PN123"');
+    expect(String(fetchMock.mock.calls[1]?.[1]?.body)).not.toContain("provisioning_source");
+  });
+
   it("allows provisioning when a location has no active unreleased number", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")

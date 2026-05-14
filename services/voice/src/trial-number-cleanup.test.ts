@@ -178,6 +178,7 @@ function createPhoneNumberStore(candidates: TrialPhoneNumberReleaseCandidate[]):
 function createTelephonyService(): TelephonyService {
   return {
     configured: true,
+    findIncomingPhoneNumber: vi.fn(async () => undefined),
     provisionPhoneNumber: vi.fn(async () => ({
       capabilities: { sms: true, voice: true },
       phoneNumber: "+14155550101",
