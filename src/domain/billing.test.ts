@@ -25,6 +25,10 @@ describe("billing snapshot", () => {
     expect(snapshot.lifecycleStatus).toBe("trialing");
     expect(snapshot.trialDaysRemaining).toBe(2);
     expect(snapshot.upgradeRequired).toBe(false);
+    expect(snapshot.remainingInteractions).toBe(560);
+    expect(snapshot.overageInteractions).toBe(0);
+    expect(snapshot.estimatedOverageCents).toBe(0);
+    expect(snapshot.usageStatus).toBe("normal");
     expect(snapshot.usagePercent).toBe(30);
   });
 
@@ -93,6 +97,36 @@ describe("billing snapshot", () => {
     expect(snapshot.monthlyPrice).toBe(399);
     expect(snapshot.planName).toBe("Scale");
     expect(snapshot.upgradeRequired).toBe(false);
+  });
+
+  it("surfaces overage counts and estimated overage dollars", () => {
+    const snapshot = buildBillingSnapshot({
+      callsThisMonth: 860,
+      draft,
+      now: new Date("2026-05-10T12:00:00.000Z"),
+      phoneNumbers: [{ phoneNumber: "+16175550199", status: "in-use" }],
+    });
+
+    expect(snapshot.usagePercent).toBe(100);
+    expect(snapshot.remainingInteractions).toBe(0);
+    expect(snapshot.overageInteractions).toBe(60);
+    expect(snapshot.estimatedOverageCents).toBe(2100);
+    expect(snapshot.usageStatus).toBe("over_limit");
+    expect(snapshot.usageDetail).toContain("60 interactions over");
+    expect(snapshot.usageDetail).toContain("$21.00");
+  });
+
+  it("warns before a plan crosses into overage", () => {
+    const snapshot = buildBillingSnapshot({
+      callsThisMonth: 650,
+      draft,
+      now: new Date("2026-05-10T12:00:00.000Z"),
+      phoneNumbers: [{ phoneNumber: "+16175550199", status: "in-use" }],
+    });
+
+    expect(snapshot.usageStatus).toBe("warning");
+    expect(snapshot.remainingInteractions).toBe(150);
+    expect(snapshot.usageDetail).toContain("150 interactions left");
   });
 
   it("normalizes Stripe return parameters", () => {

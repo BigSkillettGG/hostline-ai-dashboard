@@ -230,8 +230,24 @@ export default function Billing() {
                     </span>
                   </div>
                   <Progress value={snapshot.usagePercent} />
-                  <div className="mt-2 text-xs text-muted-foreground">
-                    Overage starts after {snapshot.includedInteractions.toLocaleString()} calls or chats.
+                  <div className="mt-3 flex flex-col gap-2 rounded-md border border-border bg-muted/20 p-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="outline" className={usageStatusClass(snapshot.usageStatus)}>
+                          {usageStatusLabel(snapshot.usageStatus)}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          Overage starts after {snapshot.includedInteractions.toLocaleString()} calls or chats.
+                        </span>
+                      </div>
+                      <p className="mt-1 text-sm leading-6 text-muted-foreground">{snapshot.usageDetail}</p>
+                    </div>
+                    <div className="shrink-0 text-left sm:text-right">
+                      <div className="text-[11px] font-medium uppercase text-muted-foreground">Estimated overage</div>
+                      <div className="mt-1 text-lg font-semibold tabular-nums">
+                        {formatMoney(snapshot.estimatedOverageCents)}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -397,6 +413,20 @@ function billingNoticeClass(tone: BillingNoticeTone) {
   return "";
 }
 
+function usageStatusLabel(status: ReturnType<typeof buildBillingSnapshot>["usageStatus"]) {
+  if (status === "over_limit") return "Over plan";
+  if (status === "warning") return "Near limit";
+  if (status === "not_configured") return "Needs plan";
+  return "On track";
+}
+
+function usageStatusClass(status: ReturnType<typeof buildBillingSnapshot>["usageStatus"]) {
+  if (status === "over_limit") return "border-destructive/30 bg-destructive/10 text-destructive";
+  if (status === "warning") return "border-warning/30 bg-warning/10 text-warning";
+  if (status === "not_configured") return "bg-muted text-muted-foreground";
+  return "border-success/30 bg-success/10 text-success";
+}
+
 function cleanupText(snapshot: ReturnType<typeof buildBillingSnapshot>) {
   if (snapshot.lifecycleStatus === "release_due") return "Cleanup is due now";
   if (snapshot.lifecycleStatus === "grace_period") return `${snapshot.trialGraceDaysRemaining ?? 0} grace days left`;
@@ -419,6 +449,14 @@ function paymentMethodText(snapshot: ReturnType<typeof buildBillingSnapshot>) {
   if (snapshot.billingStatus === "past_due") return "Payment failed";
   if (snapshot.billingStatus === "checkout_started") return "Checkout started";
   return "Stripe checkout pending";
+}
+
+function formatMoney(value: number) {
+  return new Intl.NumberFormat([], {
+    currency: "USD",
+    maximumFractionDigits: 2,
+    style: "currency",
+  }).format(value / 100);
 }
 
 function formatDate(value?: string) {

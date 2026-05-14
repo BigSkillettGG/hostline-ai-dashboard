@@ -33,19 +33,24 @@ export interface BillingSnapshot {
   billingStatus: "active" | "checkout_started" | "past_due" | "trialing" | "unpaid" | "unconfigured";
   businessType?: string;
   canProvisionTrialNumber: boolean;
+  estimatedOverageCents: number;
   includedInteractions: number;
   lifecycleDetail: string;
   lifecycleLabel: string;
   lifecycleStatus: BillingLifecycleStatus;
   monthlyPrice: number;
   overageLabel: string;
+  overageInteractions: number;
   planId?: string;
   planName: string;
   primaryNumber?: BillingPhoneNumberRecord;
+  remainingInteractions: number;
   trialDaysRemaining?: number;
   trialGraceDaysRemaining?: number;
   upgradeRequired: boolean;
+  usageDetail: string;
   usagePercent: number;
+  usageStatus: "not_configured" | "normal" | "over_limit" | "warning";
   usedInteractions: number;
 }
 
@@ -133,27 +138,43 @@ export function buildBillingSnapshot(input: {
     defaultIncludedInteractions(selectedPlanName);
   const primaryNumber = selectPrimaryPhoneNumber(input.phoneNumbers ?? []);
   const lifecycle = deriveBillingLifecycle(primaryNumber, now);
+  const overageLabel = billingAccount?.overageLabel ?? stringValue(input.draft.selectedPlanOverage) ?? defaultOverageLabel(selectedPlanName);
+  const remainingInteractions = includedInteractions > 0 ? Math.max(0, includedInteractions - usedInteractions) : 0;
+  const overageInteractions = includedInteractions > 0 ? Math.max(0, usedInteractions - includedInteractions) : 0;
+  const estimatedOverageCents = overageInteractions * (parseOverageCents(overageLabel) ?? 0);
   const usagePercent = includedInteractions > 0 ? Math.min(100, Math.round((usedInteractions / includedInteractions) * 100)) : 0;
   const billingStatus = deriveBillingStatus(billingAccount);
+  const usage = deriveUsageState({
+    estimatedOverageCents,
+    includedInteractions,
+    overageInteractions,
+    remainingInteractions,
+    usagePercent,
+  });
 
   return {
     billingAccount,
     billingStatus,
     businessType: stringValue(input.draft.businessType),
     canProvisionTrialNumber: !primaryNumber || lifecycle.status === "released",
+    estimatedOverageCents,
     includedInteractions,
     lifecycleDetail: lifecycle.detail,
     lifecycleLabel: lifecycle.label,
     lifecycleStatus: lifecycle.status,
     monthlyPrice: billingAccount?.monthlyCents ? Math.round(billingAccount.monthlyCents / 100) : readInteger(input.draft.selectedPlanMonthly) ?? defaultMonthlyPrice(selectedPlanName),
-    overageLabel: billingAccount?.overageLabel ?? stringValue(input.draft.selectedPlanOverage) ?? defaultOverageLabel(selectedPlanName),
+    overageInteractions,
+    overageLabel,
     planId: billingAccount?.planId ?? stringValue(input.draft.selectedPlanId),
     planName: billingAccount?.planName ?? selectedPlanName ?? "Unassigned",
     primaryNumber,
+    remainingInteractions,
     trialDaysRemaining: lifecycle.trialDaysRemaining,
     trialGraceDaysRemaining: lifecycle.trialGraceDaysRemaining,
     upgradeRequired: (lifecycle.status === "grace_period" || lifecycle.status === "release_due") && !isPaidBillingStatus(billingStatus),
+    usageDetail: usage.detail,
     usagePercent,
+    usageStatus: usage.status,
     usedInteractions,
   };
 }
@@ -254,6 +275,58 @@ function readInteger(value: unknown) {
   if (typeof value !== "string") return undefined;
   const parsed = Number.parseInt(value.replace(/[^\d-]/g, ""), 10);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function deriveUsageState(input: {
+  estimatedOverageCents: number;
+  includedInteractions: number;
+  overageInteractions: number;
+  remainingInteractions: number;
+  usagePercent: number;
+}) {
+  if (input.includedInteractions <= 0) {
+    return {
+      detail: "Choose a plan to set included monthly calls and chats.",
+      status: "not_configured" as const,
+    };
+  }
+
+  if (input.overageInteractions > 0) {
+    const estimate = input.estimatedOverageCents > 0
+      ? ` Estimated overage so far: ${formatCents(input.estimatedOverageCents)}.`
+      : "";
+    return {
+      detail: `${input.overageInteractions.toLocaleString()} interaction${input.overageInteractions === 1 ? "" : "s"} over the included monthly amount.${estimate}`,
+      status: "over_limit" as const,
+    };
+  }
+
+  if (input.usagePercent >= 80) {
+    return {
+      detail: `${input.remainingInteractions.toLocaleString()} interaction${input.remainingInteractions === 1 ? "" : "s"} left before overage starts.`,
+      status: "warning" as const,
+    };
+  }
+
+  return {
+    detail: `${input.remainingInteractions.toLocaleString()} included interaction${input.remainingInteractions === 1 ? "" : "s"} remaining this month.`,
+    status: "normal" as const,
+  };
+}
+
+function parseOverageCents(label: string) {
+  const match = label.match(/\$?\s*(\d+(?:\.\d+)?)/);
+  if (!match) return undefined;
+  const dollars = Number.parseFloat(match[1]);
+  return Number.isFinite(dollars) ? Math.round(dollars * 100) : undefined;
+}
+
+function formatCents(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    currency: "USD",
+    maximumFractionDigits: 2,
+    style: "currency",
+  }).format(value / 100);
 }
 
 function stringValue(value: unknown) {
