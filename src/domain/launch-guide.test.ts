@@ -32,7 +32,7 @@ describe("post-interview launch guide", () => {
       assignedNumber: "+16175550199",
       businessName: "Olive & Ember",
       draft,
-      locationId: "loc_123",
+      locationId: "78d8053b-631d-4811-939f-61f0efe1d82a",
       template: businessTemplates.restaurant,
       voiceServiceUrl: "https://voice.signalhost.ai",
     });
@@ -41,6 +41,8 @@ describe("post-interview launch guide", () => {
     expect(guide.phoneForwarding.steps.join(" ")).toContain("mobile phone");
     expect(guide.phoneForwarding.providerScript).toContain("Verizon");
     expect(guide.websiteChat.steps.join(" ")).toContain("Squarespace");
+    expect(guide.agentEmail.identity.address).toBe("ava-olive-and-ember+78d8053b-631d-4811-939f-61f0efe1d82a@agents.signalhost.ai");
+    expect(guide.launchPacketText).toContain("SignalHost email: Ava at Olive & Ember");
   });
 
   it("warns when launch information is missing", () => {
@@ -61,6 +63,7 @@ describe("post-interview launch guide", () => {
         "Add the current business main line before forwarding.",
         "Choose mobile, landline, VoIP, or not sure so setup instructions match the phone system.",
         "Assign a real SignalHost number before forwarding customer calls.",
+        "Connect a live Supabase location before publishing the SignalHost email address.",
       ]),
     );
   });

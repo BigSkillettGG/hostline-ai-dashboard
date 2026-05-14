@@ -12,6 +12,7 @@ VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 VITE_SUPABASE_DEMO_LOCATION_ID=<locations.id>
 VITE_VOICE_SERVICE_URL=https://voice.your-domain.com
+VITE_AGENT_EMAIL_DOMAIN=agents.signalhost.ai
 ```
 
 Voice service:
@@ -39,7 +40,7 @@ TWILIO_LANGUAGE=en-US
 EMAIL_PROVIDER=resend
 EMAIL_FROM=SignalHost <reports@signalhost.ai>
 EMAIL_REPLY_TO=support@signalhost.ai
-OWNER_EMAIL_INBOUND_ADDRESS=updates@inbound.signalhost.ai
+OWNER_EMAIL_INBOUND_ADDRESS=updates@agents.signalhost.ai
 RESEND_API_KEY=re_...
 RESEND_WEBHOOK_SECRET=whsec_...
 

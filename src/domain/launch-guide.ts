@@ -1,5 +1,7 @@
 import type { BusinessTemplate } from "./business-templates";
+import { buildAgentEmailIdentity, type AgentEmailIdentity } from "./agent-email";
 import { assignedDemoPhoneNumber, type OnboardingDraft } from "./onboarding";
+import { getSignalHostVoiceProfile } from "./voice-selection";
 
 export type PhoneLineType = "landline" | "mobile" | "unknown" | "voip";
 
@@ -10,6 +12,11 @@ export interface LaunchInstructionBlock {
 }
 
 export interface PostInterviewLaunchGuide {
+  agentEmail: LaunchInstructionBlock & {
+    examples: string[];
+    identity: AgentEmailIdentity;
+    setupLabel: string;
+  };
   firstTestScenarios: string[];
   launchPacketText: string;
   ownerOperatingRules: LaunchInstructionBlock;
@@ -25,6 +32,7 @@ export interface PostInterviewLaunchGuide {
 }
 
 export function buildPostInterviewLaunchGuide(input: {
+  agentEmailDomain?: string;
   appBaseUrl?: string;
   assignedNumber: string;
   businessName: string;
@@ -34,6 +42,13 @@ export function buildPostInterviewLaunchGuide(input: {
   voiceServiceUrl?: string;
 }): PostInterviewLaunchGuide {
   const phoneForwarding = buildPhoneForwardingGuide(input.draft, input.assignedNumber, input.template);
+  const agentEmail = buildAgentEmailGuide({
+    businessName: input.businessName,
+    domain: input.agentEmailDomain,
+    draft: input.draft,
+    locationId: input.locationId,
+    template: input.template,
+  });
   const websiteChat = buildWebsiteChatGuide({
     appBaseUrl: input.appBaseUrl,
     businessName: input.businessName,
@@ -44,11 +59,13 @@ export function buildPostInterviewLaunchGuide(input: {
   });
   const ownerOperatingRules = buildOwnerOperatingRules(input.template, input.draft);
   const firstTestScenarios = buildFirstTestScenarios(input.template, input.draft);
-  const readinessWarnings = buildReadinessWarnings(input.draft, input.assignedNumber);
+  const readinessWarnings = buildReadinessWarnings(input.draft, input.assignedNumber, agentEmail.identity);
 
   return {
+    agentEmail,
     firstTestScenarios,
     launchPacketText: buildLaunchPacketText({
+      agentEmail,
       businessName: input.businessName,
       firstTestScenarios,
       ownerOperatingRules,
@@ -207,6 +224,51 @@ function buildWebsiteChatGuide(input: {
   };
 }
 
+function buildAgentEmailGuide(input: {
+  businessName: string;
+  domain?: string;
+  draft: OnboardingDraft;
+  locationId?: string;
+  template: BusinessTemplate;
+}): PostInterviewLaunchGuide["agentEmail"] {
+  const voiceProfile = getSignalHostVoiceProfile(
+    draftString(input.draft.voiceProfileId) ||
+      draftString(input.draft.hostName) ||
+      draftString(input.draft.voiceGender),
+  );
+  const identity = buildAgentEmailIdentity({
+    businessName: input.businessName,
+    domain: input.domain,
+    hostName: voiceProfile.employeeName,
+    locationId: input.locationId,
+  });
+  const staffNoun = input.template.staffNoun;
+  const examples = [
+    "We're closed tomorrow for a private event.",
+    input.template.id === "restaurant"
+      ? "Tonight's special is lobster ravioli until we sell out."
+      : "We're booked until Friday, but urgent calls should still be escalated.",
+    "Send me today's urgent calls and open follow-ups.",
+  ];
+
+  return {
+    body:
+      `Use this address from a trusted owner or manager email to teach ${identity.displayName}, ask for reports, or add temporary updates. ` +
+      "It is not a paid mailbox; messages route through SignalHost and are logged with the rest of the owner commands.",
+    examples,
+    identity,
+    setupLabel: identity.routable ? "Ready after inbound email DNS is live" : "Needs live location before routing",
+    steps: [
+      `Email ${identity.address} from a trusted owner or manager email address.`,
+      `Write one clear instruction or question, the same way you would text a ${staffNoun}.`,
+      "Use temporary language for temporary facts, like 'today only', 'until Sunday', or 'for Mother's Day'.",
+      "SignalHost replies by email and records the command in Owner Assistant activity.",
+      "If the sender is not a trusted contact, SignalHost will not run the command.",
+    ],
+    title: `Email ${voiceProfile.employeeName}`,
+  };
+}
+
 function buildOwnerOperatingRules(template: BusinessTemplate, draft: OnboardingDraft): LaunchInstructionBlock {
   const appointmentText = template.id === "restaurant" ? "reservation, order, event, or guest issue" : `${template.appointmentNoun}, request, estimate, or customer issue`;
   const alertRules = draftString(draft.alertPreferenceRules);
@@ -287,12 +349,13 @@ function buildFirstTestScenarios(template: BusinessTemplate, draft: OnboardingDr
   ];
 }
 
-function buildReadinessWarnings(draft: OnboardingDraft, assignedNumber: string) {
+function buildReadinessWarnings(draft: OnboardingDraft, assignedNumber: string, agentEmail: AgentEmailIdentity) {
   const warnings: string[] = [];
   if (!String(draft.mainPhone || "").trim()) warnings.push("Add the current business main line before forwarding.");
   if (!String(draft.phoneLineType || "").trim()) warnings.push("Choose mobile, landline, VoIP, or not sure so setup instructions match the phone system.");
   if (!String(draft.websitePlatform || "").trim()) warnings.push("Add the website platform if the owner wants step-by-step chat widget instructions.");
   if (!assignedNumber || assignedNumber === assignedDemoPhoneNumber) warnings.push("Assign a real SignalHost number before forwarding customer calls.");
+  if (!agentEmail.routable) warnings.push("Connect a live Supabase location before publishing the SignalHost email address.");
   return warnings;
 }
 
@@ -346,6 +409,7 @@ After saving, open the website in a private browser window and confirm the chat 
 }
 
 function buildLaunchPacketText(input: {
+  agentEmail: PostInterviewLaunchGuide["agentEmail"];
   businessName: string;
   firstTestScenarios: string[];
   ownerOperatingRules: LaunchInstructionBlock;
@@ -367,6 +431,12 @@ function buildLaunchPacketText(input: {
     "",
     "Website snippet:",
     input.websiteChat.snippet,
+    "",
+    `SignalHost email: ${input.agentEmail.identity.displayName} <${input.agentEmail.identity.address}>`,
+    ...input.agentEmail.steps.map((step, index) => `${index + 1}. ${step}`),
+    "",
+    "Useful SignalHost email examples:",
+    ...input.agentEmail.examples.map((example, index) => `${index + 1}. ${example}`),
     "",
     "First test calls:",
     ...input.firstTestScenarios.map((step, index) => `${index + 1}. ${step}`),

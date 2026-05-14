@@ -3,6 +3,7 @@ import type { IncomingHttpHeaders } from "node:http";
 import type { VoiceServiceEnv } from "./env";
 import type { EmailDeliveryService } from "./email-delivery-service";
 import type { OwnerEmailCommandService } from "./owner-email-command-service";
+import { extractLocationIdFromAgentEmail } from "../../../src/domain/agent-email";
 
 export interface ResendInboundEmailResult {
   emailId?: string;
@@ -109,6 +110,7 @@ class DefaultResendInboundEmailService implements ResendInboundEmailService {
         eventType: event.type,
         provider: "resend",
         recipientCount: toEmails.length,
+        recipients: toEmails,
       },
       subject: email.subject ?? event.data?.subject,
       text: email.text,
@@ -158,7 +160,7 @@ class DefaultResendInboundEmailService implements ResendInboundEmailService {
     try {
       await this.emailDeliveryService.sendEmail({
         headers: buildReplyHeaders(input.email),
-        replyTo: this.inboundReplyTo ?? input.toOriginal,
+        replyTo: input.toOriginal ?? this.inboundReplyTo,
         subject: replySubject(input.email.subject),
         text: input.ownerReply,
         to,
@@ -248,10 +250,5 @@ function replySubject(subject?: string) {
 }
 
 function resolveLocationIdFromRecipients(recipients: string[]) {
-  for (const recipient of recipients) {
-    const localPart = recipient.split("@")[0] ?? "";
-    const match = localPart.match(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i);
-    if (match) return match[0];
-  }
-  return undefined;
+  return extractLocationIdFromAgentEmail(recipients);
 }

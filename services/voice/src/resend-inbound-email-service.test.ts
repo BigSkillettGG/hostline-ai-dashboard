@@ -104,7 +104,7 @@ describe("Resend inbound email service", () => {
           message_id: "<message-1@example.com>",
           subject: "Closed tomorrow",
           text: "Closed tomorrow.",
-          to: ["updates+00000000-0000-4000-8000-000000000001@inbound.signalhost.ai"],
+          to: ["ava-olive-ember+00000000-0000-4000-8000-000000000001@agents.signalhost.ai"],
         }),
         { status: 200 },
       ),
@@ -140,14 +140,14 @@ describe("Resend inbound email service", () => {
       locationId: "00000000-0000-4000-8000-000000000001",
       subject: "Closed tomorrow",
       text: "Closed tomorrow.",
-      toEmail: "updates+00000000-0000-4000-8000-000000000001@inbound.signalhost.ai",
+      toEmail: "ava-olive-ember+00000000-0000-4000-8000-000000000001@agents.signalhost.ai",
     }));
     expect(emailDeliveryService.sendEmail).toHaveBeenCalledWith(expect.objectContaining({
       headers: {
         "In-Reply-To": "<message-1@example.com>",
         References: "<message-1@example.com>",
       },
-      replyTo: "updates@inbound.signalhost.ai",
+      replyTo: "ava-olive-ember+00000000-0000-4000-8000-000000000001@agents.signalhost.ai",
       subject: "Re: Closed tomorrow",
       text: "Got it. I saved that live update.",
       to: "owner@example.com",

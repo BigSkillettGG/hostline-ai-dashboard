@@ -13,6 +13,7 @@ VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 VITE_SUPABASE_DEMO_LOCATION_ID=<temporary-active-location-id>
 VITE_VOICE_SERVICE_URL=https://voice.your-domain.com
+VITE_AGENT_EMAIL_DOMAIN=agents.signalhost.ai
 ```
 
 Keep the Supabase service-role key out of the dashboard. Browser requests should use the publishable key plus the signed-in user's access token so RLS applies.
@@ -46,7 +47,7 @@ OWNER_REPORT_WEBHOOK_URL=https://hooks.example.com/signalhost-owner-report  # op
 EMAIL_PROVIDER=resend
 EMAIL_FROM=SignalHost <reports@signalhost.ai>
 EMAIL_REPLY_TO=support@signalhost.ai
-OWNER_EMAIL_INBOUND_ADDRESS=updates@inbound.signalhost.ai
+OWNER_EMAIL_INBOUND_ADDRESS=updates@agents.signalhost.ai
 RESEND_API_KEY=re_...
 RESEND_WEBHOOK_SECRET=whsec_...
 REQUIRE_TWILIO_SIGNATURE=true

@@ -18,8 +18,8 @@ export const onboardingFeatureCoverage: OnboardingFeatureCoverage[] = [
     allVerticals: true,
     feature: "Owner identity and trusted command surface",
     fieldIds: ["ownerName", "ownerPhone", "ownerEmail", "additionalTrustedContacts", "knowledgeApprovalPolicy"],
-    runtimeTieBack: "trusted contacts, owner-assistant commands, knowledge approvals, and alert permissions",
-    launchTieBack: "post-launch instructions for teaching SignalHost and reviewing the first calls",
+    runtimeTieBack: "trusted contacts, owner-assistant commands by dashboard, phone, SMS, and agent email, knowledge approvals, and alert permissions",
+    launchTieBack: "post-launch instructions for emailing, texting, calling, teaching SignalHost, and reviewing the first calls",
   },
   {
     allVerticals: true,
@@ -80,7 +80,7 @@ export const onboardingFeatureCoverage: OnboardingFeatureCoverage[] = [
     allVerticals: true,
     feature: "Phone provisioning and website chat launch",
     fieldIds: ["mainPhone", "phoneLineType", "phoneProvider", "forwardingMode", "assignedSignalHostNumber", "websiteUrl", "websitePlatform", "websiteAdminContact", "firstTestCall"],
-    runtimeTieBack: "Twilio number routing, forwarding setup, website chat snippet, and launch-readiness checks",
-    launchTieBack: "post-interview phone instructions, provider script, website snippet, and first test checklist",
+    runtimeTieBack: "Twilio number routing, forwarding setup, agent email routing, website chat snippet, and launch-readiness checks",
+    launchTieBack: "post-interview phone instructions, SignalHost email address, provider script, website snippet, and first test checklist",
   },
 ];

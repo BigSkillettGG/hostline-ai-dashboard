@@ -17,6 +17,7 @@ import {
   Lightbulb,
   ListChecks,
   Loader2,
+  Mail,
   MessageCircle,
   PhoneForwarded,
   Rocket,
@@ -161,6 +162,7 @@ export default function Onboarding() {
   const launchGuide = useMemo(
     () =>
       buildPostInterviewLaunchGuide({
+        agentEmailDomain: import.meta.env.VITE_AGENT_EMAIL_DOMAIN,
         appBaseUrl: resolvePublicAppBaseUrl(),
         assignedNumber,
         businessName,
@@ -1044,7 +1046,7 @@ function LaunchCommandCenter({
             </CardTitle>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
               Everything the owner needs after the interview: the phone number, forwarding steps, website chat snippet,
-              first test calls, and how to manage SignalHost after go-live.
+              SignalHost email address, first test calls, and how to manage SignalHost after go-live.
             </p>
           </div>
           <Button
@@ -1197,6 +1199,61 @@ function LaunchCommandCenter({
               <p className="mt-2 line-clamp-5 whitespace-pre-line text-xs leading-5 text-muted-foreground">
                 {guide.websiteChat.handoffText}
               </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-md border border-border p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <Mail className="h-4 w-4 text-primary" />
+                {guide.agentEmail.title}
+              </div>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">{guide.agentEmail.body}</p>
+            </div>
+            <Badge variant={guide.agentEmail.identity.routable ? "secondary" : "outline"}>{guide.agentEmail.setupLabel}</Badge>
+          </div>
+
+          <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+            <div className="rounded-md bg-muted/30 p-3">
+              <div className="text-xs font-medium text-muted-foreground">SignalHost email</div>
+              <div className="mt-1 text-lg font-semibold break-all">{guide.agentEmail.identity.address}</div>
+              <div className="mt-1 text-xs text-muted-foreground">{guide.agentEmail.identity.displayName}</div>
+              <Button
+                className="mt-3"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  void navigator.clipboard?.writeText(guide.agentEmail.identity.address);
+                  toast.success("SignalHost email copied");
+                }}
+              >
+                <Copy className="mr-1.5 h-3.5 w-3.5" />
+                Copy email
+              </Button>
+            </div>
+
+            <div>
+              <InstructionList steps={guide.agentEmail.steps} />
+              <div className="mt-4 rounded-md border border-primary/20 bg-primary/5 p-3">
+                <div className="text-xs font-semibold uppercase text-muted-foreground">Good first emails to try</div>
+                <div className="mt-2 grid gap-2 md:grid-cols-3">
+                  {guide.agentEmail.examples.map((example) => (
+                    <button
+                      className="rounded-md border border-border bg-background p-2 text-left text-xs leading-5 transition hover:border-primary/40 hover:bg-primary/5"
+                      key={example}
+                      onClick={() => {
+                        void navigator.clipboard?.writeText(example);
+                        toast.success("Example copied");
+                      }}
+                      type="button"
+                    >
+                      {example}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </div>
