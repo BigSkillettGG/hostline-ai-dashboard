@@ -76,17 +76,23 @@ export default function Billing() {
     queryKey: ["billing-plans", billingBusinessType],
     staleTime: 5 * 60_000,
   });
+  const serviceUsage = billingQuery.data?.usage;
   const callsThisMonth = useMemo(() => {
+    if (typeof serviceUsage?.usedInteractions === "number") return serviceUsage.usedInteractions;
     const calls = callsQuery.data ?? demoCalls;
     const monthKey = new Date().toISOString().slice(0, 7);
     return calls.filter((call) => call.time.slice(0, 7) === monthKey).length;
-  }, [callsQuery.data]);
+  }, [callsQuery.data, serviceUsage?.usedInteractions]);
   const snapshot = buildBillingSnapshot({
     billingAccount: billingQuery.data?.account,
     callsThisMonth,
     draft,
     phoneNumbers: phoneNumbersQuery.data,
   });
+  const usageWindowLabel = serviceUsage ? "Calls and chats this billing period" : "Calls and chats this month";
+  const usageWindowDetail = serviceUsage?.periodStart
+    ? formatBillingPeriod(serviceUsage.periodStart, serviceUsage.periodEnd)
+    : undefined;
   const planOptions = useMemo(
     () => planQuery.data?.plans.length ? planQuery.data.plans : fallbackBillingPlans(billingBusinessType),
     [billingBusinessType, planQuery.data?.plans],
@@ -308,7 +314,7 @@ export default function Billing() {
 
                 <div>
                   <div className="mb-1.5 flex items-center justify-between text-sm">
-                    <span>Calls and chats this month</span>
+                    <span>{usageWindowLabel}</span>
                     <span className="tabular-nums text-muted-foreground">
                       {snapshot.usedInteractions.toLocaleString()} / {snapshot.includedInteractions.toLocaleString()}
                     </span>
@@ -323,6 +329,9 @@ export default function Billing() {
                         <span className="text-xs text-muted-foreground">
                           Overage starts after {snapshot.includedInteractions.toLocaleString()} calls or chats.
                         </span>
+                        {usageWindowDetail ? (
+                          <span className="text-xs text-muted-foreground">{usageWindowDetail}</span>
+                        ) : null}
                       </div>
                       <p className="mt-1 text-sm leading-6 text-muted-foreground">{snapshot.usageDetail}</p>
                     </div>
@@ -765,6 +774,15 @@ function normalizeBusinessTypeForPlans(value: string): BusinessType {
     return value;
   }
   return "restaurant";
+}
+
+function formatBillingPeriod(periodStart?: string, periodEnd?: string) {
+  if (!periodStart && !periodEnd) return undefined;
+  const startLabel = formatDate(periodStart);
+  const endLabel = formatDate(periodEnd);
+  if (periodStart && periodEnd) return `${startLabel} to ${endLabel}`;
+  if (periodStart) return `Since ${startLabel}`;
+  return `Until ${endLabel}`;
 }
 
 function formatDate(value?: string) {

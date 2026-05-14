@@ -138,6 +138,17 @@ function createBillingService(
       return {
         account: account ? { cancelAtPeriodEnd: false, organizationId: "org_1", status: "unknown", ...account } : null,
         configured: true,
+        usage: {
+          estimatedOverageCents: 0,
+          includedInteractions: 0,
+          overageInteractions: 0,
+          periodStart: "2026-05-01T00:00:00.000Z",
+          remainingInteractions: 0,
+          status: "not_configured",
+          usedInteractions: 0,
+          usageDetail: "Choose a plan to set included monthly calls and chats.",
+          usagePercent: 0,
+        },
       };
     },
     async handleWebhook() {

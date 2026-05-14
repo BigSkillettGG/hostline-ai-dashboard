@@ -1,7 +1,7 @@
 import { createHmac } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createBillingService } from "./billing-service";
-import type { BillingStore } from "./billing-store";
+import type { BillingAccountRecord, BillingStore } from "./billing-store";
 import type { VoiceServiceEnv } from "./env";
 
 const env: VoiceServiceEnv = {
@@ -157,18 +157,56 @@ describe("billing service", () => {
       reason: "stripe_subscription_active",
     });
   });
+
+  it("returns authoritative billing-period usage with overage estimates", async () => {
+    const store = createStore({
+      account: {
+        cancelAtPeriodEnd: false,
+        currentPeriodEnd: "2026-06-14T00:00:00.000Z",
+        currentPeriodStart: "2026-05-14T00:00:00.000Z",
+        includedInteractions: 100,
+        organizationId: "org_123",
+        overageLabel: "$0.40 per extra call or chat",
+        planName: "Dispatch",
+        status: "active",
+      },
+      usedInteractions: 112,
+    });
+    const service = createBillingService(env, store);
+
+    const status = await service.getStatus("loc_123");
+
+    expect(status.usage).toMatchObject({
+      estimatedOverageCents: 480,
+      includedInteractions: 100,
+      overageInteractions: 12,
+      periodEnd: "2026-06-14T00:00:00.000Z",
+      periodStart: "2026-05-14T00:00:00.000Z",
+      remainingInteractions: 0,
+      status: "over_limit",
+      usedInteractions: 112,
+      usagePercent: 100,
+    });
+    expect(status.usage.usageDetail).toContain("12 interactions over");
+  });
 });
 
-function createStore(): BillingStore & { upserts: unknown[] } {
+function createStore(input: {
+  account?: BillingAccountRecord | null;
+  usedInteractions?: number;
+} = {}): BillingStore & { upserts: unknown[] } {
   const upserts: unknown[] = [];
   return {
     configured: true,
     upserts,
     async getAccountByLocation() {
-      return null;
+      return input.account ?? null;
     },
     async getLocationOrganizationId() {
       return "org_123";
+    },
+    async getUsageByLocation() {
+      return { usedInteractions: input.usedInteractions ?? 0 };
     },
     async upsertAccount(input) {
       upserts.push(input);

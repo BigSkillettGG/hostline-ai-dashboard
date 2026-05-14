@@ -42,6 +42,11 @@ export interface BillingStore {
   configured: boolean;
   getAccountByLocation(locationId?: string): Promise<BillingAccountRecord | null>;
   getLocationOrganizationId(locationId?: string): Promise<string | null>;
+  getUsageByLocation(input: {
+    locationId?: string;
+    periodEnd?: string;
+    periodStart: string;
+  }): Promise<{ usedInteractions: number }>;
   upsertAccount(input: BillingAccountUpdate & { organizationId: string }): Promise<void>;
 }
 
@@ -66,6 +71,10 @@ class NoopBillingStore implements BillingStore {
 
   async getLocationOrganizationId(): Promise<string | null> {
     return null;
+  }
+
+  async getUsageByLocation(): Promise<{ usedInteractions: number }> {
+    return { usedInteractions: 0 };
   }
 
   async upsertAccount(input: BillingAccountUpdate & { organizationId: string }): Promise<void> {
@@ -119,6 +128,24 @@ class SupabaseBillingStore implements BillingStore {
     );
 
     return rows[0]?.organization_id ?? null;
+  }
+
+  async getUsageByLocation(input: { locationId?: string; periodEnd?: string; periodStart: string }) {
+    const normalizedLocationId = normalizeLocationId(input.locationId) ?? this.defaultLocationId;
+    if (!normalizedLocationId) return { usedInteractions: 0 };
+
+    const params = new URLSearchParams({
+      location_id: `eq.${normalizedLocationId}`,
+      select: "id",
+      started_at: `gte.${input.periodStart}`,
+    });
+    if (input.periodEnd) {
+      params.append("started_at", `lt.${input.periodEnd}`);
+    }
+
+    return {
+      usedInteractions: await this.count("calls", params),
+    };
   }
 
   async upsertAccount(input: BillingAccountUpdate & { organizationId: string }) {
@@ -184,6 +211,31 @@ class SupabaseBillingStore implements BillingStore {
 
     const text = await response.text();
     return text ? (JSON.parse(text) as T) : ([] as T);
+  }
+
+  private async count(table: string, params: URLSearchParams): Promise<number> {
+    const response = await fetch(`${this.restUrl}/${table}?${params.toString()}`, {
+      headers: buildSupabaseServiceHeaders(this.key, {
+        Prefer: "count=exact",
+        Range: "0-0",
+        "Range-Unit": "items",
+      }),
+      method: "GET",
+    });
+
+    if (!response.ok && response.status !== 206) {
+      const body = await response.text();
+      throw new Error(`Supabase count ${table} failed: ${response.status} ${body}`);
+    }
+
+    const contentRange = response.headers.get("content-range");
+    const total = contentRange?.split("/").at(-1);
+    const parsed = Number.parseInt(total ?? "", 10);
+    if (Number.isFinite(parsed)) return parsed;
+
+    const text = await response.text();
+    const rows = text ? JSON.parse(text) as unknown[] : [];
+    return Array.isArray(rows) ? rows.length : 0;
   }
 }
 

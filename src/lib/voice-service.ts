@@ -170,6 +170,20 @@ export interface BillingAccountStatus {
   updatedAt?: string;
 }
 
+export interface BillingUsageStatus {
+  estimatedOverageCents: number;
+  includedInteractions: number;
+  overageInteractions: number;
+  overageLabel?: string;
+  periodEnd?: string;
+  periodStart: string;
+  remainingInteractions: number;
+  status: "near_limit" | "normal" | "not_configured" | "over_limit";
+  usedInteractions: number;
+  usageDetail: string;
+  usagePercent: number;
+}
+
 export interface BillingPlanOption {
   businessType: string;
   includedInteractions: number;
@@ -488,7 +502,11 @@ export async function fetchBillingStatus(locationId = getActiveLocationId()) {
     throw new Error(body || `Billing status failed with ${response.status}.`);
   }
 
-  return (await response.json()) as { account: BillingAccountStatus | null; configured: boolean };
+  return (await response.json()) as {
+    account: BillingAccountStatus | null;
+    configured: boolean;
+    usage?: BillingUsageStatus;
+  };
 }
 
 export async function fetchBillingPlans(businessType?: string) {

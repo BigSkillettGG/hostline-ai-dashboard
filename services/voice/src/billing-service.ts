@@ -25,8 +25,26 @@ export interface BillingService {
   configured: boolean;
   createCheckoutSession(input: CreateCheckoutSessionInput, headers?: IncomingHttpHeaders): Promise<{ id: string; url: string }>;
   createCustomerPortalSession(input: CreateCustomerPortalInput, headers?: IncomingHttpHeaders): Promise<{ id: string; url: string }>;
-  getStatus(locationId?: string): Promise<{ account: Awaited<ReturnType<BillingStore["getAccountByLocation"]>>; configured: boolean }>;
+  getStatus(locationId?: string): Promise<{
+    account: Awaited<ReturnType<BillingStore["getAccountByLocation"]>>;
+    configured: boolean;
+    usage: BillingUsageStatus;
+  }>;
   handleWebhook(input: { rawBody: string; signature?: string }): Promise<{ handled: boolean; type?: string }>;
+}
+
+export interface BillingUsageStatus {
+  estimatedOverageCents: number;
+  includedInteractions: number;
+  overageInteractions: number;
+  overageLabel?: string;
+  periodEnd?: string;
+  periodStart: string;
+  remainingInteractions: number;
+  status: "near_limit" | "normal" | "not_configured" | "over_limit";
+  usedInteractions: number;
+  usageDetail: string;
+  usagePercent: number;
 }
 
 export function createBillingService(
@@ -51,9 +69,23 @@ class StripeBillingService implements BillingService {
   }
 
   async getStatus(locationId?: string) {
+    const account = await this.store.getAccountByLocation(locationId);
+    const periodStart = account?.currentPeriodStart ?? firstDayOfCurrentMonthIso();
+    const usage = await this.store.getUsageByLocation({
+      locationId,
+      periodEnd: account?.currentPeriodEnd,
+      periodStart,
+    });
+
     return {
-      account: await this.store.getAccountByLocation(locationId),
+      account,
       configured: this.configured,
+      usage: buildBillingUsageStatus({
+        account,
+        periodEnd: account?.currentPeriodEnd,
+        periodStart,
+        usedInteractions: usage.usedInteractions,
+      }),
     };
   }
 
@@ -423,4 +455,100 @@ function stringId(value?: string | { id?: string } | null) {
 function integerMetadata(value?: string) {
   const parsed = Number.parseInt(value ?? "", 10);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function buildBillingUsageStatus({
+  account,
+  periodEnd,
+  periodStart,
+  usedInteractions,
+}: {
+  account: Awaited<ReturnType<BillingStore["getAccountByLocation"]>>;
+  periodEnd?: string;
+  periodStart: string;
+  usedInteractions: number;
+}): BillingUsageStatus {
+  const includedInteractions = Math.max(0, Math.round(account?.includedInteractions ?? 0));
+  const normalizedUsed = Math.max(0, Math.round(usedInteractions));
+  const overageInteractions = includedInteractions > 0 ? Math.max(0, normalizedUsed - includedInteractions) : 0;
+  const remainingInteractions = includedInteractions > 0 ? Math.max(0, includedInteractions - normalizedUsed) : 0;
+  const usagePercent = includedInteractions > 0 ? Math.min(100, Math.round((normalizedUsed / includedInteractions) * 100)) : 0;
+  const overageCents = parseOverageCents(account?.overageLabel);
+  const estimatedOverageCents = overageInteractions * (overageCents ?? 0);
+  const status = getUsageStatus({
+    includedInteractions,
+    overageInteractions,
+    usagePercent,
+  });
+
+  return {
+    estimatedOverageCents,
+    includedInteractions,
+    overageInteractions,
+    overageLabel: account?.overageLabel,
+    periodEnd,
+    periodStart,
+    remainingInteractions,
+    status,
+    usedInteractions: normalizedUsed,
+    usageDetail: usageDetail({
+      estimatedOverageCents,
+      includedInteractions,
+      overageInteractions,
+      remainingInteractions,
+      usagePercent,
+    }),
+    usagePercent,
+  };
+}
+
+function getUsageStatus(input: {
+  includedInteractions: number;
+  overageInteractions: number;
+  usagePercent: number;
+}): BillingUsageStatus["status"] {
+  if (input.includedInteractions <= 0) return "not_configured";
+  if (input.overageInteractions > 0) return "over_limit";
+  if (input.usagePercent >= 80) return "near_limit";
+  return "normal";
+}
+
+function usageDetail(input: {
+  estimatedOverageCents: number;
+  includedInteractions: number;
+  overageInteractions: number;
+  remainingInteractions: number;
+  usagePercent: number;
+}) {
+  if (input.includedInteractions <= 0) return "Choose a plan to set included monthly calls and chats.";
+  if (input.overageInteractions > 0) {
+    const estimate = input.estimatedOverageCents > 0
+      ? ` Estimated overage so far: ${formatCents(input.estimatedOverageCents)}.`
+      : "";
+    return `${input.overageInteractions.toLocaleString()} interaction${input.overageInteractions === 1 ? "" : "s"} over the included billing-period amount.${estimate}`;
+  }
+  if (input.usagePercent >= 80) {
+    return `${input.remainingInteractions.toLocaleString()} interaction${input.remainingInteractions === 1 ? "" : "s"} left before overage starts.`;
+  }
+  return `${input.remainingInteractions.toLocaleString()} included interaction${input.remainingInteractions === 1 ? "" : "s"} remaining in this billing period.`;
+}
+
+function parseOverageCents(label?: string) {
+  const match = label?.match(/\$?\s*(\d+(?:\.\d+)?)/);
+  if (!match) return undefined;
+  const dollars = Number.parseFloat(match[1]);
+  return Number.isFinite(dollars) ? Math.round(dollars * 100) : undefined;
+}
+
+function formatCents(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    currency: "USD",
+    maximumFractionDigits: 2,
+    style: "currency",
+  }).format(value / 100);
+}
+
+function firstDayOfCurrentMonthIso() {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
 }
