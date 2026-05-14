@@ -55,7 +55,7 @@ There are 12 production workstreams:
 - Billing now shows plan, trial number status, usage, cleanup timing, and trial guardrails, while the voice backend blocks duplicate active trial-number purchases for a location.
 - Stripe checkout, customer portal, signed webhook handling, and `billing_accounts` subscription persistence are now wired through the voice service using a server-side plan catalog.
 - The voice service billing status now returns authoritative billing-period usage from Supabase calls/chats, including remaining interactions, overage count, and estimated overage dollars.
-- Calls now have a derived interaction-status foundation in the dashboard: follow-up need, urgency, value tier, knowledge-gap signal, owner report bucket, and recommended next action. The schema baseline includes matching persisted columns for the next migration, but the dashboard derives them safely until the live database is updated.
+- Calls now have a derived interaction-status foundation in the dashboard: follow-up need, urgency, value tier, knowledge-gap signal, owner report bucket, and recommended next action. The live schema and voice service now persist those fields on completed calls, staff-review orders, reservation requests, and customer requests.
 - The Dashboard now generates a daily narrative owner brief from live calls, chats, orders, reservations, staff tasks, and interaction-status signals, with copy-ready text for future email/SMS delivery.
 - The voice service can now generate and upsert the same daily owner brief into `owner_reports`, giving us the backend foundation for scheduled report delivery.
 - Owner reports can now be delivered through SMS, direct email, or an owner-report webhook using `POST /owner-reports/daily/deliver`.

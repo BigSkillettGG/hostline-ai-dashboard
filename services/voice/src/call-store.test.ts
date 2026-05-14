@@ -169,6 +169,8 @@ describe("Supabase call store", () => {
         method: "PATCH",
       }),
     );
+    expect(String(fetchMock.mock.calls[3]?.[1]?.body)).toContain('"workflow_status":"resolved"');
+    expect(String(fetchMock.mock.calls[3]?.[1]?.body)).toContain('"owner_report_bucket":"revenue_opportunity"');
   });
 
   it("creates a staff follow-up task", async () => {
@@ -247,6 +249,8 @@ describe("Supabase call store", () => {
         method: "PATCH",
       }),
     );
+    expect(String(fetchMock.mock.calls[2]?.[1]?.body)).toContain('"follow_up_needed":true');
+    expect(String(fetchMock.mock.calls[2]?.[1]?.body)).toContain('"owner_report_bucket":"open_follow_up"');
   });
 
   it("falls back to staff tasks when customer request table is not migrated yet", async () => {
@@ -329,5 +333,7 @@ describe("Supabase call store", () => {
         method: "PATCH",
       }),
     );
+    expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toContain('"workflow_status":"escalated"');
+    expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toContain('"knowledge_gap":true');
   });
 });

@@ -15,7 +15,7 @@ SignalHost now derives operational status for every call or chat before the owne
 
 ## Current Behavior
 
-The dashboard derives these signals from existing call fields, transcript text, call summaries, escalation state, linked orders/reservations, and review feedback. This avoids breaking the live Supabase database while we are still moving fast.
+The dashboard derives these signals from existing call fields, transcript text, call summaries, escalation state, linked orders/reservations, and review feedback. Live calls now also persist the same core fields at completion so owner reports, filters, and follow-up queues can query them directly.
 
 ## Persistence Path
 
@@ -30,4 +30,4 @@ The baseline Supabase schema now includes matching `calls` columns:
 - `recommended_action`
 - `tags`
 
-Next migration step: add those columns to the live Lovable Supabase database, then update the voice service to write the derived insight at call completion and update it when owner feedback is saved.
+The live migration adds those columns to Lovable Supabase. The voice service writes the persisted insight when calls complete and when it creates order, reservation, or customer-request records. Owner feedback can continue to re-derive the dashboard view until a later slice writes feedback-driven recalculations back to Supabase.

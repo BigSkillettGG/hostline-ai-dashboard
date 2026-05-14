@@ -401,15 +401,23 @@ export type Database = {
           duration_seconds: number
           external_call_sid: string | null
           external_session_id: string | null
+          follow_up_needed: boolean
           id: string
           intent: Database["public"]["Enums"]["call_intent"]
+          knowledge_gap: boolean
           location_id: string
           outcome: string
+          owner_report_bucket: string
           recording_url: string | null
+          recommended_action: string | null
           started_at: string
           status: Database["public"]["Enums"]["call_status"]
           summary: string | null
+          tags: Json
           twilio_payload: Json
+          urgency: string
+          value_tier: string
+          workflow_status: string
         }
         Insert: {
           caller_name?: string | null
@@ -419,15 +427,23 @@ export type Database = {
           duration_seconds?: number
           external_call_sid?: string | null
           external_session_id?: string | null
+          follow_up_needed?: boolean
           id?: string
           intent?: Database["public"]["Enums"]["call_intent"]
+          knowledge_gap?: boolean
           location_id: string
           outcome?: string
+          owner_report_bucket?: string
           recording_url?: string | null
+          recommended_action?: string | null
           started_at?: string
           status?: Database["public"]["Enums"]["call_status"]
           summary?: string | null
+          tags?: Json
           twilio_payload?: Json
+          urgency?: string
+          value_tier?: string
+          workflow_status?: string
         }
         Update: {
           caller_name?: string | null
@@ -437,15 +453,23 @@ export type Database = {
           duration_seconds?: number
           external_call_sid?: string | null
           external_session_id?: string | null
+          follow_up_needed?: boolean
           id?: string
           intent?: Database["public"]["Enums"]["call_intent"]
+          knowledge_gap?: boolean
           location_id?: string
           outcome?: string
+          owner_report_bucket?: string
           recording_url?: string | null
+          recommended_action?: string | null
           started_at?: string
           status?: Database["public"]["Enums"]["call_status"]
           summary?: string | null
+          tags?: Json
           twilio_payload?: Json
+          urgency?: string
+          value_tier?: string
+          workflow_status?: string
         }
         Relationships: [
           {

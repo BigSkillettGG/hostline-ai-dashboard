@@ -2,6 +2,7 @@ import type { VoiceServiceEnv } from "./env";
 import type { CapturedOrderItem } from "./order-intake";
 import type { CapturedReservationRequest } from "./reservation-intake";
 import type { CustomerRequestKind } from "../../../src/domain/business-links";
+import { buildPersistedCallInsightPatch } from "./call-insight";
 import { buildSupabaseServiceHeaders } from "./supabase-headers";
 import type { ConversationRelaySetupMessage, TranscriptRole } from "./types";
 
@@ -29,11 +30,14 @@ export interface AddTranscriptTurnInput {
 
 export interface CompleteCallInput {
   callId?: string;
+  channel?: "phone" | "web_chat";
   confidence?: number;
   durationSeconds: number;
   intent?: "order" | "reservation" | "faq" | "hours" | "other";
+  orderId?: string;
   outcome?: string;
   recordingUrl?: string;
+  reservationId?: string;
   summary?: string;
   status?: "new" | "reviewed" | "needs_review" | "resolved";
 }
@@ -283,6 +287,16 @@ class SupabaseCallStore implements CallStore {
     if (input.intent) body.intent = input.intent;
     if (input.outcome) body.outcome = input.outcome;
     if (input.recordingUrl) body.recording_url = input.recordingUrl;
+    Object.assign(body, buildPersistedCallInsightPatch({
+      channel: input.channel,
+      confidence: input.confidence,
+      intent: input.intent,
+      orderId: input.orderId,
+      outcome: input.outcome,
+      reservationId: input.reservationId,
+      status: input.status ?? "resolved",
+      summary: input.summary,
+    }));
 
     await this.request("calls", {
       body,
@@ -379,11 +393,22 @@ class SupabaseCallStore implements CallStore {
     });
 
     if (input.callId) {
+      const intent = input.requestType === "reservation" ? "reservation" : input.requestType === "order" ? "order" : "other";
+      const status = "new";
+      const insightSummary = `${title}. Type: ${input.requestType}. Priority: ${input.priority ?? "normal"}. ${summary}`;
       await this.request("calls", {
         body: {
-          intent: input.requestType === "reservation" ? "reservation" : input.requestType === "order" ? "order" : "other",
+          intent,
           outcome: "customer_request_created",
+          status,
           summary,
+          ...buildPersistedCallInsightPatch({
+            confidence: input.priority === "urgent" ? 65 : input.priority === "high" ? 72 : 80,
+            intent,
+            outcome: "customer_request_created",
+            status,
+            summary: insightSummary,
+          }),
         },
         method: "PATCH",
         query: `id=eq.${encodeURIComponent(input.callId)}`,
@@ -446,6 +471,13 @@ class SupabaseCallStore implements CallStore {
         intent: "order",
         outcome: "order_placed",
         summary: `Staff-review pickup order created with ${input.items.length} item type${input.items.length === 1 ? "" : "s"}.`,
+        ...buildPersistedCallInsightPatch({
+          intent: "order",
+          orderId,
+          outcome: "order_placed",
+          status: "resolved",
+          summary: `Staff-review pickup order created with ${input.items.length} item type${input.items.length === 1 ? "" : "s"}.`,
+        }),
       },
       method: "PATCH",
       query: `id=eq.${encodeURIComponent(input.callId)}`,
@@ -487,10 +519,22 @@ class SupabaseCallStore implements CallStore {
       body: {
         intent: "reservation",
         outcome: input.status === "confirmed" ? "reservation_booked" : "escalated",
+        status: input.status === "confirmed" ? "resolved" : "needs_review",
         summary:
           input.status === "confirmed"
             ? `${providerLabel(input.provider)} reservation confirmed for ${input.partySize} on ${input.date} at ${input.time}.`
             : `Staff-confirmed reservation request created for ${input.partySize} on ${input.date} at ${input.time}.`,
+        ...buildPersistedCallInsightPatch({
+          confidence: input.confidence,
+          intent: "reservation",
+          outcome: input.status === "confirmed" ? "reservation_booked" : "escalated",
+          reservationId,
+          status: input.status === "confirmed" ? "resolved" : "needs_review",
+          summary:
+            input.status === "confirmed"
+              ? `${providerLabel(input.provider)} reservation confirmed for ${input.partySize} on ${input.date} at ${input.time}.`
+              : `Staff-confirmed reservation request created for ${input.partySize} on ${input.date} at ${input.time}.`,
+        }),
       },
       method: "PATCH",
       query: `id=eq.${encodeURIComponent(input.callId)}`,
