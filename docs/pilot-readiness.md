@@ -91,3 +91,22 @@ If the call appears without transcript turns, inspect Render logs for OpenAI Rea
 If transcript exists but reporting signal is missing, confirm the latest Supabase migration for persisted interaction insight columns has been applied.
 
 If feedback saves but reporting does not change, refresh `/super/calls` and check for errors from `updateCallInteractionInsightInSupabase`.
+
+## Lovable Supabase Migration Prompt
+
+If Lovable is managing Supabase and the pilot card says reporting, workflow status, or phone-number lifecycle fields are missing, paste this into Lovable:
+
+```text
+Please apply the pending Supabase migrations from the repository to the connected Lovable Supabase project.
+
+Start with these two migrations because the live pilot needs them:
+
+1. supabase/migrations/20260513112000_phone_number_lifecycle_and_sms_threads.sql
+2. supabase/migrations/20260514133000_call_interaction_status.sql
+
+After applying them, verify:
+
+- public.phone_numbers has trial_started_at, trial_ends_at, trial_grace_ends_at, released_at, release_reason, sms_webhook_url, and provisioning_source.
+- public.calls has workflow_status, urgency, value_tier, follow_up_needed, knowledge_gap, owner_report_bucket, recommended_action, and tags.
+- The Olive & Ember location still exists with id 78d8053b-631d-4811-939f-61f0efe1d82a.
+```

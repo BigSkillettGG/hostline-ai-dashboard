@@ -287,7 +287,8 @@ class SupabaseCallStore implements CallStore {
     if (input.intent) body.intent = input.intent;
     if (input.outcome) body.outcome = input.outcome;
     if (input.recordingUrl) body.recording_url = input.recordingUrl;
-    Object.assign(body, buildPersistedCallInsightPatch({
+
+    await this.patchCallWithInsightFallback(input.callId, body, {
       channel: input.channel,
       confidence: input.confidence,
       intent: input.intent,
@@ -296,12 +297,6 @@ class SupabaseCallStore implements CallStore {
       reservationId: input.reservationId,
       status: input.status ?? "resolved",
       summary: input.summary,
-    }));
-
-    await this.request("calls", {
-      body,
-      method: "PATCH",
-      query: `id=eq.${encodeURIComponent(input.callId)}`,
     });
   }
 
@@ -396,22 +391,17 @@ class SupabaseCallStore implements CallStore {
       const intent = input.requestType === "reservation" ? "reservation" : input.requestType === "order" ? "order" : "other";
       const status = "new";
       const insightSummary = `${title}. Type: ${input.requestType}. Priority: ${input.priority ?? "normal"}. ${summary}`;
-      await this.request("calls", {
-        body: {
-          intent,
-          outcome: "customer_request_created",
-          status,
-          summary,
-          ...buildPersistedCallInsightPatch({
-            confidence: input.priority === "urgent" ? 65 : input.priority === "high" ? 72 : 80,
-            intent,
-            outcome: "customer_request_created",
-            status,
-            summary: insightSummary,
-          }),
-        },
-        method: "PATCH",
-        query: `id=eq.${encodeURIComponent(input.callId)}`,
+      await this.patchCallWithInsightFallback(input.callId, {
+        intent,
+        outcome: "customer_request_created",
+        status,
+        summary,
+      }, {
+        confidence: input.priority === "urgent" ? 65 : input.priority === "high" ? 72 : 80,
+        intent,
+        outcome: "customer_request_created",
+        status,
+        summary: insightSummary,
       });
     }
 
@@ -466,21 +456,16 @@ class SupabaseCallStore implements CallStore {
       method: "POST",
     });
 
-    await this.request("calls", {
-      body: {
-        intent: "order",
-        outcome: "order_placed",
-        summary: `Staff-review pickup order created with ${input.items.length} item type${input.items.length === 1 ? "" : "s"}.`,
-        ...buildPersistedCallInsightPatch({
-          intent: "order",
-          orderId,
-          outcome: "order_placed",
-          status: "resolved",
-          summary: `Staff-review pickup order created with ${input.items.length} item type${input.items.length === 1 ? "" : "s"}.`,
-        }),
-      },
-      method: "PATCH",
-      query: `id=eq.${encodeURIComponent(input.callId)}`,
+    await this.patchCallWithInsightFallback(input.callId, {
+      intent: "order",
+      outcome: "order_placed",
+      summary: `Staff-review pickup order created with ${input.items.length} item type${input.items.length === 1 ? "" : "s"}.`,
+    }, {
+      intent: "order",
+      orderId,
+      outcome: "order_placed",
+      status: "resolved",
+      summary: `Staff-review pickup order created with ${input.items.length} item type${input.items.length === 1 ? "" : "s"}.`,
     });
 
     return { orderId };
@@ -515,32 +500,52 @@ class SupabaseCallStore implements CallStore {
     const reservationId = rows?.[0]?.id;
     if (!reservationId) return {};
 
-    await this.request("calls", {
-      body: {
-        intent: "reservation",
-        outcome: input.status === "confirmed" ? "reservation_booked" : "escalated",
-        status: input.status === "confirmed" ? "resolved" : "needs_review",
-        summary:
-          input.status === "confirmed"
-            ? `${providerLabel(input.provider)} reservation confirmed for ${input.partySize} on ${input.date} at ${input.time}.`
-            : `Staff-confirmed reservation request created for ${input.partySize} on ${input.date} at ${input.time}.`,
-        ...buildPersistedCallInsightPatch({
-          confidence: input.confidence,
-          intent: "reservation",
-          outcome: input.status === "confirmed" ? "reservation_booked" : "escalated",
-          reservationId,
-          status: input.status === "confirmed" ? "resolved" : "needs_review",
-          summary:
-            input.status === "confirmed"
-              ? `${providerLabel(input.provider)} reservation confirmed for ${input.partySize} on ${input.date} at ${input.time}.`
-              : `Staff-confirmed reservation request created for ${input.partySize} on ${input.date} at ${input.time}.`,
-        }),
-      },
-      method: "PATCH",
-      query: `id=eq.${encodeURIComponent(input.callId)}`,
+    const summary =
+      input.status === "confirmed"
+        ? `${providerLabel(input.provider)} reservation confirmed for ${input.partySize} on ${input.date} at ${input.time}.`
+        : `Staff-confirmed reservation request created for ${input.partySize} on ${input.date} at ${input.time}.`;
+    await this.patchCallWithInsightFallback(input.callId, {
+      intent: "reservation",
+      outcome: input.status === "confirmed" ? "reservation_booked" : "escalated",
+      status: input.status === "confirmed" ? "resolved" : "needs_review",
+      summary,
+    }, {
+      confidence: input.confidence,
+      intent: "reservation",
+      outcome: input.status === "confirmed" ? "reservation_booked" : "escalated",
+      reservationId,
+      status: input.status === "confirmed" ? "resolved" : "needs_review",
+      summary,
     });
 
     return { reservationId };
+  }
+
+  private async patchCallWithInsightFallback(callId: string, body: Record<string, unknown>, insight: Parameters<typeof buildPersistedCallInsightPatch>[0]) {
+    const insightPatch = buildPersistedCallInsightPatch(insight);
+
+    try {
+      await this.patchCall(callId, {
+        ...body,
+        ...insightPatch,
+      });
+      return;
+    } catch (error) {
+      if (!isMissingCallInsightColumnError(error)) throw error;
+      console.warn("[call-store] calls insight columns missing; patched call with legacy fields only", {
+        callId,
+      });
+    }
+
+    await this.patchCall(callId, body);
+  }
+
+  private async patchCall(callId: string, body: Record<string, unknown>) {
+    await this.request("calls", {
+      body,
+      method: "PATCH",
+      query: `id=eq.${encodeURIComponent(callId)}`,
+    });
   }
 
   private async request<T = unknown>(
@@ -631,6 +636,11 @@ function formatDetailKey(value: string) {
 function isMissingCustomerRequestsTableError(error: unknown) {
   if (!(error instanceof Error)) return false;
   return /customer_requests|relation .* does not exist|404|42P01/i.test(error.message);
+}
+
+function isMissingCallInsightColumnError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  return /workflow_status|urgency|value_tier|follow_up_needed|knowledge_gap|owner_report_bucket|recommended_action|tags|column .* does not exist|schema cache|PGRST204|42703/i.test(error.message);
 }
 
 function providerLabel(provider?: string) {

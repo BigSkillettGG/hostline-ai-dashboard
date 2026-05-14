@@ -111,6 +111,30 @@ describe("Supabase call store", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("still completes calls when live Supabase is missing newer insight columns", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response("Could not find the 'workflow_status' column of 'calls' in the schema cache", { status: 400 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const store = createCallStore(env);
+
+    await store.completeCall({
+      callId: "call_uuid",
+      confidence: 88,
+      durationSeconds: 42,
+      intent: "faq",
+      outcome: "resolved",
+      status: "resolved",
+      summary: "Caller asked about tonight's specials and was answered.",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain('"workflow_status":"resolved"');
+    expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toContain('"duration_seconds":42');
+    expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toContain('"summary":"Caller asked about tonight\'s specials and was answered."');
+    expect(String(fetchMock.mock.calls[1]?.[1]?.body)).not.toContain("workflow_status");
+  });
+
   it("creates a staff-review pickup order with order items", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
