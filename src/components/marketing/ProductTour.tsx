@@ -46,7 +46,7 @@ export function ProductTour() {
             {active === "orders" && (
               <Copy
                 title="Pickup orders, captured cleanly."
-                body="Vera reads from your menu, handles modifiers and substitutions, confirms ETA, takes the customer's name, and hands staff a clean ticket."
+                body="SignalHost reads from your menu, handles modifiers and substitutions, confirms ETA, takes the customer's name, and hands staff a clean ticket."
                 bullets={["POS-ready workflow", "Upsell prompts you control", "Allergy questions auto-escalated"]}
               />
             )}
@@ -162,7 +162,7 @@ function MockUI({ tab }: { tab: string }) {
           <div key={question} className="rounded-lg border border-border bg-background p-3 text-sm shadow-sm">
             <div className="text-xs text-muted-foreground">Caller</div>
             <div className="font-medium">{question}</div>
-            <div className="mt-1.5 text-xs text-success">Answered by Vera - 2.1s</div>
+            <div className="mt-1.5 text-xs text-success">Answered by SignalHost - 2.1s</div>
           </div>
         ))}
       </div>
@@ -199,7 +199,7 @@ function MockUI({ tab }: { tab: string }) {
         </div>
         <div className="mt-2 text-xs text-muted-foreground">Holiday booking inquiry - Dec 23, party of 12</div>
         <div className="mt-3 rounded-md bg-muted/40 p-2 text-xs">
-          Vera: "We're closed right now, but I've put a soft hold on Dec 23 at 7 PM. The owner will confirm by 10 AM."
+          SignalHost: "We're closed right now, but I've put a soft hold on Dec 23 at 7 PM. The owner will confirm by 10 AM."
         </div>
       </div>
     </div>

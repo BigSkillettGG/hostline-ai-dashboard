@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 type PlaybackState = "done" | "idle" | "playing";
-type Speaker = "vera" | "caller";
+type Speaker = "ava" | "caller";
 
 interface DemoLine {
   speaker: Speaker;
@@ -57,13 +57,13 @@ const scenarios: DemoScenario[] = [
     label: "Hours and parking",
     outcome: "Resolved",
     lines: [
-      { speaker: "vera", text: "Thanks for calling Olive and Ember, this is Vera. How can I help you tonight?" },
+      { speaker: "ava", text: "Thanks for calling Olive and Ember, this is Ava. How can I help you tonight?" },
       { speaker: "caller", text: "Hey, what time do you guys close on Sundays?" },
-      { speaker: "vera", text: "We're open until 9 PM on Sundays. Kitchen takes last orders at 8:30." },
+      { speaker: "ava", text: "We're open until 9 PM on Sundays. Kitchen takes last orders at 8:30." },
       { speaker: "caller", text: "And is there parking nearby?" },
-      { speaker: "vera", text: "There's metered street parking on Valencia, and a paid lot at 17th and Valencia, about a two minute walk." },
+      { speaker: "ava", text: "There's metered street parking on Valencia, and a paid lot at 17th and Valencia, about a two minute walk." },
       { speaker: "caller", text: "Perfect, thanks!" },
-      { speaker: "vera", text: "You're welcome. Anything else I can help with tonight?" },
+      { speaker: "ava", text: "You're welcome. Anything else I can help with tonight?" },
     ],
   },
   {
@@ -76,13 +76,13 @@ const scenarios: DemoScenario[] = [
     label: "Pickup order",
     outcome: "$54 captured",
     lines: [
-      { speaker: "vera", text: "Thanks for calling Olive and Ember, this is Vera. How can I help you?" },
+      { speaker: "ava", text: "Thanks for calling Olive and Ember, this is Ava. How can I help you?" },
       { speaker: "caller", text: "I'd like to place a pickup order. Two margherita pizzas and a Caesar salad." },
-      { speaker: "vera", text: "Got it. Two margheritas and one Caesar. Any modifications? We can do gluten-free crust for four dollars more." },
+      { speaker: "ava", text: "Got it. Two margheritas and one Caesar. Any modifications? We can do gluten-free crust for four dollars more." },
       { speaker: "caller", text: "Gluten-free on one pizza, and no anchovy on the Caesar." },
-      { speaker: "vera", text: "Perfect. One regular margherita, one gluten-free, Caesar no anchovy. That's fifty four dollars. What name for pickup?" },
+      { speaker: "ava", text: "Perfect. One regular margherita, one gluten-free, Caesar no anchovy. That's fifty four dollars. What name for pickup?" },
       { speaker: "caller", text: "Sarah." },
-      { speaker: "vera", text: "Sarah, your order will be ready in about 25 minutes. Pay at the counter. Sending you a text confirmation now." },
+      { speaker: "ava", text: "Sarah, your order will be ready in about 25 minutes. Pay at the counter. Sending you a text confirmation now." },
     ],
   },
   {
@@ -94,13 +94,13 @@ const scenarios: DemoScenario[] = [
     label: "Reservation",
     outcome: "Staff review",
     lines: [
-      { speaker: "vera", text: "Thanks for calling Olive and Ember, this is Vera. How can I help you?" },
+      { speaker: "ava", text: "Thanks for calling Olive and Ember, this is Ava. How can I help you?" },
       { speaker: "caller", text: "I'd like to book a table for six this Saturday at 7:30." },
-      { speaker: "vera", text: "Saturday at 7:30 for six. I'll put in a reservation request for you. Any special occasion?" },
+      { speaker: "ava", text: "Saturday at 7:30 for six. I'll put in a reservation request for you. Any special occasion?" },
       { speaker: "caller", text: "It's my mom's sixtieth birthday. Could we get a quiet table near the window?" },
-      { speaker: "vera", text: "Happy birthday to her. I've noted the birthday and window preference. What name should I put it under?" },
+      { speaker: "ava", text: "Happy birthday to her. I've noted the birthday and window preference. What name should I put it under?" },
       { speaker: "caller", text: "Priya Shah." },
-      { speaker: "vera", text: "Priya, I've sent the request to the team. You'll get a text once they confirm. Anything else?" },
+      { speaker: "ava", text: "Priya, I've sent the request to the team. You'll get a text once they confirm. Anything else?" },
     ],
   },
   {
@@ -112,13 +112,13 @@ const scenarios: DemoScenario[] = [
     label: "Specials and wine",
     outcome: "Upsell offered",
     lines: [
-      { speaker: "vera", text: "Thanks for calling Olive and Ember, this is Vera. How can I help you?" },
+      { speaker: "ava", text: "Thanks for calling Olive and Ember, this is Ava. How can I help you?" },
       { speaker: "caller", text: "What specials do you have tonight?" },
-      { speaker: "vera", text: "Tonight's special is a wood-fired branzino with lemon and capers for thirty four dollars. The chef's burrata is also back with heirloom tomatoes." },
+      { speaker: "ava", text: "Tonight's special is a wood-fired branzino with lemon and capers for thirty four dollars. The chef's burrata is also back with heirloom tomatoes." },
       { speaker: "caller", text: "Ooh, nice. Do you have good red wines by the glass?" },
-      { speaker: "vera", text: "We have a Chianti Classico and a Montepulciano, both around sixteen dollars. Full wine list is on our website too." },
+      { speaker: "ava", text: "We have a Chianti Classico and a Montepulciano, both around sixteen dollars. Full wine list is on our website too." },
       { speaker: "caller", text: "Is there live music tonight?" },
-      { speaker: "vera", text: "Not tonight, but we have live jazz every Thursday from 7 to 10. Would you like to make a reservation for Thursday?" },
+      { speaker: "ava", text: "Not tonight, but we have live jazz every Thursday from 7 to 10. Would you like to make a reservation for Thursday?" },
     ],
   },
   {
@@ -130,13 +130,13 @@ const scenarios: DemoScenario[] = [
     label: "Dietary and allergy",
     outcome: "Staff-safe answer",
     lines: [
-      { speaker: "vera", text: "Thanks for calling Olive and Ember, this is Vera. How can I help you?" },
+      { speaker: "ava", text: "Thanks for calling Olive and Ember, this is Ava. How can I help you?" },
       { speaker: "caller", text: "My daughter has a severe nut allergy. Can you accommodate that?" },
-      { speaker: "vera", text: "I want to be upfront. We do use nuts in several dishes, and cross-contact is possible in our kitchen. For severe allergies, I'd recommend speaking with the chef directly." },
+      { speaker: "ava", text: "I want to be upfront. We do use nuts in several dishes, and cross-contact is possible in our kitchen. For severe allergies, I'd recommend speaking with the chef directly." },
       { speaker: "caller", text: "Okay. Do you have gluten-free options?" },
-      { speaker: "vera", text: "We do. Gluten-free pizza crust is available for four dollars more, and several pasta dishes can be made with gluten-free pasta. I can note the allergy for your order." },
+      { speaker: "ava", text: "We do. Gluten-free pizza crust is available for four dollars more, and several pasta dishes can be made with gluten-free pasta. I can note the allergy for your order." },
       { speaker: "caller", text: "That's helpful. What about vegan options?" },
-      { speaker: "vera", text: "Our roasted vegetable antipasto and the marinara pizza are both vegan. I can also ask the kitchen about modifications on other dishes." },
+      { speaker: "ava", text: "Our roasted vegetable antipasto and the marinara pizza are both vegan. I can also ask the kitchen about modifications on other dishes." },
     ],
   },
   {
@@ -148,13 +148,13 @@ const scenarios: DemoScenario[] = [
     label: "Complaint",
     outcome: "Escalated",
     lines: [
-      { speaker: "vera", text: "Thanks for calling Olive and Ember, this is Vera. How can I help you?" },
+      { speaker: "ava", text: "Thanks for calling Olive and Ember, this is Ava. How can I help you?" },
       { speaker: "caller", text: "I was there last night and my order was completely wrong. I got chicken instead of salmon." },
-      { speaker: "vera", text: "I'm really sorry to hear that. That's not the experience we want for you. Let me get the manager involved right away." },
+      { speaker: "ava", text: "I'm really sorry to hear that. That's not the experience we want for you. Let me get the manager involved right away." },
       { speaker: "caller", text: "This is the second time it's happened. I want a refund." },
-      { speaker: "vera", text: "I understand your frustration. I've texted the manager with the details. They'll call you back within the hour to make this right." },
+      { speaker: "ava", text: "I understand your frustration. I've texted the manager with the details. They'll call you back within the hour to make this right." },
       { speaker: "caller", text: "Fine. My number is 415-555-0177." },
-      { speaker: "vera", text: "Got it. The manager will reach out shortly. I'm sorry again. We want to fix this." },
+      { speaker: "ava", text: "Got it. The manager will reach out shortly. I'm sorry again. We want to fix this." },
     ],
   },
   {
@@ -166,13 +166,13 @@ const scenarios: DemoScenario[] = [
     label: "After hours",
     outcome: "Captured",
     lines: [
-      { speaker: "vera", text: "Thanks for calling Olive and Ember. We're closed right now, but this is Vera. I can still help." },
+      { speaker: "ava", text: "Thanks for calling Olive and Ember. We're closed right now, but this is Ava. I can still help." },
       { speaker: "caller", text: "Oh, when do you open tomorrow?" },
-      { speaker: "vera", text: "We open at 5 PM tomorrow, Tuesday. Kitchen takes orders until 9:30." },
+      { speaker: "ava", text: "We open at 5 PM tomorrow, Tuesday. Kitchen takes orders until 9:30." },
       { speaker: "caller", text: "Can I make a reservation for tomorrow at 7?" },
-      { speaker: "vera", text: "I can put in a request for tomorrow at 7. How many guests?" },
+      { speaker: "ava", text: "I can put in a request for tomorrow at 7. How many guests?" },
       { speaker: "caller", text: "Four, under the name Rodriguez." },
-      { speaker: "vera", text: "Done. Party of four, tomorrow at 7, under Rodriguez. The team will confirm by text in the morning. Anything else?" },
+      { speaker: "ava", text: "Done. Party of four, tomorrow at 7, under Rodriguez. The team will confirm by text in the morning. Anything else?" },
     ],
   },
 ];
@@ -306,7 +306,7 @@ export function VoiceDemoPlayer() {
             Hear a call become an order, a task, and a clean record.
           </h2>
           <p className="mt-4 max-w-2xl text-base leading-7 text-white/62 md:text-lg">
-            The point is not that Vera talks. The point is that the business gets a useful outcome without a human picking up.
+            The point is not that SignalHost talks. The point is that the business gets a useful outcome without a human picking up.
           </p>
         </div>
         <div className="border-l border-white/12 pl-5">
@@ -363,7 +363,7 @@ export function VoiceDemoPlayer() {
                 </span>
               </div>
               <h3 className="mt-3 text-xl font-semibold md:text-2xl">
-                {scenario.caller.name} is calling. Vera picks up.
+                {scenario.caller.name} is calling. SignalHost picks up.
               </h3>
             </div>
 
@@ -427,7 +427,7 @@ export function VoiceDemoPlayer() {
               </div>
             </div>
 
-            <PersonPanel active={activeLineIndex >= 0 && scenario.lines[activeLineIndex]?.speaker === "vera"} caller={scenario.caller} speaker="vera" />
+            <PersonPanel active={activeLineIndex >= 0 && scenario.lines[activeLineIndex]?.speaker === "ava"} caller={scenario.caller} speaker="ava" />
           </div>
 
           <div className="bg-[#18120e]">
@@ -454,7 +454,7 @@ export function VoiceDemoPlayer() {
               </div>
 
               {scenario.lines.map((line, index) => {
-                const isVera = line.speaker === "vera";
+                const isAva = line.speaker === "ava";
                 const isActive = index === activeLineIndex;
                 const hasPlayed = playback !== "idle" && index < activeLineIndex;
 
@@ -462,7 +462,7 @@ export function VoiceDemoPlayer() {
                   <div
                     className={cn(
                       "flex transition-opacity",
-                      isVera ? "justify-end" : "justify-start",
+                      isAva ? "justify-end" : "justify-start",
                       playback === "idle" && "opacity-75",
                       hasPlayed && "opacity-70",
                     )}
@@ -471,20 +471,20 @@ export function VoiceDemoPlayer() {
                     <div
                       className={cn(
                         "max-w-[86%] rounded-lg border px-4 py-3 text-sm leading-relaxed shadow-sm md:max-w-[72%]",
-                        isVera
+                        isAva
                           ? "border-primary/30 bg-primary/15 text-white"
                           : "border-white/10 bg-white/[0.055] text-white/85",
                         isActive && "border-primary bg-primary/25 shadow-[0_0_0_3px_hsl(var(--primary)/0.18)]",
                       )}
                     >
                       <div className="mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase">
-                        {isVera ? (
+                        {isAva ? (
                           <Sparkles className="h-3 w-3 text-primary" />
                         ) : (
                           <UserRound className="h-3 w-3 text-white/45" />
                         )}
-                        <span className={isVera ? "text-primary" : "text-white/45"}>
-                          {isVera ? "Vera" : scenario.caller.name}
+                        <span className={isAva ? "text-primary" : "text-white/45"}>
+                          {isAva ? "Ava" : scenario.caller.name}
                         </span>
                       </div>
                       {line.text}
@@ -509,27 +509,27 @@ function PersonPanel({
   caller: DemoScenario["caller"];
   speaker: Speaker;
 }) {
-  const isVera = speaker === "vera";
+  const isAva = speaker === "ava";
   return (
     <div className="flex min-h-[200px] flex-col items-center justify-center bg-[#211912] px-5 py-6 text-center sm:min-h-[240px] sm:py-8">
       <div className="mb-3 rounded-full border border-white/10 bg-white/[0.045] px-3 py-1 text-[10px] font-semibold uppercase text-white/35">
-        {isVera ? "Restaurant host" : "Caller"}
+        {isAva ? "Restaurant host" : "Caller"}
       </div>
       <div className="relative">
         {active && <span className="absolute inset-[-8px] rounded-full border border-primary/50" />}
         <div
           className={cn(
             "flex h-[72px] w-[72px] items-center justify-center rounded-full text-lg font-semibold ring-4 transition-transform",
-            isVera ? "bg-primary text-primary-foreground ring-primary/15" : "text-white ring-white/10",
+            isAva ? "bg-primary text-primary-foreground ring-primary/15" : "text-white ring-white/10",
             active && "scale-105 ring-primary/35",
           )}
-          style={isVera ? undefined : { background: caller.color }}
+          style={isAva ? undefined : { background: caller.color }}
         >
-          {isVera ? "V" : caller.initials}
+          {isAva ? "A" : caller.initials}
         </div>
       </div>
-      <div className="mt-4 text-sm font-semibold text-white">{isVera ? "Vera" : caller.name}</div>
-      <div className="mt-1 text-xs text-white/40">{isVera ? "AI host - Olive & Ember" : caller.phone}</div>
+      <div className="mt-4 text-sm font-semibold text-white">{isAva ? "Ava" : caller.name}</div>
+      <div className="mt-1 text-xs text-white/40">{isAva ? "SignalHost - Olive & Ember" : caller.phone}</div>
       <div className={cn(
         "mt-4 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]",
         active ? "border-primary/35 bg-primary/10 text-primary" : "border-white/10 bg-white/[0.04] text-white/30",

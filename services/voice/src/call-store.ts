@@ -539,8 +539,8 @@ function buildReservationNotes(input: CreateStaffReviewReservationInput) {
   return [
     input.notes,
     input.status === "confirmed"
-      ? `AI-created reservation confirmed through ${providerLabel(input.provider)}. Confidence: ${input.confidence}%.`
-      : `AI-created staff-confirmed reservation request. Not confirmed until staff approves. Confidence: ${input.confidence}%.`,
+      ? `SignalHost-created reservation confirmed through ${providerLabel(input.provider)}. Confidence: ${input.confidence}%.`
+      : `SignalHost-created staff-confirmed reservation request. Not confirmed until staff approves. Confidence: ${input.confidence}%.`,
   ]
     .filter(Boolean)
     .join(" ");

@@ -78,7 +78,7 @@ export default function PhoneHours() {
                 <Input defaultValue={mainPhone} />
               </div>
               <div className="space-y-2">
-                <Label>AI host numbers</Label>
+                <Label>SignalHost numbers</Label>
                 <div className="divide-y divide-border rounded-md border border-border">
                   {(dataMode === "live" ? phoneNumbers : sampleNumbers).map((record) => (
                     <div key={record.id} className="space-y-2 p-3">

@@ -114,7 +114,7 @@ export default function Signup() {
               Start with the right operating manual.
             </h1>
             <p className="mt-4 text-sm leading-6 text-background/70">
-              Choose the solution now. The next screen interviews you in plain English and turns the answers into the AI's call and chat behavior.
+              Choose the solution now. The next screen interviews you in plain English and turns the answers into SignalHost's call and chat behavior.
             </p>
 
             <div className="mt-6 rounded-md border border-background/15 bg-background/8 p-4">
@@ -224,7 +224,7 @@ export default function Signup() {
                 <div className="rounded-md border border-border bg-muted/30 p-4">
                   <Phone className="h-4 w-4 text-primary" />
                   <div className="mt-2 text-sm font-semibold">First call ready</div>
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">Forward a test number after onboarding and hear the AI answer with your business name.</p>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">Forward a test number after onboarding and hear SignalHost answer with your business name.</p>
                 </div>
                 <div className="rounded-md border border-border bg-muted/30 p-4">
                   <ClipboardList className="h-4 w-4 text-primary" />

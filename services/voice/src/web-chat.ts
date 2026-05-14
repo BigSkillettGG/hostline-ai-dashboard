@@ -493,7 +493,7 @@ function buildWebChatSummary({
 
   return [
     `${visitor} chatted with ${context.restaurantName}: ${compactText(message, 170)}`,
-    `AI host replied: ${compactText(reply, 190)}`,
+    `SignalHost replied: ${compactText(reply, 190)}`,
     actionSummary && `Action: ${actionSummary}.`,
   ]
     .filter(Boolean)

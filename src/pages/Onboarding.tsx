@@ -1413,7 +1413,7 @@ function renderFieldInput({
       <div className="flex items-center justify-between gap-4 rounded-md border border-border bg-background p-3">
         <div>
           <div className="text-sm font-medium">{value === true ? "Yes" : "No"}</div>
-          <div className="mt-1 text-xs text-muted-foreground">Switch this on only if the AI should offer this capability.</div>
+          <div className="mt-1 text-xs text-muted-foreground">Switch this on only if SignalHost should offer this capability.</div>
         </div>
         <Switch checked={value === true} onCheckedChange={onChange} />
       </div>
@@ -1495,19 +1495,19 @@ function getFieldGuidance(field: OnboardingField) {
 
 const fieldWhy: Record<string, string> = {
   businessType: "This chooses the right questions, vocabulary, call handling rules, and reporting categories.",
-  restaurantName: "The AI uses this in the greeting, confirmations, staff alerts, and customer texts.",
-  concept: "This helps the AI answer broad questions in the right voice without making things up.",
+  restaurantName: "SignalHost uses this in the greeting, confirmations, staff alerts, and customer texts.",
+  concept: "This helps SignalHost answer broad questions in the right voice without making things up.",
   primaryLocation: "Callers ask for directions, parking, service area, pickup, and arrival details constantly.",
   timezone: "Hours, after-hours handling, daily specials, reservations, and reports all depend on local time.",
   ownerName: "This identifies who owns the setup and who SignalHost can address in owner-assistant mode.",
   ownerPhone: "Trusted caller ID and urgent alert routing use this number.",
   ownerEmail: "Reports, billing notices, and email owner commands use this address.",
-  escalationPhone: "When the AI needs help, this is the human path.",
+  escalationPhone: "When SignalHost needs help, this is the human path.",
   menuUrl: "A menu link gives the system a source to ingest instead of relying only on manual notes.",
-  menuCategories: "Categories teach the AI how to organize orders and answer menu questions naturally.",
+  menuCategories: "Categories teach SignalHost how to organize orders and answer menu questions naturally.",
   modifiers: "Most ordering mistakes happen around sizes, substitutions, add-ons, removals, and sauces.",
-  substitutionPolicy: "This prevents the AI from overpromising off-menu items or custom requests.",
-  regularHours: "The AI needs this to answer open/closed questions and choose after-hours behavior.",
+  substitutionPolicy: "This prevents SignalHost from overpromising off-menu items or custom requests.",
+  regularHours: "SignalHost needs this to answer open/closed questions and choose after-hours behavior.",
   holidayExceptions: "Special days cause the most wrong answers unless they are written down.",
   takeOrders: "This tells SignalHost whether to capture orders or only send links/messages.",
   orderHandlingMode: "This controls whether order requests become staff tasks, links, or handoffs.",
@@ -1526,7 +1526,7 @@ const fieldWhy: Record<string, string> = {
   ownerReportPreferences: "Daily and weekly reports are where owners see what SignalHost handled and what still needs attention.",
   unknownAnswerPolicy: "This tells SignalHost how to act like a careful employee when it does not know something.",
   knowledgeApprovalPolicy: "This protects the business from accidental permanent changes while still letting the system learn.",
-  liveUpdateRules: "Temporary updates keep the AI current for specials, closures, weather, staffing, promos, and busy modes.",
+  liveUpdateRules: "Temporary updates keep SignalHost current for specials, closures, weather, staffing, promos, and busy modes.",
   followUpPolicy: "Follow-up rules help recover bookings, quotes, and leads without turning SignalHost into a spam machine.",
   callReviewPolicy: "Call review rules decide which transcripts and recordings deserve owner attention first.",
   opportunityScoringRules: "Value rules make analytics and reports match what the business actually cares about.",
@@ -1550,7 +1550,7 @@ const fieldTips: Record<string, string> = {
   regularHours: "Use whatever format is fastest. Example: Mon closed, Tue-Thu 9-5, Fri 9-7.",
   servicePeriods: "Only fill this if service windows differ from normal hours.",
   holidayExceptions: "Add known holidays now. Owners can later text temporary closures or special hours.",
-  takeOrders: "Turn this off if the AI should avoid taking orders and only send the online order link.",
+  takeOrders: "Turn this off if SignalHost should avoid taking orders and only send the online order link.",
   orderHandlingMode: "For early pilots, staff review or link-first is safer than promising direct POS completion.",
   reservationBookingUrl: "Use the public link a customer would click from your website or Google profile.",
   partyRules: "Mention large-party thresholds, deposits, private rooms, patio requests, and blackout dates.",
@@ -1577,8 +1577,8 @@ const fieldTips: Record<string, string> = {
 
 function defaultWhyForField(field: OnboardingField) {
   if (field.required) return "This is part of the minimum setup SignalHost needs before a strong first test call.";
-  if (field.control === "url") return "A link lets the AI send customers to the right place instead of guessing.";
-  if (field.control === "toggle") return "This turns an AI capability on or off for callers.";
+  if (field.control === "url") return "A link lets SignalHost send customers to the right place instead of guessing.";
+  if (field.control === "toggle") return "This turns a SignalHost capability on or off for callers.";
   return "This gives SignalHost more business context for better answers and safer handoffs.";
 }
 
@@ -1643,7 +1643,7 @@ function buildLaunchAssistantSteps({
       status: assignedNumberIsDemo ? (voiceConfigured ? "current" : "blocked") : "done",
     },
     {
-      detail: forwardingVerificationStatus === "verified" ? "Direct, no-answer, and busy-line tests passed." : "Call the AI number first, then verify forwarding.",
+      detail: forwardingVerificationStatus === "verified" ? "Direct, no-answer, and busy-line tests passed." : "Call the SignalHost number first, then verify forwarding.",
       label: "Forwarding",
       status: forwardingVerificationStatus === "verified" ? "done" : assignedNumberIsDemo ? "pending" : "current",
     },
@@ -1730,9 +1730,9 @@ function buildLaunchChecklist(template: ReturnType<typeof getOnboardingBusinessT
 function buildForwardingVerificationChecks(template: ReturnType<typeof getOnboardingBusinessTemplate>): ForwardingVerificationCheck[] {
   return [
     {
-      description: "Call the assigned SignalHost number directly and confirm the AI answers.",
+      description: "Call the assigned SignalHost number directly and confirm SignalHost answers.",
       key: "directCall",
-      label: "Direct AI number",
+      label: "Direct SignalHost number",
     },
     {
       description: `Let the ${template.businessNoun} main line ring unanswered and confirm the call reaches SignalHost.`,

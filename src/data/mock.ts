@@ -232,7 +232,7 @@ export const calls: Call[] = [
     id: "c_011", caller: "Rachel Nguyen", phone: "+1 (415) 555-0177",
     time: iso(15), duration: 198, intent: "complaint", outcome: "manager_alerted",
     confidence: 84, status: "needs_review",
-    summary: "Order arrived with wrong pizza and cold pasta. Caller upset; AI offered manager callback.",
+    summary: "Order arrived with wrong pizza and cold pasta. Caller upset; SignalHost offered manager callback.",
     transcript: [
       { speaker: "caller", t: "00:00", text: "I'm really frustrated — my order was completely wrong and the pasta was cold." },
       { speaker: "agent", t: "00:05", text: "I'm so sorry to hear that. I'll let the manager know right away and they'll call you back shortly. Could you share what happened so I can pass it along?" },
@@ -297,7 +297,7 @@ export const calls: Call[] = [
     outcome: (["resolved", "order_placed", "reservation_booked", "resolved", "voicemail"] as CallOutcome[])[i % 5],
     confidence: 70 + (i * 7) % 30,
     status: (["resolved", "reviewed", "needs_review"] as CallStatus[])[i % 3],
-    summary: "Sample interaction handled by AI host.",
+    summary: "Sample interaction handled by SignalHost.",
     transcript: [],
   })),
 ];

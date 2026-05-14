@@ -255,7 +255,7 @@ export default function Dashboard() {
                 <div className="leading-tight">
                   <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase text-muted-foreground">
                     <Phone className="h-3 w-3" />
-                    AI host answering
+                    SignalHost answering
                   </div>
                   <a href={`tel:${aiHostPhone}`} className="block text-sm font-semibold tabular-nums hover:text-primary">
                     {aiHostPhone}

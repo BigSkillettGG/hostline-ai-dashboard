@@ -223,7 +223,7 @@ function buildOwnerOperatingRules(template: BusinessTemplate, draft: OnboardingD
     steps: [
       reportRules
         ? `Review reports using this rule: ${reportRules}`
-        : "Use Ask SignalHost to ask what happened today, what needs follow-up, and what the AI did not know.",
+        : "Use Ask SignalHost to ask what happened today, what needs follow-up, and what SignalHost did not know.",
       alertRules
         ? `Confirm alert routing matches this rule: ${alertRules}`
         : "Confirm critical, high-value, normal, low-priority, and summary-only alerts route to the right trusted contacts.",
@@ -312,7 +312,7 @@ function buildProviderScript(input: {
         ? "forward calls after hours"
         : "forward unanswered calls after 3 to 4 rings and forward calls when the line is busy";
 
-  return `${providerIntro} Please ${mode} from ${businessLine} to ${input.assignedNumber}. This is for SignalHost, our AI ${input.template.staffNoun}. Please make sure voicemail does not answer before the forwarding destination receives the call.`;
+  return `${providerIntro} Please ${mode} from ${businessLine} to ${input.assignedNumber}. This is for SignalHost, our phone ${input.template.staffNoun}. Please make sure voicemail does not answer before the forwarding destination receives the call.`;
 }
 
 function draftString(value: OnboardingDraft[string]) {

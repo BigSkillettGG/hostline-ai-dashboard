@@ -110,7 +110,7 @@ export default function AppLayout() {
               )}
               <div className="hidden sm:flex items-center gap-2 rounded-full border border-border bg-card px-2.5 py-1">
                 <span className={`h-1.5 w-1.5 rounded-full ${agentLive ? "bg-success animate-pulse" : "bg-muted-foreground"}`} />
-                <span className="text-xs font-medium">{agentLive ? "AI Live" : "Paused"}</span>
+                <span className="text-xs font-medium">{agentLive ? "SignalHost Live" : "Paused"}</span>
                 <Switch checked={agentLive} onCheckedChange={setAgentLive} className="h-4 w-7 data-[state=checked]:bg-success" />
               </div>
 

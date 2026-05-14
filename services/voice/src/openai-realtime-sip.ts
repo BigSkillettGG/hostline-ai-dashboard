@@ -1411,7 +1411,7 @@ function buildOpenAIRealtimeStructuredSummary(
       : "",
     `OpenAI Realtime call classified as ${classification.intent}; outcome ${classification.outcome}.`,
     callerTurns.length ? `Caller said: ${callerTurns.slice(-3).join(" / ")}.` : "No caller transcript was captured.",
-    agentTurns.length ? `AI host replied: ${agentTurns.slice(-2).join(" / ")}.` : "",
+    agentTurns.length ? `SignalHost replied: ${agentTurns.slice(-2).join(" / ")}.` : "",
     actionSummary,
     qualitySummary,
     closeSummary,

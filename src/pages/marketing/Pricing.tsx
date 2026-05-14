@@ -11,7 +11,7 @@ import { industrySolutions } from "@/data/industry-solutions";
 import { cn } from "@/lib/utils";
 
 const pricingFaqs = [
-  { q: "What counts as a call or chat?", a: "Any answered phone call or website chat conversation that lasts long enough for the AI to provide help. Silent calls, failed calls, and obvious spam can be filtered out." },
+  { q: "What counts as a call or chat?", a: "Any answered phone call or website chat conversation that lasts long enough for SignalHost to provide help. Silent calls, failed calls, and obvious spam can be filtered out." },
   { q: "Do you charge by the minute?", a: "No. The public pricing model is by answered call or chat, with overage billed per extra interaction." },
   { q: "Can pricing change by industry?", a: "Yes. A salon with short appointment calls and an HVAC company with emergency triage have different volume and value profiles, so each solution has its own starting point." },
   { q: "Can I start without integrations?", a: "Yes. Basic and middle tiers can capture requests and send links. The high tier is where deeper tools like Toast, ServiceTitan, Jobber, or Boulevard make sense." },
@@ -173,7 +173,7 @@ export default function Pricing() {
                 </thead>
                 <tbody>
                   {[
-                    ["AI phone answering", true, true, true],
+                    ["SignalHost phone answering", true, true, true],
                     ["Website chat", true, true, true],
                     ["FAQs, hours, service area, policies", true, true, true],
                     ["Request/order/appointment capture", false, true, true],

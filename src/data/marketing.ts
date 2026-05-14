@@ -5,7 +5,7 @@ export const testimonials = [
     restaurant: "Trattoria Rinaldi",
     city: "Brooklyn, NY",
     quote:
-      "We were missing 40+ calls a week during dinner. Vera caught every one. We added almost $9k of pickup orders our first month, and she paid for herself in three days.",
+      "We were missing 40+ calls a week during dinner. SignalHost caught every one. We added almost $9k of pickup orders our first month, and it paid for itself in three days.",
     initials: "MR",
   },
   {
@@ -23,7 +23,7 @@ export const testimonials = [
     restaurant: "Taqueria Norte (4 locations)",
     city: "San Diego, CA",
     quote:
-      "Setup was a Tuesday afternoon. By Friday Vera was answering in Spanish and English across all four spots. I have not picked up the phone since.",
+      "Setup was a Tuesday afternoon. By Friday SignalHost was answering in Spanish and English across all four spots. I have not picked up the phone since.",
     initials: "DA",
   },
 ];
@@ -62,15 +62,15 @@ export const comparisonRows = [
 
 export const homeFaqs = [
   {
-    q: "Will callers know they're talking to AI?",
-    a: "The greeting is configurable. Vera can identify herself politely as a virtual host, but most callers care more that they get a fast, useful answer.",
+    q: "Will callers know they're talking to SignalHost?",
+    a: "The greeting is configurable. SignalHost can identify itself politely, but most callers care more that they get a fast, useful answer.",
   },
   {
     q: "How long does setup take?",
     a: "Most restaurants are live the same day. Forward your line, upload a menu or link to one, and answer the onboarding interview.",
   },
   {
-    q: "What if Vera doesn't know the answer?",
+    q: "What if SignalHost doesn't know the answer?",
     a: "She gracefully takes a message, alerts staff, and saves a transcript instead of making up an answer.",
   },
   {
@@ -120,6 +120,6 @@ export const featureMatrix = {
 export const addOns = [
   { name: "Extra location", price: "+$79 / mo", desc: "Separate number, menu, hours, and analytics." },
   { name: "Extra phone number", price: "+$9 / mo", desc: "Vanity or local number, ported or new." },
-  { name: "Custom voice clone", price: "$199 one-time", desc: "Vera trained on your owner or host's actual voice." },
+  { name: "Custom voice clone", price: "$199 one-time", desc: "Premium voice configuration for teams that need a custom sound." },
   { name: "Premium support", price: "+$49 / mo", desc: "1-hour response SLA, weekend coverage, Slack channel." },
 ];

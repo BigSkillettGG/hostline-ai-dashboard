@@ -96,7 +96,7 @@ export default function RestaurantProfile() {
                   <ProvisioningFact label="Location ID" value={liveTenant.locationId} mono />
                   <ProvisioningFact label="Vertical" value={liveTenant.businessLabel} />
                   <ProvisioningFact label="Onboarding" value={`${liveTenant.onboardingProgressPercent}% - ${formatStatusText(liveTenant.onboardingStatus)}`} />
-                  <ProvisioningFact label="AI number" value={liveTenant.aiHostPhone ?? "Not provisioned"} mono />
+                  <ProvisioningFact label="SignalHost number" value={liveTenant.aiHostPhone ?? "Not provisioned"} mono />
                   <ProvisioningFact label="Main line" value={liveTenant.mainPhone ?? "Not set"} mono />
                   <ProvisioningFact label="Plan" value={`${liveTenant.planName} - $${liveTenant.monthlyPrice}/mo`} />
                   <ProvisioningFact label="Calls this month" value={liveTenant.callsThisMonth.toLocaleString()} />

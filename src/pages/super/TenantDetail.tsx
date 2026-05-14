@@ -263,7 +263,7 @@ export default function TenantDetail() {
               <Fact label="Owner" value={tenant ? `${tenant.ownerName} - ${tenant.ownerEmail}` : "Loading..."} />
               <Fact label="Plan" value={tenant ? `${tenant.planName} - $${tenant.monthlyPrice}/mo` : "Loading..."} />
               <Fact label="Main phone" value={tenant?.mainPhone ?? "Not set"} />
-              <Fact label="AI phone" value={tenant?.aiHostPhone ?? "Not provisioned"} />
+              <Fact label="SignalHost phone" value={tenant?.aiHostPhone ?? "Not provisioned"} />
               <Fact label="Timezone" value={tenant?.timezone ?? "Unknown"} />
               <Fact label="Location ID" value={locationId} mono />
             </CardContent>
@@ -482,7 +482,7 @@ export default function TenantDetail() {
 function CallRow({ call }: { call: Call }) {
   const transcriptPreview = call.transcript
     .slice(0, 2)
-    .map((turn) => `${turn.speaker === "agent" ? "AI" : "Caller"}: ${turn.text}`)
+    .map((turn) => `${turn.speaker === "agent" ? "SignalHost" : "Caller"}: ${turn.text}`)
     .join(" ");
 
   return (
@@ -604,7 +604,7 @@ function buildSetupChecks({
     },
     {
       detail: primaryPhone ? primaryPhone.phoneNumber : "No phone number row found.",
-      label: "AI phone number",
+      label: "SignalHost phone number",
       ready: Boolean(primaryPhone || tenant?.aiHostPhone),
     },
     {

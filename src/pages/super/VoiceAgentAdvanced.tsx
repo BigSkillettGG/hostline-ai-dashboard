@@ -90,7 +90,7 @@ export default function VoiceAgentAdvanced() {
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">System prompt template</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              <Textarea rows={10} defaultValue={`You are {host_name}, the AI phone host for {restaurant_name}.\nTone: {tone}.\nAlways disclose you are virtual on first turn.\nFollow the menu and knowledge base verbatim — never invent items, prices, or hours.\nEscalate any allergy, refund, or complaint.\nKeep replies under 2 sentences.`} className="font-mono text-xs" />
+              <Textarea rows={10} defaultValue={`You are {host_name}, the SignalHost phone employee for {restaurant_name}.\nTone: {tone}.\nAlways disclose you are virtual on first turn.\nFollow the menu and knowledge base verbatim — never invent items, prices, or hours.\nEscalate any allergy, refund, or complaint.\nKeep replies under 2 sentences.`} className="font-mono text-xs" />
               <div className="flex flex-wrap gap-1.5">
                 {["{host_name}", "{restaurant_name}", "{tone}", "{hours_today}", "{caller_name}"].map((v) => (
                   <Badge key={v} variant="secondary" className="font-mono text-[10px]">{v}</Badge>

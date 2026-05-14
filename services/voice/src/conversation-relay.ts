@@ -1092,7 +1092,7 @@ async function submitPickupOrderFromTool({
       locationId: session.locationId,
       notes: [
         notes,
-        "AI-created staff-review pickup order from model tool call. Staff should confirm before kitchen production.",
+        "SignalHost-created staff-review pickup order from model tool call. Staff should confirm before kitchen production.",
       ].filter(Boolean).join(" "),
     });
     session.orderCreatedId = result.orderId;
@@ -1101,7 +1101,7 @@ async function submitPickupOrderFromTool({
         confidence: 70,
         customerName: session.orderCustomerName,
         items: session.orderDraftItems,
-        notes: "AI-created staff-review pickup order from model tool call.",
+        notes: "SignalHost-created staff-review pickup order from model tool call.",
       },
       guestConfirmations,
       session,
@@ -1323,7 +1323,7 @@ async function maybeAdvanceStaffReviewOrder({
       etaMinutes: session.context.defaultPickupEtaMinutes ?? 25,
       items: session.orderDraftItems,
       locationId: session.locationId,
-      notes: `AI-created staff-review pickup order. Staff should confirm before kitchen production. Confidence: ${
+      notes: `SignalHost-created staff-review pickup order. Staff should confirm before kitchen production. Confidence: ${
         capturedOrder?.confidence ?? 75
       }%.`,
     });
@@ -1334,7 +1334,7 @@ async function maybeAdvanceStaffReviewOrder({
         confidence: capturedOrder?.confidence ?? 75,
         customerName: session.orderCustomerName,
         items: session.orderDraftItems,
-        notes: "AI-created staff-review pickup order. Staff should confirm before kitchen production.",
+        notes: "SignalHost-created staff-review pickup order. Staff should confirm before kitchen production.",
       },
       guestConfirmations,
       session,

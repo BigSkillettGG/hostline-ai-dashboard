@@ -2,14 +2,14 @@ import { useEffect, useState } from "react";
 import { Mic, PhoneCall, Sparkles, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type Line = { who: "vera" | "caller"; text: string; dur: string };
+type Line = { who: "ava" | "caller"; text: string; dur: string };
 
 const SCRIPT: Line[] = [
-  { who: "vera", text: "Thanks for calling Trattoria Rinaldi. How can I help you?", dur: "0:04" },
+  { who: "ava", text: "Thanks for calling Trattoria Rinaldi. How can I help you?", dur: "0:04" },
   { who: "caller", text: "Hi, can I order a large margherita and one Caesar salad for pickup at 7?", dur: "0:10" },
-  { who: "vera", text: "Absolutely. One large margherita and one Caesar salad, ready at 7.", dur: "0:16" },
+  { who: "ava", text: "Absolutely. One large margherita and one Caesar salad, ready at 7.", dur: "0:16" },
   { who: "caller", text: "Perfect. Can you also add garlic knots and two tiramisus?", dur: "0:22" },
-  { who: "vera", text: "Got it. Garlic knots and two tiramisus added. Total is $54.12. Confirming via text now.", dur: "0:29" },
+  { who: "ava", text: "Got it. Garlic knots and two tiramisus added. Total is $54.12. Confirming via text now.", dur: "0:29" },
 ];
 
 export function CallTranscriptCard({ className }: { className?: string }) {
@@ -27,7 +27,7 @@ export function CallTranscriptCard({ className }: { className?: string }) {
   }, []);
 
   const current = SCRIPT[active];
-  const isVeraSpeaking = current.who === "vera";
+  const isAvaSpeaking = current.who === "ava";
   const mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
   const ss = String(elapsed % 60).padStart(2, "0");
 
@@ -44,25 +44,25 @@ export function CallTranscriptCard({ className }: { className?: string }) {
 
         <div className="px-4 pb-4 pt-5 sm:px-6 sm:pb-5 sm:pt-7">
           <div className="flex items-center justify-between gap-3">
-            <Caller name="Marco P." sub="+1 (917) 555-0142" icon={User} tone="neutral" isActive={!isVeraSpeaking} />
+            <Caller name="Marco P." sub="+1 (917) 555-0142" icon={User} tone="neutral" isActive={!isAvaSpeaking} />
 
             <div className="flex flex-1 flex-col items-center gap-2">
               <div className="flex h-7 w-7 items-center justify-center rounded-full bg-success/20 text-success ring-2 ring-success/30">
                 <PhoneCall className="h-3.5 w-3.5" />
               </div>
-              <Waveform direction={isVeraSpeaking ? "right" : "left"} />
+              <Waveform direction={isAvaSpeaking ? "right" : "left"} />
               <div className="text-[10px] uppercase text-background/50">Connected</div>
             </div>
 
-            <Caller name="Vera" sub="AI host - Trattoria" icon={Sparkles} tone="primary" isActive={isVeraSpeaking} />
+            <Caller name="Ava" sub="SignalHost - Trattoria" icon={Sparkles} tone="primary" isActive={isAvaSpeaking} />
           </div>
         </div>
 
         <div className="border-t border-background/10 bg-background/5 px-6 py-4">
           <div className="flex items-center gap-2 text-[10px] font-semibold uppercase">
             <Mic className="h-3 w-3" />
-            <span className={isVeraSpeaking ? "text-primary-glow" : "text-background/80"}>
-              {isVeraSpeaking ? "Vera" : "Marco"} speaking
+            <span className={isAvaSpeaking ? "text-primary-glow" : "text-background/80"}>
+              {isAvaSpeaking ? "Ava" : "Marco"} speaking
             </span>
             <span className="ml-auto tabular-nums text-background/50">{current.dur}</span>
           </div>

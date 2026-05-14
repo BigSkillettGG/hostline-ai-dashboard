@@ -44,7 +44,7 @@ export const industrySolutions: IndustrySolution[] = [
     businessType: "restaurant",
     ctaLabel: "Start restaurant setup",
     customerNoun: "guest",
-    heroTitle: "An AI host that answers every restaurant call.",
+    heroTitle: "SignalHost answers every restaurant call.",
     heroSubtitle:
       "Handle dinner-rush questions, pickup orders, reservation requests, delivery driver calls, allergies, complaints, and after-hours questions without pulling your host off the floor.",
     integrations: ["Toast", "Square", "Clover", "OpenTable", "Resy", "Yelp Reservations"],
@@ -84,7 +84,7 @@ export const industrySolutions: IndustrySolution[] = [
     ],
     valuePillars: [
       { title: "Recover missed revenue", body: "Dinner-rush calls become orders and reservation requests instead of voicemails." },
-      { title: "Protect the guest experience", body: "Your host can greet people at the door while Vera handles routine phone traffic." },
+      { title: "Protect the guest experience", body: "Your host can greet people at the door while SignalHost handles routine phone traffic." },
       { title: "Know what happened", body: "Every call has a transcript, summary, intent, staff task, and optional recording." },
     ],
     pricing: [
@@ -95,7 +95,7 @@ export const industrySolutions: IndustrySolution[] = [
         includedInteractions: 250,
         overage: "$0.45 per extra call or chat",
         blurb: "For small restaurants that need reliable call coverage.",
-        features: ["24/7 AI answering", "Hours, directions, FAQs", "Reservation request capture", "Call transcripts and staff alerts"],
+        features: ["24/7 SignalHost answering", "Hours, directions, FAQs", "Reservation request capture", "Call transcripts and staff alerts"],
       },
       {
         id: "growth",
@@ -162,7 +162,7 @@ export const industrySolutions: IndustrySolution[] = [
     valuePillars: [
       { title: "Win the urgent call", body: "When a homeowner has no heat or no AC, the company that answers first usually wins." },
       { title: "Qualify before dispatch", body: "Capture equipment, urgency, address, and access details before your team calls back." },
-      { title: "Sell the maintenance plan", body: "Vera can mention tune-ups, memberships, and seasonal promos at the right moment." },
+      { title: "Sell the maintenance plan", body: "SignalHost can mention tune-ups, memberships, and seasonal promos at the right moment." },
     ],
     pricing: [
       {
@@ -172,7 +172,7 @@ export const industrySolutions: IndustrySolution[] = [
         includedInteractions: 200,
         overage: "$0.55 per extra call or chat",
         blurb: "For owner-operated HVAC shops that need every lead answered.",
-        features: ["24/7 AI answering", "Service area and FAQ answers", "Emergency lead capture", "Staff callback alerts"],
+        features: ["24/7 SignalHost answering", "Service area and FAQ answers", "Emergency lead capture", "Staff callback alerts"],
       },
       {
         id: "growth",
@@ -238,8 +238,8 @@ export const industrySolutions: IndustrySolution[] = [
     ],
     valuePillars: [
       { title: "Never miss the emergency", body: "Plumbing callers are motivated. If you miss them, they call the next plumber." },
-      { title: "Get cleaner job details", body: "Vera asks the practical questions your dispatcher needs before calling back." },
-      { title: "Keep promises conservative", body: "The AI can collect requests without over-promising price, availability, or safety." },
+      { title: "Get cleaner job details", body: "SignalHost asks the practical questions your dispatcher needs before calling back." },
+      { title: "Keep promises conservative", body: "SignalHost can collect requests without over-promising price, availability, or safety." },
     ],
     pricing: [
       {
@@ -249,7 +249,7 @@ export const industrySolutions: IndustrySolution[] = [
         includedInteractions: 200,
         overage: "$0.55 per extra call or chat",
         blurb: "For small plumbing shops that cannot afford missed calls.",
-        features: ["24/7 AI answering", "Emergency intake", "Service area FAQs", "Staff callback alerts"],
+        features: ["24/7 SignalHost answering", "Emergency intake", "Service area FAQs", "Staff callback alerts"],
       },
       {
         id: "growth",
@@ -326,7 +326,7 @@ export const industrySolutions: IndustrySolution[] = [
         includedInteractions: 175,
         overage: "$0.55 per extra call or chat",
         blurb: "For local roofers that want every lead captured.",
-        features: ["24/7 AI answering", "Repair and estimate intake", "Service area FAQs", "Urgent leak alerts"],
+        features: ["24/7 SignalHost answering", "Repair and estimate intake", "Service area FAQs", "Urgent leak alerts"],
       },
       {
         id: "growth",
@@ -352,7 +352,7 @@ export const industrySolutions: IndustrySolution[] = [
     businessType: "electrical",
     ctaLabel: "Start electrician setup",
     customerNoun: "customer",
-    heroTitle: "An AI dispatcher for electrical calls and urgent safety issues.",
+    heroTitle: "SignalHost dispatches electrical calls and urgent safety issues.",
     heroSubtitle:
       "Capture panel, outlet, EV charger, generator, lighting, and emergency electrical calls while keeping safety-sensitive conversations conservative.",
     integrations: ["ServiceTitan", "Housecall Pro", "Jobber", "Google Calendar", "Zapier", "HubSpot"],
@@ -403,7 +403,7 @@ export const industrySolutions: IndustrySolution[] = [
         includedInteractions: 200,
         overage: "$0.55 per extra call or chat",
         blurb: "For small electrical contractors that need every call answered.",
-        features: ["24/7 AI answering", "Safety-aware intake", "Service area FAQs", "Urgent staff alerts"],
+        features: ["24/7 SignalHost answering", "Safety-aware intake", "Service area FAQs", "Urgent staff alerts"],
       },
       {
         id: "growth",
@@ -469,7 +469,7 @@ export const industrySolutions: IndustrySolution[] = [
     ],
     valuePillars: [
       { title: "Book while hands are busy", body: "Stylists and barbers do not have to stop mid-service to answer routine calls." },
-      { title: "Give new clients confidence", body: "Vera can explain services, starting prices, and what information the salon needs." },
+      { title: "Give new clients confidence", body: "SignalHost can explain services, starting prices, and what information the salon needs." },
       { title: "Reduce front-desk chaos", body: "Appointment requests, changes, and cancellation questions arrive organized." },
     ],
     pricing: [
@@ -480,7 +480,7 @@ export const industrySolutions: IndustrySolution[] = [
         includedInteractions: 150,
         overage: "$0.40 per extra call or chat",
         blurb: "For solo stylists, barbers, and small studios.",
-        features: ["24/7 AI answering", "Hours, prices, policies", "Booking request capture", "Client transcripts"],
+        features: ["24/7 SignalHost answering", "Hours, prices, policies", "Booking request capture", "Client transcripts"],
       },
       {
         id: "growth",

@@ -251,9 +251,9 @@ function ScenarioCard({
       setTestReply(result.reply);
       setTestActions(result.actions);
       setTestTranscript(result.transcript);
-      toast.success("AI host reply tested");
+      toast.success("SignalHost reply tested");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not test the AI host's reply");
+      toast.error(error instanceof Error ? error.message : "Could not test SignalHost's reply");
     } finally {
       setIsTesting(false);
     }
@@ -261,7 +261,7 @@ function ScenarioCard({
 
   const appendTestToNotes = () => {
     const actionSummary = testActions.length ? `\nActions: ${testActions.map(labelAgentTestAction).join(", ")}` : "";
-    const note = `\n\nBrain test\nCaller: ${testMessage}\nVera: ${testReply}${actionSummary}`.trim();
+    const note = `\n\nBrain test\nCaller: ${testMessage}\nSignalHost: ${testReply}${actionSummary}`.trim();
     onUpdate({ notes: [run?.notes?.trim(), note].filter(Boolean).join("\n\n") });
     toast.success("Test result added to notes");
   };
@@ -347,7 +347,7 @@ function ScenarioCard({
               <div className="rounded-md border border-border bg-background p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="text-[11px] font-medium uppercase text-muted-foreground">AI host would say</div>
+                    <div className="text-[11px] font-medium uppercase text-muted-foreground">SignalHost would say</div>
                     <p className="mt-1 text-sm">{testReply}</p>
                   </div>
                   <Button size="sm" variant="outline" onClick={appendTestToNotes}>

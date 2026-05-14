@@ -151,7 +151,7 @@ export default function SuperTenants() {
                     <th className="px-4 py-2.5 text-left font-medium">Vertical</th>
                     <th className="px-4 py-2.5 text-left font-medium">Plan</th>
                     <th className="px-4 py-2.5 text-right font-medium">Usage</th>
-                    <th className="px-4 py-2.5 text-left font-medium">AI number</th>
+                    <th className="px-4 py-2.5 text-left font-medium">SignalHost number</th>
                     <th className="px-4 py-2.5 text-left font-medium">Onboarding</th>
                     <th className="px-4 py-2.5 text-left font-medium">Status</th>
                     <th className="px-4 py-2.5 text-right font-medium">Actions</th>

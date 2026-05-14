@@ -63,7 +63,7 @@ export const alertRouteMetas: AlertRouteMeta[] = [
     label: "Human handoff",
   },
   {
-    description: "New phone pickup orders captured by the AI host and ready for staff review.",
+    description: "New phone pickup orders captured by SignalHost and ready for staff review.",
     kind: "order",
     label: "Phone orders",
   },

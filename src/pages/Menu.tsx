@@ -334,7 +334,7 @@ export default function MenuPage() {
     <>
       <PageHeader
         title="Menu"
-        description="Manage what your AI host can offer to callers"
+        description="Manage what SignalHost can offer to callers"
         actions={
           <>
             <Badge variant="outline" className="hidden gap-1.5 sm:inline-flex">
@@ -387,7 +387,7 @@ export default function MenuPage() {
             <div className="space-y-2">
               {sources.length === 0 && (
                 <div className="rounded-md border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
-                  No URLs yet. Add a menu page so the AI host can stay current.
+                  No URLs yet. Add a menu page so SignalHost can stay current.
                 </div>
               )}
               {sources.map((source) => (
@@ -547,7 +547,7 @@ export default function MenuPage() {
               ))
             ) : (
               <Card className="border-dashed p-8 text-center text-sm text-muted-foreground">
-                Import a menu or add an item to start building the AI host order catalog.
+                Import a menu or add an item to start building SignalHost's order catalog.
               </Card>
             )}
           </div>
@@ -639,7 +639,7 @@ export default function MenuPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Description</Label>
-              <Textarea defaultValue={editing?.description || ""} rows={2} placeholder="A short description for the AI host" />
+              <Textarea defaultValue={editing?.description || ""} rows={2} placeholder="A short description for SignalHost" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -662,7 +662,7 @@ export default function MenuPage() {
             <div className="flex items-center justify-between rounded-md border border-border p-3">
               <div>
                 <div className="text-sm font-medium">Available</div>
-                <div className="text-xs text-muted-foreground">If off, AI host will mark it as unavailable</div>
+                <div className="text-xs text-muted-foreground">If off, SignalHost will mark it as unavailable</div>
               </div>
               <Switch defaultChecked={editing?.available ?? true} />
             </div>

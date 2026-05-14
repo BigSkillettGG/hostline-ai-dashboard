@@ -732,7 +732,7 @@ function ActionDetail({
 
       <div className="space-y-4">
         <DetailSection label="Recommended next step" value={recommendedAction(task)} />
-        {task.body && <DetailSection label="Context the AI host captured" value={task.body} />}
+        {task.body && <DetailSection label="Context SignalHost captured" value={task.body} />}
         {(task.type === "customer_request" || task.type === "low_confidence_review") && (
           <CustomerAnswerPanel
             busy={busy}
@@ -988,7 +988,7 @@ function recommendedAction(task: StaffTask) {
   if (task.type === "reservation_review") return "Confirm availability in the reservation book or platform, then follow up with the guest.";
   if (task.type === "order_follow_up") return "Check the order record, confirm the kitchen or counter update, then close the action.";
   if (task.type === "delivery_issue") return "Resolve the operational handoff first, then verify the guest or kitchen is no longer blocked.";
-  if (task.type === "low_confidence_review") return "Open the call transcript, decide the right answer, and add a tuning note if the AI host needs better knowledge.";
+  if (task.type === "low_confidence_review") return "Open the call transcript, decide the right answer, and add a tuning note if SignalHost needs better knowledge.";
   return "Handle the request, then mark done when no customer or staff follow-up remains.";
 }
 

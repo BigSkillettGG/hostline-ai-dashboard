@@ -17,8 +17,8 @@ export default function MarketingLayout() {
           <Sparkles className="h-3 w-3 shrink-0 text-primary-glow" />
           <span className="font-medium">New:</span>
           <span className="opacity-80">
-            <span className="hidden sm:inline">AI phone plus website chat for restaurants, trades, and salons.</span>
-            <span className="sm:hidden">AI phone plus website chat.</span>
+            <span className="hidden sm:inline">SignalHost phone plus website chat for restaurants, trades, and salons.</span>
+            <span className="sm:hidden">SignalHost phone plus website chat.</span>
           </span>
           <Link to="/#solutions" className="ml-1 shrink-0 underline-offset-2 hover:underline">See solutions</Link>
         </div>
@@ -114,7 +114,7 @@ export default function MarketingLayout() {
                 <span className="text-base font-semibold">SignalHost</span>
               </div>
               <p className="mt-3 max-w-sm text-sm text-muted-foreground">
-                The AI phone and website chat operator for local businesses. Answer every call, capture every request, and give staff clean follow-up.
+                SignalHost answers phones and website chats for local businesses. Capture every request and give staff clean follow-up.
               </p>
             </div>
 

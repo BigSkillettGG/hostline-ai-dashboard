@@ -12,7 +12,7 @@ export function MissedCallCalculator() {
     const ordersWeek = missed * 0.6;
     const lostMonth = Math.round(ordersWeek * ticket * 4.3);
     const lostYear = lostMonth * 12;
-    const recoveredMonth = Math.round(lostMonth * 0.85); // Vera recovers ~85%
+    const recoveredMonth = Math.round(lostMonth * 0.85); // SignalHost recovers ~85%
     return { lostMonth, lostYear, recoveredMonth };
   }, [missed, ticket]);
 

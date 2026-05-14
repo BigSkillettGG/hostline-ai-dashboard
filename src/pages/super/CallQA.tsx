@@ -38,7 +38,7 @@ import { formatDuration, formatTime } from "@/lib/format";
 import { toast } from "sonner";
 
 const reviewOptions: Array<{ description: string; label: string; value: CallFeedbackCategory }> = [
-  { description: "The AI host did exactly what we want.", label: "Good answer", value: "good_answer" },
+  { description: "SignalHost did exactly what we want.", label: "Good answer", value: "good_answer" },
   { description: "Factually wrong or misleading.", label: "Wrong answer", value: "wrong_answer" },
   { description: "Technically okay, but unnatural.", label: "Awkward", value: "awkward" },
   { description: "Tenant knowledge is missing.", label: "Missing knowledge", value: "missing_knowledge" },
@@ -341,7 +341,7 @@ export default function CallQA() {
                   </div>
 
                   <div className="rounded-md border border-border p-3">
-                    <div className="text-xs font-medium uppercase text-muted-foreground">AI summary</div>
+                    <div className="text-xs font-medium uppercase text-muted-foreground">SignalHost summary</div>
                     <p className="mt-1 text-sm">{selectedCall.summary}</p>
                     <div className="mt-2 flex flex-wrap gap-1">
                       {selected.reasons.map((reason) => (
@@ -367,7 +367,7 @@ export default function CallQA() {
                           <div key={`${turn.t}-${index}`} className={`flex ${turn.speaker === "agent" ? "justify-start" : "justify-end"}`}>
                             <div className={`max-w-[82%] rounded-md px-3 py-2 text-sm ${turn.speaker === "agent" ? "bg-muted" : "bg-primary text-primary-foreground"}`}>
                               <div className={`mb-1 text-[10px] ${turn.speaker === "agent" ? "text-muted-foreground" : "text-primary-foreground/75"}`}>
-                                {turn.speaker === "agent" ? "AI host" : turn.speaker === "staff" ? "Staff" : "Caller"} - {turn.t}
+                                {turn.speaker === "agent" ? "SignalHost" : turn.speaker === "staff" ? "Staff" : "Caller"} - {turn.t}
                               </div>
                               {turn.text}
                             </div>
@@ -382,7 +382,7 @@ export default function CallQA() {
                       <Sparkles className="mt-0.5 h-4 w-4 text-primary" />
                       <div>
                         <div className="text-sm font-semibold">Tune from this call</div>
-                        <p className="text-xs text-muted-foreground">Save what happened, what the AI host should do, and whether this becomes permanent tenant knowledge.</p>
+                        <p className="text-xs text-muted-foreground">Save what happened, what SignalHost should do, and whether this becomes permanent tenant knowledge.</p>
                       </div>
                     </div>
 
@@ -406,7 +406,7 @@ export default function CallQA() {
 
                     <div className="mt-4 space-y-2">
                       <Label className="text-xs font-medium text-muted-foreground">What happened?</Label>
-                      <Textarea value={reviewNote} onChange={(event) => setReviewNote(event.target.value)} rows={3} placeholder="Example: Caller said they were done, but the AI host did not close the call cleanly." />
+                      <Textarea value={reviewNote} onChange={(event) => setReviewNote(event.target.value)} rows={3} placeholder="Example: Caller said they were done, but SignalHost did not close the call cleanly." />
                     </div>
 
                     <div className="mt-3 space-y-2">
@@ -418,7 +418,7 @@ export default function CallQA() {
                       <Checkbox checked={addToKnowledge} id="qa-add-knowledge" onCheckedChange={(checked) => setAddToKnowledge(checked === true)} />
                       <div>
                         <Label htmlFor="qa-add-knowledge" className="text-sm font-medium">Queue this as a knowledge update</Label>
-                        <p className="text-xs text-muted-foreground">Use this for permanent facts or preferred behavior. It will wait for owner approval before shaping the AI.</p>
+                        <p className="text-xs text-muted-foreground">Use this for permanent facts or preferred behavior. It will wait for owner approval before shaping SignalHost.</p>
                       </div>
                     </div>
 
@@ -581,7 +581,7 @@ function tenantName(locationId: string | undefined, tenants: Array<{ locationId:
 
 function buildTranscriptText(call: Call, tenant: string) {
   const transcript = call.transcript.length
-    ? call.transcript.map((turn) => `${turn.speaker === "agent" ? "AI host" : turn.speaker === "staff" ? "Staff" : "Caller"}: ${turn.text}`).join("\n")
+    ? call.transcript.map((turn) => `${turn.speaker === "agent" ? "SignalHost" : turn.speaker === "staff" ? "Staff" : "Caller"}: ${turn.text}`).join("\n")
     : "Transcript not available.";
   return [
     `Tenant: ${tenant}`,
@@ -613,7 +613,7 @@ function defaultNoteForCategory(category: CallFeedbackCategory, call: Call | nul
   if (!call) return "";
   if (category === "awkward") return "The answer was technically acceptable, but it sounded stiff or unnatural.";
   if (category === "wrong_answer") return "The answer was incorrect or misleading.";
-  if (category === "missing_knowledge") return "The AI host did not have enough tenant knowledge to answer confidently.";
+  if (category === "missing_knowledge") return "SignalHost did not have enough tenant knowledge to answer confidently.";
   if (category === "should_have_escalated") return "This should have been escalated to staff instead of answered directly.";
   if (category === "good_answer") return "This call is a good example of the behavior we want to keep.";
   return `Review needed for ${call.intent} call.`;

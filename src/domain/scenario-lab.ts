@@ -34,8 +34,8 @@ export const voiceScenarios: VoiceScenario[] = [
     callerScript: [
       "Call from a quiet phone.",
       "Say: Hi, do you have any specials tonight?",
-      "After the AI host answers, say: Great, do you have parking nearby?",
-      "After the AI host answers, say: No, that's all.",
+      "After SignalHost answers, say: Great, do you have parking nearby?",
+      "After SignalHost answers, say: No, that's all.",
     ],
     channel: "phone",
     expectedBehavior: [
@@ -54,9 +54,9 @@ export const voiceScenarios: VoiceScenario[] = [
   {
     callerScript: [
       "Call on speakerphone or car Bluetooth.",
-      "Let the AI host answer, then wait silently for two seconds.",
+      "Let SignalHost answer, then wait silently for two seconds.",
       "Ask: Are you open tonight?",
-      "Ask one follow-up while the AI host is speaking softly: Do you have happy hour?",
+      "Ask one follow-up while SignalHost is speaking softly: Do you have happy hour?",
     ],
     channel: "phone",
     expectedBehavior: [
@@ -75,7 +75,7 @@ export const voiceScenarios: VoiceScenario[] = [
   {
     callerScript: [
       "Say: Do you have availability at 6 tonight?",
-      "When the AI host asks the missing detail, say: Two people.",
+      "When SignalHost asks the missing detail, say: Two people.",
       "Give a last name only when asked for the name: Schneider.",
     ],
     channel: "phone",
@@ -95,7 +95,7 @@ export const voiceScenarios: VoiceScenario[] = [
   {
     callerScript: [
       "Say: My son has a severe peanut allergy. Is the mushroom risotto safe?",
-      "If the AI host offers staff help, say: Yes, please have someone call me.",
+      "If SignalHost offers staff help, say: Yes, please have someone call me.",
     ],
     channel: "phone",
     expectedBehavior: [
@@ -114,7 +114,7 @@ export const voiceScenarios: VoiceScenario[] = [
   {
     callerScript: [
       "Say: Can I get a pepperoni pizza for pickup?",
-      "If the AI host says it is not listed, ask: Can you just add pepperoni to a cheese pizza?",
+      "If SignalHost says it is not listed, ask: Can you just add pepperoni to a cheese pizza?",
       "Then ask: How much will that be?",
     ],
     channel: "phone",
@@ -134,7 +134,7 @@ export const voiceScenarios: VoiceScenario[] = [
   {
     callerScript: [
       "Say: Can you text me the reservation link?",
-      "If the AI host references your number, confirm yes.",
+      "If SignalHost references your number, confirm yes.",
       "Ask: Can you send the menu too?",
     ],
     channel: "phone",
@@ -154,7 +154,7 @@ export const voiceScenarios: VoiceScenario[] = [
   {
     callerScript: [
       "Say: I want to talk to a manager.",
-      "When the AI host asks why, say: I had a bad experience last night.",
+      "When SignalHost asks why, say: I had a bad experience last night.",
       "Ask if she can connect you now.",
     ],
     channel: "phone",

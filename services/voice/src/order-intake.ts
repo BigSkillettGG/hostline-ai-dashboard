@@ -63,7 +63,7 @@ export function capturePickupOrder(
     confidence: Math.min(95, 65 + items.length * 10),
     customerName: captureCustomerName(utterance),
     items,
-    notes: "AI-created staff-review pickup order. Staff should confirm before kitchen production.",
+    notes: "SignalHost-created staff-review pickup order. Staff should confirm before kitchen production.",
   };
 }
 

@@ -129,7 +129,7 @@ describe("Supabase call store", () => {
         { name: "Caesar Salad", priceCents: 1400, quantity: 1 },
       ],
       locationId: "00000000-0000-4000-8000-000000000002",
-      notes: "AI-created staff-review order.",
+      notes: "SignalHost-created staff-review order.",
     });
 
     expect(result.orderId).toBe("order_uuid");

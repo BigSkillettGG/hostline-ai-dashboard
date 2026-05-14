@@ -58,7 +58,7 @@ export const onboardingSections: OnboardingSection[] = [
       {
         id: "businessType",
         label: "Business type",
-        prompt: "Which template should shape the setup interview and AI behavior?",
+        prompt: "Which template should shape the setup interview and SignalHost behavior?",
         control: "select",
         required: true,
         options: businessTypeOptions,
@@ -253,8 +253,8 @@ export const onboardingSections: OnboardingSection[] = [
       },
       {
         id: "orderHandlingMode",
-        label: "What the AI host should do",
-        prompt: "When a caller wants to order, what should the AI host do first?",
+        label: "What SignalHost should do",
+        prompt: "When a caller wants to order, what should SignalHost do first?",
         control: "select",
         required: true,
         options: [
@@ -267,7 +267,7 @@ export const onboardingSections: OnboardingSection[] = [
       {
         id: "onlineOrderingUrl",
         label: "Online ordering link",
-        prompt: "If callers can order online, what link should the AI host text them?",
+        prompt: "If callers can order online, what link should SignalHost text them?",
         placeholder: "https://oliveandember.example/order",
         control: "url",
       },
@@ -275,7 +275,7 @@ export const onboardingSections: OnboardingSection[] = [
         businessTypes: ["electrical", "hvac", "plumbing", "roofing", "salon_barber"],
         id: "appointmentBookingUrl",
         label: "Appointment booking link",
-        prompt: "If customers can book online, what link should the AI send?",
+        prompt: "If customers can book online, what link should SignalHost send?",
         placeholder: "https://business.example/book",
         control: "url",
       },
@@ -283,7 +283,7 @@ export const onboardingSections: OnboardingSection[] = [
         businessTypes: ["electrical", "hvac", "plumbing", "roofing"],
         id: "quoteRequestUrl",
         label: "Quote request link",
-        prompt: "If customers can request an estimate online, what link should the AI send?",
+        prompt: "If customers can request an estimate online, what link should SignalHost send?",
         placeholder: "https://business.example/quote",
         control: "url",
       },
@@ -291,7 +291,7 @@ export const onboardingSections: OnboardingSection[] = [
         businessTypes: ["electrical", "hvac", "plumbing", "roofing", "salon_barber"],
         id: "intakeFormUrl",
         label: "Intake form link",
-        prompt: "If customers should fill out an intake form before staff follow-up, what link should the AI send?",
+        prompt: "If customers should fill out an intake form before staff follow-up, what link should SignalHost send?",
         placeholder: "https://business.example/intake",
         control: "url",
       },
@@ -352,7 +352,7 @@ export const onboardingSections: OnboardingSection[] = [
       {
         id: "takeReservations",
         label: "Handle reservations",
-        prompt: "Should the AI host answer reservation questions or collect reservation requests?",
+        prompt: "Should SignalHost answer reservation questions or collect reservation requests?",
         control: "toggle",
         required: true,
       },
@@ -377,8 +377,8 @@ export const onboardingSections: OnboardingSection[] = [
       },
       {
         id: "reservationHandlingMode",
-        label: "What the AI host should do",
-        prompt: "When a caller asks for a reservation, what should the AI host do first?",
+        label: "What SignalHost should do",
+        prompt: "When a caller asks for a reservation, what should SignalHost do first?",
         control: "select",
         required: true,
         options: [
@@ -394,7 +394,7 @@ export const onboardingSections: OnboardingSection[] = [
       {
         id: "reservationProvider",
         label: "Connected provider",
-        prompt: "If the AI host should connect to a reservation system, which one should we integrate with?",
+        prompt: "If SignalHost should connect to a reservation system, which one should we integrate with?",
         control: "select",
         required: true,
         options: ["OpenTable", "Yelp Guest Manager", "SevenRooms", "Resy", "Tock", "Google / booking link", "Manual requests only", "No reservations"],
@@ -402,14 +402,14 @@ export const onboardingSections: OnboardingSection[] = [
       {
         id: "reservationBookingUrl",
         label: "Booking link",
-        prompt: "If the AI host should text or read a booking link, what URL should it use?",
+        prompt: "If SignalHost should text or read a booking link, what URL should it use?",
         placeholder: "https://www.opentable.com/r/olive-and-ember",
         control: "url",
       },
       {
         id: "autoConfirmPartyLimit",
         label: "Auto-confirm party limit",
-        prompt: "What is the largest party the AI host may confirm without staff, if auto-confirm is enabled?",
+        prompt: "What is the largest party SignalHost may confirm without staff, if auto-confirm is enabled?",
         placeholder: "6",
         control: "short",
       },
@@ -424,7 +424,7 @@ export const onboardingSections: OnboardingSection[] = [
       {
         id: "largePartyThreshold",
         label: "Large-party threshold",
-        prompt: "At what party size should the AI host treat the call as a large-party or event inquiry?",
+        prompt: "At what party size should SignalHost treat the call as a large-party or event inquiry?",
         placeholder: "8 or more",
         control: "short",
       },
@@ -445,7 +445,7 @@ export const onboardingSections: OnboardingSection[] = [
       {
         id: "reservationCutoffRules",
         label: "Cutoff rules",
-        prompt: "When should the AI host stop taking or confirming reservations for a service?",
+        prompt: "When should SignalHost stop taking or confirming reservations for a service?",
         placeholder: "No same-day reservations after 4 PM Friday or Saturday.",
         control: "long",
       },
@@ -473,7 +473,7 @@ export const onboardingSections: OnboardingSection[] = [
       {
         id: "lateArrivalPolicy",
         label: "Late-arrival policy",
-        prompt: "How long are tables held, and what should the AI host say if someone is running late?",
+        prompt: "How long are tables held, and what should SignalHost say if someone is running late?",
         placeholder: "Tables are held for 15 minutes; staff confirmation needed after that.",
         control: "long",
       },
@@ -629,7 +629,7 @@ export const onboardingSections: OnboardingSection[] = [
       {
         id: "offerComplaintCallback",
         label: "Offer a manager callback for complaints",
-        prompt: "Should the AI host promise the caller that the manager will call them back?",
+        prompt: "Should SignalHost promise the caller that the manager will call them back?",
         control: "toggle",
       },
       {
@@ -862,7 +862,7 @@ type FieldCopyOverride = Partial<Omit<OnboardingField, "businessTypes" | "contro
 const tradeSectionCopy: Partial<Record<OnboardingStepId, SectionCopyOverride>> = {
   basics: {
     title: "Business basics",
-    assistantPrompt: "Let us capture the service area, dispatch rules, and details the AI needs before answering calls.",
+    assistantPrompt: "Let us capture the service area, dispatch rules, and details SignalHost needs before answering calls.",
     outcome: "Business identity, service area, escalation contact, and account owner details.",
   },
   menus: {
@@ -880,7 +880,7 @@ const tradeSectionCopy: Partial<Record<OnboardingStepId, SectionCopyOverride>> =
   reservations: {
     title: "Appointments and estimates",
     eyebrow: "Scheduling",
-    assistantPrompt: "Teach the AI what can be booked, what needs dispatch approval, and how emergencies are handled.",
+    assistantPrompt: "Teach SignalHost what can be booked, what needs dispatch approval, and how emergencies are handled.",
     outcome: "Scheduling system, appointment rules, emergency thresholds, service windows, and staff-confirmed requests.",
   },
   policies: {
@@ -896,7 +896,7 @@ const tradeSectionCopy: Partial<Record<OnboardingStepId, SectionCopyOverride>> =
   voice: {
     title: "Voice and behavior",
     eyebrow: "Front desk",
-    assistantPrompt: "Now let us make the AI sound like the business and behave the way staff expect.",
+    assistantPrompt: "Now let us make SignalHost sound like the business and behave the way staff expect.",
     outcome: "Host name, tone, greeting, answer timing, text follow-ups, languages, and handoff rules.",
   },
   launch: {
@@ -973,7 +973,7 @@ const businessSectionCopy: Partial<Record<BusinessType, Partial<Record<Onboardin
     voice: {
       title: "Voice and behavior",
       eyebrow: "Front desk",
-      assistantPrompt: "Now let us make the AI sound like the studio and behave the way the front desk expects.",
+      assistantPrompt: "Now let us make SignalHost sound like the studio and behave the way the front desk expects.",
       outcome: "Host name, tone, greeting, answer timing, text follow-ups, languages, and handoff rules.",
     },
   },
@@ -998,7 +998,7 @@ const genericSchedulingOptions = [
 const tradeFieldOverrides: Record<string, FieldCopyOverride> = {
   restaurantName: {
     label: "Business name",
-    prompt: "What business name should the AI use on calls and chats?",
+    prompt: "What business name should SignalHost use on calls and chats?",
     placeholder: "Harbor Plumbing",
   },
   concept: {
@@ -1033,7 +1033,7 @@ const tradeFieldOverrides: Record<string, FieldCopyOverride> = {
   },
   substitutionPolicy: {
     label: "Out-of-scope requests",
-    prompt: "Which requests can the AI accept, flag for staff, or decline?",
+    prompt: "Which requests can SignalHost accept, flag for staff, or decline?",
     placeholder: "Jobs requiring permits, unsafe conditions, commercial work, or exact pricing need staff review before promising anything.",
   },
   timedPricing: {
@@ -1043,7 +1043,7 @@ const tradeFieldOverrides: Record<string, FieldCopyOverride> = {
   },
   drinkRules: {
     label: "Licenses, warranties, and safety rules",
-    prompt: "What should the AI know about licenses, permits, warranties, and safety-sensitive advice?",
+    prompt: "What should SignalHost know about licenses, permits, warranties, and safety-sensitive advice?",
     placeholder: "Licensed and insured. Do not give unsafe DIY instructions. Escalate safety concerns to staff.",
   },
   regularHours: {
@@ -1058,7 +1058,7 @@ const tradeFieldOverrides: Record<string, FieldCopyOverride> = {
   },
   specialsSchedule: {
     label: "Promotions and seasonal priorities",
-    prompt: "Which seasonal promos, maintenance pushes, or high-priority services should the AI know?",
+    prompt: "Which seasonal promos, maintenance pushes, or high-priority services should SignalHost know?",
     placeholder: "Spring tune-up promo, winter emergency heat priority, free replacement estimates in service area.",
   },
   holidayExceptions: {
@@ -1068,31 +1068,31 @@ const tradeFieldOverrides: Record<string, FieldCopyOverride> = {
   },
   orderingCutoffs: {
     label: "Dispatch cutoffs",
-    prompt: "When should the AI stop offering same-day callbacks, appointments, estimates, or non-emergency requests?",
+    prompt: "When should SignalHost stop offering same-day callbacks, appointments, estimates, or non-emergency requests?",
     placeholder: "Same-day routine requests before 3 PM. After 3 PM, staff confirms next available window.",
   },
   takeOrders: {
     label: "Capture service requests",
-    prompt: "Should the AI capture service requests for staff follow-up?",
+    prompt: "Should SignalHost capture service requests for staff follow-up?",
   },
   orderHandlingMode: {
-    label: "What the AI should do",
-    prompt: "When a customer needs service, what should the AI do first?",
+    label: "What SignalHost should do",
+    prompt: "When a customer needs service, what should SignalHost do first?",
     options: tradeOrderOptions,
   },
   onlineOrderingUrl: {
     label: "Primary service request link",
-    prompt: "If customers can submit service requests online, what link should the AI send?",
+    prompt: "If customers can submit service requests online, what link should SignalHost send?",
     placeholder: "https://business.example/request",
   },
   defaultPickupEta: {
     label: "Default response ETA",
-    prompt: "What follow-up estimate should the AI use when dispatch is not connected?",
+    prompt: "What follow-up estimate should SignalHost use when dispatch is not connected?",
     placeholder: "A dispatcher will call back within 15 minutes during business hours.",
   },
   paymentPolicy: {
     label: "Payment and estimate policy",
-    prompt: "How should the AI explain trip fees, diagnostics, estimates, deposits, financing, and payment?",
+    prompt: "How should SignalHost explain trip fees, diagnostics, estimates, deposits, financing, and payment?",
     placeholder: "Diagnostic fee due at visit. Estimates for replacements are free. Financing available on approved credit.",
   },
   orderDestination: {
@@ -1102,7 +1102,7 @@ const tradeFieldOverrides: Record<string, FieldCopyOverride> = {
   },
   orderChangePolicy: {
     label: "Existing jobs and changes",
-    prompt: "What should the AI do if someone wants to change, cancel, or check an existing appointment or job?",
+    prompt: "What should SignalHost do if someone wants to change, cancel, or check an existing appointment or job?",
     placeholder: "Collect job name, address, phone, requested change, and urgency. Flag staff before promising anything.",
   },
   deliveryDriverPolicy: {
@@ -1112,12 +1112,12 @@ const tradeFieldOverrides: Record<string, FieldCopyOverride> = {
   },
   upsellRules: {
     label: "Helpful suggestions",
-    prompt: "What should the AI mention naturally without sounding salesy?",
+    prompt: "What should SignalHost mention naturally without sounding salesy?",
     placeholder: "Mention maintenance plans after repair requests and financing after replacement estimate questions.",
   },
   takeReservations: {
     label: "Handle appointment requests",
-    prompt: "Should the AI answer scheduling questions or collect appointment requests?",
+    prompt: "Should SignalHost answer scheduling questions or collect appointment requests?",
   },
   reservationSourceToday: {
     label: "Current scheduling workflow",
@@ -1125,8 +1125,8 @@ const tradeFieldOverrides: Record<string, FieldCopyOverride> = {
     options: ["ServiceTitan", "Housecall Pro", "Jobber", "Google Calendar", "Booking link", "Phone calls only", "Spreadsheet", "No formal system"],
   },
   reservationHandlingMode: {
-    label: "What the AI should do",
-    prompt: "When a customer asks for an appointment, what should the AI do first?",
+    label: "What SignalHost should do",
+    prompt: "When a customer asks for an appointment, what should SignalHost do first?",
     options: genericSchedulingOptions,
   },
   reservationProvider: {
@@ -1136,7 +1136,7 @@ const tradeFieldOverrides: Record<string, FieldCopyOverride> = {
   },
   reservationBookingUrl: {
     label: "Booking link",
-    prompt: "If the AI should send a booking link, what URL should it use?",
+    prompt: "If SignalHost should send a booking link, what URL should it use?",
     placeholder: "https://business.example/book",
   },
   partyRules: {
@@ -1151,7 +1151,7 @@ const tradeFieldOverrides: Record<string, FieldCopyOverride> = {
   },
   waitlistPolicy: {
     label: "Urgent and emergency calls",
-    prompt: "What should the AI say about emergencies, urgent calls, and response windows?",
+    prompt: "What should SignalHost say about emergencies, urgent calls, and response windows?",
     placeholder: "Active leaks, no heat, sparking, or interior roof leaks get urgent callback. Safety risks are escalated.",
   },
   parking: {
@@ -1161,22 +1161,22 @@ const tradeFieldOverrides: Record<string, FieldCopyOverride> = {
   },
   allergyPolicy: {
     label: "Safety-sensitive calls",
-    prompt: "Which situations should the AI treat as urgent or unsafe, and what should it avoid saying?",
+    prompt: "Which situations should SignalHost treat as urgent or unsafe, and what should it avoid saying?",
     placeholder: "Do not give DIY repair instructions for safety-sensitive issues. Escalate gas smell, flooding, sparking, or active leaks.",
   },
   deliveryPolicy: {
     label: "Service area and travel rules",
-    prompt: "Where do you provide service, and what should the AI say about travel fees, out-of-area requests, or remote estimates?",
+    prompt: "Where do you provide service, and what should SignalHost say about travel fees, out-of-area requests, or remote estimates?",
     placeholder: "Serve within 25 miles. Out-of-area requests go to staff review. Travel fees may apply beyond 15 miles.",
   },
   lostAndFoundPolicy: {
     label: "Existing job follow-up",
-    prompt: "What should the AI collect when someone asks about an existing job, estimate, invoice, warranty, or technician visit?",
+    prompt: "What should SignalHost collect when someone asks about an existing job, estimate, invoice, warranty, or technician visit?",
     placeholder: "Collect name, address, phone, job date, technician if known, and what they need changed or reviewed.",
   },
   hiringPolicy: {
     label: "Jobs and hiring",
-    prompt: "What should the AI say when someone asks about careers, apprenticeships, subcontracting, or resumes?",
+    prompt: "What should SignalHost say when someone asks about careers, apprenticeships, subcontracting, or resumes?",
     placeholder: "Collect name, trade, license status, phone, email, and resume link; route to operations.",
   },
   donationPressPolicy: {
@@ -1186,7 +1186,7 @@ const tradeFieldOverrides: Record<string, FieldCopyOverride> = {
   },
   feesAndRules: {
     label: "Fees, warranties, and customer rules",
-    prompt: "Which fees, warranty limits, pets/access rules, financing options, and customer responsibilities should the AI know?",
+    prompt: "Which fees, warranty limits, pets/access rules, financing options, and customer responsibilities should SignalHost know?",
     placeholder: "Diagnostic fee, emergency surcharge, warranty terms, financing available, secure pets, clear access to work area.",
   },
   customFaqs: {
@@ -1200,7 +1200,7 @@ const tradeFieldOverrides: Record<string, FieldCopyOverride> = {
   },
   complaintPolicy: {
     label: "Complaint, damage, and refund handling",
-    prompt: "What should the AI say and collect for complaints, property damage, missed appointments, bad experiences, or refund requests?",
+    prompt: "What should SignalHost say and collect for complaints, property damage, missed appointments, bad experiences, or refund requests?",
     placeholder: "Apologize, collect name, address, callback, job details, and route for manager review without promising refunds.",
   },
   salesManagerEmail: {
@@ -1210,12 +1210,12 @@ const tradeFieldOverrides: Record<string, FieldCopyOverride> = {
   },
   vendorCallPolicy: {
     label: "Vendor and sales call handling",
-    prompt: "What should the AI collect from suppliers, software reps, marketing callers, and salespeople?",
+    prompt: "What should SignalHost collect from suppliers, software reps, marketing callers, and salespeople?",
     placeholder: "Collect company, reason, contact name, phone, email, and route without interrupting dispatch.",
   },
   humanHandoffPolicy: {
     label: "Human callback rules",
-    prompt: "When someone asks for a person, what should the AI promise and what details should it collect?",
+    prompt: "When someone asks for a person, what should SignalHost promise and what details should it collect?",
     placeholder: "Offer a staff callback, collect name, phone, reason, urgency, and avoid promising immediate transfer.",
   },
   additionalTrustedContacts: {
@@ -1346,7 +1346,7 @@ const businessFieldOverrides: Partial<Record<BusinessType, Record<string, FieldC
     ...tradeFieldOverrides,
     restaurantName: {
       label: "Business name",
-      prompt: "What business name should the AI use on calls and chats?",
+      prompt: "What business name should SignalHost use on calls and chats?",
       placeholder: "Harbor Plumbing",
     },
     concept: {
@@ -1381,7 +1381,7 @@ const businessFieldOverrides: Partial<Record<BusinessType, Record<string, FieldC
     },
     substitutionPolicy: {
       label: "Out-of-scope requests",
-      prompt: "Which requests can the AI accept, flag for staff, or decline?",
+      prompt: "Which requests can SignalHost accept, flag for staff, or decline?",
       placeholder: "Gas line work, remodel bids, and commercial jobs need staff review before promising availability or price.",
     },
     timedPricing: {
@@ -1391,26 +1391,26 @@ const businessFieldOverrides: Partial<Record<BusinessType, Record<string, FieldC
     },
     drinkRules: {
       label: "Licenses, warranties, and safety rules",
-      prompt: "What should the AI know about licenses, permits, warranties, and safety?",
+      prompt: "What should SignalHost know about licenses, permits, warranties, and safety?",
       placeholder: "Licensed and insured. Do not advise unsafe DIY steps. Ask caller to shut off water if safe.",
     },
     takeOrders: {
       label: "Capture service requests",
-      prompt: "Should the AI capture service requests for staff follow-up?",
+      prompt: "Should SignalHost capture service requests for staff follow-up?",
     },
     orderHandlingMode: {
-      label: "What the AI should do",
-      prompt: "When a customer needs service, what should the AI do first?",
+      label: "What SignalHost should do",
+      prompt: "When a customer needs service, what should SignalHost do first?",
       options: tradeOrderOptions,
     },
     onlineOrderingUrl: {
       label: "Primary service request link",
-      prompt: "If customers can submit service requests online, what link should the AI send?",
+      prompt: "If customers can submit service requests online, what link should SignalHost send?",
       placeholder: "https://harborplumbing.example/request",
     },
     defaultPickupEta: {
       label: "Default response ETA",
-      prompt: "What follow-up estimate should the AI use when dispatch is not connected?",
+      prompt: "What follow-up estimate should SignalHost use when dispatch is not connected?",
       placeholder: "A dispatcher will call back within 15 minutes during business hours.",
     },
     orderDestination: {
@@ -1420,7 +1420,7 @@ const businessFieldOverrides: Partial<Record<BusinessType, Record<string, FieldC
     },
     takeReservations: {
       label: "Handle appointment requests",
-      prompt: "Should the AI answer scheduling questions or collect appointment requests?",
+      prompt: "Should SignalHost answer scheduling questions or collect appointment requests?",
     },
     reservationSourceToday: {
       label: "Current scheduling workflow",
@@ -1428,8 +1428,8 @@ const businessFieldOverrides: Partial<Record<BusinessType, Record<string, FieldC
       options: ["ServiceTitan", "Housecall Pro", "Jobber", "Google Calendar", "Booking link", "Phone calls only", "Spreadsheet", "No formal system"],
     },
     reservationHandlingMode: {
-      label: "What the AI should do",
-      prompt: "When a customer asks for an appointment, what should the AI do first?",
+      label: "What SignalHost should do",
+      prompt: "When a customer asks for an appointment, what should SignalHost do first?",
       options: genericSchedulingOptions,
     },
     reservationProvider: {
@@ -1439,7 +1439,7 @@ const businessFieldOverrides: Partial<Record<BusinessType, Record<string, FieldC
     },
     reservationBookingUrl: {
       label: "Booking link",
-      prompt: "If the AI should send a booking link, what URL should it use?",
+      prompt: "If SignalHost should send a booking link, what URL should it use?",
       placeholder: "https://harborplumbing.example/book",
     },
     partyRules: {
@@ -1454,7 +1454,7 @@ const businessFieldOverrides: Partial<Record<BusinessType, Record<string, FieldC
     },
     waitlistPolicy: {
       label: "Urgent and emergency calls",
-      prompt: "What should the AI say about emergencies, urgent calls, and response windows?",
+      prompt: "What should SignalHost say about emergencies, urgent calls, and response windows?",
       placeholder: "Active leaks get urgent callback. If there is flooding or safety risk, tell the caller to shut off water if safe.",
     },
     mainPhone: {
@@ -1502,30 +1502,30 @@ const businessFieldOverrides: Partial<Record<BusinessType, Record<string, FieldC
     },
   },
   salon_barber: {
-    restaurantName: { label: "Studio name", prompt: "What studio name should the AI use?", placeholder: "Luna Studio" },
+    restaurantName: { label: "Studio name", prompt: "What studio name should SignalHost use?", placeholder: "Luna Studio" },
     concept: { label: "Services and vibe", prompt: "How would staff describe the salon, barbershop, or studio?", placeholder: "Modern salon and barbershop offering cuts, color, blowouts, beard trims, treatments, and bridal services." },
     menuUrl: { label: "Service menu link", placeholder: "https://lunastudio.example/services" },
     menuCategories: { label: "Services offered", prompt: "Which services should clients ask about or book?", placeholder: "Haircuts, barber cuts, beard trims, color, blowouts, treatments, waxing, bridal, packages." },
-    modifiers: { label: "Service options", prompt: "Which details should the AI collect before booking or staff follow-up?", placeholder: "Provider preference, hair length, color history, beard service, add-ons, duration, first visit notes." },
+    modifiers: { label: "Service options", prompt: "Which details should SignalHost collect before booking or staff follow-up?", placeholder: "Provider preference, hair length, color history, beard service, add-ons, duration, first visit notes." },
     timedPricing: { label: "Timed pricing and promos", placeholder: "New-client facial promo weekdays. Bridal consultations require deposit." },
     drinkRules: { label: "Contraindications and product notes", placeholder: "Color patch tests, skin sensitivities, allergies, product lines, pregnancy-safe services, barber sanitation rules." },
     regularHours: { label: "Studio hours", prompt: "What are normal front-desk and appointment hours for each day?", placeholder: "Tue-Fri 10 AM-7 PM, Sat 9 AM-5 PM, Sun-Mon closed." },
     servicePeriods: { label: "Service windows", prompt: "When do cuts, color, barber services, bridal consultations, and walk-ins run?", placeholder: "Color Tue-Sat by appointment. Barber walk-ins Tue-Thu. Bridal consultations weekday mornings." },
     specialsSchedule: { label: "Promos and special services", prompt: "Which seasonal promos, bridal days, product launches, or recurring events should clients hear about?", placeholder: "New-client color consultation promo, bridal trials on Fridays, product education night first Thursday." },
     holidayExceptions: { label: "Holiday and event hours", prompt: "Which holidays, weddings, photo-shoot days, or blackout dates change hours or booking rules?", placeholder: "Closed major holidays. Prom season Saturdays require deposits. Bridal parties need staff confirmation." },
-    orderingCutoffs: { label: "Same-day booking cutoff", prompt: "When should the AI stop offering same-day appointment requests or waitlist promises?", placeholder: "Same-day requests after 3 PM are staff-confirmed only. Color services need consultation first." },
-    takeOrders: { label: "Capture client requests", prompt: "Should the AI capture appointment, product, and front-desk requests for follow-up?" },
-    orderHandlingMode: { label: "What the AI should do", options: ["Create booking request for staff review", "Send booking link", "Take a message only", "Do not handle booking requests"] },
-    onlineOrderingUrl: { label: "Booking or store link", prompt: "If clients can book or buy products online, what link should the AI send?", placeholder: "https://lunastudio.example/book" },
-    defaultPickupEta: { label: "Default response ETA", prompt: "What follow-up estimate should the AI use when the front desk is not connected?", placeholder: "The front desk will follow up during business hours, usually within 30 minutes." },
-    paymentPolicy: { label: "Payment, deposit, and checkout policy", prompt: "How should the AI explain deposits, cancellation fees, product purchases, gift cards, and payment?", placeholder: "Deposits for color and bridal services. Gift cards online. Payment is handled in studio or through booking link." },
+    orderingCutoffs: { label: "Same-day booking cutoff", prompt: "When should SignalHost stop offering same-day appointment requests or waitlist promises?", placeholder: "Same-day requests after 3 PM are staff-confirmed only. Color services need consultation first." },
+    takeOrders: { label: "Capture client requests", prompt: "Should SignalHost capture appointment, product, and front-desk requests for follow-up?" },
+    orderHandlingMode: { label: "What SignalHost should do", options: ["Create booking request for staff review", "Send booking link", "Take a message only", "Do not handle booking requests"] },
+    onlineOrderingUrl: { label: "Booking or store link", prompt: "If clients can book or buy products online, what link should SignalHost send?", placeholder: "https://lunastudio.example/book" },
+    defaultPickupEta: { label: "Default response ETA", prompt: "What follow-up estimate should SignalHost use when the front desk is not connected?", placeholder: "The front desk will follow up during business hours, usually within 30 minutes." },
+    paymentPolicy: { label: "Payment, deposit, and checkout policy", prompt: "How should SignalHost explain deposits, cancellation fees, product purchases, gift cards, and payment?", placeholder: "Deposits for color and bridal services. Gift cards online. Payment is handled in studio or through booking link." },
     orderDestination: { label: "Request destination", prompt: "Where should new client requests go first?", options: ["Staff review queue", "Front desk queue", "Booking system", "Email or webhook"] },
-    orderChangePolicy: { label: "Appointment changes and cancellations", prompt: "What should the AI do when a client wants to change, cancel, or check an appointment?", placeholder: "Collect name, appointment date/time, provider, requested change, and route to front desk before promising availability." },
+    orderChangePolicy: { label: "Appointment changes and cancellations", prompt: "What should SignalHost do when a client wants to change, cancel, or check an appointment?", placeholder: "Collect name, appointment date/time, provider, requested change, and route to front desk before promising availability." },
     deliveryDriverPolicy: { label: "Client arrival instructions", prompt: "What should clients know about arrival, parking, late policy, guests, children, and accessibility?", placeholder: "Check in at front desk. Ten-minute grace period. Street parking nearby. Service animals only." },
-    upsellRules: { label: "Helpful suggestions", prompt: "What should the AI mention naturally without sounding pushy?", placeholder: "Mention consultations before complex color and product pickup after retail questions. Do not upsell after a client declines." },
-    takeReservations: { label: "Handle appointments", prompt: "Should the AI answer appointment questions or collect booking requests?" },
+    upsellRules: { label: "Helpful suggestions", prompt: "What should SignalHost mention naturally without sounding pushy?", placeholder: "Mention consultations before complex color and product pickup after retail questions. Do not upsell after a client declines." },
+    takeReservations: { label: "Handle appointments", prompt: "Should SignalHost answer appointment questions or collect booking requests?" },
     reservationSourceToday: { label: "Current booking workflow", options: ["Boulevard", "Vagaro", "Square Appointments", "Mindbody", "Google Calendar", "Booking link", "Phone calls only"] },
-    reservationHandlingMode: { label: "What the AI should do", options: genericSchedulingOptions },
+    reservationHandlingMode: { label: "What SignalHost should do", options: genericSchedulingOptions },
     reservationProvider: { label: "Booking system", options: ["Boulevard", "Vagaro", "Square Appointments", "Mindbody", "Booking link", "Manual requests only"] },
     reservationBookingUrl: { label: "Booking link", placeholder: "https://lunastudio.example/book" },
     partyRules: { label: "Appointment rules", placeholder: "Color corrections, bridal parties, first-time color, and complex barber designs need staff confirmation." },
@@ -1538,22 +1538,22 @@ const businessFieldOverrides: Partial<Record<BusinessType, Record<string, FieldC
     },
     allergyPolicy: {
       label: "Allergies and sensitivities",
-      prompt: "How should the AI handle product allergies, skin sensitivities, patch tests, and contraindications?",
+      prompt: "How should SignalHost handle product allergies, skin sensitivities, patch tests, and contraindications?",
       placeholder: "Flag product allergies and skin sensitivities for staff. Color services may require patch test.",
     },
     deliveryPolicy: {
       label: "Products and retail",
-      prompt: "What should the AI say about product purchases, gift cards, pickups, returns, or retail availability?",
+      prompt: "What should SignalHost say about product purchases, gift cards, pickups, returns, or retail availability?",
       placeholder: "Gift cards available online. Retail product availability is confirmed by front desk before holding.",
     },
     lostAndFoundPolicy: {
       label: "Lost and found",
-      prompt: "What should the AI collect when a client says they left something behind?",
+      prompt: "What should SignalHost collect when a client says they left something behind?",
       placeholder: "Collect item description, appointment date/time, stylist or barber, and callback number.",
     },
     hiringPolicy: {
       label: "Jobs and booth rental",
-      prompt: "What should the AI say about stylist, barber, apprentice, front-desk, or booth-rental inquiries?",
+      prompt: "What should SignalHost say about stylist, barber, apprentice, front-desk, or booth-rental inquiries?",
       placeholder: "Collect name, license status, portfolio link, phone, email, and preferred role.",
     },
     donationPressPolicy: {
@@ -1563,7 +1563,7 @@ const businessFieldOverrides: Partial<Record<BusinessType, Record<string, FieldC
     },
     feesAndRules: {
       label: "Studio rules",
-      prompt: "Which cancellation, no-show, deposit, children, pets, guest, and accessibility rules should the AI know?",
+      prompt: "Which cancellation, no-show, deposit, children, pets, guest, and accessibility rules should SignalHost know?",
       placeholder: "24-hour cancellation policy. Deposits for color and bridal. Service animals only. Children by appointment.",
     },
     customFaqs: {
@@ -1577,7 +1577,7 @@ const businessFieldOverrides: Partial<Record<BusinessType, Record<string, FieldC
     },
     complaintPolicy: {
       label: "Complaint and redo handling",
-      prompt: "What should the AI say and collect for service complaints, redo requests, refunds, or bad experiences?",
+      prompt: "What should SignalHost say and collect for service complaints, redo requests, refunds, or bad experiences?",
       placeholder: "Apologize, collect name, service date, provider, concern, photos if relevant, and manager callback request.",
     },
     salesManagerEmail: {
@@ -1587,12 +1587,12 @@ const businessFieldOverrides: Partial<Record<BusinessType, Record<string, FieldC
     },
     vendorCallPolicy: {
       label: "Vendor and sales call handling",
-      prompt: "What should the AI collect from product reps, educators, software reps, and sales callers?",
+      prompt: "What should SignalHost collect from product reps, educators, software reps, and sales callers?",
       placeholder: "Collect company, line carried, reason, contact name, phone, email, and route to owner.",
     },
     humanHandoffPolicy: {
       label: "Human callback rules",
-      prompt: "When someone asks for a person, what should the AI promise and what details should it collect?",
+      prompt: "When someone asks for a person, what should SignalHost promise and what details should it collect?",
       placeholder: "Offer a front-desk callback, collect name, phone, reason, urgency, and avoid promising immediate transfer.",
     },
     alertPreferenceRules: {

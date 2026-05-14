@@ -230,7 +230,7 @@ export default function VoiceAgent() {
     <>
       <PageHeader
         title="Voice Agent"
-        description="Configure how the AI host answers, routes, and escalates calls"
+        description="Configure how SignalHost answers, routes, and escalates calls"
         actions={
           <>
             <Button variant="outline" size="sm" onClick={playVoicePreview} disabled={playingPreview}>
@@ -310,7 +310,7 @@ export default function VoiceAgent() {
 
                 <div className="flex items-center justify-between rounded-md border border-border p-3">
                   <div>
-                    <div className="text-sm font-medium">Light AI disclosure</div>
+                    <div className="text-sm font-medium">Light disclosure</div>
                     <div className="text-xs text-muted-foreground">Default greeting identifies the host as virtual.</div>
                   </div>
                   <Switch

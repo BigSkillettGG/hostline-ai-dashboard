@@ -80,7 +80,7 @@ const valueColor: Record<InteractionValueTier, string> = {
   very_high: "bg-primary/10 text-primary border-primary/20",
 };
 const reviewOptions: Array<{ description: string; label: string; value: CallFeedbackCategory }> = [
-  { description: "The AI host nailed it. Keep this behavior.", label: "Good answer", value: "good_answer" },
+  { description: "SignalHost nailed it. Keep this behavior.", label: "Good answer", value: "good_answer" },
   { description: "Factually wrong or misleading.", label: "Wrong answer", value: "wrong_answer" },
   { description: "Technically okay, but sounded clunky.", label: "Awkward", value: "awkward" },
   { description: "Restaurant knowledge is missing.", label: "Missing knowledge", value: "missing_knowledge" },
@@ -224,7 +224,7 @@ export default function Calls() {
     if (!selected) return;
 
     const transcript = selected.transcript.length
-      ? selected.transcript.map((turn) => `${turn.speaker === "agent" ? "AI host" : turn.speaker === "staff" ? "Staff" : selected.channel === "web_chat" ? "Visitor" : "Caller"}: ${turn.text}`).join("\n")
+      ? selected.transcript.map((turn) => `${turn.speaker === "agent" ? "SignalHost" : turn.speaker === "staff" ? "Staff" : selected.channel === "web_chat" ? "Visitor" : "Caller"}: ${turn.text}`).join("\n")
       : "Transcript not available.";
     const text = [
       `${selected.channel === "web_chat" ? "Conversation" : "Call"} ID: ${selected.id}`,
@@ -571,7 +571,7 @@ export default function Calls() {
                     <div key={i} className={`flex gap-3 ${t.speaker === "agent" ? "" : "flex-row-reverse"}`}>
                       <div className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${t.speaker === "agent" ? "bg-muted" : "bg-primary text-primary-foreground"}`}>
                         <div className={`text-[10px] mb-0.5 ${t.speaker === "agent" ? "text-muted-foreground" : "text-primary-foreground/70"}`}>
-                          {t.speaker === "agent" ? "AI host" : t.speaker === "staff" ? "Staff" : selected.channel === "web_chat" ? "Visitor" : selected.caller} · {t.t}
+                          {t.speaker === "agent" ? "SignalHost" : t.speaker === "staff" ? "Staff" : selected.channel === "web_chat" ? "Visitor" : selected.caller} · {t.t}
                         </div>
                         {t.text}
                       </div>
@@ -610,7 +610,7 @@ export default function Calls() {
                       <div className="flex items-start gap-2">
                         <MessageSquare className="mt-0.5 h-4 w-4 text-primary shrink-0" />
                         <div>
-                          <div className="text-xs font-medium text-muted-foreground">AI summary</div>
+                          <div className="text-xs font-medium text-muted-foreground">SignalHost summary</div>
                           <p className="mt-1 text-sm">{selected.summary}</p>
                         </div>
                       </div>
@@ -665,9 +665,9 @@ export default function Calls() {
                     <div className="mb-3 flex items-start gap-2">
                       <Sparkles className="mt-0.5 h-4 w-4 text-primary" />
                       <div>
-                        <div className="text-sm font-semibold">Tune the AI host from this call</div>
+                        <div className="text-sm font-semibold">Tune SignalHost from this call</div>
                         <p className="text-xs text-muted-foreground">
-                          Capture what went well, what sounded odd, and what the AI host should know next time.
+                          Capture what went well, what sounded odd, and what SignalHost should know next time.
                         </p>
                       </div>
                     </div>
@@ -698,7 +698,7 @@ export default function Calls() {
                       <Textarea
                         value={reviewNote}
                         onChange={(event) => setReviewNote(event.target.value)}
-                        placeholder="Example: Caller asked about patio heaters and the AI host did not know the answer."
+                        placeholder="Example: Caller asked about patio heaters and SignalHost did not know the answer."
                         rows={3}
                       />
                     </div>

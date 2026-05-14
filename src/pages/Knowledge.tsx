@@ -401,7 +401,7 @@ export default function Knowledge() {
     <>
       <PageHeader
         title="Knowledge Base"
-        description="What the AI host knows and the active tuning notes shaping its behavior"
+        description="What SignalHost knows and the active tuning notes shaping its behavior"
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Badge
@@ -537,7 +537,7 @@ export default function Knowledge() {
 
                 <div className="space-y-3">
                   <div>
-                    <div className="text-xs font-medium uppercase text-muted-foreground">Active for the AI</div>
+                    <div className="text-xs font-medium uppercase text-muted-foreground">Active for SignalHost</div>
                     <p className="text-xs text-muted-foreground">These are the rules SignalHost would apply before regular knowledge.</p>
                     {businessLiveQuery.isError && (
                       <p className="mt-2 rounded-md border border-warning/30 bg-warning/10 p-2 text-xs text-warning">
@@ -578,7 +578,7 @@ export default function Knowledge() {
                 Suggested knowledge updates
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
-                When a call review finds missing knowledge or a better answer, SignalHost queues it here before it changes the live AI.
+                When a call review finds missing knowledge or a better answer, SignalHost queues it here before it changes live SignalHost behavior.
               </p>
               {knowledgeConfigured && (
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -632,10 +632,10 @@ export default function Knowledge() {
             <div className="max-w-3xl">
               <div className="flex items-center gap-2 text-sm font-semibold">
                 <Bot className="h-4 w-4 text-primary" />
-                Active AI tuning notes
+                Active SignalHost tuning notes
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
-                QA notes saved to knowledge are now included in the AI host's runtime instructions. They are behavior corrections, not caller-facing facts.
+                QA notes saved to knowledge are now included in SignalHost's runtime instructions. They are behavior corrections, not caller-facing facts.
               </p>
               {knowledgeConfigured && (
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -690,7 +690,7 @@ export default function Knowledge() {
                 Business knowledge
               </div>
               <p className="text-xs text-muted-foreground">
-                Facts the AI host can use for hours, policies, menu questions, events, directions, and common caller questions.
+                Facts SignalHost can use for hours, policies, menu questions, events, directions, and common caller questions.
               </p>
             </div>
             <Badge variant="secondary" className="w-fit text-[10px]">
@@ -741,7 +741,7 @@ export default function Knowledge() {
                 <BookOpen className="h-4 w-4 text-primary" />
                 Custom FAQs
               </div>
-              <p className="text-xs text-muted-foreground">Question and answer pairs the AI host can reference.</p>
+              <p className="text-xs text-muted-foreground">Question and answer pairs SignalHost can reference.</p>
             </div>
             <Button size="sm" variant="outline" onClick={() => setItems([...items, { a: "", q: "" }])}>
               <Plus className="mr-1.5 h-3.5 w-3.5" />
@@ -770,7 +770,7 @@ export default function Knowledge() {
             <Music className="mt-0.5 h-4 w-4 text-primary" />
             <div>
               <div className="text-sm font-semibold">Music & Entertainment</div>
-              <p className="text-xs text-muted-foreground">The AI host will reference these when callers ask about live music, DJs, or events.</p>
+              <p className="text-xs text-muted-foreground">SignalHost will reference these when callers ask about live music, DJs, or events.</p>
             </div>
           </div>
 
@@ -838,7 +838,7 @@ export default function Knowledge() {
                 Scheduled events
               </div>
               <div className="space-y-2">
-                {sortedEvents.length === 0 && <EmptyState text="No events scheduled. Add tonight's act so the AI host can answer event questions." />}
+                {sortedEvents.length === 0 && <EmptyState text="No events scheduled. Add tonight's act so SignalHost can answer event questions." />}
                 {sortedEvents.map((event) => (
                   <div key={event.id} className="flex flex-wrap items-center gap-3 rounded-md border border-border p-3">
                     <div className="w-28 shrink-0 text-xs tabular-nums text-muted-foreground">

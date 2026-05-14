@@ -123,9 +123,9 @@ export default function Settings() {
               <CardHeader><CardTitle className="text-base">Phone numbers</CardTitle></CardHeader>
               <CardContent className="space-y-4 max-w-xl">
                 <div className="space-y-1.5"><Label>Restaurant main line</Label><Input defaultValue={restaurant.phone} /></div>
-                <div className="space-y-1.5"><Label>AI host number</Label><Input defaultValue={restaurant.aiHostNumber} /></div>
+                <div className="space-y-1.5"><Label>SignalHost number</Label><Input defaultValue={restaurant.aiHostNumber} /></div>
                 <div className="rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-                  Port-in status: <span className="font-medium text-foreground">Active</span> · forwarding to AI host on overflow.
+                  Port-in status: <span className="font-medium text-foreground">Active</span> · forwarding to SignalHost on overflow.
                 </div>
               </CardContent>
             </Card>

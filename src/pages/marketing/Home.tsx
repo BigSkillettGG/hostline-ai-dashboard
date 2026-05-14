@@ -24,9 +24,9 @@ const localBusinessImage = "/marketing/happy-guests.jpg";
 
 const faqs = [
   { q: "Does this only work for restaurants?", a: "No. Restaurants are the first polished demo, but the platform supports restaurants, HVAC, plumbers, roofers, electricians, and hair salons or barbershops." },
-  { q: "Will callers know they are talking to AI?", a: "The greeting and disclosure are configurable. The experience is designed to feel like a polished operator while staying conservative in sensitive situations." },
+  { q: "Will callers know they are talking to SignalHost?", a: "The greeting and disclosure are configurable. The experience is designed to feel like a polished operator while staying conservative in sensitive situations." },
   { q: "How long does setup take?", a: "Most businesses can test a first call the same day. Pick an industry, answer the setup interview, add links or files, and forward the phone line to SignalHost." },
-  { q: "What if the AI does not know the answer?", a: "It takes a clean message, alerts staff, saves the transcript, and avoids promising anything it cannot verify." },
+  { q: "What if SignalHost does not know the answer?", a: "It takes a clean message, alerts staff, saves the transcript, and avoids promising anything it cannot verify." },
   { q: "Can I keep my current phone number?", a: "Yes. You can port the number later or forward unanswered, busy, after-hours, or all calls to your SignalHost number." },
 ];
 
@@ -48,7 +48,7 @@ const urgentMoments = [
   { title: "No heat", body: "A homeowner is cold, frustrated, and ready to book the first HVAC company that answers.", solution: "HVAC", icon: AlertTriangle },
   { title: "Active leak", body: "Someone is standing in water and needs calm triage before a dispatcher calls back.", solution: "Plumbers", icon: Wrench },
   { title: "Storm lead", body: "A roof is leaking, photos are ready, and three contractors are being called at once.", solution: "Roofers", icon: ShieldCheck },
-  { title: "Sparking outlet", body: "A safety-sensitive call needs careful escalation, not a casual AI guess.", solution: "Electricians", icon: Zap },
+  { title: "Sparking outlet", body: "A safety-sensitive call needs careful escalation, not a casual guess.", solution: "Electricians", icon: Zap },
   { title: "Color appointment", body: "A client wants pricing, provider preference, timing, and a booking link after hours.", solution: "Salons", icon: Scissors },
 ];
 
@@ -77,7 +77,7 @@ export default function MarketingHome() {
           <div>
             <Badge variant="outline" className="mb-5 border-background/25 bg-background/10 text-background">
               <Sparkles className="mr-1.5 h-3 w-3" />
-              AI operator for phone and website chat
+              SignalHost operator for phone and website chat
             </Badge>
             <h1 className="max-w-2xl text-5xl font-semibold leading-[0.96] md:text-7xl lg:text-[78px]">
               Miss the call. Lose the customer.
@@ -284,7 +284,7 @@ export default function MarketingHome() {
                 {[
                   ["Question", "When should a leak be treated as urgent?"],
                   ["Owner answer", "Interior water, active dripping, ceiling bulge, or storm damage gets an immediate callback."],
-                  ["AI behavior", "Collect photos, address, roof type, leak location, insurance status, and create an urgent task."],
+                  ["SignalHost behavior", "Collect photos, address, roof type, leak location, insurance status, and create an urgent task."],
                 ].map(([label, body]) => (
                   <div key={label} className="px-5 py-4">
                     <div className="text-xs font-semibold uppercase text-background/38">{label}</div>

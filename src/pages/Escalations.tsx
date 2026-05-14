@@ -85,7 +85,7 @@ export default function Escalations() {
                 <TableRow><TableCell colSpan={8} className="py-12 text-center">
                   <AlertTriangle className="mx-auto h-8 w-8 text-muted-foreground/50" />
                   <p className="mt-2 text-sm font-medium">No escalations yet</p>
-                  <p className="text-xs text-muted-foreground">When the AI host hands a caller off, it'll show up here.</p>
+                  <p className="text-xs text-muted-foreground">When SignalHost hands a caller off, it'll show up here.</p>
                 </TableCell></TableRow>
               )}
               {filtered.map((c) => {

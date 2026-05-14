@@ -279,7 +279,7 @@ export default function Reservations() {
           <Card className="p-4">
             <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Manual requests</div>
             <div className="mt-2 text-3xl font-semibold tabular-nums">{requests.length}</div>
-            <div className="mt-1 text-xs text-muted-foreground">AI-captured requests waiting on staff confirmation.</div>
+            <div className="mt-1 text-xs text-muted-foreground">SignalHost-captured requests waiting on staff confirmation.</div>
           </Card>
           <Card className="p-4">
             <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Confirmed</div>
@@ -341,7 +341,7 @@ export default function Reservations() {
               <div className="text-sm">
                 <div className="font-medium text-warning-foreground">Staff confirmation required</div>
                 <div className="text-xs text-muted-foreground">
-                  These requests came in through the AI host but are not confirmed until a person approves them.
+                  These requests came in through SignalHost but are not confirmed until a person approves them.
                 </div>
               </div>
             </div>
@@ -419,7 +419,7 @@ export default function Reservations() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ai_host">AI host</SelectItem>
+                  <SelectItem value="ai_host">SignalHost</SelectItem>
                   <SelectItem value="web">Web</SelectItem>
                   <SelectItem value="walk_in">Walk-in</SelectItem>
                 </SelectContent>
