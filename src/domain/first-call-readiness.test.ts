@@ -16,9 +16,9 @@ describe("buildFirstCallReadiness", () => {
   it("marks the automatic checklist ready before manual Twilio setup", () => {
     const readiness = buildFirstCallReadiness({
       health: {
-        elevenLabsConfigured: true,
         ok: true,
         onboardedContextConfigured: true,
+        openAIVoiceConfigured: true,
         openaiConfigured: true,
         productionReady: true,
         readinessChecks: [],
@@ -44,8 +44,8 @@ describe("buildFirstCallReadiness", () => {
   it("lists missing production readiness labels in the service-check detail", () => {
     const readiness = buildFirstCallReadiness({
       health: {
-        elevenLabsConfigured: true,
         ok: true,
+        openAIVoiceConfigured: true,
         openaiConfigured: true,
         readinessChecks: [
           { label: "OpenAI replies", ready: true, required: true },

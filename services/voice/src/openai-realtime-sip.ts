@@ -20,6 +20,7 @@ import type { RestaurantContextStore } from "./restaurant-context-store";
 import type { ReservationPlatformService } from "./reservation-platform-service";
 import type { TranscriptRole, TranscriptTurn } from "./types";
 import type { TrustedContact } from "../../../src/domain/trusted-contacts";
+import { resolveSignalHostOpenAIVoice } from "../../../src/domain/voice-selection";
 
 const OPENAI_REALTIME_DEFAULT_MODEL = "gpt-realtime";
 const OPENAI_REALTIME_DEFAULT_FEMALE_VOICE = "marin";
@@ -37,14 +38,18 @@ type OpenAIRealtimeEnv = Pick<
   | "OPENAI_REALTIME_IDLE_TIMEOUT_MS"
   | "OPENAI_REALTIME_INTERRUPT_RESPONSE"
   | "OPENAI_REALTIME_MALE_VOICE"
+  | "OPENAI_REALTIME_MARCO_VOICE"
+  | "OPENAI_REALTIME_MAYA_VOICE"
   | "OPENAI_REALTIME_MODEL"
   | "OPENAI_REALTIME_NOISE_REDUCTION"
   | "OPENAI_REALTIME_SERVER_VAD_PREFIX_PADDING_MS"
   | "OPENAI_REALTIME_SERVER_VAD_SILENCE_MS"
   | "OPENAI_REALTIME_SERVER_VAD_THRESHOLD"
   | "OPENAI_REALTIME_SPEED"
+  | "OPENAI_REALTIME_THEO_VOICE"
   | "OPENAI_REALTIME_TURN_DETECTION_MODE"
   | "OPENAI_REALTIME_TURN_EAGERNESS"
+  | "OPENAI_REALTIME_VERA_VOICE"
   | "OPENAI_REALTIME_VOICE"
   | "OPENAI_WEBHOOK_SECRET"
   | "PUBLIC_HTTP_BASE_URL"
@@ -2680,10 +2685,14 @@ export function resolveOpenAIRealtimeInterruptResponse(env: OpenAIRealtimeEnv) {
 
 function resolveOpenAIRealtimeVoice(env: OpenAIRealtimeEnv, context: RestaurantVoiceContext) {
   if (env.OPENAI_REALTIME_VOICE?.trim()) return env.OPENAI_REALTIME_VOICE.trim();
-  if (context.voiceGender === "male") {
-    return env.OPENAI_REALTIME_MALE_VOICE?.trim() || OPENAI_REALTIME_DEFAULT_MALE_VOICE;
-  }
-  return env.OPENAI_REALTIME_FEMALE_VOICE?.trim() || OPENAI_REALTIME_DEFAULT_FEMALE_VOICE;
+  return resolveSignalHostOpenAIVoice(context.voiceProfileId ?? context.hostName ?? context.voiceGender, {
+    female: env.OPENAI_REALTIME_FEMALE_VOICE,
+    male: env.OPENAI_REALTIME_MALE_VOICE,
+    marco: env.OPENAI_REALTIME_MARCO_VOICE || env.OPENAI_REALTIME_MALE_VOICE || OPENAI_REALTIME_DEFAULT_MALE_VOICE,
+    maya: env.OPENAI_REALTIME_MAYA_VOICE || env.OPENAI_REALTIME_FEMALE_VOICE,
+    theo: env.OPENAI_REALTIME_THEO_VOICE || env.OPENAI_REALTIME_MALE_VOICE,
+    vera: env.OPENAI_REALTIME_VERA_VOICE || env.OPENAI_REALTIME_FEMALE_VOICE || OPENAI_REALTIME_DEFAULT_FEMALE_VOICE,
+  });
 }
 
 function withOptionalQueryParam(url: string, key: string, value?: string) {

@@ -1,4 +1,4 @@
-import type { SignalHostVoiceGender } from "../../../src/domain/voice-selection";
+import type { SignalHostVoiceGender, SignalHostVoiceProfileId } from "../../../src/domain/voice-selection";
 import type { BusinessLink } from "../../../src/domain/business-links";
 import type { BusinessLiveContext } from "../../../src/domain/business-updates";
 import type { TrustedContact } from "../../../src/domain/trusted-contacts";
@@ -11,6 +11,7 @@ export interface RestaurantVoiceContext {
   restaurantName: string;
   hostName: string;
   voiceGender: SignalHostVoiceGender;
+  voiceProfileId: SignalHostVoiceProfileId;
   timezone: string;
   greeting: string;
   defaultPickupEtaMinutes?: number;
@@ -98,6 +99,7 @@ export const demoRestaurantContext: RestaurantVoiceContext = {
   restaurantName: "Olive & Ember",
   hostName: "Vera",
   voiceGender: "female",
+  voiceProfileId: "vera",
   timezone: "America/Los_Angeles",
   greeting: "Hi, thank you for calling Olive and Ember. How can I help you?",
   defaultPickupEtaMinutes: 25,

@@ -445,6 +445,7 @@ describe("OpenAI Realtime SIP", () => {
     const context: RestaurantVoiceContext = {
       ...demoRestaurantContext,
       voiceGender: "male",
+      voiceProfileId: "marco",
     };
 
     const payload = buildOpenAIRealtimeAcceptPayload({

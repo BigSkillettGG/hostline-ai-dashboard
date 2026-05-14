@@ -24,6 +24,7 @@ import {
   Settings2,
   ShieldCheck,
   ShoppingBag,
+  Play,
   Store,
   UtensilsCrossed,
   type LucideIcon,
@@ -58,6 +59,12 @@ import {
   type PostInterviewLaunchGuide,
 } from "@/domain/launch-guide";
 import { getVerticalInsightProfile } from "@/domain/vertical-insights";
+import {
+  getSignalHostVoiceProfile,
+  normalizeSignalHostVoiceProfileId,
+  signalHostVoiceRoster,
+  type SignalHostVoiceProfileId,
+} from "@/domain/voice-selection";
 import { loadOnboardingDraft, saveOnboardingDraft } from "@/lib/onboarding-draft";
 import {
   fetchOnboardingProfileFromSupabase,
@@ -73,6 +80,7 @@ import {
 import {
   searchAvailableVoicePhoneNumbers,
   provisionVoicePhoneNumber,
+  fetchVoicePreviewAudio,
   isVoiceServiceConfigured,
   voiceServiceBaseUrl,
   type AvailableVoicePhoneNumber,
@@ -85,6 +93,7 @@ const sectionIcons: Record<OnboardingStepId, LucideIcon> = {
   launch: PhoneForwarded,
   menus: UtensilsCrossed,
   orders: ShoppingBag,
+  owner: MessageCircle,
   policies: ShieldCheck,
   reservations: CalendarDays,
   escalations: ClipboardCheck,
@@ -129,6 +138,7 @@ export default function Onboarding() {
   const [provisioningNumber, setProvisioningNumber] = useState<string | null>(null);
   const [savingVerificationKey, setSavingVerificationKey] = useState<string | null>(null);
   const [searchingNumbers, setSearchingNumbers] = useState(false);
+  const [previewingVoiceProfile, setPreviewingVoiceProfile] = useState<SignalHostVoiceProfileId | null>(null);
   const businessTemplate = useMemo(() => getOnboardingBusinessTemplate(draft), [draft]);
   const verticalProfile = useMemo(() => getVerticalInsightProfile(businessTemplate.id), [businessTemplate.id]);
   const activeOnboardingSections = useMemo(() => getBusinessOnboardingSections(draft), [draft]);
@@ -240,6 +250,17 @@ export default function Onboarding() {
   }, [draft.mainPhone, draft.preferredAreaCode, phoneSearchAreaCode]);
 
   const updateField = (fieldId: string, value: string | boolean) => {
+    if (fieldId === "voiceProfileId" && typeof value === "string") {
+      const profile = getSignalHostVoiceProfile(value);
+      setDraft((current) => ({
+        ...current,
+        hostName: profile.employeeName,
+        voiceGender: profile.gender,
+        voiceProfileId: profile.id,
+      }));
+      return;
+    }
+
     if (fieldId === "businessType" && typeof value === "string") {
       setDraft((current) => mergeDraftForBusinessTypeChange(current, value));
       return;
@@ -281,6 +302,35 @@ export default function Onboarding() {
   const saveAndContinue = async () => {
     await persistDraft(draft, nextSection ? "Saved. Moving to the next section." : "Onboarding draft saved");
     if (nextSection) setActiveSectionId(nextSection.id);
+  };
+
+  const playVoiceProfilePreview = async (voiceProfileId: SignalHostVoiceProfileId) => {
+    const profile = getSignalHostVoiceProfile(voiceProfileId);
+    const previewText = `Hi, thank you for calling ${businessName}. How can I help you?`;
+
+    if (!isVoiceServiceConfigured()) {
+      toast.error("Voice service is not configured yet. Set VITE_VOICE_SERVICE_URL first.");
+      return;
+    }
+
+    setPreviewingVoiceProfile(profile.id);
+
+    try {
+      const audioBlob = await fetchVoicePreviewAudio(previewText, {
+        voiceGender: profile.gender,
+        voiceProfileId: profile.id,
+      });
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+      audio.onended = () => URL.revokeObjectURL(audioUrl);
+      audio.onerror = () => URL.revokeObjectURL(audioUrl);
+      await audio.play();
+      toast.success(`Playing ${profile.employeeName}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Voice preview failed.");
+    } finally {
+      setPreviewingVoiceProfile(null);
+    }
   };
 
   const jumpToFirstMissing = () => {
@@ -642,9 +692,12 @@ export default function Onboarding() {
                     {activeSection.fields.map((field) => (
                       <OnboardingFieldControl
                         key={field.id}
+                        businessName={businessName}
                         draft={draft}
                         field={field}
                         onChange={(value) => updateField(field.id, value)}
+                        onPreviewVoice={playVoiceProfilePreview}
+                        previewingVoiceProfile={previewingVoiceProfile}
                       />
                     ))}
                   </div>
@@ -1230,13 +1283,19 @@ function GuidancePill({ icon: Icon, label, value }: { icon: LucideIcon; label: s
 }
 
 function OnboardingFieldControl({
+  businessName,
   draft,
   field,
   onChange,
+  onPreviewVoice,
+  previewingVoiceProfile,
 }: {
+  businessName: string;
   draft: OnboardingDraft;
   field: OnboardingField;
   onChange: (value: string | boolean) => void;
+  onPreviewVoice: (voiceProfileId: SignalHostVoiceProfileId) => void;
+  previewingVoiceProfile: SignalHostVoiceProfileId | null;
 }) {
   const value = draft[field.id];
   const guidance = getFieldGuidance(field);
@@ -1260,7 +1319,14 @@ function OnboardingFieldControl({
             <div className="text-sm font-medium leading-6">{field.prompt}</div>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">{guidance.why}</p>
           </div>
-          {renderFieldInput({ field, onChange, value })}
+          {renderFieldInput({
+            businessName,
+            field,
+            onChange,
+            onPreviewVoice,
+            previewingVoiceProfile,
+            value,
+          })}
         </div>
 
         <div className="space-y-3 rounded-md border border-border bg-muted/20 p-3">
@@ -1283,14 +1349,65 @@ function OnboardingFieldControl({
 }
 
 function renderFieldInput({
+  businessName,
   field,
   onChange,
+  onPreviewVoice,
+  previewingVoiceProfile,
   value,
 }: {
+  businessName: string;
   field: OnboardingField;
   onChange: (value: string | boolean) => void;
+  onPreviewVoice: (voiceProfileId: SignalHostVoiceProfileId) => void;
+  previewingVoiceProfile: SignalHostVoiceProfileId | null;
   value: string | boolean | undefined;
 }) {
+  if (field.id === "voiceProfileId") {
+    return (
+      <div className="grid gap-3 sm:grid-cols-2">
+        {signalHostVoiceRoster.map((profile) => {
+          const selected = normalizeSignalHostVoiceProfileId(value) === profile.id;
+          const previewing = previewingVoiceProfile === profile.id;
+
+          return (
+            <div
+              key={profile.id}
+              className={cn(
+                "rounded-md border bg-background p-3 transition-colors",
+                selected ? "border-primary bg-primary/5" : "border-border",
+              )}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <button type="button" className="min-w-0 text-left" onClick={() => onChange(profile.id)}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold">{profile.employeeName}</span>
+                    <Badge variant="secondary" className="capitalize">{profile.gender}</Badge>
+                    {selected && <Badge variant="outline" className="border-primary/25 bg-primary/10 text-primary">Selected</Badge>}
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">{profile.description}</p>
+                  <p className="mt-2 text-[11px] leading-5 text-muted-foreground">
+                    Preview: Hi, thank you for calling {businessName}. How can I help you?
+                  </p>
+                </button>
+                <Button
+                  size="icon"
+                  variant="outline"
+                  type="button"
+                  onClick={() => onPreviewVoice(profile.id)}
+                  disabled={Boolean(previewingVoiceProfile)}
+                  aria-label={`Preview ${profile.employeeName}`}
+                >
+                  {previewing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+                </Button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   if (field.control === "toggle") {
     return (
       <div className="flex items-center justify-between gap-4 rounded-md border border-border bg-background p-3">
@@ -1399,10 +1516,20 @@ const fieldWhy: Record<string, string> = {
   allergyPolicy: "Severe allergies need careful wording and staff confirmation rules.",
   complaintPolicy: "Complaints need consistent empathy, information capture, and fast routing.",
   greeting: "This is the first thing callers hear, so shorter and clearer is usually better.",
-  voiceGender: "For V1 this maps to the approved SignalHost male or female voice.",
+  voiceProfileId: "This chooses the named SignalHost employee, their voice, and the employee name used across the owner experience.",
+  voiceGender: "Legacy voice setting kept for older saved profiles.",
   forwardingMode: "This decides whether SignalHost answers all calls, missed calls, or after-hours calls.",
   phoneLineType: "This lets SignalHost show the right forwarding instructions for mobile phones, landlines, and VoIP systems.",
   phoneProvider: "The carrier or phone provider often controls busy-line and no-answer forwarding.",
+  additionalTrustedContacts: "Trusted contacts let SignalHost know who may receive alerts, review calls, and teach the agent.",
+  alertPreferenceRules: "These rules prevent every call from becoming an interruption while still surfacing urgent or valuable items fast.",
+  ownerReportPreferences: "Daily and weekly reports are where owners see what SignalHost handled and what still needs attention.",
+  unknownAnswerPolicy: "This tells SignalHost how to act like a careful employee when it does not know something.",
+  knowledgeApprovalPolicy: "This protects the business from accidental permanent changes while still letting the system learn.",
+  liveUpdateRules: "Temporary updates keep the AI current for specials, closures, weather, staffing, promos, and busy modes.",
+  followUpPolicy: "Follow-up rules help recover bookings, quotes, and leads without turning SignalHost into a spam machine.",
+  callReviewPolicy: "Call review rules decide which transcripts and recordings deserve owner attention first.",
+  opportunityScoringRules: "Value rules make analytics and reports match what the business actually cares about.",
   websiteUrl: "The launch page uses this to generate website-chat instructions and a handoff for the web person.",
   websitePlatform: "Different website builders hide custom-code settings in different places.",
   websiteAdminContact: "Many owners will forward the chat snippet to a web person instead of installing it themselves.",
@@ -1430,9 +1557,19 @@ const fieldTips: Record<string, string> = {
   allergyPolicy: "For severe allergies, prefer staff confirmation over certainty.",
   complaintPolicy: "Do not promise refunds unless the business explicitly allows that.",
   greeting: "Keep it short. The strongest default is: Hi, thank you for calling {restaurant_name}. How can I help you?",
+  voiceProfileId: "Preview all four voices. The selected name becomes the employee name owners see in calls, texts, reports, and settings.",
   firstTestCall: "Write the calls you want the owner to try first, like hours, pricing, booking, and complaints.",
   phoneLineType: "If unsure, choose Not sure. The launch packet will produce a safe provider script instead of brittle instructions.",
   phoneProvider: "If the owner does not know, write not sure. This can be cleaned up before forwarding.",
+  additionalTrustedContacts: "Include name, role, phone, email, and what they are allowed to do. You can leave this blank for a solo owner.",
+  alertPreferenceRules: "Use plain tiers: text immediately, send to task list, daily summary only, or ignore unless repeated.",
+  ownerReportPreferences: "Pick times the owner will actually read. Daily after close and weekly Monday morning are good defaults.",
+  unknownAnswerPolicy: "The safest default is: do not guess, collect contact info, create a task, and suggest a knowledge update after staff answers.",
+  knowledgeApprovalPolicy: "For pilots, owner approval for permanent knowledge is the safest setting.",
+  liveUpdateRules: "Write expiration rules. Examples: tonight only, until tomorrow, until a date, recurring weekly, emergency mode.",
+  followUpPolicy: "Start with owner-approved follow-ups for high-value requests, then automate later when the workflow feels proven.",
+  callReviewPolicy: "Review more calls during the first week, then focus on complaints, low confidence, and high-value opportunities.",
+  opportunityScoringRules: "Name the calls that make or protect money: emergencies, quotes, large parties, private events, complaints, repeat clients.",
   websiteUrl: "Optional for phone-only launch, but useful if website chat should go live the same day.",
   websitePlatform: "Choose Not sure if the owner does not manage the website.",
   websiteAdminContact: "Use an email, agency name, or a note like owner will install.",
@@ -1651,6 +1788,7 @@ function mergeDraftForBusinessTypeChange(current: OnboardingDraft, nextBusinessT
     smsConfirmations: current.smsConfirmations ?? nextDefaults.smsConfirmations,
     timezone: current.timezone || nextDefaults.timezone,
     tone: current.tone || nextDefaults.tone,
+    voiceProfileId: current.voiceProfileId || nextDefaults.voiceProfileId,
     voiceGender: current.voiceGender || nextDefaults.voiceGender,
     websiteAdminContact: current.websiteAdminContact || nextDefaults.websiteAdminContact,
     websitePlatform: current.websitePlatform || nextDefaults.websitePlatform,

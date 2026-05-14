@@ -1,5 +1,10 @@
 import { defaultRestaurantAgentConfig, type RestaurantAgentConfig } from "@/domain/restaurant-config";
-import { normalizeSignalHostVoiceGender } from "@/domain/voice-selection";
+import {
+  findSignalHostVoiceProfile,
+  getSignalHostVoiceProfile,
+  normalizeSignalHostVoiceGender,
+  normalizeSignalHostVoiceProfileId,
+} from "@/domain/voice-selection";
 
 const storageKey = "signalhost:agent-config";
 
@@ -11,10 +16,16 @@ export function loadAgentConfigDraft(): RestaurantAgentConfig | null {
 
   try {
     const parsed = JSON.parse(rawConfig) as Partial<RestaurantAgentConfig>;
+    const voiceProfile =
+      [parsed.voiceProfileId, parsed.hostName, parsed.voiceGender]
+        .map(findSignalHostVoiceProfile)
+        .find(Boolean) ?? getSignalHostVoiceProfile(undefined);
     return {
       ...defaultRestaurantAgentConfig,
       ...parsed,
-      voiceGender: normalizeSignalHostVoiceGender(parsed.voiceGender ?? defaultRestaurantAgentConfig.voiceGender),
+      hostName: voiceProfile.employeeName,
+      voiceGender: normalizeSignalHostVoiceGender(voiceProfile.id),
+      voiceProfileId: normalizeSignalHostVoiceProfileId(voiceProfile.id),
     };
   } catch {
     return null;

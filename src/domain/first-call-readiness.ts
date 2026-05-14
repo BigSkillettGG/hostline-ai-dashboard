@@ -4,6 +4,7 @@ export interface FirstCallVoiceHealth {
   elevenLabsConfigured?: boolean;
   ok?: boolean;
   onboardedContextConfigured?: boolean;
+  openAIVoiceConfigured?: boolean;
   openaiConfigured?: boolean;
   productionReady?: boolean;
   readinessChecks?: Array<{
@@ -60,10 +61,10 @@ export function buildFirstCallReadiness(input: FirstCallReadinessInput): FirstCa
     step(
       "provider_secrets",
       "Provider secrets loaded",
-      "OpenAI, ElevenLabs, Twilio, and Supabase are configured on the voice backend.",
+      "OpenAI Realtime, Twilio, and Supabase are configured on the voice backend.",
       Boolean(
         input.health?.openaiConfigured &&
-          input.health.elevenLabsConfigured &&
+          (input.health.openAIVoiceConfigured ?? input.health.openaiConfigured) &&
           input.health.supabaseConfigured &&
           input.health.twilioProvisioningConfigured,
       ),

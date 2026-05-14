@@ -62,6 +62,7 @@ import {
   type UpdateTrustedContactPermissionsInput,
 } from "@/domain/trusted-contacts";
 import type { RestaurantAgentConfig } from "@/domain/restaurant-config";
+import { findSignalHostVoiceProfile, getSignalHostVoiceProfile } from "@/domain/voice-selection";
 import type {
   BusinessMode,
   TemporaryBusinessUpdate,
@@ -2582,6 +2583,10 @@ export function mapSupabaseAgentConfig(
 ): RestaurantAgentConfig {
   const ordersEnabled = row.orders_enabled ?? fallbackConfig.orders.enabled;
   const reservationsEnabled = row.reservations_enabled ?? fallbackConfig.capabilities.handleReservations;
+  const voiceProfile =
+    [fallbackConfig.voiceProfileId, row.host_name, fallbackConfig.hostName]
+      .map(findSignalHostVoiceProfile)
+      .find(Boolean) ?? getSignalHostVoiceProfile(undefined);
 
   return {
     ...fallbackConfig,
@@ -2599,7 +2604,7 @@ export function mapSupabaseAgentConfig(
     disclosureEnabled: row.disclosure_enabled ?? fallbackConfig.disclosureEnabled,
     escalationPhoneNumber: normalizeStringField(row.escalation_phone_number, fallbackConfig.escalationPhoneNumber),
     greetingTemplate: normalizeStringField(row.greeting_template, fallbackConfig.greetingTemplate),
-    hostName: normalizeStringField(row.host_name, fallbackConfig.hostName),
+    hostName: voiceProfile.employeeName,
     orders: {
       ...fallbackConfig.orders,
       destinations: normalizeStringArrayWithFallback(row.order_destinations, fallbackConfig.orders.destinations),
@@ -2612,6 +2617,8 @@ export function mapSupabaseAgentConfig(
       provider: normalizeStringField(row.reservation_provider, fallbackConfig.reservations.provider),
     },
     tone: normalizeStringField(row.tone, fallbackConfig.tone),
+    voiceGender: voiceProfile.gender,
+    voiceProfileId: voiceProfile.id,
   };
 }
 

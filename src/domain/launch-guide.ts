@@ -42,7 +42,7 @@ export function buildPostInterviewLaunchGuide(input: {
     template: input.template,
     voiceServiceUrl: input.voiceServiceUrl,
   });
-  const ownerOperatingRules = buildOwnerOperatingRules(input.template);
+  const ownerOperatingRules = buildOwnerOperatingRules(input.template, input.draft);
   const firstTestScenarios = buildFirstTestScenarios(input.template, input.draft);
   const readinessWarnings = buildReadinessWarnings(input.draft, input.assignedNumber);
 
@@ -207,18 +207,42 @@ function buildWebsiteChatGuide(input: {
   };
 }
 
-function buildOwnerOperatingRules(template: BusinessTemplate): LaunchInstructionBlock {
+function buildOwnerOperatingRules(template: BusinessTemplate, draft: OnboardingDraft): LaunchInstructionBlock {
   const appointmentText = template.id === "restaurant" ? "reservation, order, event, or guest issue" : `${template.appointmentNoun}, request, estimate, or customer issue`;
+  const alertRules = draftString(draft.alertPreferenceRules);
+  const reportRules = draftString(draft.ownerReportPreferences);
+  const unknownAnswerRules = draftString(draft.unknownAnswerPolicy);
+  const approvalPolicy = draftString(draft.knowledgeApprovalPolicy);
+  const liveUpdateRules = draftString(draft.liveUpdateRules);
+  const followUpRules = draftString(draft.followUpPolicy);
+  const reviewRules = draftString(draft.callReviewPolicy);
 
   return {
     body:
-      "After launch, the owner should treat SignalHost like a new front-desk employee: review the first calls, correct missing answers, and add temporary updates before busy periods.",
+      "After launch, the owner should treat SignalHost like a new front-desk employee: review the first calls, correct missing answers, add temporary updates, and watch the follow-up queue.",
     steps: [
-      "Use Ask SignalHost to ask what happened today, what needs follow-up, and what the AI did not know.",
-      "Add temporary updates for closures, specials, staffing changes, weather, promotions, or limited availability.",
+      reportRules
+        ? `Review reports using this rule: ${reportRules}`
+        : "Use Ask SignalHost to ask what happened today, what needs follow-up, and what the AI did not know.",
+      alertRules
+        ? `Confirm alert routing matches this rule: ${alertRules}`
+        : "Confirm critical, high-value, normal, low-priority, and summary-only alerts route to the right trusted contacts.",
+      liveUpdateRules
+        ? `Use temporary updates this way: ${liveUpdateRules}`
+        : "Add temporary updates for closures, specials, staffing changes, weather, promotions, or limited availability.",
       `Review every important ${appointmentText} in Tasks until the workflow feels reliable.`,
-      "When SignalHost misses an answer, save the correction as a knowledge suggestion before marking it resolved.",
-      "Check the daily brief for urgent items, high-value opportunities, unanswered questions, and suggested updates.",
+      unknownAnswerRules
+        ? `When SignalHost is not sure, follow this rule: ${unknownAnswerRules}`
+        : "When SignalHost misses an answer, save the correction as a knowledge suggestion before marking it resolved.",
+      approvalPolicy
+        ? `Approve learning with this policy: ${approvalPolicy}`
+        : "Approve or reject knowledge suggestions before they become permanent business rules.",
+      followUpRules
+        ? `Use the follow-up queue this way: ${followUpRules}`
+        : "Check open follow-ups for booking links, quote requests, private events, callbacks, and review requests.",
+      reviewRules
+        ? `Review calls using this QA rule: ${reviewRules}`
+        : "Review transcripts and recordings for first-week calls, complaints, low-confidence answers, and high-value opportunities.",
     ],
     title: "How to work with SignalHost after launch",
   };
@@ -289,6 +313,10 @@ function buildProviderScript(input: {
         : "forward unanswered calls after 3 to 4 rings and forward calls when the line is busy";
 
   return `${providerIntro} Please ${mode} from ${businessLine} to ${input.assignedNumber}. This is for SignalHost, our AI ${input.template.staffNoun}. Please make sure voicemail does not answer before the forwarding destination receives the call.`;
+}
+
+function draftString(value: OnboardingDraft[string]) {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
 function buildWebsiteHandoffText(input: {

@@ -7,10 +7,15 @@ import type { VoiceServiceEnv } from "./env";
 import type { RestaurantVoiceContext } from "./restaurant-context";
 
 export function resolvePreviewElevenLabsVoiceId(
-  env: Pick<VoiceServiceEnv, "ELEVENLABS_EVE_VOICE_ID" | "ELEVENLABS_MICHAEL_VOICE_ID">,
+  env: Pick<
+    VoiceServiceEnv,
+    | "ELEVENLABS_EVE_VOICE_ID"
+    | "ELEVENLABS_MICHAEL_VOICE_ID"
+  >,
   voiceGender?: unknown,
 ) {
-  return resolveSignalHostVoiceId(normalizeSignalHostVoiceGender(voiceGender), {
+  const gender = normalizeSignalHostVoiceGender(voiceGender);
+  return resolveSignalHostVoiceId(gender, {
     female: env.ELEVENLABS_EVE_VOICE_ID,
     male: env.ELEVENLABS_MICHAEL_VOICE_ID,
   });
@@ -28,7 +33,7 @@ export function resolveConversationRelayTtsVoice(
     | "TWILIO_TTS_PROVIDER"
     | "TWILIO_TTS_VOICE"
   >,
-  context: Pick<RestaurantVoiceContext, "voiceGender">,
+  context: Pick<RestaurantVoiceContext, "voiceGender" | "voiceProfileId">,
 ) {
   if (env.TWILIO_TTS_PROVIDER !== "ElevenLabs") return env.TWILIO_TTS_VOICE;
 
@@ -39,6 +44,7 @@ export function resolveConversationRelayTtsVoice(
       female: env.ELEVENLABS_EVE_VOICE_ID,
       male: env.ELEVENLABS_MICHAEL_VOICE_ID,
     },
+    voiceProfileId: context.voiceProfileId,
     similarityBoost: env.TWILIO_ELEVENLABS_SIMILARITY_BOOST,
     speed: env.TWILIO_ELEVENLABS_SPEED,
     stability: env.TWILIO_ELEVENLABS_STABILITY,

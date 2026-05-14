@@ -65,6 +65,30 @@ describe("post-interview launch guide", () => {
     );
   });
 
+  it("carries owner-control answers into the launch packet", () => {
+    const draft = createOnboardingDraftForBusiness("roofing", {
+      alertPreferenceRules: "Active leaks text owner and production manager immediately.",
+      ownerReportPreferences: "Daily report at 6 PM and weekly storm report Monday morning.",
+      unknownAnswerPolicy: "Do not guess; collect the question, address, photos, and callback number.",
+      knowledgeApprovalPolicy: "Owner approves permanent knowledge",
+      liveUpdateRules: "Storm mode expires when owner clears it.",
+      followUpPolicy: "Inspection leads get follow-up reminder after 24 hours.",
+      callReviewPolicy: "Review storm calls, complaints, and low-confidence answers.",
+    });
+
+    const guide = buildPostInterviewLaunchGuide({
+      assignedNumber: "+16175550199",
+      businessName: "RidgeLine Roofing",
+      draft,
+      template: businessTemplates.roofing,
+    });
+
+    expect(guide.ownerOperatingRules.steps.join(" ")).toContain("Active leaks text owner");
+    expect(guide.ownerOperatingRules.steps.join(" ")).toContain("Daily report at 6 PM");
+    expect(guide.ownerOperatingRules.steps.join(" ")).toContain("Do not guess");
+    expect(guide.launchPacketText).toContain("Inspection leads get follow-up");
+  });
+
   it("normalizes common phone line labels", () => {
     expect(normalizePhoneLineType("Cell / mobile")).toBe("mobile");
     expect(normalizePhoneLineType("Landline")).toBe("landline");

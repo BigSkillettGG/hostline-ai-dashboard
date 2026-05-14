@@ -126,6 +126,15 @@ describe("restaurant context store", () => {
           reservationSourceToday: "Paper book",
           reservationProvider: "Manual requests only",
           restaurantName: "Saffron Table",
+          additionalTrustedContacts: "Rin, manager, +15550177, can receive urgent alerts and suggest knowledge.",
+          alertPreferenceRules: "Complaints and catering leads text Rin immediately; vendor calls stay in daily summary.",
+          ownerReportPreferences: "Daily owner report at 9 PM by email and weekly report Monday morning.",
+          unknownAnswerPolicy: "Do not guess; collect the question, name, callback, and create a staff task.",
+          knowledgeApprovalPolicy: "Owner approves permanent knowledge",
+          liveUpdateRules: "Chef specials expire at close; closure notices expire after the stated date.",
+          followUpPolicy: "Catering and large-party leads need same-day follow-up reminders.",
+          callReviewPolicy: "Review first-week calls, complaints, allergies, and low-confidence answers.",
+          opportunityScoringRules: "Catering and large parties are high value; vendor calls are low priority.",
           specialsSchedule: "Chef's curry special is available Friday dinner only.",
           substitutionPolicy: "No off-menu noodles. Simple sauce-on-side requests are okay; allergy substitutions need staff confirmation.",
           timezone: "America/New_York",
@@ -137,9 +146,10 @@ describe("restaurant context store", () => {
     });
 
     expect(context.restaurantName).toBe("Saffron Table");
-    expect(context.hostName).toBe("Nina");
+    expect(context.hostName).toBe("Marco");
     expect(context.voiceGender).toBe("male");
-    expect(context.greeting).toBe("Hello from Saffron Table, Nina speaking.");
+    expect(context.voiceProfileId).toBe("marco");
+    expect(context.greeting).toBe("Hello from Saffron Table, Marco speaking.");
     expect(context.defaultPickupEtaMinutes).toBe(20);
     expect(context.smsConfirmationsEnabled).toBe(false);
     expect(context.businessLiveContext?.activeMode.id).toBe("busy");
@@ -189,6 +199,15 @@ describe("restaurant context store", () => {
     expect(context.policies.specials).toContain("Chef's curry special");
     expect(context.policies.specials).toContain("lobster ravioli");
     expect(context.policies.live_updates).toContain("Business mode: Busy");
+    expect(context.policies.trusted_contacts).toContain("Rin, manager");
+    expect(context.policies.alert_preferences).toContain("Complaints and catering");
+    expect(context.policies.owner_reporting).toContain("Daily owner report");
+    expect(context.policies.unknown_answers).toContain("Do not guess");
+    expect(context.policies.knowledge_approval).toContain("Owner approves");
+    expect(context.policies.live_update_rules).toContain("Chef specials");
+    expect(context.policies.follow_up).toContain("Catering and large-party");
+    expect(context.policies.call_review).toContain("first-week calls");
+    expect(context.policies.opportunity_scoring).toContain("large parties");
     expect(context.policies.substitutions).toContain("No off-menu noodles");
     expect(context.policies.waitlist).toContain("quoted waits");
     expect(context.faqs).toEqual([
@@ -222,6 +241,14 @@ describe("restaurant context store", () => {
         {
           body: "Vendors should leave company, reason, phone, and email for the owner.",
           title: "Vendor and sales calls",
+        },
+        {
+          body: "Rin, manager, +15550177, can receive urgent alerts and suggest knowledge.",
+          title: "Trusted contacts and permissions",
+        },
+        {
+          body: "Catering and large-party leads need same-day follow-up reminders.",
+          title: "Follow-up and revenue recovery",
         },
       ]),
     );

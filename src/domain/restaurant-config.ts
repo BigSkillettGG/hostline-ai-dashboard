@@ -1,4 +1,4 @@
-import type { SignalHostVoiceGender } from "./voice-selection";
+import type { SignalHostVoiceGender, SignalHostVoiceProfileId } from "./voice-selection";
 
 export type CallHandlingMode =
   | "answer_immediately"
@@ -35,6 +35,7 @@ export type PaymentMode = "pay_at_pickup";
 export interface RestaurantAgentConfig {
   hostName: string;
   voiceGender: SignalHostVoiceGender;
+  voiceProfileId: SignalHostVoiceProfileId;
   tone: VoiceTone;
   greetingTemplate: string;
   disclosureEnabled: boolean;
@@ -106,6 +107,7 @@ export const reservationModeLabels: Record<ReservationMode, string> = {
 export const defaultRestaurantAgentConfig: RestaurantAgentConfig = {
   hostName: "Vera",
   voiceGender: "female",
+  voiceProfileId: "vera",
   tone: "warm",
   greetingTemplate:
     "Thanks for calling {restaurant_name}. This is Vera, the restaurant's virtual host. How can I help you?",

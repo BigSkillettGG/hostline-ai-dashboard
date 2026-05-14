@@ -1,13 +1,14 @@
 import { getActiveLocationId, getSupabaseAccessToken } from "@/lib/auth";
 import type { OnboardingDraft } from "@/domain/onboarding";
 import type { BusinessType } from "@/domain/business-templates";
-import type { SignalHostVoiceGender } from "@/domain/voice-selection";
+import type { SignalHostVoiceGender, SignalHostVoiceProfileId } from "@/domain/voice-selection";
 
 export interface VoiceServiceHealth {
   ok: boolean;
   service: string;
   openaiConfigured: boolean;
-  elevenLabsConfigured: boolean;
+  openAIVoiceConfigured?: boolean;
+  elevenLabsConfigured?: boolean;
   menuIngestionConfigured?: boolean;
   onboardedContextConfigured?: boolean;
   ownerReportDeliveryConfigured?: boolean;
@@ -249,10 +250,18 @@ export async function fetchTwiMLPreview(locationId = getActiveLocationId()) {
   return text;
 }
 
-export async function fetchVoicePreviewAudio(text: string, voiceGender?: SignalHostVoiceGender) {
+export async function fetchVoicePreviewAudio(
+  text: string,
+  voice?: SignalHostVoiceGender | {
+    voiceGender?: SignalHostVoiceGender;
+    voiceProfileId?: SignalHostVoiceProfileId;
+  },
+) {
   if (!voiceServiceBaseUrl) {
     throw new Error("VITE_VOICE_SERVICE_URL is not configured.");
   }
+
+  const voicePayload = typeof voice === "string" ? { voiceGender: voice } : voice ?? {};
 
   const response = await fetch(`${voiceServiceBaseUrl}/voice/preview`, {
     method: "POST",
@@ -260,7 +269,7 @@ export async function fetchVoicePreviewAudio(text: string, voiceGender?: SignalH
       "Content-Type": "application/json",
       ...buildVoiceAdminHeaders(),
     },
-    body: JSON.stringify({ text, voiceGender }),
+    body: JSON.stringify({ text, ...voicePayload }),
   });
 
   if (!response.ok) {

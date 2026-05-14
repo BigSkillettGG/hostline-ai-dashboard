@@ -45,7 +45,7 @@ describe("voice service readiness", () => {
       "dashboard_admin_auth",
       "supabase_service_role",
       "openai",
-      "elevenlabs",
+      "openai_realtime_sip",
       "twilio_credentials",
       "twilio_signatures",
     ]);

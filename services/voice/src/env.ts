@@ -34,8 +34,8 @@ const envSchema = z.object({
     .enum(["true", "false"])
     .default("false")
     .transform((value) => value === "true"),
-  TWILIO_TTS_PROVIDER: z.enum(["Google", "Amazon", "ElevenLabs"]).default("ElevenLabs"),
-  TWILIO_TTS_VOICE: z.string().default("BZgkqPqms7Kj9ulSkVzn-flash_v2_5-0.95_0.35_0.85"),
+  TWILIO_TTS_PROVIDER: z.enum(["Google", "Amazon", "ElevenLabs"]).default("Google"),
+  TWILIO_TTS_VOICE: z.string().default("en-US-Standard-H"),
   TWILIO_ELEVENLABS_MODEL_ID: z.string().default("flash_v2_5"),
   TWILIO_ELEVENLABS_SPEED: z.string().default("0.95"),
   TWILIO_ELEVENLABS_STABILITY: z.string().default("0.35"),
@@ -47,8 +47,12 @@ const envSchema = z.object({
   OPENAI_MODEL: z.string().default("gpt-5-mini"),
   OPENAI_REPLY_TIMEOUT_MS: z.coerce.number().int().positive().default(4500),
   OPENAI_PROJECT_ID: z.string().optional(),
+  OPENAI_TTS_MODEL: z.string().default("gpt-4o-mini-tts"),
+  OPENAI_TTS_RESPONSE_FORMAT: z.enum(["mp3", "opus", "wav"]).default("mp3"),
   OPENAI_REALTIME_FEMALE_VOICE: z.string().optional(),
   OPENAI_REALTIME_MALE_VOICE: z.string().optional(),
+  OPENAI_REALTIME_MARCO_VOICE: z.string().optional(),
+  OPENAI_REALTIME_MAYA_VOICE: z.string().optional(),
   OPENAI_REALTIME_MODEL: z.string().optional(),
   OPENAI_REALTIME_NOISE_REDUCTION: z.enum(["near_field", "far_field"]).default("far_field"),
   OPENAI_REALTIME_SPEED: z.string().optional(),
@@ -62,6 +66,8 @@ const envSchema = z.object({
     .default("false")
     .transform((value) => value === "true"),
   OPENAI_REALTIME_TURN_EAGERNESS: z.enum(["low", "medium", "high"]).default("low"),
+  OPENAI_REALTIME_THEO_VOICE: z.string().optional(),
+  OPENAI_REALTIME_VERA_VOICE: z.string().optional(),
   OPENAI_REALTIME_VOICE: z.string().optional(),
   OPENAI_WEBHOOK_SECRET: z.string().optional(),
   ELEVENLABS_API_KEY: z.string().optional(),
@@ -160,17 +166,10 @@ export function getVoiceServiceReadiness(env: VoiceServiceEnv): VoiceServiceRead
       required: true,
     },
     {
-      detail: "Optional pilot path that lets OpenAI handle the live phone conversation over SIP.",
+      detail: "Lets OpenAI handle the live phone conversation over SIP.",
       id: "openai_realtime_sip",
-      label: "OpenAI Realtime SIP pilot",
+      label: "OpenAI Realtime SIP",
       ready: Boolean(env.OPENAI_API_KEY && env.PUBLIC_HTTP_BASE_URL),
-      required: false,
-    },
-    {
-      detail: "Powers the hosted voice preview and fallback TTS flows.",
-      id: "elevenlabs",
-      label: "ElevenLabs voice",
-      ready: Boolean(env.ELEVENLABS_API_KEY),
       required: true,
     },
     {

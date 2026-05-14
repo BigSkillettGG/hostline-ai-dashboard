@@ -5,6 +5,7 @@ import {
   normalizeBusinessType,
   type BusinessType,
 } from "./business-templates";
+import { signalHostVoiceRoster } from "./voice-selection";
 
 export type OnboardingFieldControl = "short" | "long" | "url" | "select" | "toggle";
 export type OnboardingFieldOption = string | { label: string; value: string };
@@ -17,6 +18,7 @@ export type OnboardingStepId =
   | "reservations"
   | "policies"
   | "escalations"
+  | "owner"
   | "voice"
   | "launch";
 
@@ -639,19 +641,109 @@ export const onboardingSections: OnboardingSection[] = [
     ],
   },
   {
+    id: "owner",
+    title: "Owner controls",
+    eyebrow: "Reports & learning",
+    assistantPrompt:
+      "Now let us decide how SignalHost reports back, learns from corrections, follows up on opportunities, and knows which team members it can trust.",
+    outcome: "Trusted contacts, permissions, alert routing, daily reports, learning loop, live updates, follow-up rules, QA, and value scoring.",
+    fields: [
+      {
+        id: "additionalTrustedContacts",
+        label: "Trusted team contacts",
+        prompt: "Who else can receive alerts, review calls, answer questions, or teach SignalHost?",
+        placeholder:
+          "Alex Chen, general manager, +1 (415) 555-0171, alex@example.com, urgent alerts and call review; permanent knowledge needs owner approval.",
+        control: "long",
+      },
+      {
+        id: "alertPreferenceRules",
+        label: "Alert rules",
+        prompt: "Who should be notified for critical, high-value, normal, low-priority, and summary-only events?",
+        placeholder:
+          "Critical issues text owner and manager immediately. Private events/high-value leads text manager. Vendor calls appear in daily summary only.",
+        control: "long",
+        required: true,
+      },
+      {
+        id: "ownerReportPreferences",
+        label: "Owner reports",
+        prompt: "When and where should SignalHost send daily and weekly summaries?",
+        placeholder:
+          "Daily report by email at 8:30 PM. Weekly report Monday at 8 AM. Urgent items text owner immediately.",
+        control: "long",
+        required: true,
+      },
+      {
+        id: "unknownAnswerPolicy",
+        label: "When SignalHost is not sure",
+        prompt: "What should SignalHost say, collect, and promise when it does not know an answer?",
+        placeholder:
+          "Say it will check with the team, collect name and callback number, create a task, and never guess. Reply when staff provides the answer.",
+        control: "long",
+        required: true,
+      },
+      {
+        id: "knowledgeApprovalPolicy",
+        label: "Knowledge approval",
+        prompt: "Who can turn a correction into permanent business knowledge?",
+        control: "select",
+        required: true,
+        options: [
+          "Owner approves permanent knowledge",
+          "Managers can suggest, owner approves",
+          "Trusted managers can save permanent knowledge",
+          "SignalHost drafts only",
+        ],
+      },
+      {
+        id: "liveUpdateRules",
+        label: "Temporary updates and modes",
+        prompt: "Which updates can the owner or team give SignalHost for today, this week, emergencies, staffing, promos, or busy periods?",
+        placeholder:
+          "Daily specials expire at close. Closed dates expire after that date. Busy mode during Friday dinner means answer all overflow and avoid promising live waits.",
+        control: "long",
+      },
+      {
+        id: "followUpPolicy",
+        label: "Follow-up rules",
+        prompt: "Which callers should SignalHost follow up with, remind the owner about, or place in an approval queue?",
+        placeholder:
+          "Follow up on private events and catering the same day. Remind owner about open callbacks after 24 hours. Review requests require owner approval.",
+        control: "long",
+      },
+      {
+        id: "callReviewPolicy",
+        label: "Call review and QA",
+        prompt: "Which calls should the owner review first, and who may see transcripts or recordings?",
+        placeholder:
+          "Review first 20 calls, then all complaints, allergies, low-confidence answers, and high-value leads. Owner and managers can review recordings.",
+        control: "long",
+      },
+      {
+        id: "opportunityScoringRules",
+        label: "High-value opportunities",
+        prompt: "What should count as a valuable opportunity, urgent risk, or low-priority call for this business?",
+        placeholder:
+          "Private events, catering, large parties, and repeat guest issues are high value. Vendor sales calls are low priority. Complaints are high risk.",
+        control: "long",
+      },
+    ],
+  },
+  {
     id: "voice",
     title: "Voice and behavior",
     eyebrow: "Host",
     assistantPrompt: "Now let us make the host sound like the restaurant and behave the way staff expect.",
-    outcome: "Host name, tone, greeting, disclosure, answer timing, SMS confirmations, languages, and handoff rules.",
+    outcome: "Employee voice, tone, greeting, answer timing, text follow-ups, languages, and handoff rules.",
     fields: [
       {
-        id: "hostName",
-        label: "Host name",
-        prompt: "What should the AI host call itself?",
-        placeholder: "Vera",
-        control: "short",
+        id: "voiceProfileId",
+        label: "Who should answer?",
+        prompt: "Choose the SignalHost employee voice callers will hear.",
+        control: "select",
         required: true,
+        options: signalHostVoiceRoster.map((profile) => ({ label: profile.label, value: profile.id })),
       },
       {
         id: "tone",
@@ -660,14 +752,6 @@ export const onboardingSections: OnboardingSection[] = [
         control: "select",
         required: true,
         options: ["Warm", "Professional", "Bright", "Calm", "Playful"],
-      },
-      {
-        id: "voiceGender",
-        label: "Voice",
-        prompt: "Which host voice should callers hear?",
-        control: "select",
-        required: true,
-        options: ["Female - Eve", "Male - Michael"],
       },
       {
         id: "greeting",
@@ -803,6 +887,12 @@ const tradeSectionCopy: Partial<Record<OnboardingStepId, SectionCopyOverride>> =
     title: "Customer policies",
     outcome: "Service area, safety, warranties, arrival rules, financing, jobs, vendor calls, and common FAQs.",
   },
+  owner: {
+    title: "Owner controls",
+    eyebrow: "Reports & learning",
+    assistantPrompt: "Now let us decide how SignalHost reports, learns, follows up, and routes service opportunities.",
+    outcome: "Trusted contacts, alert routing, reports, learning loop, follow-up rules, QA, and lead value scoring.",
+  },
   voice: {
     title: "Voice and behavior",
     eyebrow: "Front desk",
@@ -873,6 +963,12 @@ const businessSectionCopy: Partial<Record<BusinessType, Partial<Record<Onboardin
     policies: {
       title: "Client policies",
       outcome: "Parking, late arrivals, cancellations, deposits, allergies, accessibility, pets, children, and common FAQs.",
+    },
+    owner: {
+      title: "Owner controls",
+      eyebrow: "Reports & learning",
+      assistantPrompt: "Now let us decide how SignalHost reports, learns, follows up, and routes client opportunities.",
+      outcome: "Trusted contacts, alert routing, reports, learning loop, follow-up rules, QA, and client value scoring.",
     },
     voice: {
       title: "Voice and behavior",
@@ -1121,6 +1217,38 @@ const tradeFieldOverrides: Record<string, FieldCopyOverride> = {
     label: "Human callback rules",
     prompt: "When someone asks for a person, what should the AI promise and what details should it collect?",
     placeholder: "Offer a staff callback, collect name, phone, reason, urgency, and avoid promising immediate transfer.",
+  },
+  additionalTrustedContacts: {
+    placeholder:
+      "Jamie office manager, +1 (617) 555-0108, jamie@business.example, urgent alerts and task resolution. Field tech leads can suggest knowledge but need owner approval.",
+  },
+  alertPreferenceRules: {
+    placeholder:
+      "Emergencies and safety issues text owner plus dispatcher immediately. Quote/replacement leads text sales. Vendor calls stay in daily summary.",
+  },
+  ownerReportPreferences: {
+    placeholder:
+      "Daily report by email at 6 PM. Weekly pipeline report Monday morning. Urgent safety calls text owner and dispatcher immediately.",
+  },
+  unknownAnswerPolicy: {
+    placeholder:
+      "If not sure, collect the customer name, phone, address, question, and urgency, then create a callback task instead of guessing.",
+  },
+  liveUpdateRules: {
+    placeholder:
+      "Emergency mode during storms or heat waves. Closed holiday dates expire after the holiday. Booked-out notices expire on the date staff gives.",
+  },
+  followUpPolicy: {
+    placeholder:
+      "Quote requests get owner reminder after 24 hours. Booking links get one follow-up. Review requests require owner approval.",
+  },
+  callReviewPolicy: {
+    placeholder:
+      "Review first 20 calls, then all emergencies, complaints, low-confidence answers, and high-value estimate requests. Owner and managers can review recordings.",
+  },
+  opportunityScoringRules: {
+    placeholder:
+      "Emergency calls, replacements, estimates, maintenance plans, and commercial work are high value. Vendor calls and wrong numbers are low priority.",
   },
   smsConfirmations: {
     label: "Text follow-ups",
@@ -1467,6 +1595,34 @@ const businessFieldOverrides: Partial<Record<BusinessType, Record<string, FieldC
       prompt: "When someone asks for a person, what should the AI promise and what details should it collect?",
       placeholder: "Offer a front-desk callback, collect name, phone, reason, urgency, and avoid promising immediate transfer.",
     },
+    alertPreferenceRules: {
+      placeholder:
+        "Client complaints, redo requests, bridal inquiries, and color corrections text owner or manager. Product reps and vendors stay in the daily summary.",
+    },
+    ownerReportPreferences: {
+      placeholder:
+        "Daily report after close by email. Weekly report Monday morning with appointment requests, missed leads, reviews, and unanswered questions.",
+    },
+    unknownAnswerPolicy: {
+      placeholder:
+        "If not sure about pricing, stylist availability, color safety, or products, collect the client details and create a front-desk callback task.",
+    },
+    liveUpdateRules: {
+      placeholder:
+        "Provider out sick expires tonight. Running 20 minutes behind expires at close. Prom or bridal availability stays active until the event date.",
+    },
+    followUpPolicy: {
+      placeholder:
+        "Color consultation, bridal, and first-time client requests get follow-up reminders. Review requests require owner approval.",
+    },
+    callReviewPolicy: {
+      placeholder:
+        "Review first 20 calls, all complaints, product allergy questions, color corrections, and bridal inquiries. Owner and manager can hear recordings.",
+    },
+    opportunityScoringRules: {
+      placeholder:
+        "Bridal parties, color corrections, new color clients, and recurring appointment requests are high value. Vendor calls are low priority.",
+    },
     smsConfirmations: {
       label: "Text follow-ups",
       prompt: "Should clients receive text confirmations for appointment requests, booking links, waitlist notes, or intake forms?",
@@ -1505,10 +1661,12 @@ export const productionWorkstreams = [
   "Conversational onboarding and multi-industry knowledge extraction",
   "Menu ingestion from PDFs, images, links, spreadsheets, and POS exports",
   "Twilio number provisioning, forwarding instructions, and live call routing",
-  "Realtime voice latency tuning across Twilio, transcription, LLM, and ElevenLabs",
+  "Realtime voice latency tuning across OpenAI, Twilio, transcription, and tool calls",
   "Supabase persistence, RLS, roles, audit logs, and admin workflows",
   "Staff-review queues for orders, reservations, appointments, quotes, and callbacks",
   "Link-first workflows for ordering, booking, quotes, intake forms, and menus",
+  "Owner assistant, trusted contacts, permissions, and command routing",
+  "Temporary live knowledge, business modes, learning loop, and owner-approved follow-up",
   "Optional industry integrations later for POS, booking, CRM, and dispatch systems",
   "SMS confirmations, staff alerts, low-confidence review, and human handoff",
   "Analytics, call QA, transcript review, and launch-readiness monitoring",
@@ -1545,6 +1703,23 @@ export const sampleOnboardingDraft: OnboardingDraft = {
   mainPhone: "+1 (415) 555-0148",
   phoneLineType: "Landline or desk phone",
   phoneProvider: "Comcast Business",
+  additionalTrustedContacts:
+    "Alex Chen, general manager, +1 (415) 555-0171, alex@oliveandember.example, can receive urgent alerts, resolve tasks, and suggest knowledge. Permanent knowledge needs owner approval.",
+  alertPreferenceRules:
+    "Critical complaints, severe allergy questions, private events, and large-party requests text owner and manager immediately. Vendor calls and basic FAQs stay in the daily summary.",
+  ownerReportPreferences:
+    "Daily report by email at 8:30 PM. Weekly opportunity report Monday at 8 AM. Urgent items text owner and manager immediately.",
+  unknownAnswerPolicy:
+    "If SignalHost is not sure, it should say it will check with the team, collect name and callback number, create a task, and never guess. Staff answers can become knowledge suggestions.",
+  knowledgeApprovalPolicy: "Owner approves permanent knowledge",
+  liveUpdateRules:
+    "Daily specials expire at closing. Closures expire after the stated date. Busy mode during Friday and Saturday dinner answers overflow but does not promise live wait times.",
+  followUpPolicy:
+    "Private event and catering requests get same-day follow-up reminders. Booking and ordering links get one polite check-in if the customer provided a phone number. Review requests require owner approval.",
+  callReviewPolicy:
+    "Review the first 20 calls, then all complaints, severe allergies, low-confidence answers, private events, and calls marked high value. Owner and manager can access transcripts and recordings.",
+  opportunityScoringRules:
+    "Private events, catering, large parties, and repeat guest issues are high value. Complaints are high risk. Vendor sales calls are low priority.",
   menuCategories: "Starters, wood-fired pizza, pasta, dessert, cocktails, wine, beer, and NA drinks.",
   menuUploadNotes: "Dinner menu PDF, brunch photo menu, cocktail list spreadsheet, and current specials sheet.",
   menuUrl: "https://oliveandember.example/menu",
@@ -1597,7 +1772,8 @@ export const sampleOnboardingDraft: OnboardingDraft = {
   upsellRules:
     "Suggest tiramisu or affogato with pasta orders, sparkling water with larger pickup orders, and no more than one upsell after the caller declines.",
   vendorCallPolicy: "Collect company, caller name, reason, phone, and email, then route to the owner.",
-  voiceGender: "Female - Eve",
+  voiceProfileId: "vera",
+  voiceGender: "Vera - warm female",
   waitlistPolicy: "Walk-ins are welcome, but live wait times change quickly and are confirmed at the door.",
   websiteAdminContact: "webmaster@oliveandember.example",
   websitePlatform: "Squarespace",
@@ -1607,8 +1783,29 @@ export const sampleOnboardingDraft: OnboardingDraft = {
     "Do you have live music? Do you have patio seating? What are tonight's specials? Do you sell gift cards? Can I bring a cake? Do you have vegan options? Where should delivery drivers go?",
 };
 
+const tradeOwnerControlDraft: OnboardingDraft = {
+  additionalTrustedContacts:
+    "Jamie office manager, +1 (617) 555-0108, jamie@business.example, can receive urgent alerts, resolve tasks, and suggest knowledge. Permanent knowledge needs owner approval.",
+  alertPreferenceRules:
+    "Emergencies and safety issues text owner plus dispatcher immediately. Quote and replacement leads text sales. Vendor calls and routine FAQs stay in the daily summary.",
+  ownerReportPreferences:
+    "Daily report by email at 6 PM. Weekly pipeline report Monday at 8 AM. Urgent safety calls text owner and dispatcher immediately.",
+  unknownAnswerPolicy:
+    "If SignalHost is not sure, collect the customer name, phone, address, question, and urgency, then create a callback task instead of guessing.",
+  knowledgeApprovalPolicy: "Owner approves permanent knowledge",
+  liveUpdateRules:
+    "Emergency mode can be enabled during storms, heat waves, or staffing shortages. Closed dates expire after the holiday. Booked-out notices expire on the date staff gives.",
+  followUpPolicy:
+    "Quote requests get owner reminder after 24 hours. Booking links get one polite follow-up. Review requests require owner approval.",
+  callReviewPolicy:
+    "Review the first 20 calls, then all emergencies, complaints, low-confidence answers, and high-value estimate requests. Owner and managers can review recordings.",
+  opportunityScoringRules:
+    "Emergency calls, replacements, estimates, maintenance plans, and commercial work are high value. Vendor calls and wrong numbers are low priority.",
+};
+
 const businessSampleDraftOverrides: Partial<Record<BusinessType, OnboardingDraft>> = {
   electrical: {
+    ...tradeOwnerControlDraft,
     allergyPolicy: "Burning smell, sparking, partial power loss, exposed wiring, shocks, and panel concerns require urgent staff callback. Do not give DIY electrical advice.",
     complaintPolicy: "Apologize, collect name, address, callback number, job details, photos if useful, and route to the operations manager without promising refunds.",
     concept: businessTemplates.electrical.defaultOffering,
@@ -1647,6 +1844,7 @@ const businessSampleDraftOverrides: Partial<Record<BusinessType, OnboardingDraft
     websiteUrl: "https://brightwire.example",
   },
   hvac: {
+    ...tradeOwnerControlDraft,
     allergyPolicy: "Gas smell, carbon monoxide alarms, no heat in freezing weather, and no AC for vulnerable occupants require urgent staff callback.",
     complaintPolicy: "Apologize, collect name, address, callback number, visit details, technician if known, and route to manager review.",
     concept: businessTemplates.hvac.defaultOffering,
@@ -1685,6 +1883,7 @@ const businessSampleDraftOverrides: Partial<Record<BusinessType, OnboardingDraft
     websiteUrl: "https://summitair.example",
   },
   plumbing: {
+    ...tradeOwnerControlDraft,
     allergyPolicy: "Active flooding, sewer backup, gas line concerns, no water, and unsafe conditions require urgent staff callback. Suggest shutting off water only if safe.",
     complaintPolicy: "Apologize, collect name, address, callback number, job date, technician if known, and route to manager review.",
     concept: businessTemplates.plumbing.defaultOffering,
@@ -1723,6 +1922,7 @@ const businessSampleDraftOverrides: Partial<Record<BusinessType, OnboardingDraft
     websiteUrl: "https://harborplumbing.example",
   },
   roofing: {
+    ...tradeOwnerControlDraft,
     allergyPolicy: "Active interior leaks, ceiling bulges, unsafe roof access, storm damage, and emergency tarping requests require urgent staff callback.",
     complaintPolicy: "Apologize, collect name, property address, callback number, project details, photos if relevant, and route to manager review.",
     concept: businessTemplates.roofing.defaultOffering,
@@ -1761,6 +1961,23 @@ const businessSampleDraftOverrides: Partial<Record<BusinessType, OnboardingDraft
     websiteUrl: "https://ridgelineroofing.example",
   },
   salon_barber: {
+    additionalTrustedContacts:
+      "Avery front desk lead, +1 (617) 555-0115, avery@lunastudio.example, can receive client issue alerts, resolve tasks, and suggest knowledge. Permanent knowledge needs owner approval.",
+    alertPreferenceRules:
+      "Complaints, redo requests, bridal inquiries, and color corrections text owner or manager. Product reps and vendor calls stay in the daily summary.",
+    ownerReportPreferences:
+      "Daily report after close by email. Weekly report Monday morning with appointment requests, missed leads, reviews, and unanswered questions.",
+    unknownAnswerPolicy:
+      "If SignalHost is not sure about pricing, stylist availability, color safety, or products, collect client details and create a front-desk callback task.",
+    knowledgeApprovalPolicy: "Owner approves permanent knowledge",
+    liveUpdateRules:
+      "Provider out sick expires tonight. Running 20 minutes behind expires at close. Prom or bridal availability stays active until the event date.",
+    followUpPolicy:
+      "Color consultation, bridal, and first-time client requests get follow-up reminders. Review requests require owner approval.",
+    callReviewPolicy:
+      "Review the first 20 calls, all complaints, product allergy questions, color corrections, and bridal inquiries. Owner and manager can hear recordings.",
+    opportunityScoringRules:
+      "Bridal parties, color corrections, new color clients, and recurring appointment requests are high value. Vendor calls are low priority.",
     allergyPolicy: "Product allergies, skin sensitivities, scalp irritation, pregnancy-sensitive services, and color reactions require staff review.",
     complaintPolicy: "Apologize, collect name, service date, provider, concern, photos if relevant, and route to manager review.",
     concept: businessTemplates.salon_barber.defaultOffering,

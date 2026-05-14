@@ -241,7 +241,7 @@ export default function Telephony() {
                 <StatusRow label="Production readiness" ready={Boolean(healthQuery.data?.productionReady)} value={healthQuery.data?.productionReady ? "Ready" : `${readyCount}/${totalChecks || 11} checks`} />
                 <StatusRow label="Twilio signatures" ready={Boolean(healthQuery.data?.twilioSignatureRequired)} value={healthQuery.data?.twilioSignatureRequired ? "Required" : "Not required"} />
                 <StatusRow label="OpenAI" ready={Boolean(healthQuery.data?.openaiConfigured)} value={healthQuery.data?.openaiConfigured ? "Configured" : "Missing"} />
-                <StatusRow label="ElevenLabs" ready={Boolean(healthQuery.data?.elevenLabsConfigured)} value={healthQuery.data?.elevenLabsConfigured ? "Configured" : "Missing"} />
+                <StatusRow label="OpenAI voice" ready={Boolean(healthQuery.data?.openAIVoiceConfigured ?? healthQuery.data?.openaiConfigured)} value={(healthQuery.data?.openAIVoiceConfigured ?? healthQuery.data?.openaiConfigured) ? "Configured" : "Missing"} />
                 <StatusRow label="Supabase context" ready={Boolean(healthQuery.data?.onboardedContextConfigured)} value={healthQuery.data?.onboardedContextConfigured ? "Configured" : "Missing"} />
                 <StatusRow label="Shared SMS routing" ready={Boolean(healthQuery.data?.sharedSmsRoutingConfigured)} value={healthQuery.data?.sharedSmsRoutingConfigured ? "Configured" : "Needs sender + Supabase"} />
               </CardContent>

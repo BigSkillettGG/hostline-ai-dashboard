@@ -21,6 +21,7 @@ describe("restaurant onboarding scope", () => {
       "reservations",
       "policies",
       "escalations",
+      "owner",
       "voice",
       "launch",
     ]);
@@ -78,7 +79,7 @@ describe("restaurant onboarding scope", () => {
   });
 
   it("keeps the remaining production build visible", () => {
-    expect(productionWorkstreams).toHaveLength(12);
+    expect(productionWorkstreams).toHaveLength(14);
   });
 
   it("asks for restaurant-specific policies behind common phone playbook scenarios", () => {
@@ -92,6 +93,15 @@ describe("restaurant onboarding scope", () => {
         "donationPressPolicy",
         "hiringPolicy",
         "humanHandoffPolicy",
+        "additionalTrustedContacts",
+        "alertPreferenceRules",
+        "ownerReportPreferences",
+        "unknownAnswerPolicy",
+        "knowledgeApprovalPolicy",
+        "liveUpdateRules",
+        "followUpPolicy",
+        "callReviewPolicy",
+        "opportunityScoringRules",
         "lostAndFoundPolicy",
         "onlineOrderingUrl",
         "orderChangePolicy",

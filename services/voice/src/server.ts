@@ -7,8 +7,8 @@ import { createBillingService } from "./billing-service";
 import { createBillingStore } from "./billing-store";
 import { createCallStore } from "./call-store";
 import { createConversationRelayHandler } from "./conversation-relay";
-import { createElevenLabsPreview } from "./elevenlabs";
 import { createGuestConfirmationService } from "./guest-confirmation-service";
+import { createOpenAIVoicePreview } from "./openai-voice-preview";
 import { getVoiceServiceReadiness, loadEnv, type VoiceServiceEnv } from "./env";
 import { buildLiveCallConfig } from "./live-call";
 import {
@@ -136,6 +136,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       productionReady: readiness.productionReady,
       readinessChecks: readiness.checks,
       openaiConfigured: Boolean(currentEnv.OPENAI_API_KEY),
+      openAIVoiceConfigured: Boolean(currentEnv.OPENAI_API_KEY),
       elevenLabsConfigured: Boolean(currentEnv.ELEVENLABS_API_KEY),
       supabaseConfigured: Boolean(
         currentEnv.SUPABASE_URL &&
@@ -846,9 +847,15 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       const body = parseJsonRequestBody(await readLimitedRequestBody(req, PREVIEW_BODY_LIMIT_BYTES)) as {
         text?: string;
         voiceGender?: string;
+        voiceProfileId?: string;
       };
       const text = body.text?.trim() || demoRestaurantContext.greeting;
-      const preview = await createElevenLabsPreview({ env: currentEnv, text, voiceGender: body.voiceGender });
+      const preview = await createOpenAIVoicePreview({
+        env: currentEnv,
+        text,
+        voiceGender: body.voiceGender,
+        voiceProfileId: body.voiceProfileId,
+      });
 
       res.writeHead(200, {
         "Content-Type": preview.contentType,

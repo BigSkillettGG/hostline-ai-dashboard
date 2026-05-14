@@ -1,5 +1,5 @@
 import type { VoiceServiceEnv } from "./env";
-import { normalizeSignalHostVoiceGender } from "../../../src/domain/voice-selection";
+import { findSignalHostVoiceProfile, getSignalHostVoiceProfile } from "../../../src/domain/voice-selection";
 import type { BusinessLink } from "../../../src/domain/business-links";
 import { getBusinessTemplate, normalizeBusinessType, type BusinessTemplate, type BusinessType } from "../../../src/domain/business-templates";
 import {
@@ -181,7 +181,16 @@ export function buildRestaurantContext({
     stringValue(draft.businessName) ??
     location?.name?.trim() ??
     businessTemplate.defaultName;
-  const hostName = stringValue(draft.hostName) ?? agentConfig?.host_name?.trim() ?? demoRestaurantContext.hostName;
+  const voiceProfile =
+    [
+      stringValue(draft.voiceProfileId),
+      stringValue(draft.hostName),
+      stringValue(draft.voiceGender),
+      agentConfig?.host_name?.trim(),
+    ]
+      .map(findSignalHostVoiceProfile)
+      .find(Boolean) ?? getSignalHostVoiceProfile(undefined);
+  const hostName = voiceProfile.employeeName;
   const timezone = stringValue(draft.timezone) ?? location?.timezone?.trim() ?? demoRestaurantContext.timezone;
   const greetingTemplate =
     stringValue(draft.greeting) ?? agentConfig?.greeting_template?.trim() ?? demoRestaurantContext.greeting;
@@ -243,6 +252,33 @@ export function buildRestaurantContext({
       employment: stringValue(draft.hiringPolicy) ?? "Hiring inquiries should be sent to staff for follow-up.",
       human_handoff: buildHumanHandoffPolicy(draft, agentConfig),
       hours: buildHoursPolicy(draft, businessTemplate),
+      trusted_contacts:
+        stringValue(draft.additionalTrustedContacts) ??
+        "Only configured trusted contacts should receive alerts, use owner-assistant commands, or approve knowledge changes.",
+      owner_reporting:
+        stringValue(draft.ownerReportPreferences) ??
+        "Send urgent items immediately and summarize calls, chats, follow-ups, unanswered questions, and high-value opportunities in daily and weekly owner reports.",
+      alert_preferences:
+        stringValue(draft.alertPreferenceRules) ??
+        "Critical and high-value events should alert staff quickly. Routine calls should be logged and summarized without interrupting the owner.",
+      unknown_answers:
+        stringValue(draft.unknownAnswerPolicy) ??
+        "When not sure, do not guess. Collect the customer question, callback details, and urgency, then create a staff task and suggest a knowledge update after staff answers.",
+      knowledge_approval:
+        stringValue(draft.knowledgeApprovalPolicy) ??
+        "Permanent knowledge changes require owner approval unless a trusted contact has explicit permission.",
+      live_update_rules:
+        stringValue(draft.liveUpdateRules) ??
+        "Temporary updates should include an expiration such as today only, until a date, recurring weekly, emergency mode, or permanent.",
+      follow_up:
+        stringValue(draft.followUpPolicy) ??
+        "High-value requests and unresolved callbacks should appear in the follow-up queue for owner review before outbound follow-up.",
+      call_review:
+        stringValue(draft.callReviewPolicy) ??
+        "Review low-confidence calls, complaints, urgent issues, and high-value opportunities with transcript and recording context.",
+      opportunity_scoring:
+        stringValue(draft.opportunityScoringRules) ??
+        "Classify calls by urgency, value, and follow-up need so owner reports match business priorities.",
       location: locationPolicy,
       lost_and_found:
         stringValue(draft.lostAndFoundPolicy) ??
@@ -273,7 +309,8 @@ export function buildRestaurantContext({
     smsConfirmationsEnabled: agentConfig?.sms_confirmations_enabled ?? true,
     timezone,
     trustedContacts: mappedTrustedContacts,
-    voiceGender: normalizeSignalHostVoiceGender(draft.voiceGender),
+    voiceGender: voiceProfile.gender,
+    voiceProfileId: voiceProfile.id,
   };
 }
 
@@ -985,6 +1022,13 @@ function buildDraftKnowledgeSections(draft: OnboardingDraft): RestaurantKnowledg
   addDraftSection(sections, "Jobs and hiring", stringValue(draft.hiringPolicy));
   addDraftSection(sections, "Vendor and sales calls", stringValue(draft.vendorCallPolicy));
   addDraftSection(sections, "Human handoff rules", stringValue(draft.humanHandoffPolicy));
+  addDraftSection(sections, "Trusted contacts and permissions", stringValue(draft.additionalTrustedContacts));
+  addDraftSection(sections, "Owner reports and alert routing", [stringValue(draft.alertPreferenceRules), stringValue(draft.ownerReportPreferences)].filter(Boolean).join(" "));
+  addDraftSection(sections, "Unknown answers and learning loop", [stringValue(draft.unknownAnswerPolicy), stringValue(draft.knowledgeApprovalPolicy)].filter(Boolean).join(" "));
+  addDraftSection(sections, "Temporary updates and business modes", stringValue(draft.liveUpdateRules));
+  addDraftSection(sections, "Follow-up and revenue recovery", stringValue(draft.followUpPolicy));
+  addDraftSection(sections, "Call QA and review rules", stringValue(draft.callReviewPolicy));
+  addDraftSection(sections, "Opportunity scoring", stringValue(draft.opportunityScoringRules));
   addDraftSection(sections, "Donations, press, and partnerships", stringValue(draft.donationPressPolicy));
   addDraftSection(sections, "Fees and house rules", stringValue(draft.feesAndRules));
   addDraftSection(sections, "Common FAQs", stringValue(draft.customFaqs));
