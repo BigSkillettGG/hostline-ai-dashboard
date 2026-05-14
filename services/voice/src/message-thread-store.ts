@@ -191,6 +191,7 @@ class SupabaseMessageThreadStore implements MessageThreadStore {
       body: input.body,
       direction: "outbound",
       fromPhone: signalhostPhone,
+      locationId,
       providerMessageSid: input.providerMessageSid,
       status: "sent",
       threadId,
@@ -266,6 +267,7 @@ class SupabaseMessageThreadStore implements MessageThreadStore {
       body,
       direction: "inbound",
       fromPhone: from,
+      locationId: selectedThread.location_id,
       providerMessageSid: input.providerMessageSid,
       rawPayload: input.rawPayload,
       status: "routed",
@@ -327,6 +329,7 @@ class SupabaseMessageThreadStore implements MessageThreadStore {
       body,
       direction: "inbound",
       fromPhone: from,
+      locationId: selectedContact.locationId ?? this.defaultLocationId,
       providerMessageSid: input.providerMessageSid,
       rawPayload: input.rawPayload,
       status: "owner_command",
@@ -342,6 +345,7 @@ class SupabaseMessageThreadStore implements MessageThreadStore {
 
     await this.recordOwnerCommandReply({
       from,
+      locationId: selectedContact.locationId ?? this.defaultLocationId,
       result,
       to,
     });
@@ -426,6 +430,7 @@ class SupabaseMessageThreadStore implements MessageThreadStore {
 
   private async recordOwnerCommandReply(input: {
     from: string;
+    locationId: string;
     result: OwnerCommandToolResult;
     to: string;
   }) {
@@ -433,6 +438,7 @@ class SupabaseMessageThreadStore implements MessageThreadStore {
       body: formatOwnerCommandSmsReply(input.result),
       direction: "outbound",
       fromPhone: input.to,
+      locationId: input.locationId,
       status: input.result.ok ? "owner_command_reply" : "owner_command_failed",
       toPhone: input.from,
     });
@@ -511,6 +517,7 @@ class SupabaseMessageThreadStore implements MessageThreadStore {
     body: string;
     direction: "inbound" | "outbound";
     fromPhone: string;
+    locationId?: string;
     providerMessageSid?: string;
     rawPayload?: Record<string, string>;
     status: string;
@@ -522,6 +529,7 @@ class SupabaseMessageThreadStore implements MessageThreadStore {
         body: input.body,
         direction: input.direction,
         from_phone: input.fromPhone,
+        location_id: input.locationId ?? null,
         provider: "twilio",
         provider_message_sid: input.providerMessageSid ?? null,
         raw_payload: input.rawPayload ?? {},

@@ -7,6 +7,7 @@ import {
   BookOpen,
   CheckCircle2,
   ClipboardList,
+  History,
   Mail,
   MessageCircle,
   Phone,
@@ -41,6 +42,7 @@ import {
   applyKnowledgeSuggestionInSupabase,
   createKnowledgeSuggestionInSupabase,
   fetchCallsFromSupabase,
+  fetchOwnerCommandActivityFromSupabase,
   fetchOrdersFromSupabase,
   fetchReservationsFromSupabase,
   fetchStaffTasksFromSupabase,
@@ -49,6 +51,7 @@ import {
   isBusinessLiveUpdatesPersistenceConfigured,
   isSupabaseConfigured,
   saveBusinessLiveModeToSupabase,
+  type OwnerCommandActivity,
 } from "@/lib/supabase-rest";
 import { cn } from "@/lib/utils";
 
@@ -69,6 +72,7 @@ const emptyCalls: Call[] = [];
 const emptyOrders: Order[] = [];
 const emptyReservations: Reservation[] = [];
 const emptyTasks: StaffTask[] = [];
+const emptyOwnerActivity: OwnerCommandActivity[] = [];
 const ownerCommandSuggestions = [
   "Tonight's special is lobster ravioli",
   "We're closed tomorrow for a private event",
@@ -116,6 +120,12 @@ export default function OwnerAssistant() {
     queryKey: ["tenant-directory", "owner-assistant", activeLocationId],
     staleTime: 60_000,
   });
+  const ownerActivityQuery = useQuery({
+    enabled: liveEnabled,
+    queryFn: () => fetchOwnerCommandActivityFromSupabase(activeLocationId),
+    queryKey: ["owner-command-activity", activeLocationId],
+    refetchInterval: 30_000,
+  });
 
   const activeTenant = tenantQuery.data?.find((tenant) => tenant.locationId === activeLocationId);
   const businessName = activeTenant?.locationName ?? String(draft.restaurantName || "your business");
@@ -144,6 +154,10 @@ export default function OwnerAssistant() {
     [liveEnabled, reservationQuery.data],
   );
   const tasks = useMemo(() => liveEnabled ? taskQuery.data ?? emptyTasks : emptyTasks, [liveEnabled, taskQuery.data]);
+  const ownerActivity = useMemo(
+    () => liveEnabled ? ownerActivityQuery.data ?? emptyOwnerActivity : emptyOwnerActivity,
+    [liveEnabled, ownerActivityQuery.data],
+  );
   const assistantContext = useMemo(
     () => ({ businessName, calls, orders, reservations, tasks }),
     [businessName, calls, orders, reservations, tasks],
@@ -155,7 +169,12 @@ export default function OwnerAssistant() {
       text: "Ask me what happened today, what needs follow-up, what I did not know, or tell me live updates like tonight's special.",
     },
   ]);
-  const hasLiveError = callQuery.isError || orderQuery.isError || reservationQuery.isError || taskQuery.isError;
+  const hasLiveError =
+    callQuery.isError ||
+    orderQuery.isError ||
+    ownerActivityQuery.isError ||
+    reservationQuery.isError ||
+    taskQuery.isError;
 
   async function askOwnerAssistant(nextQuestion: string) {
     const trimmed = nextQuestion.trim();
@@ -172,10 +191,14 @@ export default function OwnerAssistant() {
       useLiveSupabase: liveUpdatesEnabled,
     });
     if (commandRoute.kind === "live_command") {
-      await queryClient.invalidateQueries({ queryKey: ["business-live-state", activeLocationId] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["business-live-state", activeLocationId] }),
+        queryClient.invalidateQueries({ queryKey: ["owner-command-activity", activeLocationId] }),
+      ]);
     }
     if (commandRoute.kind === "knowledge_update") {
       await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["owner-command-activity", activeLocationId] }),
         queryClient.invalidateQueries({ queryKey: ["knowledge-suggestions"] }),
         queryClient.invalidateQueries({ queryKey: ["knowledge-suggestions", activeLocationId] }),
         queryClient.invalidateQueries({ queryKey: ["knowledge-sections"] }),
@@ -316,6 +339,32 @@ export default function OwnerAssistant() {
                 <Button variant="outline" size="sm" className="w-full" asChild>
                   <Link to="/app/onboarding">Edit in onboarding</Link>
                 </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <History className="h-4 w-4 text-primary" />
+                  Recent owner activity
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {!liveEnabled ? (
+                  <p className="text-sm leading-5 text-muted-foreground">
+                    Connect Supabase to show owner commands from phone, text, and email.
+                  </p>
+                ) : ownerActivityQuery.isLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading owner activity...</p>
+                ) : ownerActivity.length ? (
+                  ownerActivity.slice(0, 5).map((activity) => (
+                    <OwnerActivityRow key={activity.id} activity={activity} />
+                  ))
+                ) : (
+                  <p className="text-sm leading-5 text-muted-foreground">
+                    No owner phone, text, or email commands have been recorded for this location yet.
+                  </p>
+                )}
               </CardContent>
             </Card>
 
@@ -647,6 +696,27 @@ function IdentityLine({
   );
 }
 
+function OwnerActivityRow({ activity }: { activity: OwnerCommandActivity }) {
+  return (
+    <div className="rounded-md border border-border p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-sm font-medium">{activity.title}</div>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            {activity.body || "No message body captured."}
+          </p>
+        </div>
+        <Badge variant="outline" className="shrink-0 text-[10px] uppercase">
+          {activity.channel}
+        </Badge>
+      </div>
+      <div className="mt-2 text-[11px] uppercase tracking-wide text-muted-foreground">
+        {formatOwnerActivityTime(activity.createdAt)} - {activity.direction}
+      </div>
+    </div>
+  );
+}
+
 function Capability({ icon: Icon, label }: { icon: typeof CheckCircle2; label: string }) {
   return (
     <div className="flex items-center gap-2 rounded-md border border-border p-2.5">
@@ -663,6 +733,20 @@ function formatOwnerUpdateExpiration(value: string) {
       hour: "numeric",
       minute: "2-digit",
       month: "short",
+    }).format(new Date(value));
+  } catch {
+    return value;
+  }
+}
+
+function formatOwnerActivityTime(value: string) {
+  if (!value) return "Recently";
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+      month: "short",
+      day: "numeric",
     }).format(new Date(value));
   } catch {
     return value;

@@ -104,6 +104,7 @@ class SupabaseOwnerEmailCommandService implements OwnerEmailCommandService {
       await this.recordEmailEvent({
         fromEmail,
         input,
+        locationId: requestedLocationId,
         message,
         status: "owner_email_unknown",
         toEmail: input.toEmail,
@@ -118,6 +119,7 @@ class SupabaseOwnerEmailCommandService implements OwnerEmailCommandService {
       await this.recordEmailEvent({
         fromEmail,
         input,
+        locationId: requestedLocationId,
         message,
         status: "owner_email_ambiguous",
         toEmail: input.toEmail,
@@ -141,6 +143,7 @@ class SupabaseOwnerEmailCommandService implements OwnerEmailCommandService {
       contact,
       fromEmail,
       input,
+      locationId: resolvedLocationId,
       message,
       status: "owner_email_command",
       toEmail: input.toEmail,
@@ -158,6 +161,7 @@ class SupabaseOwnerEmailCommandService implements OwnerEmailCommandService {
       contact,
       fromEmail: input.toEmail ?? "signalhost-email",
       input,
+      locationId: resolvedLocationId,
       message: replyMessage,
       status: toolResult.ok ? "owner_email_reply" : "owner_email_failed",
       toEmail: fromEmail,
@@ -194,20 +198,24 @@ class SupabaseOwnerEmailCommandService implements OwnerEmailCommandService {
     contact?: TrustedContact;
     fromEmail: string;
     input: OwnerEmailCommandInput;
+    locationId?: string;
     message: string;
     status: string;
     toEmail?: string;
   }) {
+    const locationId = input.locationId ?? input.contact?.locationId ?? input.input.locationId ?? null;
+
     await this.request("message_events", {
       body: {
         body: input.message,
         direction: input.status === "owner_email_reply" || input.status === "owner_email_failed" ? "outbound" : "inbound",
         from_phone: input.fromEmail,
+        location_id: locationId,
         provider: "email",
         provider_message_sid: input.input.providerMessageId ?? null,
         raw_payload: {
           contactId: input.contact?.id,
-          locationId: input.contact?.locationId ?? input.input.locationId ?? null,
+          locationId,
           rawPayload: input.input.rawPayload ?? {},
           subject: input.input.subject ?? null,
         },

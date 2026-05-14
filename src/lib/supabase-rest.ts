@@ -508,6 +508,21 @@ interface SupabaseTrustedContactRow {
   updated_at: string | null;
 }
 
+interface SupabaseMessageEventRow {
+  body: string | null;
+  created_at: string | null;
+  direction: string | null;
+  from_phone: string | null;
+  id: string;
+  location_id: string | null;
+  provider: string | null;
+  provider_message_sid: string | null;
+  raw_payload: unknown;
+  status: string | null;
+  thread_id: string | null;
+  to_phone: string | null;
+}
+
 export interface PhoneNumberRecord {
   createdAt?: string;
   forwardingMode: string;
@@ -688,6 +703,18 @@ export interface CreateMenuSourceInput {
   url: string;
 }
 
+export type OwnerCommandActivityChannel = "email" | "phone" | "sms" | "unknown";
+
+export interface OwnerCommandActivity {
+  body: string;
+  channel: OwnerCommandActivityChannel;
+  createdAt: string;
+  direction: "inbound" | "outbound";
+  id: string;
+  status: string;
+  title: string;
+}
+
 export function isSupabaseConfigured() {
   return Boolean(supabaseUrl && supabasePublishableKey);
 }
@@ -749,6 +776,10 @@ export function isTeamPersistenceConfigured(organizationId = getActiveOrganizati
 }
 
 export function isTrustedContactPersistenceConfigured(locationId = getActiveSupabaseLocationId()) {
+  return Boolean(isSupabaseConfigured() && locationId);
+}
+
+export function isOwnerCommandActivityPersistenceConfigured(locationId = getActiveSupabaseLocationId()) {
   return Boolean(isSupabaseConfigured() && locationId);
 }
 
@@ -837,6 +868,27 @@ export async function fetchTrustedContactsFromSupabase(
   );
 
   return rows.map(mapSupabaseTrustedContact);
+}
+
+export async function fetchOwnerCommandActivityFromSupabase(
+  locationId = getActiveSupabaseLocationId(),
+): Promise<OwnerCommandActivity[]> {
+  if (!isOwnerCommandActivityPersistenceConfigured(locationId)) {
+    throw new Error("Supabase owner command activity is not configured.");
+  }
+
+  const rows = await supabaseRequest<SupabaseMessageEventRow[]>(
+    "message_events",
+    new URLSearchParams({
+      limit: "25",
+      location_id: `eq.${locationId}`,
+      order: "created_at.desc",
+      select: messageEventSelectColumns,
+      status: "in.(owner_command,owner_command_reply,owner_command_failed,owner_email_command,owner_email_reply,owner_email_failed,owner_email_unknown,owner_email_ambiguous,owner_needs_disambiguation)",
+    }),
+  );
+
+  return rows.map(mapSupabaseOwnerCommandActivity);
 }
 
 export async function createTrustedContactInSupabase(
@@ -3302,6 +3354,57 @@ export function mapSupabaseTrustedContact(row: SupabaseTrustedContactRow): Trust
   };
 }
 
+export function mapSupabaseOwnerCommandActivity(row: SupabaseMessageEventRow): OwnerCommandActivity {
+  const status = row.status?.trim() || "unknown";
+  const direction = row.direction === "outbound" ? "outbound" : "inbound";
+
+  return {
+    body: row.body?.trim() || "",
+    channel: ownerCommandActivityChannel(row),
+    createdAt: row.created_at ?? "",
+    direction,
+    id: row.id,
+    status,
+    title: ownerCommandActivityTitle(status, direction),
+  };
+}
+
+function ownerCommandActivityChannel(row: SupabaseMessageEventRow): OwnerCommandActivityChannel {
+  const provider = row.provider?.trim().toLowerCase();
+  const status = row.status?.trim().toLowerCase() ?? "";
+  if (provider === "email" || status.startsWith("owner_email")) return "email";
+  if (provider === "phone" || status.startsWith("owner_phone")) return "phone";
+  if (provider === "twilio" || status.startsWith("owner_command") || status === "owner_needs_disambiguation") {
+    return "sms";
+  }
+  return "unknown";
+}
+
+function ownerCommandActivityTitle(status: string, direction: "inbound" | "outbound") {
+  switch (status) {
+    case "owner_command":
+      return "Owner text command";
+    case "owner_command_reply":
+      return "SignalHost text reply";
+    case "owner_command_failed":
+      return "Owner text failed";
+    case "owner_email_command":
+      return "Owner email command";
+    case "owner_email_reply":
+      return "SignalHost email reply";
+    case "owner_email_failed":
+      return "Owner email failed";
+    case "owner_email_unknown":
+      return "Unknown owner email";
+    case "owner_email_ambiguous":
+      return "Email needs location";
+    case "owner_needs_disambiguation":
+      return "Text needs location";
+    default:
+      return direction === "outbound" ? "SignalHost reply" : "Owner activity";
+  }
+}
+
 function normalizeInviteStatus(status: string | null): TeamInviteStatus {
   if (status === "accepted" || status === "revoked" || status === "expired") return status;
   return "pending";
@@ -3388,3 +3491,6 @@ const businessLiveUpdateSelectColumns =
 
 const trustedContactSelectColumns =
   "id,location_id,contact_type,name,phone,email,preferred_channel,can_receive_alerts,can_use_owner_assistant,can_add_live_updates,can_approve_permanent_knowledge,can_resolve_customer_requests,can_manage_alert_preferences,requires_owner_approval,trusted_identity_enabled,created_at,updated_at";
+
+const messageEventSelectColumns =
+  "id,thread_id,location_id,provider,provider_message_sid,direction,from_phone,to_phone,body,status,raw_payload,created_at";

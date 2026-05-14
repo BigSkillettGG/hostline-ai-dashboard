@@ -69,6 +69,7 @@ describe("message thread store", () => {
     );
     expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain('"customer_phone":"+17813072672"');
     expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toContain('"thread_id":"thread_123"');
+    expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toContain('"location_id":"00000000-0000-4000-8000-000000000002"');
   });
 
   it("routes a clear inbound reply to the active thread and creates a staff task", async () => {
@@ -100,6 +101,7 @@ describe("message thread store", () => {
     expect(result.replyMessage).toBe("Got it. I sent that to Olive & Ember.");
     expect(fetchMock).toHaveBeenCalledTimes(5);
     expect(String(fetchMock.mock.calls[2]?.[1]?.body)).toContain('"status":"routed"');
+    expect(String(fetchMock.mock.calls[2]?.[1]?.body)).toContain('"location_id":"00000000-0000-4000-8000-000000000002"');
     expect(String(fetchMock.mock.calls[4]?.[1]?.body)).toContain("Review customer text reply");
   });
 
@@ -192,7 +194,9 @@ describe("message thread store", () => {
     }));
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toContain('"status":"owner_command"');
+    expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toContain('"location_id":"00000000-0000-4000-8000-000000000002"');
     expect(String(fetchMock.mock.calls[2]?.[1]?.body)).toContain('"status":"owner_command_reply"');
+    expect(String(fetchMock.mock.calls[2]?.[1]?.body)).toContain('"location_id":"00000000-0000-4000-8000-000000000002"');
   });
 
   it("escapes SMS TwiML replies", () => {

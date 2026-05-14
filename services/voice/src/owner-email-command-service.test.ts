@@ -101,7 +101,9 @@ describe("owner email command service", () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(fetchMock.mock.calls[0]?.[0]).toContain("/business_contacts?");
     expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toContain('"status":"owner_email_command"');
+    expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toContain('"location_id":"00000000-0000-4000-8000-000000000002"');
     expect(String(fetchMock.mock.calls[2]?.[1]?.body)).toContain('"status":"owner_email_reply"');
+    expect(String(fetchMock.mock.calls[2]?.[1]?.body)).toContain('"location_id":"00000000-0000-4000-8000-000000000002"');
   });
 
   it("requires location disambiguation when one email owns multiple businesses", async () => {

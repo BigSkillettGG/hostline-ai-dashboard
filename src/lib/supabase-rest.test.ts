@@ -31,6 +31,7 @@ import {
   mapSupabaseMenu,
   mapSupabaseMenuSource,
   mapSupabaseOrders,
+  mapSupabaseOwnerCommandActivity,
   mapSupabasePhoneNumber,
   mapSupabaseReservations,
   mapSupabaseStaffAlertEvent,
@@ -455,6 +456,56 @@ describe("Supabase business live updates", () => {
       source: "dashboard",
       title: "Live update",
       type: "policy",
+    });
+  });
+});
+
+describe("Supabase owner command activity", () => {
+  it("maps persisted owner email and text events into dashboard activity", () => {
+    expect(
+      mapSupabaseOwnerCommandActivity({
+        body: "Tonight's special is lobster ravioli.",
+        created_at: "2026-05-13T20:00:00.000Z",
+        direction: "inbound",
+        from_phone: "owner@example.com",
+        id: "event_email",
+        location_id: "location_1",
+        provider: "email",
+        provider_message_sid: "email_123",
+        raw_payload: {},
+        status: "owner_email_command",
+        thread_id: null,
+        to_phone: "updates@signalhost.ai",
+      }),
+    ).toEqual({
+      body: "Tonight's special is lobster ravioli.",
+      channel: "email",
+      createdAt: "2026-05-13T20:00:00.000Z",
+      direction: "inbound",
+      id: "event_email",
+      status: "owner_email_command",
+      title: "Owner email command",
+    });
+
+    expect(
+      mapSupabaseOwnerCommandActivity({
+        body: "Got it. I saved that live update.",
+        created_at: "2026-05-13T20:00:01.000Z",
+        direction: "outbound",
+        from_phone: "+15550000",
+        id: "event_sms",
+        location_id: "location_1",
+        provider: "twilio",
+        provider_message_sid: null,
+        raw_payload: {},
+        status: "owner_command_reply",
+        thread_id: null,
+        to_phone: "+14155550148",
+      }),
+    ).toMatchObject({
+      channel: "sms",
+      direction: "outbound",
+      title: "SignalHost text reply",
     });
   });
 });
