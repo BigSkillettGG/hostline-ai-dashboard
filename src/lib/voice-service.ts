@@ -9,6 +9,7 @@ export interface VoiceServiceHealth {
   customerFollowUpsConfigured?: boolean;
   openaiConfigured: boolean;
   openAIVoiceConfigured?: boolean;
+  openAIRealtimeSipConfigured?: boolean;
   elevenLabsConfigured?: boolean;
   emailDeliveryConfigured?: boolean;
   menuIngestionConfigured?: boolean;
@@ -149,6 +150,24 @@ export interface LiveCallConfig {
   ready: boolean;
   twilioSignatureRequired: boolean;
   voiceWebhookUrl?: string;
+}
+
+export interface OpenAIRealtimeLiveCallConfig {
+  model: string;
+  projectIdConfigured: boolean;
+  ready: boolean;
+  sipUri?: string;
+  voice: string;
+  webhookSecretConfigured: boolean;
+  webhookUrl?: string;
+}
+
+export interface OpenAIRealtimePreflight {
+  checks: VoiceServiceReadinessCheck[];
+  config: OpenAIRealtimeLiveCallConfig;
+  locationId: string;
+  ready: boolean;
+  restaurantName?: string;
 }
 
 export interface BillingAccountStatus {
@@ -332,6 +351,48 @@ export async function fetchTwiMLPreview(locationId = getActiveLocationId()) {
   }
 
   return text;
+}
+
+export async function fetchOpenAIRealtimeLiveCallConfig(locationId = getActiveLocationId()) {
+  if (!voiceServiceBaseUrl) {
+    throw new Error("VITE_VOICE_SERVICE_URL is not configured.");
+  }
+
+  const params = new URLSearchParams();
+  if (locationId?.trim()) params.set("locationId", locationId.trim());
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const response = await fetch(`${voiceServiceBaseUrl}/openai/realtime/live-call-config${query}`, {
+    headers: buildVoiceAdminHeaders(),
+  });
+  const text = await response.text();
+  const payload = text ? JSON.parse(text) as OpenAIRealtimeLiveCallConfig | { error?: string } : undefined;
+
+  if (!response.ok && !isOpenAIRealtimeConfigPayload(payload)) {
+    throw new Error(payload?.error || text || `OpenAI Realtime config failed with ${response.status}.`);
+  }
+
+  return payload as OpenAIRealtimeLiveCallConfig;
+}
+
+export async function fetchOpenAIRealtimePreflight(locationId = getActiveLocationId()) {
+  if (!voiceServiceBaseUrl) {
+    throw new Error("VITE_VOICE_SERVICE_URL is not configured.");
+  }
+
+  const params = new URLSearchParams();
+  if (locationId?.trim()) params.set("locationId", locationId.trim());
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const response = await fetch(`${voiceServiceBaseUrl}/openai/realtime/preflight${query}`, {
+    headers: buildVoiceAdminHeaders(),
+  });
+  const text = await response.text();
+  const payload = text ? JSON.parse(text) as OpenAIRealtimePreflight | { error?: string } : undefined;
+
+  if (!response.ok && !isOpenAIRealtimePreflightPayload(payload)) {
+    throw new Error(payload?.error || text || `OpenAI Realtime preflight failed with ${response.status}.`);
+  }
+
+  return payload as OpenAIRealtimePreflight;
 }
 
 export async function fetchVoicePreviewAudio(
@@ -813,4 +874,12 @@ function buildVoiceAdminHeaders() {
 
 function isEmailReadinessPayload(value: unknown): value is EmailReadiness {
   return Boolean(value && typeof value === "object" && Array.isArray((value as EmailReadiness).checks));
+}
+
+function isOpenAIRealtimeConfigPayload(value: unknown): value is OpenAIRealtimeLiveCallConfig {
+  return Boolean(value && typeof value === "object" && "ready" in value && "model" in value);
+}
+
+function isOpenAIRealtimePreflightPayload(value: unknown): value is OpenAIRealtimePreflight {
+  return Boolean(value && typeof value === "object" && Array.isArray((value as OpenAIRealtimePreflight).checks));
 }

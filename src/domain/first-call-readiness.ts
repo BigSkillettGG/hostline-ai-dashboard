@@ -23,10 +23,17 @@ export interface FirstCallLiveConfig {
   voiceWebhookUrl?: string;
 }
 
+export interface FirstCallOpenAIRealtimeConfig {
+  ready?: boolean;
+  sipUri?: string;
+  webhookUrl?: string;
+}
+
 export interface FirstCallReadinessInput {
   health?: FirstCallVoiceHealth;
   liveCallConfig?: FirstCallLiveConfig;
   locationId?: string;
+  openAIRealtimeConfig?: FirstCallOpenAIRealtimeConfig;
   twimlPreview?: string;
   voiceConfigured: boolean;
 }
@@ -51,8 +58,10 @@ export interface FirstCallReadiness {
 export function buildFirstCallReadiness(input: FirstCallReadinessInput): FirstCallReadiness {
   const missingRequiredChecks = input.health?.readinessChecks?.filter((check) => check.required && !check.ready) ?? [];
   const hasLocationId = Boolean(input.locationId?.trim());
-  const hasWebhookTargets = Boolean(input.liveCallConfig?.voiceWebhookUrl && input.liveCallConfig.conversationRelayUrl);
-  const rendersConversationRelay = Boolean(input.twimlPreview?.includes("<ConversationRelay"));
+  const hasConversationRelayTargets = Boolean(input.liveCallConfig?.voiceWebhookUrl && input.liveCallConfig.conversationRelayUrl);
+  const hasOpenAIRealtimeTargets = Boolean(input.openAIRealtimeConfig?.ready && input.openAIRealtimeConfig.webhookUrl);
+  const hasWebhookTargets = hasConversationRelayTargets || hasOpenAIRealtimeTargets;
+  const hasLiveCallPreview = Boolean(input.twimlPreview?.includes("<ConversationRelay") || input.openAIRealtimeConfig?.webhookUrl);
 
   const steps: FirstCallReadinessStep[] = [
     step("dashboard_connection", "Dashboard connected", "Voice service URL is present in the dashboard environment.", input.voiceConfigured),
@@ -78,18 +87,20 @@ export function buildFirstCallReadiness(input: FirstCallReadinessInput): FirstCa
       Boolean(input.health?.productionReady),
     ),
     step("restaurant_context", "Restaurant context", "SignalHost can load this restaurant's profile, menu, FAQs, and policies.", Boolean(input.health?.onboardedContextConfigured)),
-    step("webhook_targets", "Webhook targets", "Twilio voice webhook and ConversationRelay websocket URLs are generated.", hasWebhookTargets),
-    step("twiml_preview", "TwiML preview", "The Twilio response includes ConversationRelay for the selected location.", rendersConversationRelay),
+    step("webhook_targets", "Webhook targets", "OpenAI Realtime webhook or Twilio ConversationRelay URLs are generated.", hasWebhookTargets),
+    step("twiml_preview", "Live-call route preview", "The OpenAI Realtime webhook is available or the fallback Twilio response includes ConversationRelay.", hasLiveCallPreview),
     step("twilio_signatures", "Twilio signatures", "Incoming Twilio requests require signature validation.", Boolean(input.health?.twilioSignatureRequired)),
   ];
 
   const manualSteps: FirstCallReadinessStep[] = [
     {
-      detail: input.liveCallConfig?.voiceWebhookUrl
+      detail: input.openAIRealtimeConfig?.webhookUrl
+        ? `Set the OpenAI Realtime webhook to ${input.openAIRealtimeConfig.webhookUrl}${input.openAIRealtimeConfig.sipUri ? ` and route Twilio SIP to ${input.openAIRealtimeConfig.sipUri}` : ""}.`
+        : input.liveCallConfig?.voiceWebhookUrl
         ? `Set the Twilio number's Voice webhook to ${input.liveCallConfig.voiceWebhookUrl}.`
-        : "Deploy the voice service first so the exact Twilio Voice webhook URL can be generated.",
+        : "Deploy the voice service first so the exact OpenAI/Twilio call URL can be generated.",
       id: "twilio_number_webhook",
-      label: "Twilio number webhook",
+      label: "Phone routing",
       status: "manual",
     },
     {

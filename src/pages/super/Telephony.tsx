@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -24,10 +25,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { buildFirstCallReadiness, type FirstCallReadinessStep } from "@/domain/first-call-readiness";
-import { fetchPhoneNumbersFromSupabase, isSupabaseConfigured, type PhoneNumberRecord } from "@/lib/supabase-rest";
+import { buildPilotReadiness, type PilotReadinessStep } from "@/domain/pilot-readiness";
+import {
+  fetchCallFeedbackFromSupabase,
+  fetchCallsFromSupabase,
+  fetchPhoneNumbersFromSupabase,
+  isSupabaseConfigured,
+  type PhoneNumberRecord,
+} from "@/lib/supabase-rest";
 import {
   fetchLiveCallConfig,
   fetchEmailReadiness,
+  fetchOpenAIRealtimeLiveCallConfig,
+  fetchOpenAIRealtimePreflight,
   fetchTwiMLPreview,
   fetchVoiceServiceHealth,
   isVoiceServiceConfigured,
@@ -56,6 +66,18 @@ export default function Telephony() {
     queryKey: ["live-call-config", locationId],
   });
 
+  const realtimeConfigQuery = useQuery({
+    enabled: voiceConfigured,
+    queryFn: () => fetchOpenAIRealtimeLiveCallConfig(locationId),
+    queryKey: ["openai-realtime-live-call-config", locationId],
+  });
+
+  const realtimePreflightQuery = useQuery({
+    enabled: voiceConfigured,
+    queryFn: () => fetchOpenAIRealtimePreflight(locationId),
+    queryKey: ["openai-realtime-preflight", locationId],
+  });
+
   const twimlQuery = useQuery({
     enabled: voiceConfigured,
     queryFn: () => fetchTwiMLPreview(locationId),
@@ -74,6 +96,19 @@ export default function Telephony() {
     queryKey: ["phone-numbers", locationId],
   });
 
+  const pilotCallsQuery = useQuery({
+    enabled: supabaseConfigured && Boolean(locationId.trim()),
+    queryFn: () => fetchCallsFromSupabase(locationId),
+    queryKey: ["pilot-readiness-calls", locationId],
+    refetchInterval: 30_000,
+  });
+  const latestPilotCall = pilotCallsQuery.data?.[0];
+  const pilotFeedbackQuery = useQuery({
+    enabled: supabaseConfigured && Boolean(latestPilotCall?.id),
+    queryFn: () => fetchCallFeedbackFromSupabase(latestPilotCall!.id),
+    queryKey: ["pilot-readiness-feedback", latestPilotCall?.id],
+  });
+
   const releaseMutation = useMutation({
     mutationFn: releaseVoicePhoneNumber,
     onSuccess: async () => {
@@ -90,8 +125,12 @@ export default function Telephony() {
     void healthQuery.refetch();
     void emailReadinessQuery.refetch();
     void liveCallQuery.refetch();
+    void realtimeConfigQuery.refetch();
+    void realtimePreflightQuery.refetch();
     void twimlQuery.refetch();
     void phoneNumbersQuery.refetch();
+    if (locationId.trim()) void pilotCallsQuery.refetch();
+    if (latestPilotCall?.id) void pilotFeedbackQuery.refetch();
   };
 
   const config = liveCallQuery.data;
@@ -101,12 +140,25 @@ export default function Telephony() {
     health: healthQuery.data,
     liveCallConfig: config,
     locationId,
+    openAIRealtimeConfig: realtimeConfigQuery.data,
     twimlPreview: twimlQuery.data,
     voiceConfigured,
   });
   const sharedSmsWebhookUrl = voiceServiceBaseUrl ? `${voiceServiceBaseUrl}/twilio/sms` : "Set VITE_VOICE_SERVICE_URL";
   const expiredTrialReleaseUrl = voiceServiceBaseUrl ? `${voiceServiceBaseUrl}/telephony/release-expired-trials` : "Set VITE_VOICE_SERVICE_URL";
   const emailReadiness = emailReadinessQuery.data;
+  const pilotReadiness = buildPilotReadiness({
+    calls: pilotCallsQuery.data ?? [],
+    emailReadiness,
+    feedback: pilotFeedbackQuery.data ?? [],
+    health: healthQuery.data,
+    locationId,
+    phoneNumbers: phoneNumbersQuery.data ?? [],
+    realtimeConfig: realtimeConfigQuery.data,
+    realtimePreflight: realtimePreflightQuery.data,
+    supabaseConfigured,
+    voiceConfigured,
+  });
 
   const releaseNumber = (record: PhoneNumberRecord) => {
     if (!record.providerSid) {
@@ -129,10 +181,10 @@ export default function Telephony() {
     <>
       <PageHeader
         title="Telephony"
-        description="Twilio numbers, live-call webhook, and ConversationRelay readiness"
+        description="OpenAI Realtime SIP, Twilio numbers, and live-call logging readiness"
         actions={
-          <Button size="sm" variant="outline" onClick={refreshAll} disabled={!voiceConfigured || healthQuery.isFetching || liveCallQuery.isFetching}>
-            <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${healthQuery.isFetching || liveCallQuery.isFetching ? "animate-spin" : ""}`} />
+          <Button size="sm" variant="outline" onClick={refreshAll} disabled={!voiceConfigured || healthQuery.isFetching || liveCallQuery.isFetching || realtimeConfigQuery.isFetching}>
+            <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${healthQuery.isFetching || liveCallQuery.isFetching || realtimeConfigQuery.isFetching ? "animate-spin" : ""}`} />
             Check service
           </Button>
         }
@@ -147,13 +199,13 @@ export default function Telephony() {
                     <PhoneCall className="h-4 w-4 text-primary" />
                     First live call
                   </CardTitle>
-                  <p className="mt-1 text-xs text-muted-foreground">Active location and Twilio webhook targets</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Active location, OpenAI SIP webhook, and fallback Twilio targets</p>
                 </div>
                 <Badge
                   variant="outline"
-                  className={config?.ready ? "border-success/30 bg-success/10 text-success" : "border-warning/30 bg-warning/10 text-warning"}
+                  className={realtimeConfigQuery.data?.ready ? "border-success/30 bg-success/10 text-success" : "border-warning/30 bg-warning/10 text-warning"}
                 >
-                  {config?.ready ? "Webhook ready" : voiceConfigured ? "Needs deploy URL" : "Not connected"}
+                  {realtimeConfigQuery.data?.ready ? "Realtime ready" : voiceConfigured ? "Needs deploy URL" : "Not connected"}
                 </Badge>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -176,13 +228,18 @@ export default function Telephony() {
                 </div>
 
                 <UrlRow label="Voice service" value={voiceServiceBaseUrl || "Set VITE_VOICE_SERVICE_URL"} />
-                <UrlRow label="Twilio Voice webhook" value={config?.voiceWebhookUrl ?? "Unavailable"} />
-                <UrlRow label="ConversationRelay websocket" value={config?.conversationRelayUrl ?? "Unavailable"} />
-                <UrlRow label="Conversation ended callback" value={config?.actionUrl ?? "Unavailable"} />
+                <UrlRow label="OpenAI Realtime webhook" value={realtimeConfigQuery.data?.webhookUrl ?? "Unavailable"} />
+                <UrlRow label="OpenAI SIP URI" value={realtimeConfigQuery.data?.sipUri ?? "Set OPENAI_PROJECT_ID or use the OpenAI project SIP URI"} />
+                <UrlRow label="Fallback Twilio Voice webhook" value={config?.voiceWebhookUrl ?? "Unavailable"} />
 
                 {liveCallQuery.isError && (
                   <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
                     {liveCallQuery.error instanceof Error ? liveCallQuery.error.message : "Live call config failed."}
+                  </div>
+                )}
+                {realtimeConfigQuery.isError && (
+                  <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                    {realtimeConfigQuery.error instanceof Error ? realtimeConfigQuery.error.message : "OpenAI Realtime config failed."}
                   </div>
                 )}
               </CardContent>
@@ -252,6 +309,7 @@ export default function Telephony() {
                 <StatusRow label="Twilio signatures" ready={Boolean(healthQuery.data?.twilioSignatureRequired)} value={healthQuery.data?.twilioSignatureRequired ? "Required" : "Not required"} />
                 <StatusRow label="OpenAI" ready={Boolean(healthQuery.data?.openaiConfigured)} value={healthQuery.data?.openaiConfigured ? "Configured" : "Missing"} />
                 <StatusRow label="OpenAI voice" ready={Boolean(healthQuery.data?.openAIVoiceConfigured ?? healthQuery.data?.openaiConfigured)} value={(healthQuery.data?.openAIVoiceConfigured ?? healthQuery.data?.openaiConfigured) ? "Configured" : "Missing"} />
+                <StatusRow label="OpenAI Realtime SIP" ready={Boolean(healthQuery.data?.openAIRealtimeSipConfigured || realtimePreflightQuery.data?.ready)} value={realtimePreflightQuery.data?.ready ? "Preflight ready" : healthQuery.data?.openAIRealtimeSipConfigured ? "Configured" : "Missing"} />
                 <StatusRow label="Supabase context" ready={Boolean(healthQuery.data?.onboardedContextConfigured)} value={healthQuery.data?.onboardedContextConfigured ? "Configured" : "Missing"} />
                 <StatusRow label="Shared SMS routing" ready={Boolean(healthQuery.data?.sharedSmsRoutingConfigured)} value={healthQuery.data?.sharedSmsRoutingConfigured ? "Configured" : "Needs sender + Supabase"} />
               </CardContent>
@@ -343,7 +401,57 @@ export default function Telephony() {
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <ClipboardCheck className="h-4 w-4 text-primary" />
-                  First-call readiness
+                  Pilot readiness
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center justify-between gap-3 rounded-md border border-border p-3">
+                  <div>
+                    <div className="text-sm font-medium">
+                      {pilotReadiness.requiredReadyCount}/{pilotReadiness.requiredTotal} pilot checks
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">{pilotReadiness.nextAction}</div>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={
+                      pilotReadiness.ready
+                        ? "border-success/30 bg-success/10 text-success"
+                        : "border-warning/30 bg-warning/10 text-warning"
+                    }
+                  >
+                    {pilotReadiness.ready ? "Ready to pilot" : "Needs setup"}
+                  </Badge>
+                </div>
+
+                <div className="grid gap-2">
+                  {pilotReadiness.steps.map((step) => (
+                    <PilotReadinessRow key={step.id} step={step} />
+                  ))}
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Button variant="outline" size="sm" asChild>
+                    <Link to="/super/calls">Review live calls</Link>
+                  </Button>
+                  <Button variant="outline" size="sm" asChild>
+                    <Link to="/super/qa">Open QA loop</Link>
+                  </Button>
+                </div>
+
+                {pilotCallsQuery.isError && (
+                  <div className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
+                    {pilotCallsQuery.error instanceof Error ? pilotCallsQuery.error.message : "Pilot calls could not be loaded."}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <ClipboardCheck className="h-4 w-4 text-primary" />
+                  First-call route checks
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -362,7 +470,7 @@ export default function Telephony() {
                         : "border-warning/30 bg-warning/10 text-warning"
                     }
                   >
-                    {firstCallReadiness.autoReady ? "Ready for Twilio" : `${firstCallReadiness.missingCount} missing`}
+                    {firstCallReadiness.autoReady ? "Ready for routing" : `${firstCallReadiness.missingCount} missing`}
                   </Badge>
                 </div>
 
@@ -502,6 +610,36 @@ function ReadinessRow({ step }: { step: FirstCallReadinessStep }) {
       ) : (
         <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
       )}
+    </div>
+  );
+}
+
+function PilotReadinessRow({ step }: { step: PilotReadinessStep }) {
+  return (
+    <div className="rounded-md border border-border px-3 py-2">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-sm font-medium">{step.label}</div>
+            {!step.required && (
+              <Badge variant="outline" className="bg-muted text-[10px] uppercase text-muted-foreground">
+                Recommended
+              </Badge>
+            )}
+          </div>
+          <div className="mt-0.5 break-words text-xs text-muted-foreground">{step.detail}</div>
+          {step.status !== "ready" && step.action && (
+            <div className="mt-1 text-xs text-foreground">{step.action}</div>
+          )}
+        </div>
+        {step.status === "ready" ? (
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+        ) : step.status === "recommended" ? (
+          <CircleDashed className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+        ) : (
+          <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+        )}
+      </div>
     </div>
   );
 }
