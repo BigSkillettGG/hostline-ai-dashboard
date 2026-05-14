@@ -8,16 +8,20 @@ import {
   CheckCircle2,
   Clock3,
   ClipboardCheck,
+  Code2,
   Copy,
   FileText,
+  Globe2,
   HelpCircle,
   Info,
   Lightbulb,
   ListChecks,
   Loader2,
+  MessageCircle,
   PhoneForwarded,
   Rocket,
   Search,
+  Settings2,
   ShieldCheck,
   ShoppingBag,
   Store,
@@ -49,6 +53,10 @@ import {
   type OnboardingFieldOption,
   type OnboardingStepId,
 } from "@/domain/onboarding";
+import {
+  buildPostInterviewLaunchGuide,
+  type PostInterviewLaunchGuide,
+} from "@/domain/launch-guide";
 import { getVerticalInsightProfile } from "@/domain/vertical-insights";
 import { loadOnboardingDraft, saveOnboardingDraft } from "@/lib/onboarding-draft";
 import {
@@ -66,6 +74,7 @@ import {
   searchAvailableVoicePhoneNumbers,
   provisionVoicePhoneNumber,
   isVoiceServiceConfigured,
+  voiceServiceBaseUrl,
   type AvailableVoicePhoneNumber,
 } from "@/lib/voice-service";
 import { cn } from "@/lib/utils";
@@ -138,6 +147,20 @@ export default function Onboarding() {
   const forwardingVerificationStatus = buildVerificationStatus(forwardingVerification);
   const selectedPlanName = String(draft.selectedPlanName ?? "Not selected");
   const selectedPlanMonthly = String(draft.selectedPlanMonthly ?? "");
+  const businessName = String(draft.restaurantName || businessTemplate.defaultName);
+  const launchGuide = useMemo(
+    () =>
+      buildPostInterviewLaunchGuide({
+        appBaseUrl: resolvePublicAppBaseUrl(),
+        assignedNumber,
+        businessName,
+        draft,
+        locationId: activeLocationId,
+        template: businessTemplate,
+        voiceServiceUrl: voiceServiceBaseUrl,
+      }),
+    [activeLocationId, assignedNumber, businessName, businessTemplate, draft],
+  );
   const launchAssistantSteps = useMemo(
     () =>
       buildLaunchAssistantSteps({
@@ -647,6 +670,16 @@ export default function Onboarding() {
                   </div>
                 </CardContent>
               </Card>
+
+              {activeSection.id === "launch" && (
+                <LaunchCommandCenter
+                  assignedNumber={assignedNumber}
+                  assignedNumberIsDemo={assignedNumberIsDemo}
+                  businessName={businessName}
+                  guide={launchGuide}
+                  template={businessTemplate}
+                />
+              )}
             </div>
 
             <Card>
@@ -931,6 +964,243 @@ export default function Onboarding() {
   }
 }
 
+function LaunchCommandCenter({
+  assignedNumber,
+  assignedNumberIsDemo,
+  businessName,
+  guide,
+  template,
+}: {
+  assignedNumber: string;
+  assignedNumberIsDemo: boolean;
+  businessName: string;
+  guide: PostInterviewLaunchGuide;
+  template: ReturnType<typeof getOnboardingBusinessTemplate>;
+}) {
+  return (
+    <Card className="border-primary/20">
+      <CardHeader className="pb-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <Badge variant="outline" className="mb-2 border-primary/25 bg-primary/5 text-primary">
+              Owner launch center
+            </Badge>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Rocket className="h-4 w-4 text-primary" />
+              Launch {businessName}
+            </CardTitle>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+              Everything the owner needs after the interview: the phone number, forwarding steps, website chat snippet,
+              first test calls, and how to manage SignalHost after go-live.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              void navigator.clipboard?.writeText(guide.launchPacketText);
+              toast.success("Launch packet copied");
+            }}
+          >
+            <Copy className="mr-1.5 h-3.5 w-3.5" />
+            Copy launch packet
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {guide.readinessWarnings.length > 0 && (
+          <div className="rounded-md border border-warning/30 bg-warning/10 p-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <AlertTriangle className="h-4 w-4 text-warning" />
+              Finish these before forwarding real calls
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              {guide.readinessWarnings.map((warning) => (
+                <div key={warning} className="flex gap-2 text-xs leading-5 text-muted-foreground">
+                  <Clock3 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
+                  <span>{warning}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="grid gap-4 xl:grid-cols-2">
+          <div className="rounded-md border border-border p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <PhoneForwarded className="h-4 w-4 text-primary" />
+                  Phone forwarding
+                </div>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">{guide.phoneForwarding.body}</p>
+              </div>
+              <Badge variant="secondary">{guide.phoneForwarding.setupLabel}</Badge>
+            </div>
+
+            <div className="mt-4 rounded-md bg-muted/30 p-3">
+              <div className="text-xs font-medium text-muted-foreground">SignalHost number</div>
+              <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
+                <div className="text-2xl font-semibold tabular-nums">{assignedNumber}</div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      void navigator.clipboard?.writeText(assignedNumber);
+                      toast.success("SignalHost number copied");
+                    }}
+                  >
+                    <Copy className="mr-1.5 h-3.5 w-3.5" />
+                    Copy
+                  </Button>
+                  <Button size="sm" disabled={assignedNumberIsDemo} asChild={!assignedNumberIsDemo}>
+                    {assignedNumberIsDemo ? (
+                      <span>Call</span>
+                    ) : (
+                      <a href={`tel:${assignedNumber}`}>Call</a>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <InstructionList className="mt-4" steps={guide.phoneForwarding.steps} />
+
+            <div className="mt-4 rounded-md border border-primary/20 bg-primary/5 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-xs font-semibold uppercase text-muted-foreground">Copy for carrier or phone admin</div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    void navigator.clipboard?.writeText(guide.phoneForwarding.providerScript);
+                    toast.success("Phone setup script copied");
+                  }}
+                >
+                  <Copy className="mr-1.5 h-3.5 w-3.5" />
+                  Copy
+                </Button>
+              </div>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">{guide.phoneForwarding.providerScript}</p>
+            </div>
+          </div>
+
+          <div className="rounded-md border border-border p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <Globe2 className="h-4 w-4 text-primary" />
+                  Website chat
+                </div>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">{guide.websiteChat.body}</p>
+              </div>
+              <Button variant="outline" size="sm" asChild>
+                <Link to="/app/website-chat">
+                  Preview
+                  <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                </Link>
+              </Button>
+            </div>
+
+            <InstructionList className="mt-4" steps={guide.websiteChat.steps} />
+
+            <div className="mt-4 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <Label className="flex items-center gap-2">
+                  <Code2 className="h-3.5 w-3.5 text-primary" />
+                  Website snippet
+                </Label>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    void navigator.clipboard?.writeText(guide.websiteChat.snippet);
+                    toast.success("Website snippet copied");
+                  }}
+                >
+                  <Copy className="mr-1.5 h-3.5 w-3.5" />
+                  Copy
+                </Button>
+              </div>
+              <Textarea className="min-h-40 resize-none font-mono text-xs" readOnly value={guide.websiteChat.snippet} />
+            </div>
+
+            <div className="mt-4 rounded-md border border-border bg-muted/20 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-xs font-semibold uppercase text-muted-foreground">Copy for website helper</div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    void navigator.clipboard?.writeText(guide.websiteChat.handoffText);
+                    toast.success("Website handoff copied");
+                  }}
+                >
+                  <Copy className="mr-1.5 h-3.5 w-3.5" />
+                  Copy
+                </Button>
+              </div>
+              <p className="mt-2 line-clamp-5 whitespace-pre-line text-xs leading-5 text-muted-foreground">
+                {guide.websiteChat.handoffText}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+          <div className="rounded-md border border-border p-4">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <MessageCircle className="h-4 w-4 text-primary" />
+              First test calls and chats
+            </div>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              Run these before forwarding real {template.customerNoun} traffic. Then check transcripts, recordings,
+              Tasks, and Analytics.
+            </p>
+            <InstructionList className="mt-4" steps={guide.firstTestScenarios} />
+          </div>
+
+          <div className="rounded-md border border-border p-4">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <Settings2 className="h-4 w-4 text-primary" />
+              {guide.ownerOperatingRules.title}
+            </div>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">{guide.ownerOperatingRules.body}</p>
+            <InstructionList className="mt-4" steps={guide.ownerOperatingRules.steps} />
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" asChild>
+                <Link to="/app/assistant">Ask SignalHost</Link>
+              </Button>
+              <Button size="sm" variant="outline" asChild>
+                <Link to="/app/calls">Review calls</Link>
+              </Button>
+              <Button size="sm" variant="outline" asChild>
+                <Link to="/app/tasks">Open tasks</Link>
+              </Button>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function InstructionList({ className, steps }: { className?: string; steps: string[] }) {
+  return (
+    <div className={cn("space-y-2", className)}>
+      {steps.map((step, index) => (
+        <div key={`${index}-${step}`} className="flex gap-3 text-sm leading-6">
+          <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-primary/10 text-[11px] font-semibold text-primary tabular-nums">
+            {index + 1}
+          </div>
+          <span>{step}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function LaunchAssistantStepCard({ step }: { step: LaunchAssistantStep }) {
   const Icon = step.status === "done" ? CheckCircle2 : step.status === "blocked" ? AlertTriangle : Clock3;
 
@@ -1131,6 +1401,11 @@ const fieldWhy: Record<string, string> = {
   greeting: "This is the first thing callers hear, so shorter and clearer is usually better.",
   voiceGender: "For V1 this maps to the approved SignalHost male or female voice.",
   forwardingMode: "This decides whether SignalHost answers all calls, missed calls, or after-hours calls.",
+  phoneLineType: "This lets SignalHost show the right forwarding instructions for mobile phones, landlines, and VoIP systems.",
+  phoneProvider: "The carrier or phone provider often controls busy-line and no-answer forwarding.",
+  websiteUrl: "The launch page uses this to generate website-chat instructions and a handoff for the web person.",
+  websitePlatform: "Different website builders hide custom-code settings in different places.",
+  websiteAdminContact: "Many owners will forward the chat snippet to a web person instead of installing it themselves.",
 };
 
 const fieldTips: Record<string, string> = {
@@ -1156,6 +1431,11 @@ const fieldTips: Record<string, string> = {
   complaintPolicy: "Do not promise refunds unless the business explicitly allows that.",
   greeting: "Keep it short. The strongest default is: Hi, thank you for calling {restaurant_name}. How can I help you?",
   firstTestCall: "Write the calls you want the owner to try first, like hours, pricing, booking, and complaints.",
+  phoneLineType: "If unsure, choose Not sure. The launch packet will produce a safe provider script instead of brittle instructions.",
+  phoneProvider: "If the owner does not know, write not sure. This can be cleaned up before forwarding.",
+  websiteUrl: "Optional for phone-only launch, but useful if website chat should go live the same day.",
+  websitePlatform: "Choose Not sure if the owner does not manage the website.",
+  websiteAdminContact: "Use an email, agency name, or a note like owner will install.",
 };
 
 function defaultWhyForField(field: OnboardingField) {
@@ -1245,6 +1525,15 @@ function launchStepIconClass(status: LaunchAssistantStep["status"]) {
   if (status === "blocked") return "text-destructive";
   if (status === "current") return "text-primary";
   return "text-muted-foreground";
+}
+
+function resolvePublicAppBaseUrl() {
+  const configured = String(import.meta.env.VITE_PUBLIC_APP_URL ?? "").trim().replace(/\/$/, "");
+  if (configured) return configured;
+  if (typeof window === "undefined") return "https://signalhost.ai";
+  const origin = window.location.origin.replace(/\/$/, "");
+  if (origin.includes("localhost") || origin.includes("127.0.0.1")) return origin;
+  return "https://signalhost.ai";
 }
 
 function inferAreaCode(phoneNumber: string) {
@@ -1350,6 +1639,8 @@ function mergeDraftForBusinessTypeChange(current: OnboardingDraft, nextBusinessT
     ownerEmail: current.ownerEmail || nextDefaults.ownerEmail,
     ownerName: current.ownerName || nextDefaults.ownerName,
     ownerPhone: current.ownerPhone || nextDefaults.ownerPhone,
+    phoneLineType: current.phoneLineType || nextDefaults.phoneLineType,
+    phoneProvider: current.phoneProvider || nextDefaults.phoneProvider,
     primaryLocation: businessNameWasEdited ? current.primaryLocation || nextDefaults.primaryLocation : nextDefaults.primaryLocation,
     restaurantName: businessNameWasEdited ? current.restaurantName : nextDefaults.restaurantName,
     selectedPlanId: current.selectedPlanId,
@@ -1361,6 +1652,9 @@ function mergeDraftForBusinessTypeChange(current: OnboardingDraft, nextBusinessT
     timezone: current.timezone || nextDefaults.timezone,
     tone: current.tone || nextDefaults.tone,
     voiceGender: current.voiceGender || nextDefaults.voiceGender,
+    websiteAdminContact: current.websiteAdminContact || nextDefaults.websiteAdminContact,
+    websitePlatform: current.websitePlatform || nextDefaults.websitePlatform,
+    websiteUrl: current.websiteUrl || nextDefaults.websiteUrl,
   };
 }
 

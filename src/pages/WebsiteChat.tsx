@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
+import { buildWebsiteChatSnippet } from "@/domain/launch-guide";
 import { getOnboardingBusinessTemplate } from "@/domain/onboarding";
 import { loadOnboardingDraft } from "@/lib/onboarding-draft";
 import { getActiveSupabaseLocationId } from "@/lib/supabase-rest";
@@ -54,24 +55,14 @@ export default function WebsiteChat() {
   const conversationId = useMemo(() => `dashboard_preview_${createConversationToken()}`, []);
 
   const embedSnippet = useMemo(() => {
-    const widgetUrl = typeof window === "undefined"
-      ? "https://app.signalhost.ai/signalhost-chat.js"
-      : `${window.location.origin}/signalhost-chat.js`;
-    const serviceUrl = voiceServiceBaseUrl || "https://voice.signalhost.ai";
-    return (
-    `<script
-  src="${widgetUrl}"
-  data-location-id="${activeLocationId || "YOUR_LOCATION_ID"}"
-  data-title="${escapeHtmlAttribute(businessName)}"
-  data-subtitle="Answers right away"
-  data-voice-service-url="${serviceUrl}"
-  data-primary-color="#211713"
-  data-accent-color="#d84824"
-  data-prompts="What are your hours?|Can I book?|Can I get a link?"
-  async
-></script>`
-  );
-  }, [activeLocationId, businessName]);
+    return buildWebsiteChatSnippet({
+      appBaseUrl: resolvePublicAppBaseUrl(),
+      businessName,
+      locationId: activeLocationId,
+      template: businessTemplate,
+      voiceServiceUrl: voiceServiceBaseUrl,
+    });
+  }, [activeLocationId, businessName, businessTemplate]);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -294,19 +285,20 @@ function StatusTile({ icon: Icon, label, value }: {
   );
 }
 
-function escapeHtmlAttribute(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
 function createConversationToken() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
   }
   return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
+}
+
+function resolvePublicAppBaseUrl() {
+  const configured = String(import.meta.env.VITE_PUBLIC_APP_URL ?? "").trim().replace(/\/$/, "");
+  if (configured) return configured;
+  if (typeof window === "undefined") return "https://signalhost.ai";
+  const origin = window.location.origin.replace(/\/$/, "");
+  if (origin.includes("localhost") || origin.includes("127.0.0.1")) return origin;
+  return "https://signalhost.ai";
 }
 
 function ChatBubble({ message }: { message: ChatMessage }) {

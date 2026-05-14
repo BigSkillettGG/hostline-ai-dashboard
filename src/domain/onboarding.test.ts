@@ -96,6 +96,8 @@ describe("restaurant onboarding scope", () => {
         "onlineOrderingUrl",
         "orderChangePolicy",
         "orderHandlingMode",
+        "phoneLineType",
+        "phoneProvider",
         "reservationBookingUrl",
         "reservationChangePolicy",
         "reservationHandlingMode",
@@ -105,6 +107,9 @@ describe("restaurant onboarding scope", () => {
         "substitutionPolicy",
         "vendorCallPolicy",
         "waitlistPolicy",
+        "websiteAdminContact",
+        "websitePlatform",
+        "websiteUrl",
       ]),
     );
   });
