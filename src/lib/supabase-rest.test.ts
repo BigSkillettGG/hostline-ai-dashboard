@@ -990,7 +990,11 @@ describe("Supabase tenant directory mapping", () => {
         forwarding_status: "pending_verification",
         location_id: "loc_1",
         phone_number: "+17815550100",
+        released_at: null,
         status: "provisioned",
+        trial_ends_at: "2026-05-19T12:00:00.000Z",
+        trial_grace_ends_at: "2026-06-02T12:00:00.000Z",
+        trial_started_at: "2026-05-12T12:00:00.000Z",
         voice_webhook_url: "https://voice.signalhost.ai/twilio/voice?locationId=loc_1",
       }],
     });
@@ -1005,8 +1009,12 @@ describe("Supabase tenant directory mapping", () => {
       monthlyPrice: 249,
       onboardingProgressPercent: 100,
       ownerEmail: "owner@summitair.test",
+      phoneStatus: "provisioned",
       planName: "Growth",
       status: "healthy",
+      trialEndsAt: "2026-05-19T12:00:00.000Z",
+      trialGraceEndsAt: "2026-06-02T12:00:00.000Z",
+      trialStartedAt: "2026-05-12T12:00:00.000Z",
     });
   });
 

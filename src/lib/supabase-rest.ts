@@ -183,7 +183,11 @@ interface SupabasePhoneNumberDirectoryRow {
   forwarding_status: string | null;
   location_id: string | null;
   phone_number: string;
+  released_at?: string | null;
   status: string | null;
+  trial_ends_at?: string | null;
+  trial_grace_ends_at?: string | null;
+  trial_started_at?: string | null;
   voice_webhook_url: string | null;
 }
 
@@ -577,9 +581,14 @@ export interface TenantDirectoryRecord {
   organizationName: string;
   ownerEmail: string;
   ownerName: string;
+  phoneReleasedAt?: string;
+  phoneStatus?: string;
   planName: string;
   status: TenantDirectoryStatus;
   timezone: string;
+  trialEndsAt?: string;
+  trialGraceEndsAt?: string;
+  trialStartedAt?: string;
   voiceWebhookUrl?: string;
 }
 
@@ -1073,13 +1082,13 @@ export async function fetchTenantDirectoryFromSupabase(): Promise<TenantDirector
       : Promise.resolve([]),
     locationIds.length
       ? supabaseRequest<SupabasePhoneNumberDirectoryRow[]>(
-          "phone_numbers",
-          new URLSearchParams({
-            location_id: `in.(${locationIds.join(",")})`,
-            order: "created_at.desc",
-            select: "location_id,phone_number,status,forwarding_status,voice_webhook_url",
-          }),
-        )
+        "phone_numbers",
+        new URLSearchParams({
+          location_id: `in.(${locationIds.join(",")})`,
+          order: "created_at.desc",
+          select: "location_id,phone_number,status,forwarding_status,voice_webhook_url,trial_started_at,trial_ends_at,trial_grace_ends_at,released_at",
+        }),
+      )
       : Promise.resolve([]),
     locationIds.length
       ? supabaseRequest<Array<Pick<SupabaseCallRow, "id" | "location_id">>>(
@@ -3070,12 +3079,17 @@ function buildTenantDirectoryRecord(input: {
     organizationName: input.organization.name,
     ownerEmail: stringValue(owner?.member_email) ?? stringValue(draft.ownerEmail) ?? "Unknown",
     ownerName: stringValue(owner?.member_name) ?? stringValue(draft.ownerName) ?? "Owner",
+    phoneReleasedAt: stringValue(input.phoneNumber?.released_at),
+    phoneStatus: stringValue(input.phoneNumber?.status),
     planName: stringValue(draft.selectedPlanName) ?? "Unassigned",
     status,
     timezone:
       stringValue(input.location?.timezone) ??
       stringValue(draft.timezone) ??
       "America/New_York",
+    trialEndsAt: stringValue(input.phoneNumber?.trial_ends_at),
+    trialGraceEndsAt: stringValue(input.phoneNumber?.trial_grace_ends_at),
+    trialStartedAt: stringValue(input.phoneNumber?.trial_started_at),
     voiceWebhookUrl: stringValue(input.phoneNumber?.voice_webhook_url),
   };
 }
