@@ -1,4 +1,5 @@
 import type { VoiceServiceEnv } from "./env";
+import { createEmailDeliveryService, type EmailDeliveryService } from "./email-delivery-service";
 import { buildSupabaseServiceHeaders } from "./supabase-headers";
 import { buildDailyBrief, type DailyBrief } from "../../../src/domain/daily-brief";
 import type {
@@ -145,9 +146,12 @@ export interface OwnerReportService {
   generateDailyReport(input?: { locationId?: string; now?: Date }): Promise<OwnerReportResult>;
 }
 
-export function createOwnerReportService(env: VoiceServiceEnv): OwnerReportService {
+export function createOwnerReportService(
+  env: VoiceServiceEnv,
+  options: { emailDeliveryService?: EmailDeliveryService } = {},
+): OwnerReportService {
   if (env.SUPABASE_URL && env.SUPABASE_SECRET_KEY && env.SUPABASE_DEMO_LOCATION_ID) {
-    return new SupabaseOwnerReportService(env);
+    return new SupabaseOwnerReportService(env, options.emailDeliveryService ?? createEmailDeliveryService(env));
   }
 
   return new NoopOwnerReportService();
@@ -173,19 +177,22 @@ class SupabaseOwnerReportService implements OwnerReportService {
   private readonly authToken?: string;
   private readonly baseUrl: string;
   private readonly defaultLocationId: string;
+  private readonly emailDeliveryService: EmailDeliveryService;
   private readonly messagingServiceSid?: string;
   private readonly ownerReportWebhookUrl?: string;
   private readonly smsFromNumber?: string;
   private readonly key: string;
   private readonly restUrl: string;
 
-  constructor(env: VoiceServiceEnv) {
+  constructor(env: VoiceServiceEnv, emailDeliveryService: EmailDeliveryService) {
     this.accountSid = env.TWILIO_ACCOUNT_SID;
     this.authToken = env.TWILIO_AUTH_TOKEN;
     this.baseUrl = env.TWILIO_API_BASE_URL.replace(/\/$/, "");
     this.defaultLocationId = env.SUPABASE_DEMO_LOCATION_ID ?? "";
+    this.emailDeliveryService = emailDeliveryService;
     this.deliveryConfigured = Boolean(
       env.OWNER_REPORT_WEBHOOK_URL ||
+        emailDeliveryService.configured ||
         (env.TWILIO_ACCOUNT_SID &&
           env.TWILIO_AUTH_TOKEN &&
           (env.TWILIO_SMS_FROM_NUMBER || env.TWILIO_MESSAGING_SERVICE_SID)),
@@ -432,15 +439,50 @@ class SupabaseOwnerReportService implements OwnerReportService {
     }
 
     if (wantsEmail) {
-      attempts.push({
-        channel: "email",
-        reason: recipient.email ? "Email delivery provider is not configured yet." : "Recipient has no email address.",
-        recipient: recipient.email,
-        status: "skipped",
-      });
+      attempts.push(await this.sendEmail(report, recipient));
     }
 
     return attempts;
+  }
+
+  private async sendEmail(
+    report: OwnerReportResult,
+    recipient: OwnerReportRecipient,
+  ): Promise<OwnerReportDeliveryAttempt> {
+    if (!recipient.email?.trim()) {
+      return {
+        channel: "email",
+        reason: "Recipient has no email address.",
+        recipient: recipient.name,
+        status: "skipped",
+      };
+    }
+
+    if (!this.emailDeliveryService.configured) {
+      return {
+        channel: "email",
+        reason: "Email delivery provider is not configured.",
+        recipient: recipient.email,
+        status: "skipped",
+      };
+    }
+
+    try {
+      await this.emailDeliveryService.sendEmail({
+        html: formatOwnerReportHtml(report),
+        subject: `SignalHost daily report - ${report.report.dateLabel}`,
+        text: report.report.copyText,
+        to: recipient.email,
+      });
+      return { channel: "email", recipient: recipient.email, status: "sent" };
+    } catch (error) {
+      return {
+        channel: "email",
+        reason: error instanceof Error ? error.message : "Email delivery failed.",
+        recipient: recipient.email,
+        status: "failed",
+      };
+    }
   }
 
   private async sendSms(
@@ -707,6 +749,50 @@ function formatOwnerReportSms(input: OwnerReportResult) {
   ].filter(Boolean);
   const message = parts.join(" ");
   return message.length <= 600 ? message : `${message.slice(0, 597)}...`;
+}
+
+function formatOwnerReportHtml(input: OwnerReportResult) {
+  const report = input.report;
+  const metricItems = report.metrics
+    .map((metric) => `<li><strong>${escapeHtml(metric.value)}</strong> ${escapeHtml(metric.label)}</li>`)
+    .join("");
+  const followUps = report.followUps.length
+    ? `<h2>Open follow-ups</h2><ul>${report.followUps
+        .map((item) => `<li><strong>${escapeHtml(item.title)}</strong><br>${escapeHtml(item.action)}</li>`)
+        .join("")}</ul>`
+    : "";
+  const suggestions = report.suggestedUpdates.length
+    ? `<h2>Suggested updates</h2><ul>${report.suggestedUpdates
+        .map((item) => `<li><strong>${escapeHtml(item.title)}</strong><br>${escapeHtml(item.detail)}</li>`)
+        .join("")}</ul>`
+    : "";
+
+  return [
+    "<!doctype html>",
+    "<html>",
+    "<body style=\"margin:0;background:#f7f3ee;color:#241913;font-family:Arial,sans-serif;\">",
+    "<main style=\"max-width:640px;margin:0 auto;padding:32px 20px;\">",
+    "<div style=\"background:#ffffff;border:1px solid #eadfd5;border-radius:12px;padding:28px;\">",
+    `<p style=\"margin:0 0 8px;color:#d94a1e;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;\">SignalHost Daily Brief</p>`,
+    `<h1 style=\"margin:0 0 16px;font-size:26px;line-height:1.2;\">${escapeHtml(report.headline)}</h1>`,
+    `<p style=\"font-size:16px;line-height:1.55;\">${escapeHtml(report.ownerMessage)}</p>`,
+    `<ul style=\"display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 18px;margin:24px 0;padding-left:18px;\">${metricItems}</ul>`,
+    followUps,
+    suggestions,
+    "</div>",
+    "</main>",
+    "</body>",
+    "</html>",
+  ].join("");
+}
+
+function escapeHtml(value: string | number) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 function readCallChannel(row: SupabaseReportCallRow) {

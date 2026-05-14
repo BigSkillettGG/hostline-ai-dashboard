@@ -215,6 +215,75 @@ describe("owner report service", () => {
       error_message: null,
     });
   });
+
+  it("delivers a daily owner report by email when an email provider is configured", async () => {
+    const emailBodies: unknown[] = [];
+    const ownerReportUpdates: unknown[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+      const requestUrl = String(url);
+
+      if (requestUrl.includes("/locations?")) {
+        return json([{ id: env.SUPABASE_DEMO_LOCATION_ID, name: "Summit Air", timezone: "America/New_York" }]);
+      }
+
+      if (requestUrl.includes("/calls?") || requestUrl.includes("/orders?") || requestUrl.includes("/reservations?") || requestUrl.includes("/staff_tasks?")) {
+        return json([]);
+      }
+
+      if (requestUrl.includes("/owner_reports?") && init?.method === "POST") {
+        return json([{ id: "report_1" }]);
+      }
+
+      if (requestUrl.includes("/business_contacts?")) {
+        return json([
+          {
+            can_receive_alerts: true,
+            contact_type: "owner",
+            email: "owner@summitair.test",
+            name: "Sam Owner",
+            phone: "+15550123",
+            preferred_channel: "email",
+          },
+        ]);
+      }
+
+      if (requestUrl === "https://api.resend.com/emails") {
+        emailBodies.push(JSON.parse(String(init?.body)));
+        return json({ id: "email_123" });
+      }
+
+      if (requestUrl.includes("/owner_reports?") && init?.method === "PATCH") {
+        ownerReportUpdates.push(JSON.parse(String(init.body)));
+        return new Response(null, { status: 204 });
+      }
+
+      throw new Error(`Unexpected request: ${requestUrl}`);
+    });
+    const service = createOwnerReportService({
+      ...env,
+      EMAIL_FROM: "SignalHost <reports@signalhost.ai>",
+      RESEND_API_KEY: "re_test",
+    });
+
+    const result = await service.deliverDailyReport({ now: new Date("2026-05-13T20:00:00.000Z") });
+
+    expect(result.delivery.status).toBe("sent");
+    expect(result.delivery.attempts).toContainEqual({
+      channel: "email",
+      recipient: "owner@summitair.test",
+      status: "sent",
+    });
+    expect(emailBodies[0]).toMatchObject({
+      from: "SignalHost <reports@signalhost.ai>",
+      subject: "SignalHost daily report - Wednesday, May 13",
+      to: ["owner@summitair.test"],
+    });
+    expect(String((emailBodies[0] as { html?: string }).html)).toContain("SignalHost Daily Brief");
+    expect(ownerReportUpdates[0]).toMatchObject({
+      status: "sent",
+      error_message: null,
+    });
+  });
 });
 
 function json(body: unknown) {

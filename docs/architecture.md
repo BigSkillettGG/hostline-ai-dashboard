@@ -17,10 +17,10 @@ The dashboard is the admin and operations app. The real-time phone agent runs as
 - Web deployment: Vercel or Netlify.
 - Voice service: Node/TypeScript on Fly.io, Render, or AWS.
 - Telephony: Twilio.
-- Voice orchestration MVP: Twilio ConversationRelay.
-- Premium/custom voice path: Twilio Media Streams plus OpenAI Realtime or Deepgram Flux plus ElevenLabs Flash.
+- Voice orchestration: OpenAI Realtime SIP for production live calls.
+- Legacy voice fallback: Twilio ConversationRelay.
 - LLM/tool execution: OpenAI.
-- TTS: ElevenLabs.
+- Voice/TTS: OpenAI Realtime voice profiles.
 - Observability: structured call events, provider latency spans, transcripts, and tool-call audit logs.
 
 ## Services
@@ -39,10 +39,10 @@ Owns inbound phone sessions, streaming audio, barge-in, turn detection, tool cal
 
 The first implementation is in `services/voice`:
 
-- `POST /twilio/voice` returns TwiML that connects the call to ConversationRelay.
-- `wss://.../twilio/conversation-relay` receives ConversationRelay setup, prompt, DTMF, interrupt, and error messages.
-- ConversationRelay is configured for ElevenLabs TTS by default.
-- `POST /voice/preview` calls the ElevenLabs Text to Speech API directly for dashboard previews.
+- `POST /twilio/voice` supports the legacy ConversationRelay path when needed.
+- `wss://.../twilio/conversation-relay` receives legacy ConversationRelay setup, prompt, DTMF, interrupt, and error messages.
+- OpenAI Realtime SIP is the active production phone path for low-latency voice and natural turn handling.
+- `POST /voice/preview` uses OpenAI voice preview audio for dashboard samples.
 - `POST /web-chat/message` gives the website chat widget the same core intelligence without phone-specific language, returning chat-safe replies, configured links, and staff follow-up actions.
 - OpenAI Responses API powers the restaurant-host reply path when an API key is configured.
 - A deterministic fallback responds safely without OpenAI during local development.
@@ -52,7 +52,7 @@ The first implementation is in `services/voice`:
 - Generic customer requests support cross-industry workflows such as service appointments, estimates, leads, callbacks, and order/reservation requests. Until the `customer_requests` table is migrated, these safely fall back to staff tasks.
 - Human handoff, complaint, and low-confidence special-handling prompts create staff task rows so managers have a follow-up queue even when the SMS alert succeeds.
 - If SMS confirmations are enabled for the location and Twilio SMS is configured, captured phone orders and reservation requests send concise confirmations to the caller.
-- `GET /health` returns production readiness checks for public URLs, CORS, internal API key, Supabase, OpenAI, ElevenLabs, Twilio credentials, and Twilio signature enforcement.
+- `GET /health` returns production readiness checks for public URLs, CORS, internal API key, Supabase, OpenAI, Twilio credentials, email delivery, and Twilio signature enforcement.
 - `GET /ready` returns `200` only when required production checks pass; container hosts can use `/health` for liveness and `/ready` for pre-call readiness.
 - Internal live-call endpoints expose generated Twilio webhook URLs and TwiML previews so operators can verify the deployed ConversationRelay path before calling the number.
 

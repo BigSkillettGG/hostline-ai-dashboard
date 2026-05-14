@@ -34,23 +34,21 @@ TWILIO_AUTH_TOKEN=...
 TWILIO_MESSAGING_SERVICE_SID=MG...
 TWILIO_DEFAULT_COUNTRY=US
 REQUIRE_TWILIO_SIGNATURE=true
-TWILIO_TTS_PROVIDER=ElevenLabs
-TWILIO_ELEVENLABS_MODEL_ID=flash_v2_5
-TWILIO_ELEVENLABS_SPEED=0.95
-TWILIO_ELEVENLABS_STABILITY=0.35
-TWILIO_ELEVENLABS_SIMILARITY_BOOST=0.85
-TWILIO_TRANSCRIPTION_PROVIDER=Deepgram
 TWILIO_SPEECH_TIMEOUT_MS=1800
 TWILIO_LANGUAGE=en-US
+EMAIL_PROVIDER=resend
+EMAIL_FROM=SignalHost <reports@signalhost.ai>
+EMAIL_REPLY_TO=support@signalhost.ai
+RESEND_API_KEY=re_...
 
 OPENAI_API_KEY=sk-...
 OPENAI_MODEL=gpt-5-mini
 OPENAI_REPLY_TIMEOUT_MS=4500
-
-ELEVENLABS_API_KEY=...
-ELEVENLABS_EVE_VOICE_ID=BZgkqPqms7Kj9ulSkVzn
-ELEVENLABS_MICHAEL_VOICE_ID=ljX1ZrXuDIIRVcmiVSyR
-ELEVENLABS_MODEL_ID=eleven_flash_v2_5
+OPENAI_REALTIME_MODEL=...
+OPENAI_REALTIME_VERA_VOICE=...
+OPENAI_REALTIME_MAYA_VOICE=...
+OPENAI_REALTIME_MARCO_VOICE=...
+OPENAI_REALTIME_THEO_VOICE=...
 ```
 
 Do not commit any real secret values. Put them in the deployment provider's environment variable UI. For local-only testing, put them in `.env.local`, which is gitignored.
@@ -98,7 +96,7 @@ The check should show:
 - Health: ok
 - Production ready: yes
 - Voice webhook URL
-- ConversationRelay websocket URL
+- OpenAI Realtime SIP readiness or legacy ConversationRelay websocket URL
 - TwiML preview: ok
 
 ## Configure Twilio

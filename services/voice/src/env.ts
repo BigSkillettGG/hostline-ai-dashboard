@@ -27,7 +27,11 @@ const envSchema = z.object({
   TWILIO_DEFAULT_COUNTRY: z.string().default("US"),
   TWILIO_MESSAGING_SERVICE_SID: z.string().optional(),
   TWILIO_SMS_FROM_NUMBER: z.string().optional(),
+  EMAIL_FROM: z.string().optional(),
+  EMAIL_PROVIDER: z.enum(["resend"]).optional(),
+  EMAIL_REPLY_TO: z.string().optional(),
   OWNER_REPORT_WEBHOOK_URL: z.string().url().optional(),
+  RESEND_API_KEY: z.string().optional(),
   STAFF_ALERT_SMS_TO: z.string().optional(),
   STAFF_ALERT_WEBHOOK_URL: z.string().url().optional(),
   REQUIRE_TWILIO_SIGNATURE: z
@@ -204,10 +208,21 @@ export function getVoiceServiceReadiness(env: VoiceServiceEnv): VoiceServiceRead
       required: false,
     },
     {
+      detail: "Sends owner reports and staff alerts directly by email.",
+      id: "email_delivery",
+      label: "Email delivery",
+      ready: Boolean((env.EMAIL_PROVIDER === "resend" || env.RESEND_API_KEY) && env.RESEND_API_KEY && env.EMAIL_FROM),
+      required: false,
+    },
+    {
       detail: "Routes staff alerts through SMS or webhook destinations.",
       id: "staff_alerts",
       label: "Staff alert destination",
-      ready: Boolean(env.STAFF_ALERT_SMS_TO || env.STAFF_ALERT_WEBHOOK_URL),
+      ready: Boolean(
+        env.STAFF_ALERT_SMS_TO ||
+          env.STAFF_ALERT_WEBHOOK_URL ||
+          ((env.EMAIL_PROVIDER === "resend" || env.RESEND_API_KEY) && env.RESEND_API_KEY && env.EMAIL_FROM),
+      ),
       required: false,
     },
     {

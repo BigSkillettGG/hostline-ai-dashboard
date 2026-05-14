@@ -125,6 +125,58 @@ describe("staff alert formatting", () => {
     expect(String(fetchMock.mock.calls[3]?.[1]?.body)).toContain('"status":"sent"');
   });
 
+  it("sends email alerts to routed Supabase recipients when email delivery is configured", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              config: {
+                routes: {
+                  complaint: {
+                    enabled: true,
+                    quietHoursEnabled: false,
+                    recipients: [
+                      { channel: "email", email: "owner@example.com", id: "owner", name: "Owner", phone: "" },
+                    ],
+                    severityThreshold: "low",
+                  },
+                },
+              },
+              updated_at: "2026-05-06T12:00:00.000Z",
+            },
+          ]),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "email_123" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response("{}", { status: 201 }));
+    const service = createStaffNotificationService({
+      ...env,
+      EMAIL_FROM: "SignalHost <alerts@signalhost.ai>",
+      RESEND_API_KEY: "re_test",
+      STAFF_ALERT_SMS_TO: undefined,
+      TWILIO_ACCOUNT_SID: undefined,
+      TWILIO_AUTH_TOKEN: undefined,
+      TWILIO_SMS_FROM_NUMBER: undefined,
+    });
+
+    await service.sendStaffAlert({
+      callerPhone: "+17813072672",
+      kind: "complaint",
+      locationId: "00000000-0000-4000-8000-000000000001",
+      restaurantName: "Olive & Ember",
+      summary: "Guest reported an issue and requested manager follow-up.",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("https://api.resend.com/emails");
+    expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toContain('"to":["owner@example.com"]');
+    expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toContain("Complaint alert - Olive & Ember");
+    expect(String(fetchMock.mock.calls[2]?.[1]?.body)).toContain('"channels":["email"]');
+  });
+
   it("falls back to trusted owner and manager contacts when no alert route is configured", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")

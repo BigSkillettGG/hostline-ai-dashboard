@@ -10,7 +10,7 @@ There are 12 production workstreams:
 2. Conversational onboarding and vertical-specific knowledge extraction.
 3. Menu ingestion from PDFs, images, links, spreadsheets, and POS exports.
 4. Twilio number provisioning, forwarding instructions, and live call routing.
-5. Realtime voice latency tuning across Twilio, transcription, LLM, and ElevenLabs.
+5. Realtime voice latency tuning across Twilio, OpenAI Realtime, and business-tool execution.
 6. Supabase persistence, RLS, roles, audit logs, and admin workflows.
 7. Staff-review order queue, kitchen tablet, and printer delivery.
 8. Link-first order, reservation, appointment, and quote workflows, then vertical integrations when demand proves them.
@@ -32,7 +32,7 @@ There are 12 production workstreams:
 
 - Dashboard shell exists.
 - Voice service exists.
-- ElevenLabs preview endpoint exists.
+- OpenAI voice preview endpoint exists.
 - Twilio ConversationRelay webhook exists.
 - Calls can persist to Supabase.
 - Orders can read and update from Supabase, including delivery attempts for staff queue, kitchen tablet, printer, and future POS handoff.
@@ -57,8 +57,8 @@ There are 12 production workstreams:
 - Calls now have a derived interaction-status foundation in the dashboard: follow-up need, urgency, value tier, knowledge-gap signal, owner report bucket, and recommended next action. The schema baseline includes matching persisted columns for the next migration, but the dashboard derives them safely until the live database is updated.
 - The Dashboard now generates a daily narrative owner brief from live calls, chats, orders, reservations, staff tasks, and interaction-status signals, with copy-ready text for future email/SMS delivery.
 - The voice service can now generate and upsert the same daily owner brief into `owner_reports`, giving us the backend foundation for scheduled report delivery.
-- Owner reports can now be delivered through SMS or an owner-report webhook using `POST /owner-reports/daily/deliver`; direct email is intentionally waiting for a real email provider.
-- Direct email delivery is pinned in `docs/email-provider.md`; evaluate Lovable's built-in email, Resend, or Postmark once domain DNS setup is convenient.
+- Owner reports can now be delivered through SMS, direct email, or an owner-report webhook using `POST /owner-reports/daily/deliver`.
+- Direct Resend email delivery is provider-ready for owner reports and staff alerts; domain DNS still needs to be verified before production email sends.
 - The Knowledge Base now has a local Business Live Updates and Modes layer for temporary owner instructions such as specials, closures, emergency mode, holiday rules, promotions, and staffing shortages. The schema baseline includes `business_live_updates` for the next persistence slice.
 - Call QA can now queue owner-approved `knowledge_suggestions`, and the Knowledge Base page can approve/reject them before they become active AI knowledge.
 - The Owner Assistant page now lets owners ask dashboard-chat questions about today's summary, urgent calls, follow-ups, opportunities, knowledge gaps, complaints, orders, and reservations. Onboarding now captures trusted owner name, phone, and email, and the schema baseline includes `business_contacts`.
@@ -77,7 +77,7 @@ There are 12 production workstreams:
 - Supabase Auth mode, user access-token REST calls, organization memberships, platform admins, and production RLS policies are now documented and scaffolded.
 - Restaurant memberships now distinguish owner, admin, manager, and staff access in the dashboard, with a demo workspace that is separate from production roles.
 - Team invitations now have a dashboard flow, local demo fallback, Supabase REST hooks, and RLS-backed `team_invitations` schema.
-- The voice service health response now includes production readiness checks for deployment URLs, secrets, Supabase, OpenAI, ElevenLabs, Twilio, CORS, and signature enforcement.
+- The voice service health response now includes production readiness checks for deployment URLs, secrets, Supabase, OpenAI, email delivery, Twilio, CORS, and signature enforcement.
 - The voice service now has a bundled production build, Dockerfile, `/ready` endpoint, and deployment-check script for the first live call bring-up.
 - The internal Telephony page now shows live-call webhook URLs, ConversationRelay websocket targets, TwiML preview, and first-call checklist status from the deployed voice service.
 - The live voice runtime now includes first-call hardening for unclear audio, rude callers, multi-turn order capture, OpenAI response timeouts, prompt failure recovery, and structured turn-latency logs.

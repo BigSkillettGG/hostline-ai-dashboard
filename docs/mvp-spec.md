@@ -53,18 +53,17 @@ The AI escalates allergies, complaints, refunds, payment questions, private even
 
 ## Production Voice Path
 
-The MVP phone path uses Twilio ConversationRelay first because it gives us low-latency phone audio, real-time speech recognition, text-to-speech playback, and interruption handling while our application owns the restaurant logic.
+The MVP phone path uses OpenAI Realtime SIP for live calls because it gives us lower-latency speech-to-speech behavior, stronger turn handling, and one model that owns both listening and speaking while our application owns the business logic.
 
 Voice defaults:
 
 - Telephony: Twilio Voice.
-- Phone AI transport: Twilio ConversationRelay.
-- TTS provider: ElevenLabs.
-- TTS voice model: ElevenLabs Flash 2.5 via ConversationRelay voice configuration.
+- Phone AI transport: OpenAI Realtime SIP.
+- Voice/TTS provider: OpenAI Realtime voice profiles.
 - LLM: OpenAI Responses API using `gpt-5-mini` by default for cost and latency.
 - Payments: pay at pickup only.
 
-The direct ElevenLabs Text to Speech endpoint is used for dashboard voice previews. Live phone calls should use ConversationRelay's ElevenLabs TTS path until we need lower-level audio control.
+The dashboard voice preview endpoint uses OpenAI voice audio so setup previews match the live voice direction.
 
 ## Integration Priority
 

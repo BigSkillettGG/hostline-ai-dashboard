@@ -43,21 +43,20 @@ TWILIO_ACCOUNT_SID=AC...
 TWILIO_AUTH_TOKEN=...
 TWILIO_MESSAGING_SERVICE_SID=MG...
 OWNER_REPORT_WEBHOOK_URL=https://hooks.example.com/signalhost-owner-report  # optional
+EMAIL_PROVIDER=resend
+EMAIL_FROM=SignalHost <reports@signalhost.ai>
+EMAIL_REPLY_TO=support@signalhost.ai
+RESEND_API_KEY=re_...
 REQUIRE_TWILIO_SIGNATURE=true
-TWILIO_TTS_PROVIDER=ElevenLabs
-TWILIO_ELEVENLABS_MODEL_ID=flash_v2_5
-TWILIO_ELEVENLABS_SPEED=0.95
-TWILIO_ELEVENLABS_STABILITY=0.35
-TWILIO_ELEVENLABS_SIMILARITY_BOOST=0.85
 TWILIO_SPEECH_TIMEOUT_MS=1800
 
 OPENAI_API_KEY=...
 OPENAI_MODEL=gpt-5-mini
-
-ELEVENLABS_API_KEY=...
-ELEVENLABS_EVE_VOICE_ID=BZgkqPqms7Kj9ulSkVzn
-ELEVENLABS_MICHAEL_VOICE_ID=ljX1ZrXuDIIRVcmiVSyR
-ELEVENLABS_MODEL_ID=eleven_flash_v2_5
+OPENAI_REALTIME_MODEL=...
+OPENAI_REALTIME_VERA_VOICE=...
+OPENAI_REALTIME_MAYA_VOICE=...
+OPENAI_REALTIME_MARCO_VOICE=...
+OPENAI_REALTIME_THEO_VOICE=...
 ```
 
 ## Voice Service Build
@@ -94,7 +93,7 @@ Required production checks:
 - Dashboard origin is locked down; `VOICE_SERVICE_ALLOWED_ORIGIN=*` is not production-ready.
 - Dashboard-to-voice admin requests are protected by Supabase user sessions.
 - Supabase service-role access is configured for the voice service.
-- OpenAI and ElevenLabs keys are present.
+- OpenAI keys are present.
 - Twilio account SID/auth token are present.
 - Twilio signature validation is enabled.
 
@@ -102,6 +101,7 @@ Optional checks:
 
 - Guest SMS confirmation sender is configured.
 - Staff alert destination is configured.
+- Direct email delivery is configured.
 
 ## Deployment Order
 

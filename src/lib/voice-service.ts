@@ -9,6 +9,7 @@ export interface VoiceServiceHealth {
   openaiConfigured: boolean;
   openAIVoiceConfigured?: boolean;
   elevenLabsConfigured?: boolean;
+  emailDeliveryConfigured?: boolean;
   menuIngestionConfigured?: boolean;
   onboardedContextConfigured?: boolean;
   ownerReportDeliveryConfigured?: boolean;

@@ -1,22 +1,38 @@
-# Email Provider Pin
+# Email Provider
 
-SignalHost owns domains now, so direct email delivery should be added after the core owner-assistant loop is stable.
+SignalHost now has provider-ready direct email delivery for owner reports and staff alerts. The first supported provider is Resend because the API is simple, works well for transactional product email, and keeps the voice service provider-neutral enough to swap later.
 
-## Current Decision
+## Current Status
 
-- Do not build custom email delivery until an email provider is selected and domain DNS is configured.
-- Owner daily reports can already deliver through SMS or `OWNER_REPORT_WEBHOOK_URL`.
-- Webhook delivery can temporarily connect to Lovable automation, Zapier, Make, Slack, or an email workflow.
+- Direct email is optional. The product still works without it.
+- Owner daily reports deliver by SMS, email, and/or `OWNER_REPORT_WEBHOOK_URL` depending on contact preferences and configured channels.
+- Staff alerts can deliver by SMS, direct email, and/or webhook.
+- Webhook delivery can still connect to Lovable automation, Zapier, Make, Slack, or a custom workflow.
 
-## Provider Options To Evaluate
+## Render Environment Variables
 
-- Resend: simple developer API, good fit for product emails and daily reports.
-- Postmark: strong transactional deliverability and templates.
-- Lovable built-in email: worth checking first if it supports authenticated domain sending, templates, and server-side secrets cleanly.
+Add these to the Render voice service after DNS is verified with the provider:
 
-## Setup Later
+```text
+EMAIL_PROVIDER=resend
+EMAIL_FROM=SignalHost <reports@signalhost.ai>
+EMAIL_REPLY_TO=support@signalhost.ai
+RESEND_API_KEY=re_...
+```
+
+`EMAIL_REPLY_TO` is optional. `EMAIL_PROVIDER` is also optional when `RESEND_API_KEY` is present, but setting it makes the configuration obvious.
+
+## Setup Steps
 
 1. Pick provider.
 2. Add SPF, DKIM, and DMARC records for `signalhost.ai`.
-3. Add provider API key to Render voice service.
-4. Add direct email delivery to owner daily reports, staff notifications, and billing/account messages.
+3. Verify the sending domain in the provider.
+4. Add the Render environment variables above.
+5. Redeploy the Render voice service.
+6. Open `/health` and confirm `emailDeliveryConfigured: true`.
+
+## Still Later
+
+- Add branded email templates for billing/account events.
+- Add inbound email provider parsing when owner email commands move beyond the current authenticated webhook shape.
+- Consider Postmark if deliverability or template management becomes the priority.

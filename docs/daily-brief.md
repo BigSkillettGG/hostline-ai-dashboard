@@ -30,14 +30,14 @@ Server-side generation:
 - Upserts the result into `owner_reports` for the current business day in the location timezone.
 - Returns the generated report so the dashboard can confirm it was saved.
 
-The Dashboard `Save report` button calls this endpoint. The Dashboard `Send report` button calls `POST /owner-reports/daily/deliver`, which generates the report, looks for owner/manager recipients in `business_contacts`, falls back to onboarding owner contact fields, and delivers through configured SMS/webhook channels.
+The Dashboard `Save report` button calls this endpoint. The Dashboard `Send report` button calls `POST /owner-reports/daily/deliver`, which generates the report, looks for owner/manager recipients in `business_contacts`, falls back to onboarding owner contact fields, and delivers through configured SMS/email/webhook channels.
 
 Delivery channels:
 
 - SMS: requires `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and either `TWILIO_MESSAGING_SERVICE_SID` or `TWILIO_SMS_FROM_NUMBER`.
-- Webhook: optional `OWNER_REPORT_WEBHOOK_URL`, useful for Zapier, Make, Slack, email automation, or a later internal email worker.
-- Email: contacts are recognized, but direct email is intentionally skipped until a real email provider is added.
+- Email: requires `EMAIL_PROVIDER=resend`, `EMAIL_FROM`, and `RESEND_API_KEY`.
+- Webhook: optional `OWNER_REPORT_WEBHOOK_URL`, useful for Zapier, Make, Slack, email automation, or another internal worker.
 
 ## Next Step
 
-Add a scheduled worker, such as a Render Cron Job, that calls `POST /owner-reports/daily/deliver` near each location's closing time with the internal API key header. Then add a direct email provider such as Resend or Postmark.
+Add a scheduled worker, such as a Render Cron Job, that calls `POST /owner-reports/daily/deliver` near each location's closing time with the internal API key header.

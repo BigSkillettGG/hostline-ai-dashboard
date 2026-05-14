@@ -1,4 +1,5 @@
 import type { VoiceServiceEnv } from "./env";
+import { createEmailDeliveryService, type EmailDeliveryService } from "./email-delivery-service";
 import { buildSupabaseServiceHeaders } from "./supabase-headers";
 import {
   normalizeAlertRoutingConfig,
@@ -78,8 +79,12 @@ interface SupabaseTrustedAlertContactRow {
   updated_at?: string | null;
 }
 
-export function createStaffNotificationService(env: VoiceServiceEnv): StaffNotificationService {
+export function createStaffNotificationService(
+  env: VoiceServiceEnv,
+  options: { emailDeliveryService?: EmailDeliveryService } = {},
+): StaffNotificationService {
   const channels: StaffNotificationService[] = [];
+  const emailDeliveryService = options.emailDeliveryService ?? createEmailDeliveryService(env);
 
   if (
     env.TWILIO_ACCOUNT_SID &&
@@ -87,6 +92,10 @@ export function createStaffNotificationService(env: VoiceServiceEnv): StaffNotif
     (env.TWILIO_SMS_FROM_NUMBER || env.TWILIO_MESSAGING_SERVICE_SID)
   ) {
     channels.push(new TwilioSmsStaffNotificationService(env));
+  }
+
+  if (emailDeliveryService.configured) {
+    channels.push(new EmailStaffNotificationService(emailDeliveryService));
   }
 
   if (env.STAFF_ALERT_WEBHOOK_URL) {
@@ -266,6 +275,27 @@ class TwilioSmsStaffNotificationService implements StaffNotificationService {
       const responseBody = await response.text();
       throw new Error(`Twilio staff alert failed: ${response.status} ${responseBody}`);
     }
+  }
+}
+
+class EmailStaffNotificationService implements StaffNotificationService {
+  configured = true;
+
+  constructor(private readonly emailDeliveryService: EmailDeliveryService) {}
+
+  async sendStaffAlert(input: StaffAlertInput, route?: ResolvedStaffAlertRoute) {
+    const recipients = route?.emailRecipients.map((recipient) => recipient.email).filter(Boolean) ?? [];
+    if (!recipients.length) return;
+
+    await Promise.all(
+      recipients.map((to) =>
+        this.emailDeliveryService.sendEmail({
+          subject: `SignalHost alert - ${input.restaurantName}`,
+          text: formatStaffAlertMessage(input),
+          to,
+        }),
+      ),
+    );
   }
 }
 
@@ -541,7 +571,7 @@ function defaultSeverityFor(kind: StaffAlertKind): AlertSeverity {
 function channelsForRoute(route: ResolvedStaffAlertRoute) {
   return [
     route.smsRecipients.length ? "sms" : undefined,
-    route.emailRecipients.length ? "email/webhook" : undefined,
+    route.emailRecipients.length ? "email" : undefined,
   ].filter((channel): channel is string => Boolean(channel));
 }
 

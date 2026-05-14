@@ -9,6 +9,7 @@ import { listBillingPlans } from "./billing-plans";
 import { createBillingStore } from "./billing-store";
 import { createCallStore } from "./call-store";
 import { createConversationRelayHandler } from "./conversation-relay";
+import { createEmailDeliveryService } from "./email-delivery-service";
 import { createGuestConfirmationService } from "./guest-confirmation-service";
 import { createOpenAIVoicePreview } from "./openai-voice-preview";
 import { getVoiceServiceReadiness, loadEnv, type VoiceServiceEnv } from "./env";
@@ -48,10 +49,11 @@ const phoneNumberStore = createPhoneNumberStore(env);
 const billingService = createBillingService(env, billingStore, phoneNumberStore);
 const restaurantContextStore = createRestaurantContextStore(env);
 const telephonyService = createTelephonyService(env);
-const staffNotificationService = createStaffNotificationService(env);
+const emailDeliveryService = createEmailDeliveryService(env);
+const staffNotificationService = createStaffNotificationService(env, { emailDeliveryService });
 const guestConfirmationService = createGuestConfirmationService(env);
 const menuIngestionService = createMenuIngestionService(env);
-const ownerReportService = createOwnerReportService(env);
+const ownerReportService = createOwnerReportService(env, { emailDeliveryService });
 const ownerCommandRuntime = createOwnerCommandRuntime(env, ownerReportService);
 const ownerEmailCommandService = createOwnerEmailCommandService(env, ownerCommandRuntime);
 const messageThreadStore = createMessageThreadStore(env, { ownerCommandRuntime });
@@ -156,6 +158,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       ownerReportDeliveryConfigured: ownerReportService.deliveryConfigured,
       ownerReportsConfigured: ownerReportService.configured,
       ownerEmailCommandsConfigured: ownerEmailCommandService.configured,
+      emailDeliveryConfigured: emailDeliveryService.configured,
       platformIntegrations: platformIntegrationRegistry.summary,
       tenantProvisioningConfigured: tenantProvisioningService.configured,
       stripeBillingConfigured: billingService.configured,
