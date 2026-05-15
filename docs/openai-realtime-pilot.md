@@ -19,20 +19,21 @@ OPENAI_REALTIME_FEMALE_VOICE=marin
 OPENAI_REALTIME_MALE_VOICE=cedar
 OPENAI_REALTIME_NOISE_REDUCTION=far_field
 OPENAI_REALTIME_TURN_DETECTION_MODE=server_vad
-OPENAI_REALTIME_SERVER_VAD_THRESHOLD=0.72
-OPENAI_REALTIME_SERVER_VAD_SILENCE_MS=550
-OPENAI_REALTIME_SERVER_VAD_PREFIX_PADDING_MS=250
-OPENAI_REALTIME_IDLE_TIMEOUT_MS=9000
+OPENAI_REALTIME_SERVER_VAD_THRESHOLD=0.88
+OPENAI_REALTIME_SERVER_VAD_SILENCE_MS=900
+OPENAI_REALTIME_SERVER_VAD_PREFIX_PADDING_MS=150
+OPENAI_REALTIME_MANUAL_RESPONSE_GATING=true
 OPENAI_REALTIME_INTERRUPT_RESPONSE=false
 ```
 
-The realtime defaults are intentionally speakerphone-safe. `far_field` noise reduction plus server VAD at a higher threshold makes Vera less likely to treat room noise, car audio, or her own voice echoing through the caller's speaker as an interruption. If handset calls feel too slow after speakerphone is stable, test `OPENAI_REALTIME_SERVER_VAD_SILENCE_MS=450` before lowering the threshold.
+The realtime defaults are intentionally noisy-room safe. `far_field` noise reduction plus server VAD at a higher threshold makes Vera less likely to treat room noise, car audio, or her own voice echoing through the caller's speaker as speech. `OPENAI_REALTIME_MANUAL_RESPONSE_GATING=true` is the important guardrail: OpenAI still emits VAD/transcription events, but SignalHost only creates a response after the transcript looks like a real caller turn. Leave this on for pilots. If a future test needs OpenAI's automatic VAD responses back, set it to `false`.
 
 Optional semantic VAD test mode:
 
 ```text
 OPENAI_REALTIME_TURN_DETECTION_MODE=semantic_vad
 OPENAI_REALTIME_TURN_EAGERNESS=low
+OPENAI_REALTIME_MANUAL_RESPONSE_GATING=true
 ```
 
 Optional later:

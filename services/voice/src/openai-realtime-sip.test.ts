@@ -27,6 +27,7 @@ import {
   requestOpenAIRealtimeStaffCallback,
   resolveOpenAIRealtimeIdleTimeoutMs,
   resolveOpenAIRealtimeInterruptResponse,
+  resolveOpenAIRealtimeManualResponseGating,
   resolveOpenAIRealtimeNoiseReduction,
   resolveOpenAIRealtimeServerVadPrefixPaddingMs,
   resolveOpenAIRealtimeServerVadSilenceMs,
@@ -45,6 +46,7 @@ const baseEnv = {
   OPENAI_REPLY_TIMEOUT_MS: 4500,
   OPENAI_REALTIME_IDLE_TIMEOUT_MS: 12000,
   OPENAI_REALTIME_INTERRUPT_RESPONSE: false,
+  OPENAI_REALTIME_MANUAL_RESPONSE_GATING: true,
   OPENAI_REALTIME_NOISE_REDUCTION: "far_field",
   OPENAI_REALTIME_SERVER_VAD_PREFIX_PADDING_MS: 150,
   OPENAI_REALTIME_SERVER_VAD_SILENCE_MS: 900,
@@ -98,14 +100,14 @@ describe("OpenAI Realtime SIP", () => {
       type: "realtime",
     });
     expect(payload.audio.input.turn_detection).toMatchObject({
-      create_response: true,
-      idle_timeout_ms: 12000,
+      create_response: false,
       interrupt_response: false,
       prefix_padding_ms: 150,
       silence_duration_ms: 900,
       threshold: 0.88,
       type: "server_vad",
     });
+    expect(payload.audio.input.turn_detection).not.toHaveProperty("idle_timeout_ms");
     expect(payload.audio.input.noise_reduction).toMatchObject({ type: "far_field" });
     expect(payload.audio.output.voice).toBe("marin");
     expect(payload.audio.output.speed).toBe(1.02);
@@ -362,6 +364,166 @@ describe("OpenAI Realtime SIP", () => {
     });
   });
 
+  it("gates realtime responses so greeting echo and TV noise do not drive the call", async () => {
+    const socket = createFakeRealtimeSocket();
+    const transcriptTurns: unknown[] = [];
+    const service = createOpenAIRealtimeSipService(
+      baseEnv,
+      {
+        async getContext() {
+          return demoRestaurantContext;
+        },
+      },
+      {
+        callStore: {
+          async addTranscriptTurn(input) {
+            transcriptTurns.push(input);
+          },
+          async attachCallRecording() {},
+          async completeCall() {},
+          async createCustomerRequest() {
+            return {};
+          },
+          async createStaffReviewOrder() {
+            return {};
+          },
+          async createStaffReviewReservation() {
+            return {};
+          },
+          async createStaffTask() {
+            return {};
+          },
+          async startCall() {
+            return {};
+          },
+          async startRealtimeCall() {
+            return { callId: "call_uuid" };
+          },
+        },
+        fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+        websocketFactory: () => socket as never,
+      },
+    );
+
+    await service.handleIncomingWebhook({
+      headers: {},
+      rawBody: JSON.stringify({
+        data: {
+          call_id: "rtc_noise",
+          sip_headers: [{ name: "From", value: "sip:+14155550123@twilio.com" }],
+        },
+        type: "realtime.call.incoming",
+      }),
+    });
+
+    socket.emit("open");
+    expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))).toHaveLength(1);
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        response: { id: "resp_greeting" },
+        type: "response.created",
+      })),
+    );
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "echo_1",
+        transcript: "Thank you for calling Olive and Ember. How can I help you?",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "tv_1",
+        transcript: "Coming up next tonight after the break.",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    await Promise.resolve();
+
+    expect(transcriptTurns).toHaveLength(0);
+    expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))).toHaveLength(1);
+  });
+
+  it("creates one gated response for a valid caller turn after the greeting completes", async () => {
+    const socket = createFakeRealtimeSocket();
+    const transcriptTurns: unknown[] = [];
+    const service = createOpenAIRealtimeSipService(
+      baseEnv,
+      {
+        async getContext() {
+          return demoRestaurantContext;
+        },
+      },
+      {
+        callStore: {
+          async addTranscriptTurn(input) {
+            transcriptTurns.push(input);
+          },
+          async attachCallRecording() {},
+          async completeCall() {},
+          async createCustomerRequest() {
+            return {};
+          },
+          async createStaffReviewOrder() {
+            return {};
+          },
+          async createStaffReviewReservation() {
+            return {};
+          },
+          async createStaffTask() {
+            return {};
+          },
+          async startCall() {
+            return {};
+          },
+          async startRealtimeCall() {
+            return { callId: "call_uuid" };
+          },
+        },
+        fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+        websocketFactory: () => socket as never,
+      },
+    );
+
+    await service.handleIncomingWebhook({
+      headers: {},
+      rawBody: JSON.stringify({
+        data: {
+          call_id: "rtc_valid",
+          sip_headers: [{ name: "From", value: "sip:+14155550123@twilio.com" }],
+        },
+        type: "realtime.call.incoming",
+      }),
+    });
+
+    socket.emit("open");
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        response: { output: [] },
+        type: "response.done",
+      })),
+    );
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "caller_1",
+        transcript: "Do you have any specials tonight?",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    await Promise.resolve();
+
+    expect(transcriptTurns[0]).toMatchObject({
+      speaker: "caller",
+      text: "Do you have any specials tonight?",
+    });
+    expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))).toHaveLength(2);
+  });
+
   it("accepts a trusted owner SIP caller with owner tools and identity metadata", async () => {
     const socket = createFakeRealtimeSocket();
     const startedCalls: unknown[] = [];
@@ -532,14 +694,21 @@ describe("OpenAI Realtime SIP", () => {
   it("uses server VAD speakerphone-safe turn detection by default", () => {
     expect(resolveOpenAIRealtimeNoiseReduction(baseEnv)).toBe("far_field");
     expect(resolveOpenAIRealtimeInterruptResponse(baseEnv)).toBe(false);
+    expect(resolveOpenAIRealtimeManualResponseGating(baseEnv)).toBe(true);
     expect(resolveOpenAIRealtimeServerVadThreshold(baseEnv)).toBe(0.88);
     expect(resolveOpenAIRealtimeServerVadSilenceMs(baseEnv)).toBe(900);
     expect(resolveOpenAIRealtimeServerVadPrefixPaddingMs(baseEnv)).toBe(150);
     expect(resolveOpenAIRealtimeIdleTimeoutMs(baseEnv)).toBe(12000);
     expect(resolveOpenAIRealtimeTurnDetection(baseEnv)).toMatchObject({
+      create_response: false,
       interrupt_response: false,
       threshold: 0.88,
       type: "server_vad",
+    });
+    expect(resolveOpenAIRealtimeTurnDetection(baseEnv)).not.toHaveProperty("idle_timeout_ms");
+    expect(resolveOpenAIRealtimeTurnDetection({ ...baseEnv, OPENAI_REALTIME_MANUAL_RESPONSE_GATING: false })).toMatchObject({
+      create_response: true,
+      idle_timeout_ms: 12000,
     });
     expect(
       buildOpenAIRealtimeAcceptPayload({
@@ -547,12 +716,14 @@ describe("OpenAI Realtime SIP", () => {
         env: {
           ...baseEnv,
           OPENAI_REALTIME_INTERRUPT_RESPONSE: true,
+          OPENAI_REALTIME_MANUAL_RESPONSE_GATING: false,
           OPENAI_REALTIME_NOISE_REDUCTION: "near_field",
           OPENAI_REALTIME_TURN_DETECTION_MODE: "semantic_vad",
           OPENAI_REALTIME_TURN_EAGERNESS: "high",
         },
       }).audio.input.turn_detection,
     ).toMatchObject({
+      create_response: true,
       eagerness: "high",
       interrupt_response: true,
       type: "semantic_vad",
@@ -1229,4 +1400,8 @@ function createFakeRealtimeSocket() {
       }
     },
   };
+}
+
+function isRealtimeEventType(event: unknown, type: string) {
+  return Boolean(event && typeof event === "object" && (event as { type?: unknown }).type === type);
 }

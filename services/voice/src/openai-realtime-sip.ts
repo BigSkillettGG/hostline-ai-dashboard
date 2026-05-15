@@ -41,6 +41,7 @@ type OpenAIRealtimeEnv = Pick<
   | "OPENAI_REALTIME_IDLE_TIMEOUT_MS"
   | "OPENAI_REALTIME_INTERRUPT_RESPONSE"
   | "OPENAI_REALTIME_MALE_VOICE"
+  | "OPENAI_REALTIME_MANUAL_RESPONSE_GATING"
   | "OPENAI_REALTIME_MARCO_VOICE"
   | "OPENAI_REALTIME_MAYA_VOICE"
   | "OPENAI_REALTIME_MILES_VOICE"
@@ -174,6 +175,7 @@ interface RealtimeQualityMetrics {
   toolCallCount: number;
   toolErrorCount: number;
   toolLatencyMs: number[];
+  ignoredNoiseTranscriptCount: number;
 }
 
 interface OpenAIRealtimeSidebandSession {
@@ -185,7 +187,10 @@ interface OpenAIRealtimeSidebandSession {
   finishCloseTimer?: ReturnType<typeof setTimeout>;
   finishRequested: boolean;
   locationId: string;
+  manualResponseGating: boolean;
   ownerContact?: TrustedContact;
+  openingGreetingCompleted: boolean;
+  pendingManualResponse: boolean;
   quality: RealtimeQualityMetrics;
   reservationCreatedId?: string;
   reservationConfirmed?: boolean;
@@ -215,13 +220,13 @@ interface OpenAIRealtimeAcceptPayload {
         prompt: string;
       };
       turn_detection: {
-        create_response: true;
+        create_response: boolean;
         eagerness: "low" | "medium" | "high";
         interrupt_response: boolean;
         type: "semantic_vad";
       } | {
-        create_response: true;
-        idle_timeout_ms: number;
+        create_response: boolean;
+        idle_timeout_ms?: number;
         interrupt_response: boolean;
         prefix_padding_ms: number;
         silence_duration_ms: number;
@@ -1063,7 +1068,10 @@ function startSidebandSocket({
     externalCallId,
     finishRequested: false,
     locationId,
+    manualResponseGating: resolveOpenAIRealtimeManualResponseGating(env),
     ownerContact,
+    openingGreetingCompleted: false,
+    pendingManualResponse: false,
     quality: createRealtimeQualityMetrics(),
     staffCallbackRequested: false,
     staffFollowUpRequired: false,
@@ -1106,35 +1114,39 @@ function startSidebandSocket({
 
     const transcriptTurn = extractOpenAIRealtimeTranscriptTurn(event);
     if (transcriptTurn) {
-      void persistOpenAIRealtimeTranscriptTurn({
+      handleOpenAIRealtimeTranscriptTurn({
+        callId,
         callStore,
         session,
+        socket,
         turn: transcriptTurn,
       });
     }
 
-    if (eventType === "response.done" && session.finishRequested) {
-      scheduleOpenAIRealtimeFinishedClose({ callId, session, socket });
+    const toolCalls = extractOpenAIRealtimeToolCalls(event);
+    if (toolCalls.length) {
+      markRealtimeToolCalls(session, toolCalls);
+      void handleOpenAIRealtimeToolCalls({
+        callStore,
+        callerPhone,
+        callRecordId: session.callRecordId,
+        context,
+        guestConfirmationService,
+        locationId,
+        ownerCommandRuntime,
+        ownerContact,
+        reservationPlatformService,
+        session,
+        socket,
+        staffNotificationService,
+        toolCalls,
+      });
+      return;
     }
 
-    const toolCalls = extractOpenAIRealtimeToolCalls(event);
-    if (!toolCalls.length) return;
-    markRealtimeToolCalls(session, toolCalls);
-    void handleOpenAIRealtimeToolCalls({
-      callStore,
-      callerPhone,
-      callRecordId: session.callRecordId,
-      context,
-      guestConfirmationService,
-      locationId,
-      ownerCommandRuntime,
-      ownerContact,
-      reservationPlatformService,
-      session,
-      socket,
-      staffNotificationService,
-      toolCalls,
-    });
+    if (eventType === "response.done") {
+      handleOpenAIRealtimeResponseDone({ callId, session, socket });
+    }
   });
 
   socket.on("close", (code, reason) => {
@@ -1213,6 +1225,7 @@ function createRealtimeQualityMetrics(): RealtimeQualityMetrics {
     toolCallCount: 0,
     toolErrorCount: 0,
     toolLatencyMs: [],
+    ignoredNoiseTranscriptCount: 0,
   };
 }
 
@@ -1260,6 +1273,179 @@ function recordOpenAIRealtimeQualityEvent(session: OpenAIRealtimeSidebandSession
   }
 }
 
+function handleOpenAIRealtimeTranscriptTurn({
+  callId,
+  callStore,
+  session,
+  socket,
+  turn,
+}: {
+  callId: string;
+  callStore?: CallStore;
+  session: OpenAIRealtimeSidebandSession;
+  socket: RealtimeSocket;
+  turn: RealtimeTranscriptTurn;
+}) {
+  if (hasOpenAIRealtimeTranscriptTurn(session, turn)) return;
+
+  if (turn.role === "caller" && session.manualResponseGating) {
+    const decision = shouldAcceptRealtimeCallerTranscript(session, turn.text);
+    if (!decision.accept) {
+      session.quality.ignoredNoiseTranscriptCount += 1;
+      console.info("[openai-realtime] ignored likely background transcript", {
+        callId,
+        reason: decision.reason,
+        sample: turn.text.slice(0, 100),
+      });
+      return;
+    }
+  }
+
+  void persistOpenAIRealtimeTranscriptTurn({
+    callStore,
+    session,
+    turn,
+  });
+
+  if (turn.role === "caller" && session.manualResponseGating) {
+    requestOpenAIRealtimeManualResponse({ callId, session, socket });
+  }
+}
+
+function handleOpenAIRealtimeResponseDone({
+  callId,
+  session,
+  socket,
+}: {
+  callId: string;
+  session: OpenAIRealtimeSidebandSession;
+  socket: RealtimeSocket;
+}) {
+  if (!session.openingGreetingCompleted) {
+    session.openingGreetingCompleted = true;
+  }
+
+  if (session.finishRequested) {
+    scheduleOpenAIRealtimeFinishedClose({ callId, session, socket });
+    return;
+  }
+
+  if (session.manualResponseGating && session.pendingManualResponse) {
+    sendOpenAIRealtimeManualResponse({ callId, session, socket });
+  }
+}
+
+function requestOpenAIRealtimeManualResponse({
+  callId,
+  session,
+  socket,
+}: {
+  callId: string;
+  session: OpenAIRealtimeSidebandSession;
+  socket: RealtimeSocket;
+}) {
+  if (session.finishRequested) return;
+  if (!session.openingGreetingCompleted || session.quality.activeResponseStartedAt) {
+    session.pendingManualResponse = true;
+    return;
+  }
+  sendOpenAIRealtimeManualResponse({ callId, session, socket });
+}
+
+function sendOpenAIRealtimeManualResponse({
+  callId,
+  session,
+  socket,
+}: {
+  callId: string;
+  session: OpenAIRealtimeSidebandSession;
+  socket: RealtimeSocket;
+}) {
+  session.pendingManualResponse = false;
+  console.info("[openai-realtime] creating gated response for accepted caller turn", { callId });
+  sendRealtimeEvent(socket, { type: "response.create" });
+}
+
+function hasOpenAIRealtimeTranscriptTurn(session: OpenAIRealtimeSidebandSession, turn: RealtimeTranscriptTurn) {
+  return session.transcriptKeys.has(getOpenAIRealtimeTranscriptKey(turn));
+}
+
+function getOpenAIRealtimeTranscriptKey(turn: RealtimeTranscriptTurn) {
+  return `${turn.role}:${turn.itemId ?? turn.text.trim()}`;
+}
+
+function shouldAcceptRealtimeCallerTranscript(
+  session: OpenAIRealtimeSidebandSession,
+  text: string,
+): { accept: boolean; reason?: string } {
+  const normalized = normalizeRealtimeCallerText(text);
+  if (!normalized) return { accept: false, reason: "empty" };
+  if (isOpenAIRealtimeTranscriptionPromptLeak(normalized)) return { accept: false, reason: "prompt_leak" };
+  if (isLikelyOpenAIRealtimeAgentEcho(session, normalized)) return { accept: false, reason: "agent_echo" };
+
+  const wordCount = normalized.split(/\s+/).filter(Boolean).length;
+  const activeResponse = Boolean(session.quality.activeResponseStartedAt);
+  const greetingPhase = !session.openingGreetingCompleted;
+  const strongIntent = hasStrongCallerIntent(normalized);
+  const clearIntent = hasLikelyCallerIntent(normalized);
+  const directedSpeech = hasLikelyDirectedCallerSpeech(normalized);
+  const shortConfirmation = isLikelyShortCallerConfirmation(normalized);
+
+  if (greetingPhase || activeResponse) {
+    if (strongIntent || directedSpeech || shortConfirmation) return { accept: true };
+    return { accept: false, reason: greetingPhase ? "greeting_noise" : "response_noise" };
+  }
+
+  if (clearIntent || directedSpeech || shortConfirmation) return { accept: true };
+  if (wordCount >= 4 && /\b(i|we|you|your|can|could|would|need|want|looking|calling|trying)\b/.test(normalized)) {
+    return { accept: true };
+  }
+  return { accept: false, reason: "no_caller_intent" };
+}
+
+function normalizeRealtimeCallerText(text: string) {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s']/gu, " ")
+    .replace(/\s+/g, " ");
+}
+
+function isLikelyOpenAIRealtimeAgentEcho(session: OpenAIRealtimeSidebandSession, normalized: string) {
+  const businessName = normalizeRealtimeCallerText(toSpokenRestaurantName(session.context.restaurantName));
+  return (
+    normalized.includes("thank you for calling") ||
+    normalized.includes("how can i help you") ||
+    (Boolean(businessName) && normalized.includes(businessName) && normalized.includes("how can i help"))
+  );
+}
+
+function hasLikelyCallerIntent(normalized: string) {
+  return /\b(order|pickup|takeout|reservation|reserve|table|book|booking|appointment|quote|estimate|service|repair|emergency|leak|roof|hvac|plumb|electric|haircut|barber|color|hours|open|closed|close|menu|special|specials|parking|address|direction|directions|allergy|allergic|catering|private event|party|availability|available|tonight|today|tomorrow|callback|call back|manager|staff|text|email|price|cost|how much|delivery|lost|found|complaint|refund)\b/.test(
+    normalized,
+  );
+}
+
+function hasStrongCallerIntent(normalized: string) {
+  return /\b(order|pickup|takeout|reservation|reserve|table|appointment|quote|estimate|emergency|leak|roof|hvac|plumb|electric|haircut|barber|color|hours|open|closed|close|menu|specials|parking|address|direction|directions|allergy|allergic|catering|private event|party|callback|call back|manager|text|email|price|cost|how much|delivery|lost|found|complaint|refund)\b/.test(
+    normalized,
+  );
+}
+
+function hasLikelyDirectedCallerSpeech(normalized: string) {
+  return (
+    /\b(what|when|where|why|how|who|do you|are you|can i|can you|could i|could you|would you|i need|i want|i'd like|i would like|i'm calling|i am calling|i was wondering|let me|get me|looking for)\b/.test(
+      normalized,
+    ) || /\?$/.test(normalized)
+  );
+}
+
+function isLikelyShortCallerConfirmation(normalized: string) {
+  return /^(yes|yeah|yep|sure|please|no|nope|no thank you|no thanks|that's all|that is all|thanks|thank you|goodbye|bye|hello|hi)$/.test(
+    normalized,
+  );
+}
+
 async function persistOpenAIRealtimeTranscriptTurn({
   callStore,
   session,
@@ -1279,7 +1465,7 @@ async function persistOpenAIRealtimeTranscriptTurn({
     return;
   }
 
-  const key = `${turn.role}:${turn.itemId ?? text}`;
+  const key = getOpenAIRealtimeTranscriptKey({ ...turn, text });
   if (session.transcriptKeys.has(key)) return;
   session.transcriptKeys.add(key);
 
@@ -1527,6 +1713,7 @@ function buildRealtimeQualitySummary(session: OpenAIRealtimeSidebandSession) {
   const flags = [
     session.quality.speechStartedDuringResponseCount >= 3 && "possible speakerphone echo/false interruptions",
     session.quality.speechStartCount >= 3 && session.quality.callerTranscriptCount === 0 && "speech detected but no caller transcript",
+    session.quality.ignoredNoiseTranscriptCount > 0 && `${session.quality.ignoredNoiseTranscriptCount} likely background transcript(s) ignored`,
     session.quality.toolErrorCount > 0 && "tool errors",
   ].filter((flag): flag is string => Boolean(flag));
 
@@ -2764,25 +2951,33 @@ export function resolveOpenAIRealtimeNoiseReduction(env: OpenAIRealtimeEnv) {
   return env.OPENAI_REALTIME_NOISE_REDUCTION === "near_field" ? "near_field" : "far_field";
 }
 
+export function resolveOpenAIRealtimeManualResponseGating(env: OpenAIRealtimeEnv) {
+  return env.OPENAI_REALTIME_MANUAL_RESPONSE_GATING !== false;
+}
+
 export function resolveOpenAIRealtimeTurnDetection(env: OpenAIRealtimeEnv): OpenAIRealtimeAcceptPayload["audio"]["input"]["turn_detection"] {
+  const createResponse = !resolveOpenAIRealtimeManualResponseGating(env);
   if (env.OPENAI_REALTIME_TURN_DETECTION_MODE === "semantic_vad") {
     return {
-      create_response: true,
+      create_response: createResponse,
       eagerness: resolveOpenAIRealtimeTurnEagerness(env),
       interrupt_response: resolveOpenAIRealtimeInterruptResponse(env),
       type: "semantic_vad",
     };
   }
 
-  return {
-    create_response: true,
-    idle_timeout_ms: resolveOpenAIRealtimeIdleTimeoutMs(env),
+  const turnDetection: OpenAIRealtimeAcceptPayload["audio"]["input"]["turn_detection"] = {
+    create_response: createResponse,
     interrupt_response: resolveOpenAIRealtimeInterruptResponse(env),
     prefix_padding_ms: resolveOpenAIRealtimeServerVadPrefixPaddingMs(env),
     silence_duration_ms: resolveOpenAIRealtimeServerVadSilenceMs(env),
     threshold: resolveOpenAIRealtimeServerVadThreshold(env),
     type: "server_vad",
   };
+  if (createResponse) {
+    turnDetection.idle_timeout_ms = resolveOpenAIRealtimeIdleTimeoutMs(env);
+  }
+  return turnDetection;
 }
 
 export function resolveOpenAIRealtimeTurnEagerness(env: OpenAIRealtimeEnv) {
