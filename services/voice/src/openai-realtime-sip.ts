@@ -1497,16 +1497,19 @@ function shouldAcceptRealtimeCallerTranscript(
   const greetingPhase = !session.openingGreetingCompleted;
   const strongIntent = hasStrongCallerIntent(normalized);
   const clearIntent = hasLikelyCallerIntent(normalized);
+  const configuredOfferingIntent = hasConfiguredOfferingIntent(session.context, normalized);
   const directedSpeech = hasLikelyDirectedCallerSpeech(normalized);
   const shortConfirmation = isLikelyShortCallerConfirmation(normalized);
   const answerToAgentQuestion = isLikelyAnswerToRecentAgentQuestion(session, normalized);
 
   if (greetingPhase || activeResponse) {
-    if (strongIntent || directedSpeech || shortConfirmation) return { accept: true };
+    if (strongIntent || configuredOfferingIntent || directedSpeech || shortConfirmation) return { accept: true };
     return { accept: false, reason: greetingPhase ? "greeting_noise" : "response_noise" };
   }
 
-  if (clearIntent || directedSpeech || shortConfirmation || answerToAgentQuestion) return { accept: true };
+  if (clearIntent || configuredOfferingIntent || directedSpeech || shortConfirmation || answerToAgentQuestion) {
+    return { accept: true };
+  }
   if (wordCount >= 4 && /\b(i|we|you|your|can|could|would|need|want|looking|calling|trying)\b/.test(normalized)) {
     return { accept: true };
   }
@@ -1548,15 +1551,30 @@ function isLikelyOpenAIRealtimeAgentEcho(session: OpenAIRealtimeSidebandSession,
 }
 
 function hasLikelyCallerIntent(normalized: string) {
-  return /\b(order|pickup|takeout|reservation|reserve|table|book|booking|appointment|quote|estimate|service|repair|emergency|leak|roof|hvac|plumb|electric|haircut|barber|color|hours|open|closed|close|menu|special|specials|parking|address|direction|directions|allergy|allergic|catering|private event|party|availability|available|tonight|today|tomorrow|callback|call back|manager|staff|text|email|price|cost|how much|delivery|lost|found|complaint|refund)\b/.test(
+  return /\b(orders?|pickup|takeout|reservations?|reserve|table|book|booking|appointments?|quotes?|estimates?|services?|repairs?|emergency|leaks?|roof|roofing|hvac|plumb|plumbing|electric|electrical|haircuts?|barber|color|hours|open|closed|close|menus?|specials?|parking|address|directions?|allerg(?:y|ies|ic)|catering|private event|part(?:y|ies)|availability|available|tonight|today|tomorrow|callback|call back|manager|staff|text|email|prices?|cost|how much|deliver(?:y|ies)|lost|found|complaints?|refund)\b/.test(
     normalized,
   );
 }
 
 function hasStrongCallerIntent(normalized: string) {
-  return /\b(order|pickup|takeout|reservation|reserve|table|appointment|quote|estimate|emergency|leak|roof|hvac|plumb|electric|haircut|barber|color|hours|open|closed|close|menu|specials|parking|address|direction|directions|allergy|allergic|catering|private event|party|callback|call back|manager|text|email|price|cost|how much|delivery|lost|found|complaint|refund)\b/.test(
+  return /\b(orders?|pickup|takeout|reservations?|reserve|table|appointments?|quotes?|estimates?|emergency|leaks?|roof|roofing|hvac|plumb|plumbing|electric|electrical|haircuts?|barber|color|hours|open|closed|close|menus?|specials?|parking|address|directions?|allerg(?:y|ies|ic)|catering|private event|part(?:y|ies)|callback|call back|manager|text|email|prices?|cost|how much|deliver(?:y|ies)|lost|found|complaints?|refund)\b/.test(
     normalized,
   );
+}
+
+function hasConfiguredOfferingIntent(context: RestaurantVoiceContext, normalized: string) {
+  if (isLikelyBackgroundMediaFragment(normalized)) return false;
+  const normalizedTopic = normalizeLookupText(normalized);
+  if (!normalizedTopic) return false;
+
+  return context.menuItems.some((item) => {
+    const terms = [item.name, ...(item.aliases ?? [])];
+    return terms.some((term) => {
+      const normalizedTerm = normalizeLookupText(term);
+      if (!normalizedTerm || normalizedTerm.length < 4) return false;
+      return normalizedTopic.includes(normalizedTerm) || normalizedTerm.includes(normalizedTopic);
+    });
+  });
 }
 
 function hasLikelyDirectedCallerSpeech(normalized: string) {
