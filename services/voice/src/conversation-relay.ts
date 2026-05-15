@@ -180,6 +180,9 @@ const RESTAURANT_RESPONSE_TOOLS: RestaurantResponseTool[] = [
 const RELAY_RECONNECT_GRACE_MS = 20_000;
 const LATENCY_FILLER_DELAY_MS = 700;
 const NATURAL_GOODBYE_END_DELAY_MS = 2200;
+const DEFAULT_RELAY_MAX_CALL_DURATION_MS = 15 * 60_000;
+const MIN_RELAY_MAX_CALL_DURATION_MS = 60_000;
+const MAX_RELAY_MAX_CALL_DURATION_MS = 60 * 60_000;
 
 export function createConversationRelayHandler(
   env: VoiceServiceEnv,
@@ -210,6 +213,28 @@ export function createConversationRelayHandler(
       transcript: [],
     };
     sessions.set(ws, session);
+    let maxCallEndTimer: ReturnType<typeof setTimeout> | undefined;
+    const maxCallTimer = setTimeout(() => {
+      session.needsStaffReview = true;
+      const reply =
+        "I'm going to wrap up this call now so the team can review anything that needs follow-up. Thanks for calling.";
+      persistAgentTurn({ callStore, reply, session });
+      try {
+        sendText(ws, reply);
+        maxCallEndTimer = setTimeout(() => {
+          try {
+            sendEndSession(ws, {
+              reason: "ConversationRelay call reached the maximum configured duration.",
+              reasonCode: "max_duration",
+            });
+          } catch (error) {
+            console.warn("[conversation-relay] max-duration end failed", error);
+          }
+        }, NATURAL_GOODBYE_END_DELAY_MS);
+      } catch (error) {
+        console.warn("[conversation-relay] max-duration wrap-up failed", error);
+      }
+    }, resolveConversationRelayMaxCallDurationMs(env));
 
     console.info("[conversation-relay] connected", req.url);
 
@@ -312,6 +337,8 @@ export function createConversationRelayHandler(
     });
 
     ws.on("close", (code, reasonBuffer) => {
+      clearTimeout(maxCallTimer);
+      if (maxCallEndTimer) clearTimeout(maxCallEndTimer);
       const durationSeconds = getSessionOffsetSeconds(session);
       const reason = reasonBuffer.toString();
       const completion = scheduleSessionCompletion({
@@ -335,6 +362,17 @@ export function createConversationRelayHandler(
       });
     });
   };
+}
+
+export function resolveConversationRelayMaxCallDurationMs(
+  env: Pick<VoiceServiceEnv, "TWILIO_CONVERSATION_RELAY_MAX_CALL_MS">,
+) {
+  const configured = env.TWILIO_CONVERSATION_RELAY_MAX_CALL_MS;
+  if (typeof configured !== "number" || !Number.isFinite(configured)) return DEFAULT_RELAY_MAX_CALL_DURATION_MS;
+  return Math.min(
+    MAX_RELAY_MAX_CALL_DURATION_MS,
+    Math.max(MIN_RELAY_MAX_CALL_DURATION_MS, Math.round(configured)),
+  );
 }
 
 function reconnectSessionIfNeeded({

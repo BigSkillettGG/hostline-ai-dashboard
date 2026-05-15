@@ -56,6 +56,7 @@ describe("auth helpers", () => {
     expect(buildDemoUser("maria@oliveandember.com").role).toBe("admin");
     expect(buildDemoUser("maria@oliveandember.com").restaurantMembershipRole).toBe("owner");
     expect(buildDemoUser("staff@signalhost.ai").role).toBe("superadmin");
+    expect(buildDemoUser("stafford@gmail.com").role).toBe("admin");
     expect(buildDemoSuperAdmin().isPlatformAdmin).toBe(true);
     expect(roleFromEmailAndMetadata("owner@example.com", { role: "superadmin" })).toBe("superadmin");
     expect(roleFromEmailAndMetadata("staff@signalhost.ai")).toBe("admin");

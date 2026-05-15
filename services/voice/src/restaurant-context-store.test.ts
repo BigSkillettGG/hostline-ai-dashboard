@@ -157,7 +157,7 @@ describe("restaurant context store", () => {
     expect(context.businessLiveContext?.instructionBlock).toContain("lobster ravioli");
     expect(context.menuItems).toEqual([
       {
-        aliases: ["Pad Thai", "Rice noodles with tamarind"],
+        aliases: ["Pad Thai"],
         modifiers: ["No peanuts", "Add chicken"],
         name: "Pad Thai",
         priceCents: 1600,

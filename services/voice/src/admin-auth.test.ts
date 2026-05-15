@@ -87,6 +87,21 @@ describe("authorizeVoiceAdminRequest", () => {
     });
   });
 
+  it("allows restaurant managers for operational voice settings", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(json({ id: "user_1" }))
+      .mockResolvedValueOnce(json([]))
+      .mockResolvedValueOnce(json([{ organization_id: "org_1" }]))
+      .mockResolvedValueOnce(json([{ organization_id: "org_1", role: "manager" }]));
+
+    await expect(
+      authorizeVoiceAdminRequest({ currentEnv: baseEnv, locationId: "loc_1", req: request("valid-token") }),
+    ).resolves.toMatchObject({
+      authorized: true,
+      userId: "user_1",
+    });
+  });
+
   it("rejects restaurant staff for voice admin settings", async () => {
     vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(json({ id: "user_1" }))

@@ -40,6 +40,17 @@ describe("reservation intake", () => {
     });
   });
 
+  it("captures lowercase guest names from phone transcripts", () => {
+    const request = captureReservationRequest("book a table for two tonight at 6 under priya shah", { now });
+
+    expect(request).toMatchObject({
+      date: "2026-05-05",
+      guestName: "Priya Shah",
+      partySize: 2,
+      time: "18:00",
+    });
+  });
+
   it("parses relative dates and explicit times", () => {
     const request = captureReservationRequest("Can I reserve a table for two tomorrow at 6pm?", { now });
 
@@ -58,6 +69,29 @@ describe("reservation intake", () => {
       guestName: "Sarah",
       partySize: 3,
       time: "12:15",
+    });
+  });
+
+  it("uses safer implied restaurant time defaults", () => {
+    expect(captureReservationRequest("Book a table for two tonight at 7 under Priya", { now })).toMatchObject({
+      time: "19:00",
+    });
+    expect(captureReservationRequest("Book a table for two tomorrow at 11 under Priya", { now })).toMatchObject({
+      time: "11:00",
+    });
+    expect(captureReservationRequest("Book a table for two tomorrow at 12 under Priya", { now })).toMatchObject({
+      time: "12:00",
+    });
+  });
+
+  it("distinguishes this weekday from next weekday", () => {
+    const wednesday = new Date(2026, 4, 6, 12, 0, 0);
+
+    expect(captureReservationRequest("Book a table for two this Saturday at 7 under Priya", { now: wednesday })).toMatchObject({
+      date: "2026-05-09",
+    });
+    expect(captureReservationRequest("Book a table for two next Saturday at 7 under Priya", { now: wednesday })).toMatchObject({
+      date: "2026-05-16",
     });
   });
 

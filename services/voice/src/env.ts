@@ -52,6 +52,7 @@ const envSchema = z.object({
   TWILIO_ELEVENLABS_STABILITY: z.string().default("0.35"),
   TWILIO_ELEVENLABS_SIMILARITY_BOOST: z.string().default("0.85"),
   TWILIO_TRANSCRIPTION_PROVIDER: z.enum(["Google", "Deepgram"]).default("Deepgram"),
+  TWILIO_CONVERSATION_RELAY_MAX_CALL_MS: z.coerce.number().int().positive().optional(),
   TWILIO_SPEECH_TIMEOUT_MS: z.coerce.number().int().positive().default(1800),
   TWILIO_LANGUAGE: z.string().default("en-US"),
   OPENAI_API_KEY: z.string().optional(),

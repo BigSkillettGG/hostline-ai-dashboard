@@ -5,6 +5,7 @@ import {
   buildNaturalGoodbyeReply,
   classifyEscalationIntent,
   isNaturalGoodbyeIntent,
+  resolveConversationRelayMaxCallDurationMs,
   sendEndSession,
   sendText,
   summarizeCallForStaff,
@@ -163,5 +164,16 @@ describe("conversation relay staff-review triggers", () => {
         type: "end",
       },
     ]);
+  });
+
+  it("caps ConversationRelay call duration with sane configurable bounds", () => {
+    expect(resolveConversationRelayMaxCallDurationMs({})).toBe(15 * 60_000);
+    expect(resolveConversationRelayMaxCallDurationMs({ TWILIO_CONVERSATION_RELAY_MAX_CALL_MS: 500 })).toBe(60_000);
+    expect(resolveConversationRelayMaxCallDurationMs({ TWILIO_CONVERSATION_RELAY_MAX_CALL_MS: 120_000 })).toBe(
+      120_000,
+    );
+    expect(resolveConversationRelayMaxCallDurationMs({ TWILIO_CONVERSATION_RELAY_MAX_CALL_MS: 2 * 60 * 60_000 })).toBe(
+      60 * 60_000,
+    );
   });
 });

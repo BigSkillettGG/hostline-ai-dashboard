@@ -579,5 +579,5 @@ function booleanMetadataValue(metadata: Record<string, unknown> | undefined, key
 }
 
 function isSignalHostStaffEmail(email: string) {
-  return /staff|@signalhost|admin@signalhost|@hostline|admin@hostline/i.test(email);
+  return /@(?:signalhost|hostline)\.[a-z0-9.-]+$/i.test(email);
 }

@@ -181,12 +181,13 @@ function captureDate(utterance: string, now: Date) {
     return formatDate(rollForwardIfPast(new Date(now.getFullYear(), month, day), now));
   }
 
-  const weekdayMatch = normalized.match(/\b(next\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/);
+  const weekdayMatch = normalized.match(/\b(?:(this|next)\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/);
   if (weekdayMatch) {
     const targetDay = weekdays.indexOf(weekdayMatch[2]);
-    const nextModifier = Boolean(weekdayMatch[1]);
+    const modifier = weekdayMatch[1];
     let daysAhead = (targetDay - now.getDay() + 7) % 7;
-    if (daysAhead === 0 || nextModifier) daysAhead += 7;
+    if (modifier === "next") daysAhead += 7;
+    if (!modifier && daysAhead === 0) daysAhead += 7;
     return formatDate(addDays(now, daysAhead));
   }
 
@@ -209,24 +210,68 @@ function captureTime(utterance: string) {
   const minute = implied[2] ? Number(implied[2]) : 0;
   if (hour > 23 || minute > 59) return undefined;
 
-  const restaurantDinnerHour = hour >= 1 && hour <= 11 ? hour + 12 : hour;
-  return formatTime(restaurantDinnerHour, minute);
+  return formatTime(resolveImpliedReservationHour(hour), minute);
 }
 
 function captureGuestName(utterance: string) {
   const patterns = [
-    /\bunder\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b/,
-    /\bname(?:'s| is)?\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b/,
-    /\bfor\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b/,
+    /\bunder\s+([a-z][a-z'’-]+(?:\s+[a-z][a-z'’-]+)?)\b/i,
+    /\bname(?:'s| is)?\s+([a-z][a-z'’-]+(?:\s+[a-z][a-z'’-]+)?)\b/i,
+    /\bfor\s+([a-z][a-z'’-]+(?:\s+[a-z][a-z'’-]+)?)\b/i,
   ];
-  const blocked = new Set(["Today", "Tonight", "Tomorrow", "Friday", "Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"]);
+  const blocked = new Set([
+    "a",
+    "an",
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+    "nine",
+    "ten",
+    "eleven",
+    "twelve",
+    "today",
+    "tonight",
+    "tomorrow",
+    "friday",
+    "saturday",
+    "sunday",
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "table",
+    "party",
+    "people",
+    "guests",
+    "me",
+    "us",
+    "reservation",
+    "them",
+  ]);
 
   for (const pattern of patterns) {
     const name = utterance.match(pattern)?.[1]?.trim();
-    if (name && !blocked.has(name.split(/\s+/)[0])) return name;
+    const firstToken = name?.split(/\s+/)[0]?.toLowerCase();
+    if (name && firstToken && !blocked.has(firstToken)) return titleCaseName(name);
   }
 
   return undefined;
+}
+
+function resolveImpliedReservationHour(hour: number) {
+  if (hour >= 4 && hour <= 10) return hour + 12;
+  return hour;
+}
+
+function titleCaseName(name: string) {
+  return name
+    .toLowerCase()
+    .replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
 }
 
 function captureNotes(utterance: string) {

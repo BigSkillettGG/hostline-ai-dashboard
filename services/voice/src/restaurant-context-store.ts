@@ -966,7 +966,7 @@ function mapMenuItems(rows: SupabaseMenuItemRow[]): RestaurantMenuItem[] {
   return rows
     .filter((row) => row.available !== false)
     .map((row) => ({
-      aliases: [row.name, ...(row.description ? [row.description] : [])],
+      aliases: [row.name],
       modifiers: normalizeStringArray(row.modifiers),
       name: row.name,
       priceCents: row.price_cents ?? 0,

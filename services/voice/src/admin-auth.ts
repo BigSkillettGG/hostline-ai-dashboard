@@ -162,5 +162,5 @@ async function supabaseServiceRequest<T>(table: string, params: URLSearchParams,
 }
 
 function isVoiceAdminRole(role: string | null | undefined): role is RestaurantAdminRole {
-  return role === "owner" || role === "admin";
+  return role === "owner" || role === "admin" || role === "manager";
 }
