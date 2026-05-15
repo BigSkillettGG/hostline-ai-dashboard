@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  buildTwilioRecordingMediaUrl,
   buildTwilioRecordingStatusCallbackUrl,
   createTwilioCallRecordingService,
   isTwilioCallSid,
@@ -27,6 +28,16 @@ describe("Twilio call recording service", () => {
     expect(isTwilioCallSid("rtc_123")).toBe(false);
   });
 
+  it("builds a Twilio recording media URL from a recording sid", () => {
+    expect(
+      buildTwilioRecordingMediaUrl({
+        accountSid: "AC123",
+        baseUrl: "https://api.twilio.com/",
+        recordingSid: "RE123",
+      }),
+    ).toBe("https://api.twilio.com/2010-04-01/Accounts/AC123/Recordings/RE123.mp3");
+  });
+
   it("starts a live Twilio call recording with status callback metadata", async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ sid: "RE123" }), { status: 201 }));
     const service = createTwilioCallRecordingService(
@@ -48,6 +59,7 @@ describe("Twilio call recording service", () => {
 
     expect(result).toMatchObject({
       recordingSid: "RE123",
+      recordingUrl: "https://api.twilio.com/2010-04-01/Accounts/AC123/Recordings/RE123.mp3",
       started: true,
     });
     expect(fetchMock).toHaveBeenCalledWith(

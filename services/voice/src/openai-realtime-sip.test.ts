@@ -245,6 +245,7 @@ describe("OpenAI Realtime SIP", () => {
 
   it("starts and completes a persisted call for incoming SIP webhooks", async () => {
     const socket = createFakeRealtimeSocket();
+    const recordingAttachments: unknown[] = [];
     const recordingRequests: unknown[] = [];
     const startedCalls: unknown[] = [];
     const transcriptTurns: unknown[] = [];
@@ -262,14 +263,20 @@ describe("OpenAI Realtime SIP", () => {
           configured: true,
           async startCallRecording(input) {
             recordingRequests.push(input);
-            return { started: true };
+            return {
+              recordingSid: "RE123",
+              recordingUrl: "https://api.twilio.com/2010-04-01/Accounts/AC123/Recordings/RE123.mp3",
+              started: true,
+            };
           },
         },
         callStore: {
           async addTranscriptTurn(input) {
             transcriptTurns.push(input);
           },
-          async attachCallRecording() {},
+          async attachCallRecording(input) {
+            recordingAttachments.push(input);
+          },
           async completeCall(input) {
             completedCalls.push(input);
           },
@@ -326,6 +333,13 @@ describe("OpenAI Realtime SIP", () => {
       externalCallSid: "CA123",
       locationId: "00000000-0000-0000-0000-000000000001",
       openaiCallId: "rtc_123",
+    });
+    await Promise.resolve();
+    expect(recordingAttachments[0]).toMatchObject({
+      callId: "call_uuid",
+      externalCallSid: "CA123",
+      recordingSid: "RE123",
+      recordingUrl: "https://api.twilio.com/2010-04-01/Accounts/AC123/Recordings/RE123.mp3",
     });
 
     socket.emit("open");
@@ -522,6 +536,133 @@ describe("OpenAI Realtime SIP", () => {
       text: "Do you have any specials tonight?",
     });
     expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))).toHaveLength(2);
+  });
+
+  it("treats repeated hello as a real reconnect attempt after a glitch", async () => {
+    const socket = createFakeRealtimeSocket();
+    const transcriptTurns: unknown[] = [];
+    const service = createOpenAIRealtimeSipService(
+      baseEnv,
+      {
+        async getContext() {
+          return demoRestaurantContext;
+        },
+      },
+      {
+        callStore: {
+          async addTranscriptTurn(input) {
+            transcriptTurns.push(input);
+          },
+          async attachCallRecording() {},
+          async completeCall() {},
+          async createCustomerRequest() {
+            return {};
+          },
+          async createStaffReviewOrder() {
+            return {};
+          },
+          async createStaffReviewReservation() {
+            return {};
+          },
+          async createStaffTask() {
+            return {};
+          },
+          async startCall() {
+            return {};
+          },
+          async startRealtimeCall() {
+            return { callId: "call_uuid" };
+          },
+        },
+        fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+        websocketFactory: () => socket as never,
+      },
+    );
+
+    await service.handleIncomingWebhook({
+      headers: {},
+      rawBody: JSON.stringify({
+        data: {
+          call_id: "rtc_hello",
+          sip_headers: [{ name: "From", value: "sip:+14155550123@twilio.com" }],
+        },
+        type: "realtime.call.incoming",
+      }),
+    });
+
+    socket.emit("open");
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        response: { output: [] },
+        type: "response.done",
+      })),
+    );
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "caller_hello",
+        transcript: "Hello? Hello?",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    await Promise.resolve();
+
+    expect(transcriptTurns[0]).toMatchObject({
+      speaker: "caller",
+      text: "Hello? Hello?",
+    });
+    expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))).toHaveLength(2);
+  });
+
+  it("creates a manual still-here prompt when the caller goes quiet", async () => {
+    vi.useFakeTimers();
+    try {
+      const socket = createFakeRealtimeSocket();
+      const service = createOpenAIRealtimeSipService(
+        baseEnv,
+        {
+          async getContext() {
+            return demoRestaurantContext;
+          },
+        },
+        {
+          fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+          websocketFactory: () => socket as never,
+        },
+      );
+
+      await service.handleIncomingWebhook({
+        headers: {},
+        rawBody: JSON.stringify({
+          data: {
+            call_id: "rtc_idle",
+            sip_headers: [{ name: "From", value: "sip:+14155550123@twilio.com" }],
+          },
+          type: "realtime.call.incoming",
+        }),
+      });
+
+      socket.emit("open");
+      socket.emit(
+        "message",
+        Buffer.from(JSON.stringify({
+          response: { output: [] },
+          type: "response.done",
+        })),
+      );
+      await vi.advanceTimersByTimeAsync(12000);
+
+      const responseCreates = socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"));
+      expect(responseCreates).toHaveLength(2);
+      expect(responseCreates[1]).toMatchObject({
+        response: expect.objectContaining({
+          instructions: expect.stringContaining("I'm still here"),
+        }),
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("accepts a trusted owner SIP caller with owner tools and identity metadata", async () => {

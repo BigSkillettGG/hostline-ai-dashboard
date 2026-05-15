@@ -21,6 +21,7 @@ export interface StartCallRecordingInput {
 export interface StartCallRecordingResult {
   callbackUrl?: string;
   recordingSid?: string;
+  recordingUrl?: string;
   skipped?: boolean;
   started: boolean;
 }
@@ -68,6 +69,19 @@ export function buildTwilioRecordingStatusCallbackUrl(
 
 export function isTwilioCallSid(value?: string) {
   return /^CA[a-f0-9]{32}$/i.test(value?.trim() ?? "");
+}
+
+export function buildTwilioRecordingMediaUrl({
+  accountSid,
+  baseUrl,
+  recordingSid,
+}: {
+  accountSid: string;
+  baseUrl: string;
+  recordingSid?: string;
+}) {
+  if (!recordingSid) return undefined;
+  return `${baseUrl.replace(/\/$/, "")}/2010-04-01/Accounts/${encodeURIComponent(accountSid)}/Recordings/${encodeURIComponent(recordingSid)}.mp3`;
 }
 
 class NotConfiguredCallRecordingService implements CallRecordingService {
@@ -154,6 +168,11 @@ class TwilioCallRecordingService implements CallRecordingService {
     return {
       callbackUrl,
       recordingSid: parsed.sid,
+      recordingUrl: buildTwilioRecordingMediaUrl({
+        accountSid: this.accountSid,
+        baseUrl: this.baseUrl,
+        recordingSid: parsed.sid,
+      }),
       started: true,
     };
   }

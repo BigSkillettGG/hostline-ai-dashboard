@@ -186,8 +186,12 @@ interface OpenAIRealtimeSidebandSession {
   externalCallId: string;
   finishCloseTimer?: ReturnType<typeof setTimeout>;
   finishRequested: boolean;
+  ignoredTranscriptSamples: Array<{ reason?: string; text: string }>;
   locationId: string;
   manualResponseGating: boolean;
+  manualIdlePromptCount: number;
+  manualIdleTimer?: ReturnType<typeof setTimeout>;
+  manualIdleTimeoutMs: number;
   ownerContact?: TrustedContact;
   openingGreetingCompleted: boolean;
   pendingManualResponse: boolean;
@@ -366,6 +370,14 @@ export function createOpenAIRealtimeSipService(
           openaiCallId: callId,
         }).then((result) => {
           if (result.started) {
+            if (result.recordingUrl) {
+              void callStore?.attachCallRecording({
+                callId: callRecordId,
+                externalCallSid: twilioCallSid,
+                recordingSid: result.recordingSid,
+                recordingUrl: result.recordingUrl,
+              });
+            }
             console.info("[openai-realtime] Twilio call recording started", {
               callId,
               externalCallSid: twilioCallSid,
@@ -1067,7 +1079,10 @@ function startSidebandSocket({
     context,
     externalCallId,
     finishRequested: false,
+    ignoredTranscriptSamples: [],
     locationId,
+    manualIdlePromptCount: 0,
+    manualIdleTimeoutMs: resolveOpenAIRealtimeIdleTimeoutMs(env),
     manualResponseGating: resolveOpenAIRealtimeManualResponseGating(env),
     ownerContact,
     openingGreetingCompleted: false,
@@ -1152,6 +1167,7 @@ function startSidebandSocket({
   socket.on("close", (code, reason) => {
     activeSockets.delete(callId);
     clearOpenAIRealtimeFinishedClose(session);
+    clearOpenAIRealtimeManualIdleTimer(session);
     void completeOpenAIRealtimeLoggedCall({
       callStore,
       closeCode: code,
@@ -1169,6 +1185,7 @@ function startSidebandSocket({
   socket.on("error", (error) => {
     activeSockets.delete(callId);
     clearOpenAIRealtimeFinishedClose(session);
+    clearOpenAIRealtimeManualIdleTimer(session);
     void completeOpenAIRealtimeLoggedCall({
       callStore,
       closeReason: error.message,
@@ -1250,6 +1267,7 @@ function recordOpenAIRealtimeQualityEvent(session: OpenAIRealtimeSidebandSession
   }
 
   if (eventType === "response.created") {
+    clearOpenAIRealtimeManualIdleTimer(session);
     session.quality.responseCount += 1;
     session.quality.activeResponseStartedAt = now;
     if (session.quality.responseCount === 1) {
@@ -1292,6 +1310,7 @@ function handleOpenAIRealtimeTranscriptTurn({
     const decision = shouldAcceptRealtimeCallerTranscript(session, turn.text);
     if (!decision.accept) {
       session.quality.ignoredNoiseTranscriptCount += 1;
+      recordIgnoredRealtimeTranscriptSample(session, turn.text, decision.reason);
       console.info("[openai-realtime] ignored likely background transcript", {
         callId,
         reason: decision.reason,
@@ -1308,6 +1327,8 @@ function handleOpenAIRealtimeTranscriptTurn({
   });
 
   if (turn.role === "caller" && session.manualResponseGating) {
+    clearOpenAIRealtimeManualIdleTimer(session);
+    session.manualIdlePromptCount = 0;
     requestOpenAIRealtimeManualResponse({ callId, session, socket });
   }
 }
@@ -1332,7 +1353,10 @@ function handleOpenAIRealtimeResponseDone({
 
   if (session.manualResponseGating && session.pendingManualResponse) {
     sendOpenAIRealtimeManualResponse({ callId, session, socket });
+    return;
   }
+
+  scheduleOpenAIRealtimeManualIdlePrompt({ callId, session, socket });
 }
 
 function requestOpenAIRealtimeManualResponse({
@@ -1361,9 +1385,63 @@ function sendOpenAIRealtimeManualResponse({
   session: OpenAIRealtimeSidebandSession;
   socket: RealtimeSocket;
 }) {
+  clearOpenAIRealtimeManualIdleTimer(session);
   session.pendingManualResponse = false;
   console.info("[openai-realtime] creating gated response for accepted caller turn", { callId });
   sendRealtimeEvent(socket, { type: "response.create" });
+}
+
+function scheduleOpenAIRealtimeManualIdlePrompt({
+  callId,
+  session,
+  socket,
+}: {
+  callId: string;
+  session: OpenAIRealtimeSidebandSession;
+  socket: RealtimeSocket;
+}) {
+  if (!session.manualResponseGating || session.finishRequested || session.quality.activeResponseStartedAt) return;
+  clearOpenAIRealtimeManualIdleTimer(session);
+  session.manualIdleTimer = setTimeout(() => {
+    if (session.finishRequested || session.quality.activeResponseStartedAt || session.pendingManualResponse) return;
+    const isFinalPrompt = session.manualIdlePromptCount >= 1;
+    session.manualIdlePromptCount += 1;
+    if (isFinalPrompt) {
+      session.finishRequested = true;
+    }
+    console.info("[openai-realtime] creating manual idle recovery response", {
+      callId,
+      final: isFinalPrompt,
+      promptCount: session.manualIdlePromptCount,
+    });
+    delete session.manualIdleTimer;
+    sendRealtimeEvent(socket, {
+      response: {
+        instructions: isFinalPrompt
+          ? "The caller has been silent or the connection is unclear. Do not restart the greeting. Say warmly: \"I'm still not hearing you clearly, so I'll let you go for now. Please call back anytime. Thanks for calling. Goodbye.\""
+          : "The caller may be silent or checking the connection. Do not restart the greeting. Say one short, warm line like: \"I'm still here. What can I help with?\"",
+      },
+      type: "response.create",
+    });
+  }, session.manualIdleTimeoutMs);
+}
+
+function clearOpenAIRealtimeManualIdleTimer(session: OpenAIRealtimeSidebandSession) {
+  if (!session.manualIdleTimer) return;
+  clearTimeout(session.manualIdleTimer);
+  delete session.manualIdleTimer;
+}
+
+function recordIgnoredRealtimeTranscriptSample(
+  session: OpenAIRealtimeSidebandSession,
+  text: string,
+  reason?: string,
+) {
+  if (session.ignoredTranscriptSamples.length >= 5) return;
+  session.ignoredTranscriptSamples.push({
+    reason,
+    text: text.trim().slice(0, 140),
+  });
 }
 
 function hasOpenAIRealtimeTranscriptTurn(session: OpenAIRealtimeSidebandSession, turn: RealtimeTranscriptTurn) {
@@ -1408,7 +1486,8 @@ function normalizeRealtimeCallerText(text: string) {
     .trim()
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s']/gu, " ")
-    .replace(/\s+/g, " ");
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function isLikelyOpenAIRealtimeAgentEcho(session: OpenAIRealtimeSidebandSession, normalized: string) {
@@ -1434,14 +1513,14 @@ function hasStrongCallerIntent(normalized: string) {
 
 function hasLikelyDirectedCallerSpeech(normalized: string) {
   return (
-    /\b(what|when|where|why|how|who|do you|are you|can i|can you|could i|could you|would you|i need|i want|i'd like|i would like|i'm calling|i am calling|i was wondering|let me|get me|looking for)\b/.test(
+    /\b(what|when|where|why|how|who|do you|are you|can i|can you|could i|could you|would you|i need|i want|i'd like|i would like|i'm calling|i am calling|i was wondering|let me|get me|looking for|are you there|can you hear me|i'm here|i am here)\b/.test(
       normalized,
     ) || /\?$/.test(normalized)
   );
 }
 
 function isLikelyShortCallerConfirmation(normalized: string) {
-  return /^(yes|yeah|yep|sure|please|no|nope|no thank you|no thanks|that's all|that is all|thanks|thank you|goodbye|bye|hello|hi)$/.test(
+  return /^(yes|yeah|yep|sure|please|no|nope|no thank you|no thanks|that's all|that is all|thanks|thank you|goodbye|bye|hello|hi|hello hello|hi hi|hello are you there|hi are you there)$/.test(
     normalized,
   );
 }
@@ -1683,6 +1762,9 @@ function buildOpenAIRealtimeStructuredSummary(
     : "No tools were used.";
   const closeSummary = closeCode || closeReason ? `Call close: ${[closeCode, closeReason].filter(Boolean).join(" ")}.` : "";
   const qualitySummary = buildRealtimeQualitySummary(session);
+  const ignoredSummary = session.ignoredTranscriptSamples.length
+    ? `Ignored likely background: ${session.ignoredTranscriptSamples.map((sample) => `${sample.reason ?? "noise"} "${sample.text}"`).join(" / ")}.`
+    : "";
 
   return [
     session.ownerContact
@@ -1693,6 +1775,7 @@ function buildOpenAIRealtimeStructuredSummary(
     agentTurns.length ? `SignalHost replied: ${agentTurns.slice(-2).join(" / ")}.` : "",
     actionSummary,
     qualitySummary,
+    ignoredSummary,
     closeSummary,
   ]
     .filter(Boolean)
