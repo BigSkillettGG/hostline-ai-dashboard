@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  buildSignalHostRecordingPlaybackUrl,
   buildTwilioRecordingMediaUrl,
   buildTwilioRecordingStatusCallbackUrl,
   createTwilioCallRecordingService,
   isTwilioCallSid,
+  validateRecordingPlaybackToken,
 } from "./twilio-recording-service";
 
 describe("Twilio call recording service", () => {
@@ -38,6 +40,27 @@ describe("Twilio call recording service", () => {
     ).toBe("https://api.twilio.com/2010-04-01/Accounts/AC123/Recordings/RE123.mp3");
   });
 
+  it("builds and validates a signed SignalHost recording playback URL", () => {
+    const url = buildSignalHostRecordingPlaybackUrl({
+      publicHttpBaseUrl: "https://voice.signalhost.ai/",
+      recordingSid: "RE123",
+      signingSecret: "secret",
+    });
+
+    expect(url).toMatch(/^https:\/\/voice\.signalhost\.ai\/twilio\/recordings\/RE123\.mp3\?token=.+/);
+    const token = new URL(url ?? "").searchParams.get("token");
+    expect(validateRecordingPlaybackToken({
+      expectedToken: token,
+      recordingSid: "RE123",
+      signingSecret: "secret",
+    })).toBe(true);
+    expect(validateRecordingPlaybackToken({
+      expectedToken: token,
+      recordingSid: "RE456",
+      signingSecret: "secret",
+    })).toBe(false);
+  });
+
   it("starts a live Twilio call recording with status callback metadata", async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ sid: "RE123" }), { status: 201 }));
     const service = createTwilioCallRecordingService(
@@ -59,9 +82,9 @@ describe("Twilio call recording service", () => {
 
     expect(result).toMatchObject({
       recordingSid: "RE123",
-      recordingUrl: "https://api.twilio.com/2010-04-01/Accounts/AC123/Recordings/RE123.mp3",
       started: true,
     });
+    expect(result.recordingUrl).toMatch(/^https:\/\/voice\.signalhost\.ai\/twilio\/recordings\/RE123\.mp3\?token=.+/);
     expect(fetchMock).toHaveBeenCalledWith(
       "https://api.twilio.com/2010-04-01/Accounts/AC123/Calls/CA1234567890abcdef1234567890abcdef/Recordings.json",
       expect.objectContaining({
@@ -96,5 +119,42 @@ describe("Twilio call recording service", () => {
 
     expect(second).toMatchObject({ skipped: true, started: false });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("finds a completed recording for a Twilio call sid", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({
+        recordings: [
+          {
+            duration: "31",
+            media_url: "http://api.twilio.com/2010-04-01/Accounts/AC123/Recordings/RE123",
+            sid: "RE123",
+            status: "completed",
+          },
+        ],
+      }), { status: 200 })
+    );
+    const service = createTwilioCallRecordingService(
+      {
+        PUBLIC_HTTP_BASE_URL: "https://voice.signalhost.ai",
+        TWILIO_ACCOUNT_SID: "AC123",
+        TWILIO_API_BASE_URL: "https://api.twilio.com",
+        TWILIO_AUTH_TOKEN: "secret",
+      },
+      fetchMock as unknown as typeof fetch,
+    );
+
+    await expect(service.findCompletedCallRecording({
+      externalCallSid: "CA1234567890abcdef1234567890abcdef",
+    })).resolves.toMatchObject({
+      durationSeconds: 31,
+      recordingSid: "RE123",
+      status: "completed",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.twilio.com/2010-04-01/Accounts/AC123/Calls/CA1234567890abcdef1234567890abcdef/Recordings.json?PageSize=20",
+      expect.objectContaining({ method: "GET" }),
+    );
   });
 });

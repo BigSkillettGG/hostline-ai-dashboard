@@ -19,7 +19,7 @@ import { demoRestaurantContext, toSpokenRestaurantName, type RestaurantVoiceCont
 import type { RestaurantContextStore } from "./restaurant-context-store";
 import type { ReservationPlatformService } from "./reservation-platform-service";
 import type { TranscriptRole, TranscriptTurn } from "./types";
-import { createTwilioCallRecordingService, type CallRecordingService } from "./twilio-recording-service";
+import { createTwilioCallRecordingService, isTwilioCallSid, type CallRecordingService } from "./twilio-recording-service";
 import type { TrustedContact } from "../../../src/domain/trusted-contacts";
 import { resolveSignalHostOpenAIVoice } from "../../../src/domain/voice-selection";
 
@@ -179,6 +179,7 @@ interface RealtimeQualityMetrics {
 }
 
 interface OpenAIRealtimeSidebandSession {
+  callId: string;
   callRecordId?: string;
   callerPhone?: string;
   completed: boolean;
@@ -196,6 +197,7 @@ interface OpenAIRealtimeSidebandSession {
   openingGreetingCompleted: boolean;
   pendingManualResponse: boolean;
   quality: RealtimeQualityMetrics;
+  recordingBackfilled?: boolean;
   reservationCreatedId?: string;
   reservationConfirmed?: boolean;
   staffCallbackRequested: boolean;
@@ -404,6 +406,7 @@ export function createOpenAIRealtimeSipService(
       startSidebandSocket({
         activeSockets,
         callRecordId,
+        callRecordingService,
         callStore,
         callId,
         callerPhone,
@@ -1036,6 +1039,7 @@ function startSidebandSocket({
   callStore,
   callId,
   callerPhone,
+  callRecordingService,
   context,
   env,
   externalCallId,
@@ -1052,6 +1056,7 @@ function startSidebandSocket({
   callStore?: CallStore;
   callId: string;
   callerPhone?: string;
+  callRecordingService?: CallRecordingService;
   context: RestaurantVoiceContext;
   env: OpenAIRealtimeEnv;
   externalCallId: string;
@@ -1073,6 +1078,7 @@ function startSidebandSocket({
   });
   activeSockets.set(callId, socket);
   const session: OpenAIRealtimeSidebandSession = {
+    callId,
     callRecordId,
     callerPhone,
     completed: false,
@@ -1175,6 +1181,7 @@ function startSidebandSocket({
     clearOpenAIRealtimeManualIdleTimer(session);
     void completeOpenAIRealtimeLoggedCall({
       callStore,
+      callRecordingService,
       closeCode: code,
       closeReason: reason.toString("utf8"),
       env,
@@ -1193,6 +1200,7 @@ function startSidebandSocket({
     clearOpenAIRealtimeManualIdleTimer(session);
     void completeOpenAIRealtimeLoggedCall({
       callStore,
+      callRecordingService,
       closeReason: error.message,
       env,
       session,
@@ -1666,12 +1674,14 @@ function clearOpenAIRealtimeFinishedClose(session: OpenAIRealtimeSidebandSession
 }
 
 async function completeOpenAIRealtimeLoggedCall({
+  callRecordingService,
   callStore,
   closeCode,
   closeReason,
   env,
   session,
 }: {
+  callRecordingService?: CallRecordingService;
   callStore?: CallStore;
   closeCode?: number;
   closeReason?: string;
@@ -1709,10 +1719,78 @@ async function completeOpenAIRealtimeLoggedCall({
       status: classification.status,
       summary,
     });
+    scheduleOpenAIRealtimeRecordingBackfill({
+      callRecordingService,
+      callStore,
+      session,
+    });
   } catch (error) {
     console.error("[openai-realtime] call completion persistence failed", {
       error,
       externalCallId: session.externalCallId,
+    });
+  }
+}
+
+function scheduleOpenAIRealtimeRecordingBackfill({
+  callRecordingService,
+  callStore,
+  session,
+}: {
+  callRecordingService?: CallRecordingService;
+  callStore: CallStore;
+  session: OpenAIRealtimeSidebandSession;
+}) {
+  if (!callRecordingService?.configured || !isTwilioCallSid(session.externalCallId)) return;
+
+  for (const delayMs of [2500, 10000, 30000]) {
+    const timer = setTimeout(() => {
+      if (session.recordingBackfilled) return;
+      void backfillOpenAIRealtimeRecording({
+        callRecordingService,
+        callStore,
+        session,
+      });
+    }, delayMs);
+    timer.unref?.();
+  }
+}
+
+async function backfillOpenAIRealtimeRecording({
+  callRecordingService,
+  callStore,
+  session,
+}: {
+  callRecordingService: CallRecordingService;
+  callStore: CallStore;
+  session: OpenAIRealtimeSidebandSession;
+}) {
+  try {
+    if (session.recordingBackfilled) return;
+    const result = await callRecordingService.findCompletedCallRecording({
+      externalCallSid: session.externalCallId,
+    });
+    if (!result.recordingUrl) return;
+
+    await callStore.attachCallRecording({
+      callId: session.callRecordId,
+      durationSeconds: result.durationSeconds,
+      externalCallSid: session.externalCallId,
+      recordingSid: result.recordingSid,
+      recordingUrl: result.recordingUrl,
+    });
+    session.recordingBackfilled = true;
+    console.info("[openai-realtime] Twilio call recording backfilled", {
+      callId: session.callId,
+      externalCallSid: session.externalCallId,
+      recordingSid: result.recordingSid,
+      recordingStatus: result.status,
+    });
+  } catch (error) {
+    console.warn("[openai-realtime] Twilio call recording backfill failed", {
+      callId: session.callId,
+      error,
+      externalCallSid: session.externalCallId,
     });
   }
 }

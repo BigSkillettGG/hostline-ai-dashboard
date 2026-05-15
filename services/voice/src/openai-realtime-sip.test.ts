@@ -261,6 +261,9 @@ describe("OpenAI Realtime SIP", () => {
         callRecordingService: {
           callbackUrl: "https://voice.signalhost.ai/twilio/recording-status",
           configured: true,
+          async findCompletedCallRecording() {
+            return {};
+          },
           async startCallRecording(input) {
             recordingRequests.push(input);
             return {

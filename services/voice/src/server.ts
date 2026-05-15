@@ -38,7 +38,12 @@ import { createResendInboundEmailService } from "./resend-inbound-email-service"
 import { createTenantProvisioningService, type TenantBootstrapInput } from "./tenant-provisioning";
 import { createTelephonyService } from "./telephony";
 import { releaseExpiredTrialNumbers } from "./trial-number-cleanup";
-import { createTwilioCallRecordingService } from "./twilio-recording-service";
+import {
+  buildSignalHostRecordingPlaybackUrl,
+  buildTwilioRecordingMediaUrl,
+  createTwilioCallRecordingService,
+  validateRecordingPlaybackToken,
+} from "./twilio-recording-service";
 import { demoRestaurantContext } from "./restaurant-context";
 import { generateRestaurantReply } from "./restaurant-agent";
 import { validateTwilioSignature } from "./twilio-signature";
@@ -864,6 +869,17 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
     return;
   }
 
+  const recordingPlaybackMatch = url.pathname.match(/^\/twilio\/recordings\/([^/]+)\.mp3$/);
+  if (req.method === "GET" && recordingPlaybackMatch) {
+    await streamTwilioRecordingPlayback({
+      currentEnv,
+      recordingSid: decodeURIComponent(recordingPlaybackMatch[1]),
+      res,
+      token: url.searchParams.get("token"),
+    });
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/twilio/recording-status") {
     try {
       const rawBody = await readLimitedRequestBody(req, TWILIO_BODY_LIMIT_BYTES);
@@ -885,7 +901,13 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
         return;
       }
 
-      const recordingUrl = normalizeRecordingUrl(firstNonEmpty(params.RecordingUrl, params.recordingUrl));
+      const recordingSid = firstNonEmpty(params.RecordingSid, params.recordingSid);
+      const recordingUrl =
+        buildSignalHostRecordingPlaybackUrl({
+          publicHttpBaseUrl: currentEnv.PUBLIC_HTTP_BASE_URL,
+          recordingSid,
+          signingSecret: currentEnv.TWILIO_AUTH_TOKEN,
+        }) ?? normalizeRecordingUrl(firstNonEmpty(params.RecordingUrl, params.recordingUrl));
       const externalCallSid = firstNonEmpty(
         params.CallSid,
         params.callSid,
@@ -904,7 +926,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
         durationSeconds: parseOptionalSeconds(firstNonEmpty(params.RecordingDuration, params.recordingDuration)),
         externalCallSid,
         providerPayload: params,
-        recordingSid: firstNonEmpty(params.RecordingSid, params.recordingSid),
+        recordingSid,
         recordingUrl,
       });
       sendJson(res, 200, { ok: true });
@@ -1167,7 +1189,7 @@ function isValidTwilioWebhook(req: IncomingMessage, currentEnv: VoiceServiceEnv,
     authToken: currentEnv.TWILIO_AUTH_TOKEN,
     expectedSignature: req.headers["x-twilio-signature"],
     params,
-    url: `${currentEnv.PUBLIC_HTTP_BASE_URL}${req.url ?? ""}`,
+    url: `${currentEnv.PUBLIC_HTTP_BASE_URL.replace(/\/$/, "")}${req.url ?? ""}`,
   });
 }
 
@@ -1178,7 +1200,7 @@ function isValidTwilioUpgrade(req: IncomingMessage, currentEnv: VoiceServiceEnv)
   return validateTwilioSignature({
     authToken: currentEnv.TWILIO_AUTH_TOKEN,
     expectedSignature: req.headers["x-twilio-signature"],
-    url: `${currentEnv.PUBLIC_WS_BASE_URL}${req.url ?? ""}`,
+    url: `${currentEnv.PUBLIC_WS_BASE_URL.replace(/\/$/, "")}${req.url ?? ""}`,
   });
 }
 
@@ -1232,6 +1254,63 @@ function getStableCallSessionKey(params: Record<string, string>, fallback?: stri
 
 function firstNonEmpty(...values: Array<string | undefined | null>) {
   return values.find((value) => value?.trim())?.trim();
+}
+
+async function streamTwilioRecordingPlayback({
+  currentEnv,
+  recordingSid,
+  res,
+  token,
+}: {
+  currentEnv: VoiceServiceEnv;
+  recordingSid: string;
+  res: ServerResponse;
+  token?: string | null;
+}) {
+  if (!/^RE[a-f0-9]{32}$/i.test(recordingSid)) {
+    sendJson(res, 400, { error: "Invalid recording id." });
+    return;
+  }
+  if (!validateRecordingPlaybackToken({
+    expectedToken: token,
+    recordingSid,
+    signingSecret: currentEnv.TWILIO_AUTH_TOKEN,
+  })) {
+    sendJson(res, 401, { error: "Invalid recording token." });
+    return;
+  }
+  if (!currentEnv.TWILIO_ACCOUNT_SID || !currentEnv.TWILIO_AUTH_TOKEN) {
+    sendJson(res, 503, { error: "Twilio credentials are not configured." });
+    return;
+  }
+
+  const recordingUrl = buildTwilioRecordingMediaUrl({
+    accountSid: currentEnv.TWILIO_ACCOUNT_SID,
+    baseUrl: currentEnv.TWILIO_API_BASE_URL,
+    recordingSid,
+  });
+  if (!recordingUrl) {
+    sendJson(res, 404, { error: "Recording not found." });
+    return;
+  }
+
+  const response = await fetch(recordingUrl, {
+    headers: {
+      Authorization: `Basic ${Buffer.from(`${currentEnv.TWILIO_ACCOUNT_SID}:${currentEnv.TWILIO_AUTH_TOKEN}`).toString("base64")}`,
+    },
+  });
+  if (!response.ok) {
+    sendJson(res, response.status === 404 ? 404 : 502, { error: "Recording media is not available yet." });
+    return;
+  }
+
+  const body = Buffer.from(await response.arrayBuffer());
+  res.writeHead(200, {
+    "Cache-Control": "private, max-age=300",
+    "Content-Length": String(body.byteLength),
+    "Content-Type": response.headers.get("content-type") ?? "audio/mpeg",
+  });
+  res.end(body);
 }
 
 function normalizeRecordingUrl(value?: string) {

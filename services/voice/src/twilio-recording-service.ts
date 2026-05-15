@@ -1,3 +1,5 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
+
 import type { VoiceServiceEnv } from "./env";
 
 type TwilioRecordingEnv = Pick<
@@ -26,14 +28,34 @@ export interface StartCallRecordingResult {
   started: boolean;
 }
 
+export interface FindCallRecordingInput {
+  externalCallSid: string;
+}
+
+export interface FindCallRecordingResult {
+  durationSeconds?: number;
+  recordingSid?: string;
+  recordingUrl?: string;
+  skipped?: boolean;
+  status?: string;
+}
+
 export interface CallRecordingService {
   callbackUrl?: string;
   configured: boolean;
+  findCompletedCallRecording(input: FindCallRecordingInput): Promise<FindCallRecordingResult>;
   startCallRecording(input: StartCallRecordingInput): Promise<StartCallRecordingResult>;
 }
 
 interface TwilioRecordingResponse {
+  duration?: string;
+  media_url?: string;
   sid?: string;
+  status?: string;
+}
+
+interface TwilioRecordingListResponse {
+  recordings?: TwilioRecordingResponse[];
 }
 
 export function createTwilioCallRecordingService(
@@ -84,6 +106,36 @@ export function buildTwilioRecordingMediaUrl({
   return `${baseUrl.replace(/\/$/, "")}/2010-04-01/Accounts/${encodeURIComponent(accountSid)}/Recordings/${encodeURIComponent(recordingSid)}.mp3`;
 }
 
+export function buildSignalHostRecordingPlaybackUrl({
+  publicHttpBaseUrl,
+  recordingSid,
+  signingSecret,
+}: {
+  publicHttpBaseUrl?: string;
+  recordingSid?: string;
+  signingSecret?: string;
+}) {
+  if (!publicHttpBaseUrl || !recordingSid || !signingSecret) return undefined;
+  const token = signRecordingPlaybackToken({ recordingSid, signingSecret });
+  return `${publicHttpBaseUrl.replace(/\/$/, "")}/twilio/recordings/${encodeURIComponent(recordingSid)}.mp3?token=${encodeURIComponent(token)}`;
+}
+
+export function validateRecordingPlaybackToken({
+  expectedToken,
+  recordingSid,
+  signingSecret,
+}: {
+  expectedToken?: string | null;
+  recordingSid: string;
+  signingSecret?: string;
+}) {
+  if (!expectedToken || !signingSecret) return false;
+  const computed = signRecordingPlaybackToken({ recordingSid, signingSecret });
+  const expectedBuffer = Buffer.from(expectedToken);
+  const computedBuffer = Buffer.from(computed);
+  return expectedBuffer.length === computedBuffer.length && timingSafeEqual(expectedBuffer, computedBuffer);
+}
+
 class NotConfiguredCallRecordingService implements CallRecordingService {
   callbackUrl?: string;
   configured = false;
@@ -94,6 +146,10 @@ class NotConfiguredCallRecordingService implements CallRecordingService {
 
   async startCallRecording(): Promise<StartCallRecordingResult> {
     return { callbackUrl: this.callbackUrl, skipped: true, started: false };
+  }
+
+  async findCompletedCallRecording(): Promise<FindCallRecordingResult> {
+    return { skipped: true };
   }
 }
 
@@ -168,12 +224,85 @@ class TwilioCallRecordingService implements CallRecordingService {
     return {
       callbackUrl,
       recordingSid: parsed.sid,
-      recordingUrl: buildTwilioRecordingMediaUrl({
-        accountSid: this.accountSid,
-        baseUrl: this.baseUrl,
-        recordingSid: parsed.sid,
-      }),
+      recordingUrl: this.buildRecordingPlaybackUrl(parsed.sid),
       started: true,
     };
   }
+
+  async findCompletedCallRecording(input: FindCallRecordingInput): Promise<FindCallRecordingResult> {
+    const externalCallSid = input.externalCallSid.trim();
+    if (!isTwilioCallSid(externalCallSid)) {
+      return { skipped: true };
+    }
+
+    const response = await this.fetchImpl(
+      `${this.baseUrl}/2010-04-01/Accounts/${encodeURIComponent(this.accountSid)}/Calls/${encodeURIComponent(externalCallSid)}/Recordings.json?PageSize=20`,
+      {
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${this.accountSid}:${this.authToken}`).toString("base64")}`,
+        },
+        method: "GET",
+      },
+    );
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Twilio call recording lookup failed: ${response.status} ${text}`);
+    }
+
+    const text = await response.text();
+    const parsed = text ? JSON.parse(text) as TwilioRecordingListResponse : {};
+    const recordings = parsed.recordings ?? [];
+    const completed = recordings.find((recording) => recording.sid && normalizeRecordingStatus(recording.status) === "completed");
+    const fallback = recordings.find((recording) => recording.sid);
+    const match = completed ?? fallback;
+    if (!match?.sid) {
+      return {};
+    }
+
+    return {
+      durationSeconds: parseRecordingDurationSeconds(match.duration),
+      recordingSid: match.sid,
+      recordingUrl: this.buildRecordingPlaybackUrl(match.sid) ?? normalizeTwilioMediaUrl(match.media_url),
+      status: match.status,
+    };
+  }
+
+  private buildRecordingPlaybackUrl(recordingSid?: string) {
+    return buildSignalHostRecordingPlaybackUrl({
+      publicHttpBaseUrl: this.env.PUBLIC_HTTP_BASE_URL,
+      recordingSid,
+      signingSecret: this.env.TWILIO_AUTH_TOKEN,
+    }) ?? buildTwilioRecordingMediaUrl({
+      accountSid: this.accountSid,
+      baseUrl: this.baseUrl,
+      recordingSid,
+    });
+  }
+}
+
+function signRecordingPlaybackToken({
+  recordingSid,
+  signingSecret,
+}: {
+  recordingSid: string;
+  signingSecret: string;
+}) {
+  return createHmac("sha256", signingSecret).update(recordingSid, "utf8").digest("base64url");
+}
+
+function normalizeRecordingStatus(value?: string) {
+  return value?.trim().toLowerCase();
+}
+
+function parseRecordingDurationSeconds(value?: string) {
+  if (!value) return undefined;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function normalizeTwilioMediaUrl(value?: string) {
+  if (!value?.trim()) return undefined;
+  const secure = value.trim().replace(/^http:\/\//i, "https://");
+  return /\.(?:mp3|wav)$/i.test(secure) ? secure : `${secure}.mp3`;
 }
