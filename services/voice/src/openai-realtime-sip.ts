@@ -1161,6 +1161,11 @@ function startSidebandSocket({
 
     if (eventType === "response.done") {
       handleOpenAIRealtimeResponseDone({ callId, session, socket });
+      return;
+    }
+
+    if (eventType === "input_audio_buffer.speech_stopped") {
+      scheduleOpenAIRealtimeManualIdlePrompt({ callId, session, socket });
     }
   });
 
@@ -1249,6 +1254,7 @@ function createRealtimeQualityMetrics(): RealtimeQualityMetrics {
 function recordOpenAIRealtimeQualityEvent(session: OpenAIRealtimeSidebandSession, eventType: string, callId: string) {
   const now = Date.now();
   if (eventType === "input_audio_buffer.speech_started") {
+    clearOpenAIRealtimeManualIdleTimer(session);
     session.quality.speechStartCount += 1;
     if (session.quality.activeResponseStartedAt) {
       session.quality.speechStartedDuringResponseCount += 1;
@@ -1311,6 +1317,7 @@ function handleOpenAIRealtimeTranscriptTurn({
     if (!decision.accept) {
       session.quality.ignoredNoiseTranscriptCount += 1;
       recordIgnoredRealtimeTranscriptSample(session, turn.text, decision.reason);
+      discardIgnoredRealtimeConversationItem({ session, socket, turn });
       console.info("[openai-realtime] ignored likely background transcript", {
         callId,
         reason: decision.reason,
@@ -1404,7 +1411,7 @@ function scheduleOpenAIRealtimeManualIdlePrompt({
   clearOpenAIRealtimeManualIdleTimer(session);
   session.manualIdleTimer = setTimeout(() => {
     if (session.finishRequested || session.quality.activeResponseStartedAt || session.pendingManualResponse) return;
-    const isFinalPrompt = session.manualIdlePromptCount >= 1;
+    const isFinalPrompt = session.manualIdlePromptCount >= 3;
     session.manualIdlePromptCount += 1;
     if (isFinalPrompt) {
       session.finishRequested = true;
@@ -1418,8 +1425,8 @@ function scheduleOpenAIRealtimeManualIdlePrompt({
     sendRealtimeEvent(socket, {
       response: {
         instructions: isFinalPrompt
-          ? "The caller has been silent or the connection is unclear. Do not restart the greeting. Say warmly: \"I'm still not hearing you clearly, so I'll let you go for now. Please call back anytime. Thanks for calling. Goodbye.\""
-          : "The caller may be silent or checking the connection. Do not restart the greeting. Say one short, warm line like: \"I'm still here. What can I help with?\"",
+          ? "The caller has not responded after several gentle check-ins. Do not answer or refer to any unclear background phrase. Do not restart the greeting. Say exactly and only: \"I still can't hear you, so I'll let you go for now. Please call back anytime. Thanks for calling. Goodbye.\""
+          : "The caller may be silent, thinking, or checking the connection. Do not answer or refer to any unclear background phrase. Do not restart the greeting. Say exactly and only: \"I'm still here. Take your time. What else can I help with?\"",
       },
       type: "response.create",
     });
@@ -1468,17 +1475,34 @@ function shouldAcceptRealtimeCallerTranscript(
   const clearIntent = hasLikelyCallerIntent(normalized);
   const directedSpeech = hasLikelyDirectedCallerSpeech(normalized);
   const shortConfirmation = isLikelyShortCallerConfirmation(normalized);
+  const answerToAgentQuestion = isLikelyAnswerToRecentAgentQuestion(session, normalized);
 
   if (greetingPhase || activeResponse) {
     if (strongIntent || directedSpeech || shortConfirmation) return { accept: true };
     return { accept: false, reason: greetingPhase ? "greeting_noise" : "response_noise" };
   }
 
-  if (clearIntent || directedSpeech || shortConfirmation) return { accept: true };
+  if (clearIntent || directedSpeech || shortConfirmation || answerToAgentQuestion) return { accept: true };
   if (wordCount >= 4 && /\b(i|we|you|your|can|could|would|need|want|looking|calling|trying)\b/.test(normalized)) {
     return { accept: true };
   }
   return { accept: false, reason: "no_caller_intent" };
+}
+
+function discardIgnoredRealtimeConversationItem({
+  session,
+  socket,
+  turn,
+}: {
+  session: OpenAIRealtimeSidebandSession;
+  socket: RealtimeSocket;
+  turn: RealtimeTranscriptTurn;
+}) {
+  if (!turn.itemId || session.finishRequested) return;
+  sendRealtimeEvent(socket, {
+    item_id: turn.itemId,
+    type: "conversation.item.delete",
+  });
 }
 
 function normalizeRealtimeCallerText(text: string) {
@@ -1516,6 +1540,24 @@ function hasLikelyDirectedCallerSpeech(normalized: string) {
     /\b(what|when|where|why|how|who|do you|are you|can i|can you|could i|could you|would you|i need|i want|i'd like|i would like|i'm calling|i am calling|i was wondering|let me|get me|looking for|are you there|can you hear me|i'm here|i am here)\b/.test(
       normalized,
     ) || /\?$/.test(normalized)
+  );
+}
+
+function isLikelyAnswerToRecentAgentQuestion(session: OpenAIRealtimeSidebandSession, normalized: string) {
+  if (isLikelyBackgroundMediaFragment(normalized)) return false;
+  const lastAgentTurn = session.transcript.filter((turn) => turn.role === "agent").at(-1)?.text ?? "";
+  const lastAgent = normalizeRealtimeCallerText(lastAgentTurn);
+  if (!lastAgent || !lastAgentTurn.includes("?")) return false;
+
+  const wordCount = normalized.split(/\s+/).filter(Boolean).length;
+  if (wordCount <= 8) return true;
+
+  return /\b(my|name|phone|number|address|order|party|people|tonight|tomorrow|today|please|sure|yes|no)\b/.test(normalized);
+}
+
+function isLikelyBackgroundMediaFragment(normalized: string) {
+  return /\b(coming up next|after the break|sponsored by|watch now|streaming|subscribe|tonight on|commercial free|weather forecast)\b/.test(
+    normalized,
   );
 }
 
@@ -3086,7 +3128,7 @@ export function resolveOpenAIRealtimeServerVadPrefixPaddingMs(env: OpenAIRealtim
 
 export function resolveOpenAIRealtimeIdleTimeoutMs(env: OpenAIRealtimeEnv) {
   const idleTimeoutMs = env.OPENAI_REALTIME_IDLE_TIMEOUT_MS;
-  return Number.isFinite(idleTimeoutMs) ? Math.min(30000, Math.max(5000, Math.round(idleTimeoutMs))) : 12000;
+  return Number.isFinite(idleTimeoutMs) ? Math.min(45000, Math.max(15000, Math.round(idleTimeoutMs))) : 18000;
 }
 
 export function resolveOpenAIRealtimeInterruptResponse(env: OpenAIRealtimeEnv) {
