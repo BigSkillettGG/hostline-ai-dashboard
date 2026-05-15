@@ -869,6 +869,42 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
     return;
   }
 
+  if (req.method === "GET" && url.pathname === "/twilio/recording-diagnostics") {
+    const locationId = url.searchParams.get("locationId") ?? currentEnv.SUPABASE_DEMO_LOCATION_ID;
+    const authorization = await authorizeVoiceAdminRequest({ currentEnv, locationId, req });
+    if (!authorization.authorized) {
+      sendJson(res, authorization.status, { error: authorization.reason ?? "Unauthorized" });
+      return;
+    }
+
+    const externalCallSid = url.searchParams.get("callSid") ?? undefined;
+    if (!externalCallSid) {
+      sendJson(res, 400, { error: "callSid is required." });
+      return;
+    }
+
+    try {
+      const recording = await callRecordingService.findCompletedCallRecording({ externalCallSid });
+      if (recording.recordingUrl) {
+        await callStore.attachCallRecording({
+          durationSeconds: recording.durationSeconds,
+          externalCallSid,
+          recordingSid: recording.recordingSid,
+          recordingUrl: recording.recordingUrl,
+        });
+      }
+      sendJson(res, 200, {
+        attached: Boolean(recording.recordingUrl),
+        callRecordingConfigured: callRecordingService.configured,
+        externalCallSid,
+        recording,
+      });
+    } catch (error) {
+      sendCaughtError(res, error, "Recording diagnostics failed");
+    }
+    return;
+  }
+
   const recordingPlaybackMatch = url.pathname.match(/^\/twilio\/recordings\/([^/]+)\.mp3$/);
   if (req.method === "GET" && recordingPlaybackMatch) {
     await streamTwilioRecordingPlayback({
