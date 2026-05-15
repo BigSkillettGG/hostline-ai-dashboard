@@ -393,7 +393,6 @@ class SupabaseMessageThreadStore implements MessageThreadStore {
         "phone_numbers",
         [
           `phone_number=eq.${encodeURIComponent(phone)}`,
-          "status=in.(active,trial)",
           "select=location_id",
           "limit=5",
         ].join("&"),

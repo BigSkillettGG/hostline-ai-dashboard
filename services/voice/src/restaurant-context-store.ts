@@ -37,6 +37,7 @@ const RESTAURANT_CONTEXT_CACHE_TTL_MS = 5 * 60 * 1000;
 
 export interface RestaurantContextStore {
   getContext(locationId?: string): Promise<RestaurantVoiceContext>;
+  resolveLocationIdByPhoneNumber?(phoneNumber?: string): Promise<string | undefined>;
 }
 
 export interface SupabaseLocationRow {
@@ -317,6 +318,10 @@ class DemoRestaurantContextStore implements RestaurantContextStore {
   async getContext() {
     return demoRestaurantContext;
   }
+
+  async resolveLocationIdByPhoneNumber() {
+    return undefined;
+  }
 }
 
 interface CachedRestaurantContextEntry {
@@ -361,6 +366,10 @@ class CachedRestaurantContextStore implements RestaurantContextStore {
     });
 
     return promise;
+  }
+
+  async resolveLocationIdByPhoneNumber(phoneNumber?: string) {
+    return this.inner.resolveLocationIdByPhoneNumber?.(phoneNumber);
   }
 }
 
@@ -454,6 +463,34 @@ class SupabaseRestaurantContextStore implements RestaurantContextStore {
     }
   }
 
+  async resolveLocationIdByPhoneNumber(phoneNumber?: string) {
+    const normalizedPhone = normalizePhoneForLookup(phoneNumber);
+    if (!normalizedPhone) return undefined;
+
+    try {
+      const [phoneNumberRows, locationRows] = await Promise.all([
+        this.request<Array<{ location_id: string | null }>>(
+          "phone_numbers",
+          `phone_number=eq.${encodeURIComponent(normalizedPhone)}&released_at=is.null&select=location_id&limit=5`,
+        ).catch(() =>
+          this.request<Array<{ location_id: string | null }>>(
+            "phone_numbers",
+            `phone_number=eq.${encodeURIComponent(normalizedPhone)}&select=location_id&limit=5`,
+          ).catch(() => []),
+        ),
+        this.request<Array<{ id: string }>>(
+          "locations",
+          `or=(ai_host_phone.eq.${encodeURIComponent(normalizedPhone)},phone.eq.${encodeURIComponent(normalizedPhone)})&select=id&limit=5`,
+        ).catch(() => []),
+      ]);
+
+      return phoneNumberRows.find((row) => row.location_id)?.location_id ?? locationRows[0]?.id;
+    } catch (error) {
+      console.warn("[restaurant-context] phone-to-location lookup failed", { error, phoneNumber: normalizedPhone });
+      return undefined;
+    }
+  }
+
   private async request<T>(table: string, query: string) {
     const response = await fetch(`${this.restUrl}/${table}?${query}`, {
       headers: buildSupabaseServiceHeaders(this.key),
@@ -476,6 +513,19 @@ function normalizeDraft(value: unknown): OnboardingDraft {
 
 function stringValue(value: OnboardingDraftValue) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function normalizePhoneForLookup(value?: string) {
+  if (!value) return undefined;
+  const match = value.match(/\+?[1-9][\d\s().-]{6,}\d/);
+  if (!match) return undefined;
+
+  const raw = match[0].trim();
+  const digits = raw.replace(/\D/g, "");
+  if (raw.startsWith("+")) return `+${digits}`;
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length > 10 && digits.length <= 15) return `+${digits}`;
+  return undefined;
 }
 
 function normalizeBusinessMode(value: string | null | undefined): BusinessMode | undefined {

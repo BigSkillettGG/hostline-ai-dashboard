@@ -332,9 +332,11 @@ export function createOpenAIRealtimeSipService(
         return { body: { error: "OpenAI realtime webhook did not include data.call_id." }, status: 400 };
       }
 
+      const destinationPhone = extractOpenAIRealtimeDestinationPhone(event);
       const resolvedLocationId =
         locationId ??
         extractLocationId(event) ??
+        (await restaurantContextStore.resolveLocationIdByPhoneNumber?.(destinationPhone)) ??
         env.SUPABASE_DEMO_LOCATION_ID ??
         "demo-location";
       const context = await restaurantContextStore.getContext(resolvedLocationId);
@@ -821,6 +823,11 @@ export function extractOpenAIRealtimeExternalCallId(event: OpenAIRealtimeIncomin
     "twilio-call-sid",
     "x-call-sid",
   ]);
+}
+
+export function extractOpenAIRealtimeDestinationPhone(event: OpenAIRealtimeIncomingEvent) {
+  return normalizeCallerPhone(stringValue(event.data?.to)) ??
+    normalizeCallerPhone(extractDestinationPhoneFromSipHeaders(event.data?.sip_headers));
 }
 
 export function extractOpenAIRealtimeSipCallId(event: OpenAIRealtimeIncomingEvent) {
@@ -3289,6 +3296,22 @@ function buildStaffCallbackSummary(kind: StaffAlertKind, callerName: string | un
 
 function extractCallerPhoneFromSipHeaders(headers: Array<{ name?: unknown; value?: unknown }> | undefined) {
   const priority = ["p-asserted-identity", "remote-party-id", "from", "x-twilio-from", "contact"];
+  for (const name of priority) {
+    const value = extractSipHeader(headers, [name]);
+    if (value) return value;
+  }
+  return undefined;
+}
+
+function extractDestinationPhoneFromSipHeaders(headers: Array<{ name?: unknown; value?: unknown }> | undefined) {
+  const priority = [
+    "diversion",
+    "x-twilio-to",
+    "x-original-to",
+    "p-called-party-id",
+    "called-party-id",
+    "to",
+  ];
   for (const name of priority) {
     const value = extractSipHeader(headers, [name]);
     if (value) return value;

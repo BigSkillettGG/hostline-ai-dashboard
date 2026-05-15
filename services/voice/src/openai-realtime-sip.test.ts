@@ -16,6 +16,7 @@ import {
   createOpenAIRealtimeSipService,
   extractOpenAIRealtimeCallId,
   extractOpenAIRealtimeCallerPhone,
+  extractOpenAIRealtimeDestinationPhone,
   extractOpenAIRealtimeExternalCallId,
   extractOpenAIRealtimeSipCallId,
   extractOpenAIRealtimeTranscriptTurn,
@@ -1069,6 +1070,92 @@ describe("OpenAI Realtime SIP", () => {
         },
       }),
     ).toBe("+14155550124");
+  });
+
+  it("extracts the called Twilio number from SIP destination headers", () => {
+    expect(
+      extractOpenAIRealtimeDestinationPhone({
+        data: {
+          to: "sip:proj_123@sip.api.openai.com;transport=tls",
+          sip_headers: [
+            { name: "To", value: "<sip:proj_123@sip.api.openai.com;transport=tls>" },
+            { name: "Diversion", value: "<sip:+17814233898@twilio.com>;reason=unconditional" },
+          ],
+        },
+      }),
+    ).toBe("+17814233898");
+  });
+
+  it("uses the dialed phone number to select the location before accepting SIP calls", async () => {
+    const socket = createFakeRealtimeSocket();
+    const requestedLocations: Array<string | undefined> = [];
+    const startedCalls: unknown[] = [];
+    const service = createOpenAIRealtimeSipService(
+      {
+        ...baseEnv,
+        SUPABASE_DEMO_LOCATION_ID: "fallback_location",
+      },
+      {
+        async getContext(locationId) {
+          requestedLocations.push(locationId);
+          return {
+            ...demoRestaurantContext,
+            restaurantName: locationId === "hvac_location" ? "Summit Air" : "Olive & Ember",
+          };
+        },
+        async resolveLocationIdByPhoneNumber(phoneNumber) {
+          return phoneNumber === "+16175550181" ? "hvac_location" : undefined;
+        },
+      },
+      {
+        callStore: {
+          async addTranscriptTurn() {},
+          async attachCallRecording() {},
+          async completeCall() {},
+          async createCustomerRequest() {
+            return {};
+          },
+          async createStaffReviewOrder() {
+            return {};
+          },
+          async createStaffReviewReservation() {
+            return {};
+          },
+          async createStaffTask() {
+            return {};
+          },
+          async startCall() {
+            return {};
+          },
+          async startRealtimeCall(input) {
+            startedCalls.push(input);
+            return { callId: "call_uuid" };
+          },
+        },
+        fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+        websocketFactory: () => socket as never,
+      },
+    );
+
+    const result = await service.handleIncomingWebhook({
+      headers: {},
+      rawBody: JSON.stringify({
+        data: {
+          call_id: "rtc_hvac",
+          sip_headers: [
+            { name: "From", value: "sip:+14155550123@twilio.com" },
+            { name: "Diversion", value: "<sip:+16175550181@twilio.com>;reason=unconditional" },
+          ],
+        },
+        type: "realtime.call.incoming",
+      }),
+    });
+
+    expect(result.status).toBe(200);
+    expect(requestedLocations).toEqual(["hvac_location"]);
+    expect(startedCalls[0]).toMatchObject({
+      locationId: "hvac_location",
+    });
   });
 
   it("extracts provider call ids and transcript turns from realtime events", () => {

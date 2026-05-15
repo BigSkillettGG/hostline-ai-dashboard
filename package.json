@@ -11,6 +11,7 @@
     "build:dev": "vite build --mode development",
     "build:voice": "node scripts/build-voice.mjs",
     "check:voice": "node scripts/check-voice-deployment.mjs",
+    "check:demos": "node scripts/check-demo-verticals.mjs",
     "lint": "eslint .",
     "marketing:audio": "node scripts/generate-vera-audio.mjs",
     "preview": "vite preview",
