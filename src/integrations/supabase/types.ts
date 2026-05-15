@@ -180,15 +180,23 @@ export type Database = {
           duration_seconds: number
           external_call_sid: string | null
           external_session_id: string | null
+          follow_up_needed: boolean
           id: string
           intent: Database["public"]["Enums"]["call_intent"]
+          knowledge_gap: boolean
           location_id: string
           outcome: string
+          owner_report_bucket: string
+          recommended_action: string | null
           recording_url: string | null
           started_at: string
           status: Database["public"]["Enums"]["call_status"]
           summary: string | null
+          tags: Json
           twilio_payload: Json
+          urgency: string
+          value_tier: string
+          workflow_status: string
         }
         Insert: {
           caller_name?: string | null
@@ -198,15 +206,23 @@ export type Database = {
           duration_seconds?: number
           external_call_sid?: string | null
           external_session_id?: string | null
+          follow_up_needed?: boolean
           id?: string
           intent?: Database["public"]["Enums"]["call_intent"]
+          knowledge_gap?: boolean
           location_id: string
           outcome?: string
+          owner_report_bucket?: string
+          recommended_action?: string | null
           recording_url?: string | null
           started_at?: string
           status?: Database["public"]["Enums"]["call_status"]
           summary?: string | null
+          tags?: Json
           twilio_payload?: Json
+          urgency?: string
+          value_tier?: string
+          workflow_status?: string
         }
         Update: {
           caller_name?: string | null
@@ -216,15 +232,23 @@ export type Database = {
           duration_seconds?: number
           external_call_sid?: string | null
           external_session_id?: string | null
+          follow_up_needed?: boolean
           id?: string
           intent?: Database["public"]["Enums"]["call_intent"]
+          knowledge_gap?: boolean
           location_id?: string
           outcome?: string
+          owner_report_bucket?: string
+          recommended_action?: string | null
           recording_url?: string | null
           started_at?: string
           status?: Database["public"]["Enums"]["call_status"]
           summary?: string | null
+          tags?: Json
           twilio_payload?: Json
+          urgency?: string
+          value_tier?: string
+          workflow_status?: string
         }
         Relationships: [
           {
@@ -577,6 +601,139 @@ export type Database = {
           },
         ]
       }
+      message_events: {
+        Row: {
+          body: string
+          created_at: string
+          direction: string
+          from_phone: string
+          id: string
+          provider: string
+          provider_message_sid: string | null
+          raw_payload: Json
+          status: string
+          thread_id: string | null
+          to_phone: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          direction: string
+          from_phone: string
+          id?: string
+          provider?: string
+          provider_message_sid?: string | null
+          raw_payload?: Json
+          status?: string
+          thread_id?: string | null
+          to_phone: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          direction?: string
+          from_phone?: string
+          id?: string
+          provider?: string
+          provider_message_sid?: string | null
+          raw_payload?: Json
+          status?: string
+          thread_id?: string | null
+          to_phone?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_events_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "message_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      message_threads: {
+        Row: {
+          created_at: string
+          customer_phone: string
+          disambiguation_state: Json
+          expires_at: string
+          id: string
+          last_message_at: string
+          location_id: string
+          related_call_id: string | null
+          related_order_id: string | null
+          related_reservation_id: string | null
+          restaurant_name_snapshot: string | null
+          signalhost_phone: string
+          status: string
+          thread_type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          customer_phone: string
+          disambiguation_state?: Json
+          expires_at?: string
+          id?: string
+          last_message_at?: string
+          location_id: string
+          related_call_id?: string | null
+          related_order_id?: string | null
+          related_reservation_id?: string | null
+          restaurant_name_snapshot?: string | null
+          signalhost_phone: string
+          status?: string
+          thread_type?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          customer_phone?: string
+          disambiguation_state?: Json
+          expires_at?: string
+          id?: string
+          last_message_at?: string
+          location_id?: string
+          related_call_id?: string | null
+          related_order_id?: string | null
+          related_reservation_id?: string | null
+          restaurant_name_snapshot?: string | null
+          signalhost_phone?: string
+          status?: string
+          thread_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_threads_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_threads_related_call_id_fkey"
+            columns: ["related_call_id"]
+            isOneToOne: false
+            referencedRelation: "calls"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_threads_related_order_id_fkey"
+            columns: ["related_order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_threads_related_reservation_id_fkey"
+            columns: ["related_reservation_id"]
+            isOneToOne: false
+            referencedRelation: "reservations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       onboarding_profiles: {
         Row: {
           completed_required: number
@@ -797,8 +954,15 @@ export type Database = {
           phone_number: string
           provider: string
           provider_sid: string | null
+          provisioning_source: string
+          release_reason: string | null
+          released_at: string | null
           restaurant_main_line: string | null
+          sms_webhook_url: string | null
           status: string
+          trial_ends_at: string | null
+          trial_grace_ends_at: string | null
+          trial_started_at: string | null
           updated_at: string
           verification_results: Json
           voice_webhook_url: string | null
@@ -814,8 +978,15 @@ export type Database = {
           phone_number: string
           provider?: string
           provider_sid?: string | null
+          provisioning_source?: string
+          release_reason?: string | null
+          released_at?: string | null
           restaurant_main_line?: string | null
+          sms_webhook_url?: string | null
           status?: string
+          trial_ends_at?: string | null
+          trial_grace_ends_at?: string | null
+          trial_started_at?: string | null
           updated_at?: string
           verification_results?: Json
           voice_webhook_url?: string | null
@@ -831,8 +1002,15 @@ export type Database = {
           phone_number?: string
           provider?: string
           provider_sid?: string | null
+          provisioning_source?: string
+          release_reason?: string | null
+          released_at?: string | null
           restaurant_main_line?: string | null
+          sms_webhook_url?: string | null
           status?: string
+          trial_ends_at?: string | null
+          trial_grace_ends_at?: string | null
+          trial_started_at?: string | null
           updated_at?: string
           verification_results?: Json
           voice_webhook_url?: string | null
@@ -1240,6 +1418,10 @@ export type Database = {
       }
       menu_category_location_id: {
         Args: { target_category_id: string }
+        Returns: string
+      }
+      message_thread_location_id: {
+        Args: { target_thread_id: string }
         Returns: string
       }
       order_location_id: { Args: { target_order_id: string }; Returns: string }
