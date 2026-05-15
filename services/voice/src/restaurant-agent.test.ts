@@ -41,6 +41,17 @@ describe("restaurant fallback replies", () => {
     expect(instructions).toContain("Knowledge sections: Private events");
   });
 
+  it("grounds restaurant menu availability in configured menu items", () => {
+    const instructions = buildRestaurantInstructions(demoRestaurantContext);
+
+    expect(instructions).toContain("Configured menu items");
+    expect(instructions).toContain("Meatballs $13.00");
+    expect(instructions).toContain("Margherita Pizza $18.00");
+    expect(instructions).toContain("Menu availability guardrail");
+    expect(instructions).toContain("Never say an item is unavailable or not on the menu");
+    expect(instructions).toContain("If the caller asks for a broad category like pizza");
+  });
+
   it("coaches the model for noisy calls and rude callers", () => {
     const instructions = buildRestaurantInstructions(demoRestaurantContext);
     expect(instructions).toContain("noisy phone audio");

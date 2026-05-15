@@ -124,6 +124,8 @@ describe("OpenAI Realtime SIP", () => {
     expect(payload.instructions).toContain("substitutions or off-menu requests");
     expect(payload.instructions).toContain("Configured business links");
     expect(payload.instructions).toContain("Order operating mode");
+    expect(payload.instructions).toContain("Margherita Pizza $18.00");
+    expect(payload.instructions).toContain("For direct menu availability or orderability questions");
     expect(payload.instructions).toContain("create_reservation_request");
     expect(payload.instructions).toContain("Noisy-room behavior");
     expect(payload.instructions).toContain("Echo guardrail");
@@ -1537,6 +1539,17 @@ describe("OpenAI Realtime SIP", () => {
     expect(JSON.stringify(result)).toContain("specials");
     expect(JSON.stringify(result)).toContain("Margherita pizza");
     expect(JSON.stringify(result)).toContain("substitutions");
+  });
+
+  it("returns menu item matches for direct item availability lookups", () => {
+    const pizza = lookupRestaurantContext(demoRestaurantContext, "Do you have pizza?");
+    const meatballs = lookupRestaurantContext(demoRestaurantContext, "Can I get meatballs?");
+
+    expect(JSON.stringify(pizza)).toContain("Margherita Pizza");
+    expect(JSON.stringify(pizza)).toContain("Diavola Pizza");
+    expect(JSON.stringify(pizza)).toContain("matchedOfferingItems");
+    expect(JSON.stringify(meatballs)).toContain("Meatballs");
+    expect(JSON.stringify(meatballs)).toContain("$13.00");
   });
 
   it("records staff callback requests instead of pretending to transfer live calls", async () => {

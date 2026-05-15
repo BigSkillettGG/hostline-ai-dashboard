@@ -653,6 +653,9 @@ export function buildOpenAIRealtimeInstructions(
     profile.isRestaurant
       ? `Use the ${contextLookupTool} tool for specials, hours, parking, directions, menu, reservation policy, pickup timing, payment, allergies, delivery drivers, lost items, complaints, or anything policy-like.`
       : `Use the ${contextLookupTool} tool for hours, service area, directions, ${profile.offeringNoun}, ${profile.appointmentNoun} policy, quote policy, payment, safety, lost items, complaints, or anything policy-like.`,
+    profile.isRestaurant
+      ? `For direct menu availability or orderability questions like "do you have pizza" or "can I get meatballs," first check the configured menu items in your instructions. If uncertain, call ${contextLookupTool} with the item or category before saying no. Specials are not the full menu.`
+      : `For direct service availability questions, first check the configured services in your instructions. If uncertain, call ${contextLookupTool} with the service or category before saying no.`,
     "After answering any normal question or completing any task, ask a short loop-closing question such as 'Can I help you with anything else?' unless the caller has already clearly said goodbye.",
     "Never end the call immediately after answering a question. The call should only close after the caller indicates they are done.",
     "If the caller says no, no thanks, that's all, that's it, I'm good, or similar after your anything-else question, call finish_call with a short closing line like 'Thanks for calling. Goodbye.' Do not ask another question.",
@@ -912,6 +915,7 @@ export function extractOpenAIRealtimeTranscriptTurn(event: unknown): RealtimeTra
 export function lookupBusinessContext(context: RestaurantVoiceContext, rawTopic: unknown) {
   const profile = getRuntimeBusinessProfile(context);
   const topic = String(rawTopic ?? "").toLowerCase();
+  const offeringMatches = findOfferingMatches(context, topic);
   const policyMatches = Object.entries(context.policies)
     .filter(([key]) => !topic || key.toLowerCase().includes(topic) || topic.includes(key.toLowerCase()))
     .slice(0, 4);
@@ -932,19 +936,16 @@ export function lookupBusinessContext(context: RestaurantVoiceContext, rawTopic:
     topic.includes("quote") ||
     topic.includes("estimate") ||
     topic.includes("repair") ||
-    topic.includes("inspection")
+    topic.includes("inspection") ||
+    offeringMatches.length > 0
   ) {
     return {
       businessName: context.restaurantName,
       businessType: profile.businessType,
       currentBusinessTime: buildRestaurantLocalTimeContext(context),
+      matchedOfferingItems: offeringMatches.slice(0, 10).map(formatOfferingLookupItem),
       offeringHighlights: context.menuHighlights,
-      offeringItems: context.menuItems.slice(0, 30).map((item) => ({
-        aliases: item.aliases,
-        modifiers: item.modifiers,
-        name: item.name,
-        price: formatPrice(item.priceCents),
-      })),
+      offeringItems: context.menuItems.slice(0, 30).map(formatOfferingLookupItem),
       policies: profile.isRestaurant
         ? pickPolicies(context, ["menu", "substitutions", "specials", "pickup", "payment", "allergies"])
         : pickPolicies(context, ["menu", "substitutions", "specials", "pickup", "payment", "allergies", "hours", "location", "reservations", "waitlist"]),
@@ -3150,6 +3151,45 @@ function textMatchesTopic(text: string, topic: string) {
     .split(/\s+/)
     .filter((word) => word.length > 2)
     .some((word) => normalizedText.includes(word));
+}
+
+function findOfferingMatches(context: RestaurantVoiceContext, topic: string) {
+  const normalizedTopic = normalizeLookupText(topic);
+  if (!normalizedTopic) return [];
+
+  return context.menuItems.filter((item) => {
+    const terms = [item.name, ...(item.aliases ?? []), ...(item.modifiers ?? [])];
+    return terms.some((term) => offeringTermMatchesTopic(term, normalizedTopic));
+  });
+}
+
+function offeringTermMatchesTopic(term: string, normalizedTopic: string) {
+  const normalizedTerm = normalizeLookupText(term);
+  if (!normalizedTerm) return false;
+  if (normalizedTopic.includes(normalizedTerm) || normalizedTerm.includes(normalizedTopic)) return true;
+
+  const topicWords = new Set(normalizedTopic.split(/\s+/).filter((word) => word.length > 2));
+  return normalizedTerm
+    .split(/\s+/)
+    .filter((word) => word.length > 2)
+    .some((word) => topicWords.has(word));
+}
+
+function normalizeLookupText(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function formatOfferingLookupItem(item: RestaurantVoiceContext["menuItems"][number]) {
+  return {
+    aliases: item.aliases ?? [],
+    modifiers: item.modifiers ?? [],
+    name: item.name,
+    price: formatPrice(item.priceCents),
+  };
 }
 
 function formatPrice(priceCents: number) {

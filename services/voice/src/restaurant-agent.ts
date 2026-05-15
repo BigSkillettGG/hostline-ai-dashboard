@@ -181,6 +181,7 @@ export function buildRestaurantInstructions(context: RestaurantVoiceContext) {
     .join(" | ");
   const behaviorTuningLines = formatBehaviorTuningNotes(context.behaviorTuningNotes);
   const liveContextLines = formatBusinessLiveContext(context);
+  const offeringGroundingLine = formatOfferingGrounding(context);
 
   return [
     `You are ${context.hostName}, the virtual host for ${context.restaurantName}.`,
@@ -224,6 +225,10 @@ export function buildRestaurantInstructions(context: RestaurantVoiceContext) {
     businessLabels.escalationLine,
     businessLabels.manualBookingLine,
     `${businessLabels.highlightsLabel}: ${context.menuHighlights.join(", ")}.`,
+    offeringGroundingLine,
+    profile.isRestaurant
+      ? "Menu availability guardrail: the configured menu items are the source of truth unless a live update overrides them. Never say an item is unavailable or not on the menu until you have checked the configured menu items or the lookup_restaurant_context tool. If the caller asks for a broad category like pizza, list the matching menu items instead of saying no."
+      : "Offering availability guardrail: the configured service and offering items are the source of truth unless a live update overrides them. Never say a service is unavailable until you have checked the configured offerings or the lookup_business_context tool.",
     faqLines && `FAQs: ${faqLines}`,
     knowledgeLines && `Knowledge sections: ${knowledgeLines}`,
     `Policies: ${Object.entries(context.policies)
@@ -232,6 +237,28 @@ export function buildRestaurantInstructions(context: RestaurantVoiceContext) {
   ]
     .filter((line): line is string => Boolean(line))
     .join("\n");
+}
+
+function formatOfferingGrounding(context: RestaurantVoiceContext) {
+  const profile = getRuntimeBusinessProfile(context);
+  const items = context.menuItems.slice(0, 40).map((item) => {
+    const aliases = item.aliases ?? [];
+    const modifiers = item.modifiers ?? [];
+    const price = item.priceCents > 0 ? ` ${formatDollarPrice(item.priceCents)}` : "";
+    const aliasText = aliases.length ? ` aliases: ${aliases.slice(0, 4).join(", ")}` : "";
+    const modifierText = modifiers.length ? ` modifiers: ${modifiers.slice(0, 4).join(", ")}` : "";
+    return `${item.name}${price}${aliasText}${modifierText}`;
+  });
+
+  if (!items.length) return "";
+
+  const more = context.menuItems.length > items.length ? `; plus ${context.menuItems.length - items.length} more configured items` : "";
+  const label = profile.isRestaurant ? "Configured menu items" : "Configured service and offering items";
+  return `${label}: ${items.join(" | ")}${more}.`;
+}
+
+function formatDollarPrice(priceCents: number) {
+  return `$${(priceCents / 100).toFixed(2)}`;
 }
 
 function formatBehaviorTuningNotes(notes: RestaurantVoiceContext["behaviorTuningNotes"]) {
