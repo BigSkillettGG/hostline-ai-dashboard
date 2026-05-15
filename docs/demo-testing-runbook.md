@@ -73,9 +73,25 @@ To make a vertical callable, provision a real Twilio number for that location. T
 - `public.phone_numbers.phone_number`
 - `public.locations.ai_host_phone`
 
-The voice service now reads the dialed Twilio number from OpenAI/Twilio SIP headers, then picks the matching `location_id` before loading knowledge. That means multiple demo numbers can share the same OpenAI SIP trunk.
+Set `TWILIO_SIP_TRUNK_SID` on the voice service before provisioning demo numbers. With that variable set, the provisioner buys the Twilio number, attaches it to the Elastic SIP Trunk, and stores it on the matching location. The voice service then reads the dialed Twilio number from OpenAI/Twilio SIP headers and picks the matching `location_id` before loading knowledge. That means multiple demo numbers can share the same OpenAI SIP trunk.
 
 Current live state: Olive & Ember already has a real Twilio number. The other verticals need real Twilio numbers before phone testing.
+
+After the six demo locations exist in live Supabase and `TWILIO_SIP_TRUNK_SID` is set on Render, preview the demo number choices:
+
+```powershell
+$env:SIGNALHOST_ADMIN_EMAIL="tim@hostline.ai"
+$env:SIGNALHOST_ADMIN_PASSWORD="your password"
+node scripts\provision-demo-numbers.mjs
+```
+
+When the preview looks good, buy and attach the numbers:
+
+```powershell
+$env:SIGNALHOST_ADMIN_EMAIL="tim@hostline.ai"
+$env:SIGNALHOST_ADMIN_PASSWORD="your password"
+node scripts\provision-demo-numbers.mjs --commit
+```
 
 ## Texting Each Vertical
 

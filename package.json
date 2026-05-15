@@ -15,6 +15,7 @@
     "lint": "eslint .",
     "marketing:audio": "node scripts/generate-vera-audio.mjs",
     "preview": "vite preview",
+    "provision:demos": "node scripts/provision-demo-numbers.mjs",
     "scenario:lab": "tsx scripts/run-scenario-lab.ts",
     "start:voice": "node dist-voice/server.mjs",
     "test": "vitest run",

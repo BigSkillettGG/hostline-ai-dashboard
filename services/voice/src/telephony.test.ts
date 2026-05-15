@@ -66,4 +66,71 @@ describe("Twilio telephony helpers", () => {
     });
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain("IncomingPhoneNumbers.json?PageSize=1&PhoneNumber=%2B16175550100");
   });
+
+  it("attaches newly provisioned numbers to the configured SIP trunk", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        capabilities: { sms: true, voice: true },
+        phone_number: "+16178419996",
+        sid: "PN456",
+        status: "in-use",
+      }), { status: 201 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        sid: "PN456",
+        trunk_sid: "TK123",
+      }), { status: 201 }));
+    const service = createTelephonyService({
+      OPENAI_PROJECT_ID: "proj_123",
+      PUBLIC_HTTP_BASE_URL: "https://voice.signalhost.test",
+      TWILIO_ACCOUNT_SID: "AC123",
+      TWILIO_AUTH_TOKEN: "secret",
+      TWILIO_API_BASE_URL: "https://api.twilio.com",
+      TWILIO_DEFAULT_COUNTRY: "US",
+      TWILIO_SIP_TRUNK_SID: "TK123",
+      TWILIO_TRUNKING_API_BASE_URL: "https://trunking.twilio.com",
+    } as never);
+
+    await expect(service.provisionPhoneNumber({
+      locationId: "00000000-0000-4000-8000-000000000001",
+      phoneNumber: "+16178419996",
+    })).resolves.toMatchObject({
+      phoneNumber: "+16178419996",
+      providerSid: "PN456",
+      routingMode: "openai_realtime_sip",
+      voiceWebhookUrl: "https://voice.signalhost.test/openai/realtime/webhook?locationId=00000000-0000-4000-8000-000000000001",
+    });
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/IncomingPhoneNumbers.json");
+    expect(String(fetchMock.mock.calls[1]?.[0])).toBe("https://trunking.twilio.com/v1/Trunks/TK123/PhoneNumbers");
+    expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toBe("PhoneNumberSid=PN456");
+  });
+
+  it("releases a newly purchased number if SIP trunk attachment fails", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        capabilities: { sms: true, voice: true },
+        phone_number: "+16178419996",
+        sid: "PN456",
+        status: "in-use",
+      }), { status: 201 }))
+      .mockResolvedValueOnce(new Response("bad trunk", { status: 400 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const service = createTelephonyService({
+      PUBLIC_HTTP_BASE_URL: "https://voice.signalhost.test",
+      TWILIO_ACCOUNT_SID: "AC123",
+      TWILIO_AUTH_TOKEN: "secret",
+      TWILIO_API_BASE_URL: "https://api.twilio.com",
+      TWILIO_DEFAULT_COUNTRY: "US",
+      TWILIO_SIP_TRUNK_SID: "TK123",
+      TWILIO_TRUNKING_API_BASE_URL: "https://trunking.twilio.com",
+    } as never);
+
+    await expect(service.provisionPhoneNumber({
+      locationId: "00000000-0000-4000-8000-000000000001",
+      phoneNumber: "+16178419996",
+    })).rejects.toThrow(/Twilio Trunking POST failed/);
+
+    expect(String(fetchMock.mock.calls[2]?.[0])).toContain("/IncomingPhoneNumbers/PN456.json");
+    expect(fetchMock.mock.calls[2]?.[1]?.method).toBe("DELETE");
+  });
 });

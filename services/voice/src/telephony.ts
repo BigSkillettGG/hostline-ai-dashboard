@@ -1,4 +1,5 @@
 import type { VoiceServiceEnv } from "./env";
+import { buildOpenAIRealtimeLiveCallConfig } from "./openai-realtime-sip";
 
 export interface AvailableTwilioNumber {
   capabilities: Record<string, boolean>;
@@ -25,6 +26,7 @@ export interface ProvisionedPhoneNumber {
   capabilities: Record<string, boolean>;
   phoneNumber: string;
   providerSid: string;
+  routingMode?: "openai_realtime_sip" | "twilio_voice_webhook";
   status: string;
   voiceWebhookUrl?: string;
 }
@@ -120,6 +122,8 @@ class TwilioTelephonyService implements TelephonyService {
   private readonly baseUrl: string;
   private readonly defaultCountry: string;
   private readonly env: VoiceServiceEnv;
+  private readonly sipTrunkSid?: string;
+  private readonly trunkingBaseUrl: string;
 
   constructor(env: VoiceServiceEnv) {
     this.accountSid = env.TWILIO_ACCOUNT_SID ?? "";
@@ -127,6 +131,8 @@ class TwilioTelephonyService implements TelephonyService {
     this.baseUrl = env.TWILIO_API_BASE_URL.replace(/\/$/, "");
     this.defaultCountry = env.TWILIO_DEFAULT_COUNTRY;
     this.env = env;
+    this.sipTrunkSid = env.TWILIO_SIP_TRUNK_SID?.trim();
+    this.trunkingBaseUrl = (env.TWILIO_TRUNKING_API_BASE_URL ?? "https://trunking.twilio.com").replace(/\/$/, "");
   }
 
   async searchAvailableNumbers(input: {
@@ -166,6 +172,7 @@ class TwilioTelephonyService implements TelephonyService {
       capabilities: number.capabilities ?? {},
       phoneNumber: number.phone_number,
       providerSid: number.sid ?? "",
+      routingMode: number.voice_url ? ("twilio_voice_webhook" as const) : undefined,
       status: number.status ?? "active",
       voiceWebhookUrl: number.voice_url,
     };
@@ -173,16 +180,18 @@ class TwilioTelephonyService implements TelephonyService {
 
   async provisionPhoneNumber(input: ProvisionPhoneNumberInput) {
     const voiceWebhookUrl = buildVoiceWebhookUrl(this.env, input.locationId);
-    if (!voiceWebhookUrl) {
-      throw new Error("PUBLIC_HTTP_BASE_URL is required before provisioning a Twilio number.");
+    if (!voiceWebhookUrl && !this.sipTrunkSid) {
+      throw new Error("PUBLIC_HTTP_BASE_URL or TWILIO_SIP_TRUNK_SID is required before provisioning a Twilio number.");
     }
 
     const body = new URLSearchParams({
       FriendlyName: `SignalHost ${input.locationId ?? "location"}`,
       PhoneNumber: input.phoneNumber,
-      VoiceMethod: "POST",
-      VoiceUrl: voiceWebhookUrl,
     });
+    if (!this.sipTrunkSid && voiceWebhookUrl) {
+      body.set("VoiceMethod", "POST");
+      body.set("VoiceUrl", voiceWebhookUrl);
+    }
 
     const response = await this.twilioRequest<TwilioIncomingPhoneNumberResponse>(
       `/2010-04-01/Accounts/${encodeURIComponent(this.accountSid)}/IncomingPhoneNumbers.json`,
@@ -191,13 +200,36 @@ class TwilioTelephonyService implements TelephonyService {
         method: "POST",
       },
     );
+    const providerSid = response.sid ?? "";
+    let routingMode: ProvisionedPhoneNumber["routingMode"] = "twilio_voice_webhook";
+    let resolvedVoiceWebhookUrl = response.voice_url ?? voiceWebhookUrl;
+    if (this.sipTrunkSid) {
+      if (!providerSid) {
+        throw new Error("Twilio did not return a Phone Number SID, so the number cannot be attached to the SIP trunk.");
+      }
+      try {
+        await this.attachNumberToSipTrunk(providerSid);
+      } catch (error) {
+        await this.releasePhoneNumber({ providerSid }).catch((cleanupError) => {
+          console.warn("[telephony] failed to release newly purchased number after SIP trunk attachment failure", {
+            cleanupError,
+            phoneNumber: input.phoneNumber,
+            providerSid,
+          });
+        });
+        throw error;
+      }
+      routingMode = "openai_realtime_sip";
+      resolvedVoiceWebhookUrl = buildOpenAIRealtimeLiveCallConfig(this.env, input.locationId).webhookUrl;
+    }
 
     return {
       capabilities: response.capabilities ?? {},
       phoneNumber: response.phone_number ?? input.phoneNumber,
-      providerSid: response.sid ?? "",
+      providerSid,
+      routingMode,
       status: response.status ?? "provisioned",
-      voiceWebhookUrl: response.voice_url ?? voiceWebhookUrl,
+      voiceWebhookUrl: resolvedVoiceWebhookUrl,
     };
   }
 
@@ -228,6 +260,39 @@ class TwilioTelephonyService implements TelephonyService {
     if (!response.ok) {
       const body = await response.text();
       throw new Error(`Twilio ${init?.method ?? "GET"} failed: ${response.status} ${body}`);
+    }
+
+    if (response.status === 204) return undefined as T;
+    const text = await response.text();
+    return text ? (JSON.parse(text) as T) : (undefined as T);
+  }
+
+  private async attachNumberToSipTrunk(phoneNumberSid: string) {
+    if (!this.sipTrunkSid) return;
+    await this.twilioTrunkingRequest(
+      `/v1/Trunks/${encodeURIComponent(this.sipTrunkSid)}/PhoneNumbers`,
+      {
+        body: new URLSearchParams({
+          PhoneNumberSid: phoneNumberSid,
+        }),
+        method: "POST",
+      },
+    );
+  }
+
+  private async twilioTrunkingRequest<T>(path: string, init?: { body?: URLSearchParams; method?: "DELETE" | "GET" | "POST" }) {
+    const response = await fetch(`${this.trunkingBaseUrl}${path}`, {
+      body: init?.body,
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${this.accountSid}:${this.authToken}`).toString("base64")}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      method: init?.method ?? "GET",
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`Twilio Trunking ${init?.method ?? "GET"} failed: ${response.status} ${body}`);
     }
 
     if (response.status === 204) return undefined as T;

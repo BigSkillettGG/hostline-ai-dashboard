@@ -30,6 +30,8 @@ const envSchema = z.object({
   TWILIO_DEFAULT_COUNTRY: z.string().default("US"),
   TWILIO_MESSAGING_SERVICE_SID: z.string().optional(),
   TWILIO_SMS_FROM_NUMBER: z.string().optional(),
+  TWILIO_SIP_TRUNK_SID: z.string().optional(),
+  TWILIO_TRUNKING_API_BASE_URL: z.string().url().optional(),
   EMAIL_FROM: z.string().optional(),
   EMAIL_PROVIDER: z.enum(["resend"]).optional(),
   EMAIL_REPLY_TO: z.string().optional(),
@@ -194,6 +196,13 @@ export function getVoiceServiceReadiness(env: VoiceServiceEnv): VoiceServiceRead
       label: "Twilio credentials",
       ready: Boolean(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN),
       required: true,
+    },
+    {
+      detail: "Associates newly provisioned Twilio numbers with the OpenAI Realtime SIP trunk instead of the legacy voice webhook.",
+      id: "twilio_sip_trunk",
+      label: "Twilio SIP trunk assignment",
+      ready: Boolean(env.TWILIO_SIP_TRUNK_SID),
+      required: false,
     },
     {
       detail: "Rejects spoofed Twilio webhooks in production.",

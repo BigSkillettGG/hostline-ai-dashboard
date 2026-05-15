@@ -619,7 +619,20 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
         trialGraceDays: body.trialGraceDays,
       };
       const provisioned = await telephonyService.provisionPhoneNumber(input);
-      await phoneNumberStore.saveProvisionedNumber(input, provisioned);
+      try {
+        await phoneNumberStore.saveProvisionedNumber(input, provisioned);
+      } catch (error) {
+        if (provisioned.providerSid) {
+          await telephonyService.releasePhoneNumber({ providerSid: provisioned.providerSid }).catch((cleanupError) => {
+            console.warn("[voice-service] failed to release newly provisioned number after Supabase save failure", {
+              cleanupError,
+              phoneNumber: provisioned.phoneNumber,
+              providerSid: provisioned.providerSid,
+            });
+          });
+        }
+        throw error;
+      }
       sendJson(res, 200, { phoneNumber: provisioned });
     } catch (error) {
       sendCaughtError(res, error, "Twilio number provisioning failed");

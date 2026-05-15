@@ -99,6 +99,7 @@ POST https://your-tunnel.ngrok.app/twilio/voice
 - Twilio account with ConversationRelay enabled and Predictive/Generative AI terms accepted.
 - Twilio phone number pointed at `/twilio/voice`.
 - `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN` for number search/provisioning.
+- `TWILIO_SIP_TRUNK_SID` for production OpenAI Realtime SIP number provisioning. When this is set, newly purchased Twilio numbers are attached to that Elastic SIP Trunk instead of being pointed at the legacy `/twilio/voice` webhook.
 - Supabase Auth plus `SUPABASE_SECRET_KEY` for protecting dashboard admin endpoints in production.
 - Optional `SIGNALHOST_INTERNAL_API_KEY` for server-side deployment checks such as `scripts/check-voice-deployment.mjs`. Do not expose it as a dashboard `VITE_` variable.
 - OpenAI API key for real LLM replies.
@@ -129,7 +130,7 @@ When Supabase is configured, Twilio requests can include `locationId` in the web
 - `POST /owner-reports/daily` generates and saves today's owner report for the location.
 - `POST /owner-reports/daily/deliver` generates and saves today's owner report, then delivers it to owner/manager contacts through SMS, direct email, and/or `OWNER_REPORT_WEBHOOK_URL`. Use an internal API key from a Render Cron Job for scheduled delivery.
 - `GET /telephony/available-numbers?areaCode=415&limit=5` searches Twilio local numbers with voice and SMS enabled.
-- `POST /telephony/provision-number` purchases a selected number, sets its voice webhook to `/twilio/voice?locationId=...`, writes `phone_numbers`, and updates `locations.ai_host_phone`. If `phoneNumber` is omitted, the service searches Twilio with `areaCode`, `contains`, and `country`, then provisions the first match. When Supabase is configured, it refuses to buy a second unreleased active/trial number for the same location.
+- `POST /telephony/provision-number` purchases a selected number, attaches it to `TWILIO_SIP_TRUNK_SID` when configured, writes `phone_numbers`, and updates `locations.ai_host_phone`. If no SIP trunk is configured, it falls back to setting the legacy `/twilio/voice?locationId=...` webhook. If `phoneNumber` is omitted, the service searches Twilio with `areaCode`, `contains`, and `country`, then provisions the first match. When Supabase is configured, it refuses to buy a second unreleased active/trial number for the same location.
 - `POST /telephony/release-number` releases a Twilio number by `providerSid` and marks the matching `phone_numbers` row as released.
 - `POST /telephony/release-expired-trials` releases trial numbers whose grace period has ended. This endpoint is internal-key protected, supports `{ "dryRun": true }`, and skips numbers for accounts with active, trialing, past-due, checkout-started, or incomplete billing status.
 - `GET /twilio/live-call-config?locationId=...` returns the generated live call URLs.
