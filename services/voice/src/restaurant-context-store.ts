@@ -458,8 +458,8 @@ class SupabaseRestaurantContextStore implements RestaurantContextStore {
         trustedContacts,
       });
     } catch (error) {
-      console.error("[restaurant-context] falling back to demo context", error);
-      return demoRestaurantContext;
+      console.error("[restaurant-context] falling back to generic safety context", error);
+      return buildGenericFallbackContext(resolvedLocationId);
     }
   }
 
@@ -971,6 +971,31 @@ function mapMenuItems(rows: SupabaseMenuItemRow[]): RestaurantMenuItem[] {
       name: row.name,
       priceCents: row.price_cents ?? 0,
     }));
+}
+
+function buildGenericFallbackContext(locationId: string): RestaurantVoiceContext {
+  return buildRestaurantContext({
+    location: {
+      address: null,
+      ai_host_phone: null,
+      cuisine: null,
+      id: locationId,
+      name: "this business",
+      phone: null,
+      timezone: null,
+    },
+    onboardingProfile: {
+      draft: {
+        businessName: "this business",
+        businessType: "plumbing",
+        humanHandoffPolicy:
+          "If live business context cannot be loaded, answer only basic intake questions, collect the caller's name, phone, request, and urgency, and route the request to staff for follow-up.",
+        menuCategories: "General questions, appointments, messages, callbacks, and urgent requests.",
+        unknownAnswerPolicy:
+          "Do not guess when the live knowledge base is unavailable. Apologize briefly, collect the request, and tell the caller the team will follow up.",
+      },
+    },
+  });
 }
 
 function mapFaqs(rows: SupabaseFaqRow[]): RestaurantFaq[] {

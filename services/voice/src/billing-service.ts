@@ -30,7 +30,7 @@ export interface BillingService {
     configured: boolean;
     usage: BillingUsageStatus;
   }>;
-  handleWebhook(input: { rawBody: string; signature?: string }): Promise<{ handled: boolean; type?: string }>;
+  handleWebhook(input: { rawBody: string; signature?: string }): Promise<{ duplicate?: boolean; handled: boolean; type?: string }>;
 }
 
 export interface BillingUsageStatus {
@@ -59,6 +59,7 @@ class StripeBillingService implements BillingService {
   configured: boolean;
   private readonly env: VoiceServiceEnv;
   private readonly phoneNumberStore?: Pick<PhoneNumberStore, "markLocationNumberPaid">;
+  private readonly replayGuard = new StripeWebhookReplayGuard();
   private readonly store: BillingStore;
 
   constructor(env: VoiceServiceEnv, store: BillingStore, phoneNumberStore?: Pick<PhoneNumberStore, "markLocationNumberPaid">) {
@@ -216,6 +217,10 @@ class StripeBillingService implements BillingService {
     });
 
     const event = JSON.parse(input.rawBody) as StripeEvent;
+    if (event.id && !this.replayGuard.accept(event.id)) {
+      return { duplicate: true, handled: false, type: event.type };
+    }
+
     if (event.type === "checkout.session.completed") {
       await this.handleCheckoutCompleted(event.data.object as StripeCheckoutSession);
       return { handled: true, type: event.type };
@@ -339,6 +344,7 @@ class StripeBillingService implements BillingService {
 
 interface StripeEvent {
   data: { object: unknown };
+  id?: string;
   type: string;
 }
 
@@ -372,6 +378,23 @@ interface StripeInvoice {
 interface StripePortalSession {
   id?: string;
   url?: string;
+}
+
+class StripeWebhookReplayGuard {
+  private readonly seen = new Map<string, number>();
+
+  accept(eventId: string, now = Date.now()) {
+    this.prune(now);
+    if (this.seen.has(eventId)) return false;
+    this.seen.set(eventId, now + 24 * 60 * 60 * 1000);
+    return true;
+  }
+
+  private prune(now: number) {
+    for (const [eventId, expiresAt] of this.seen) {
+      if (expiresAt <= now) this.seen.delete(eventId);
+    }
+  }
 }
 
 function resolveReturnUrl({

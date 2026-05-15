@@ -24,6 +24,7 @@ import {
   readLimitedRequestBody,
 } from "./http-safety";
 import { createMenuIngestionService } from "./menu-ingestion-service";
+import { recordHttpRequestMetric, renderPrometheusMetrics } from "./metrics";
 import { buildSmsTwiML, createMessageThreadStore } from "./message-thread-store";
 import { createStaffNotificationService } from "./notification-service";
 import { buildOpenAIRealtimeLiveCallConfig, createOpenAIRealtimeSipService } from "./openai-realtime-sip";
@@ -96,7 +97,24 @@ const TWILIO_BODY_LIMIT_BYTES = 16 * 1024;
 const WEB_CHAT_BODY_LIMIT_BYTES = 16 * 1024;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const server = createServer((req, res) => {
-  void handleRequest(req, res, env);
+  const startedAt = Date.now();
+  const path = new URL(req.url ?? "/", "http://localhost").pathname;
+  res.once("finish", () => {
+    recordHttpRequestMetric({
+      durationMs: Date.now() - startedAt,
+      method: req.method ?? "UNKNOWN",
+      path,
+      statusCode: res.statusCode,
+    });
+  });
+  void handleRequest(req, res, env).catch((error) => {
+    console.error("[voice-service] unhandled request failed", error);
+    if (!res.headersSent) {
+      sendJson(res, 500, { error: "Voice service request failed" });
+      return;
+    }
+    res.end();
+  });
 });
 
 const wss = new WebSocketServer({ noServer: true });
@@ -218,6 +236,15 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
     }
 
     sendJson(res, 200, createPlatformIntegrationRegistry(currentEnv));
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/metrics") {
+    sendPrometheus(res, 200, renderPrometheusMetrics({
+      activeOpenAIRealtimeSockets: openAIRealtimeSipService.activeSocketCount,
+      activeRelayCompletions: activeRelayCompletions.size,
+      activeRelaySockets: activeRelaySockets.size,
+    }));
     return;
   }
 
@@ -1006,6 +1033,13 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
         currentEnv.SUPABASE_DEMO_LOCATION_ID ??
         "demo-location";
       const handoffData = parseConversationRelayHandoffData(params.HandoffData ?? params.handoffData);
+      await reconcileConversationRelayEndedCallback(params, handoffData).catch((error) => {
+        console.warn("[voice-service] ConversationRelay callback reconciliation failed", {
+          callSid: params.CallSid ?? params.callSid,
+          error,
+        });
+      });
+
       if (handoffData.reasonCode === "natural_goodbye") {
         console.info("[voice-service] ending call after natural goodbye", {
           callSid: params.CallSid ?? params.callSid,
@@ -1243,6 +1277,7 @@ function isValidTwilioWebhook(req: IncomingMessage, currentEnv: VoiceServiceEnv,
 }
 
 function isValidTwilioUpgrade(req: IncomingMessage, currentEnv: VoiceServiceEnv) {
+  if (!isAllowedUpgradeOrigin(req, currentEnv)) return false;
   if (!currentEnv.REQUIRE_TWILIO_SIGNATURE) return true;
   if (!currentEnv.TWILIO_AUTH_TOKEN || !currentEnv.PUBLIC_WS_BASE_URL) return false;
 
@@ -1253,9 +1288,21 @@ function isValidTwilioUpgrade(req: IncomingMessage, currentEnv: VoiceServiceEnv)
   });
 }
 
+function isAllowedUpgradeOrigin(req: IncomingMessage, currentEnv: VoiceServiceEnv) {
+  const origin = firstHeader(req.headers.origin);
+  if (!origin) return true;
+  const allowedOrigin = currentEnv.VOICE_SERVICE_ALLOWED_ORIGIN;
+  return allowedOrigin === "*" || allowedOrigin.split(",").map((item) => item.trim()).includes(origin);
+}
+
 function sendJson(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, { "Content-Type": "application/json" });
   res.end(JSON.stringify(body));
+}
+
+function sendPrometheus(res: ServerResponse, status: number, body: string) {
+  res.writeHead(status, { "Content-Type": "text/plain; version=0.0.4; charset=utf-8" });
+  res.end(body);
 }
 
 function sendXml(res: ServerResponse, status: number, body: string) {
@@ -1390,6 +1437,27 @@ function parseConversationRelayHandoffData(value?: string) {
 function isCompletedTwilioCall(params: Record<string, string>) {
   const callStatus = firstNonEmpty(params.CallStatus, params.callStatus)?.toLowerCase();
   return callStatus === "completed" || callStatus === "busy" || callStatus === "failed" || callStatus === "no-answer";
+}
+
+async function reconcileConversationRelayEndedCallback(
+  params: Record<string, string>,
+  handoffData: Record<string, string>,
+) {
+  const externalCallSid = firstNonEmpty(params.CallSid, params.callSid, params.ParentCallSid, params.parentCallSid);
+  const durationSeconds = parseOptionalSeconds(
+    firstNonEmpty(params.CallDuration, params.callDuration, params.Duration, params.duration),
+  );
+  if (!externalCallSid || durationSeconds === undefined) return;
+
+  const callStatus = firstNonEmpty(params.CallStatus, params.callStatus)?.toLowerCase();
+  const reasonCode = handoffData.reasonCode;
+  const resolved = callStatus === "completed" || reasonCode === "natural_goodbye";
+  await callStore.completeCall({
+    durationSeconds,
+    externalCallSid,
+    outcome: reasonCode ? `twilio_${reasonCode}` : callStatus ? `twilio_${callStatus}` : "twilio_conversation_ended",
+    status: resolved ? "resolved" : "needs_review",
+  });
 }
 
 function allowRateLimitedRequest(req: IncomingMessage, res: ServerResponse, action: string, limit: number) {

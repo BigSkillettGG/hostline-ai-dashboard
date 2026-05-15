@@ -1,8 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { demoRestaurantContext } from "./restaurant-context";
-import { buildRestaurantContext, createCachedRestaurantContextStore } from "./restaurant-context-store";
+import { buildRestaurantContext, createCachedRestaurantContextStore, createRestaurantContextStore } from "./restaurant-context-store";
 
 describe("restaurant context store", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("builds a voice context from onboarding, location, agent, and menu rows", () => {
     const context = buildRestaurantContext({
       agentConfig: {
@@ -384,5 +388,52 @@ describe("restaurant context store", () => {
     await expect(store.getContext("loc_1")).resolves.toMatchObject({ restaurantName: "Cached 1" });
     await expect(store.getContext("loc_2")).resolves.toMatchObject({ restaurantName: "Cached 2" });
     expect(lookupCount).toBe(2);
+  });
+
+  it("falls back to a generic service context instead of Olive & Ember when Supabase is unavailable", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("Supabase unavailable"));
+    const store = createRestaurantContextStore({
+      NODE_ENV: "production",
+      PORT: 8787,
+      OPENAI_MODEL: "gpt-5-mini",
+      OPENAI_REPLY_TIMEOUT_MS: 4500,
+      OPENAI_REALTIME_IDLE_TIMEOUT_MS: 9000,
+      OPENAI_REALTIME_INTERRUPT_RESPONSE: false,
+      OPENAI_REALTIME_NOISE_REDUCTION: "far_field",
+      OPENAI_REALTIME_SERVER_VAD_PREFIX_PADDING_MS: 250,
+      OPENAI_REALTIME_SERVER_VAD_SILENCE_MS: 550,
+      OPENAI_REALTIME_SERVER_VAD_THRESHOLD: 0.72,
+      OPENAI_REALTIME_TURN_DETECTION_MODE: "server_vad",
+      OPENAI_REALTIME_TURN_EAGERNESS: "low",
+      REQUIRE_TWILIO_SIGNATURE: true,
+      SUPABASE_DEMO_LOCATION_ID: "78d8053b-631d-4811-939f-61f0efe1d82a",
+      SUPABASE_SECRET_KEY: "sb_secret_test",
+      SUPABASE_URL: "https://example.supabase.co",
+      TWILIO_API_BASE_URL: "https://api.twilio.com",
+      TWILIO_DEFAULT_COUNTRY: "US",
+      TWILIO_LANGUAGE: "en-US",
+      TWILIO_SPEECH_TIMEOUT_MS: 1800,
+      TWILIO_TRANSCRIPTION_PROVIDER: "Deepgram",
+      TWILIO_TTS_PROVIDER: "Google",
+      TWILIO_TTS_VOICE: "voice",
+      TWILIO_ELEVENLABS_MODEL_ID: "flash_v2_5",
+      TWILIO_ELEVENLABS_SIMILARITY_BOOST: "0.8",
+      TWILIO_ELEVENLABS_SPEED: "1.0",
+      TWILIO_ELEVENLABS_STABILITY: "0.5",
+      VOICE_SERVICE_ALLOWED_ORIGIN: "https://app.signalhost.ai",
+      ELEVENLABS_MODEL_ID: "eleven_flash_v2_5",
+      ELEVENLABS_OUTPUT_FORMAT: "mp3_44100_128",
+      ELEVENLABS_VOICE_ID: "voice_1",
+      ELEVENLABS_EVE_VOICE_ID: "eve",
+      ELEVENLABS_MICHAEL_VOICE_ID: "michael",
+    });
+
+    const context = await store.getContext("loc_hvac");
+
+    expect(context.restaurantName).toBe("this business");
+    expect(context.businessType).toBe("plumbing");
+    expect(context.menuItems).toEqual([]);
+    expect(context.menuHighlights).not.toContain("Margherita Pizza");
+    expect(context.policies.human_handoff).toContain("live business context cannot be loaded");
   });
 });

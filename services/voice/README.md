@@ -1,11 +1,11 @@
 # SignalHost Voice Service
 
-This service is the production path for inbound restaurant phone calls.
+This service is the production path for inbound SignalHost calls, chats, owner commands, and operational webhooks. Production phone calls should use OpenAI Realtime SIP; Twilio ConversationRelay remains as a legacy fallback and test path.
 
 ## What It Does Today
 
-- Serves Twilio Voice webhook TwiML at `POST /twilio/voice`.
-- Connects calls to Twilio ConversationRelay over `wss://.../twilio/conversation-relay`.
+- Serves legacy Twilio Voice webhook TwiML at `POST /twilio/voice`.
+- Connects legacy fallback calls to Twilio ConversationRelay over `wss://.../twilio/conversation-relay`.
 - Searches and provisions Twilio numbers through internal telephony endpoints when Twilio credentials are configured.
 - Processes queued menu URL/text ingestion jobs through `POST /ingestion/run-next`.
 - Handles website chat messages at `POST /web-chat/message` using the same business context, configured links, and customer request fallback as the phone agent.
@@ -20,6 +20,7 @@ This service is the production path for inbound restaurant phone calls.
 - Persists calls and transcript turns to Supabase when the server has a secret key and location ID.
 - Persists OpenAI Realtime SIP calls to Supabase, including caller/agent transcript turns, call summary, intent/outcome, and staff-review status.
 - Auto-starts Twilio call recording for OpenAI SIP calls when Twilio sends a `CallSid`, accepts recording status callbacks at `POST /twilio/recording-status`, and attaches the recording URL to the matching call row.
+- Exposes Prometheus-style operational metrics at `GET /metrics` for request counts, request latency sums, active socket counts, and realtime tool-call success/latency counters.
 - Loads the onboarded restaurant profile from Supabase for greetings, policies, hours, parking, reservation rules, menu items, FAQs, and knowledge sections.
 - Creates staff-review pickup orders when the caller clearly asks for pickup/takeout and mentions recognized menu items.
 - Accumulates multi-turn pickup order drafts, so callers can pause between items before saying they are done.
@@ -116,7 +117,7 @@ POST https://your-tunnel.ngrok.app/twilio/voice
 - `SUPABASE_SECRET_KEY` or legacy service role key stored only on the voice-service backend.
 - `SUPABASE_DEMO_LOCATION_ID` set to a real `locations.id` value.
 
-When Supabase is configured, Twilio requests can include `locationId` in the webhook URL or ConversationRelay custom parameters. The service loads `locations`, `agent_configs`, `onboarding_profiles`, `menu_categories`, `menu_items`, `knowledge_sections`, and `faqs` for that location. Without a matching profile, calls use the demo context.
+When Supabase is configured, Twilio/OpenAI requests can include `locationId` or be routed by the dialed AI number. The service loads `locations`, `agent_configs`, `onboarding_profiles`, `menu_categories`, `menu_items`, `knowledge_sections`, and `faqs` for that location. If Supabase is unavailable during a live call, the service uses a generic safe intake context instead of leaking Olive & Ember demo knowledge into the wrong business.
 
 ## Internal Telephony Endpoints
 
@@ -127,6 +128,7 @@ When Supabase is configured, Twilio requests can include `locationId` in the web
 - `POST /billing/checkout-session` creates a Stripe subscription checkout session from SignalHost's server-side plan catalog and stores checkout-started state.
 - `POST /billing/customer-portal` creates a Stripe customer portal session once a Stripe customer exists.
 - `POST /stripe/webhook` verifies Stripe signatures and updates `billing_accounts` from checkout, subscription, and invoice events.
+- `GET /metrics` returns Prometheus-format runtime metrics for dashboards/alerts. It contains operational counts only, not caller transcripts or secrets.
 - `POST /owner-reports/daily` generates and saves today's owner report for the location.
 - `POST /owner-reports/daily/deliver` generates and saves today's owner report, then delivers it to owner/manager contacts through SMS, direct email, and/or `OWNER_REPORT_WEBHOOK_URL`. Use an internal API key from a Render Cron Job for scheduled delivery.
 - `GET /telephony/available-numbers?areaCode=415&limit=5` searches Twilio local numbers with voice and SMS enabled.

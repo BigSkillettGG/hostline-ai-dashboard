@@ -135,6 +135,27 @@ describe("Supabase call store", () => {
     expect(String(fetchMock.mock.calls[1]?.[1]?.body)).not.toContain("workflow_status");
   });
 
+  it("can reconcile a completed call by provider call id without wiping the summary", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const store = createCallStore(env);
+
+    await store.completeCall({
+      durationSeconds: 51,
+      externalCallSid: "CA123",
+      outcome: "twilio_completed",
+      status: "resolved",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://example.supabase.co/rest/v1/calls?external_call_sid=eq.CA123",
+      expect.objectContaining({
+        body: expect.stringContaining('"duration_seconds":51'),
+        method: "PATCH",
+      }),
+    );
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).not.toContain("summary");
+  });
+
   it("creates a staff-review pickup order with order items", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")

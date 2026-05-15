@@ -94,6 +94,7 @@ describe("billing service", () => {
           subscription: "sub_123",
         },
       },
+      id: "evt_checkout_completed_123",
       type: "checkout.session.completed",
     });
 
@@ -113,6 +114,15 @@ describe("billing service", () => {
       locationId: "loc_123",
       reason: "stripe_checkout_completed",
     });
+
+    const duplicate = await service.handleWebhook({
+      rawBody,
+      signature: signStripePayload(rawBody, env.STRIPE_WEBHOOK_SECRET ?? ""),
+    });
+
+    expect(duplicate).toEqual({ duplicate: true, handled: false, type: "checkout.session.completed" });
+    expect(store.upserts).toHaveLength(1);
+    expect(phoneNumberStore.markLocationNumberPaid).toHaveBeenCalledTimes(1);
   });
 
   it("marks a location number paid when Stripe sends an active subscription webhook", async () => {

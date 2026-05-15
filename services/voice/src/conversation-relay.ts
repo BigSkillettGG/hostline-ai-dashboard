@@ -17,6 +17,7 @@ import {
   hasOrderIntent,
   hasOrderSubmitIntent,
   mergeCapturedOrderItems,
+  applyOrderChangeRequest,
   summarizeCapturedOrderItems,
   type CapturedOrder,
   type CapturedOrderItem,
@@ -1334,6 +1335,12 @@ async function maybeAdvanceStaffReviewOrder({
   const capturedName = captureCustomerName(utterance);
   if (capturedName) {
     session.orderCustomerName = capturedName;
+  }
+
+  const orderChange = applyOrderChangeRequest(session.orderDraftItems, utterance, session.context);
+  if (orderChange.changed) {
+    session.orderIntentSeen = true;
+    session.orderDraftItems = orderChange.items;
   }
 
   const capturedOrder = capturePickupOrder(utterance, session.context, {

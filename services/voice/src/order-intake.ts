@@ -18,6 +18,12 @@ export interface OrderCaptureOptions {
   requireIntent?: boolean;
 }
 
+export interface OrderChangeResult {
+  changed: boolean;
+  items: CapturedOrderItem[];
+  summary?: string;
+}
+
 const numberWords: Record<string, number> = {
   a: 1,
   an: 1,
@@ -100,6 +106,49 @@ export function mergeCapturedOrderItems(
   }
 
   return Array.from(merged.values());
+}
+
+export function applyOrderChangeRequest(
+  existingItems: CapturedOrderItem[],
+  utterance: string,
+  context: RestaurantVoiceContext,
+): OrderChangeResult {
+  if (!existingItems.length) return { changed: false, items: existingItems };
+
+  const normalizedUtterance = normalize(utterance);
+  const matchedItems = captureMenuItems(normalizedUtterance, context.menuItems);
+  if (!matchedItems.length) return { changed: false, items: existingItems };
+
+  const matchedNames = new Set(matchedItems.map((item) => item.name));
+  if (/\b(remove|cancel|take off|scratch|drop|no longer|don't want|do not want)\b/.test(normalizedUtterance)) {
+    const items = existingItems.filter((item) => !matchedNames.has(item.name));
+    return {
+      changed: items.length !== existingItems.length,
+      items,
+      summary: `Removed ${matchedItems.map((item) => item.name).join(", ")} from the draft order.`,
+    };
+  }
+
+  if (/\b(make that|make it|change(?: that| it)? to|instead of|actually)\b/.test(normalizedUtterance)) {
+    let changed = false;
+    const quantityByName = new Map(matchedItems.map((item) => [item.name, item.quantity]));
+    const items = existingItems.map((item) => {
+      const quantity = quantityByName.get(item.name);
+      if (!quantity || quantity === item.quantity) return item;
+      changed = true;
+      return { ...item, quantity };
+    });
+
+    return {
+      changed,
+      items,
+      summary: changed
+        ? `Updated ${matchedItems.map((item) => `${item.name} to ${item.quantity}`).join(", ")}.`
+        : undefined,
+    };
+  }
+
+  return { changed: false, items: existingItems };
 }
 
 function captureMenuItems(utterance: string, menuItems: RestaurantMenuItem[]) {

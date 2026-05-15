@@ -1,5 +1,6 @@
 import type { VoiceServiceEnv } from "./env";
 import { capitalize, getRuntimeBusinessProfile } from "./business-runtime";
+import { CircuitBreaker } from "./circuit-breaker";
 import { matchPhonePlaybookReply } from "./restaurant-playbook";
 import type { RestaurantVoiceContext } from "./restaurant-context";
 import {
@@ -10,6 +11,12 @@ import {
   type CapturedReservationDetails,
 } from "./reservation-intake";
 import type { TranscriptTurn } from "./types";
+
+const openAIResponsesCircuit = new CircuitBreaker({
+  failureThreshold: 3,
+  resetAfterMs: 15_000,
+  serviceName: "OpenAI Responses",
+});
 
 export interface ResponseInputMessage {
   content: string;
@@ -426,30 +433,41 @@ async function createOpenAIResponse({
   maxOutputTokens: number;
   tools?: RestaurantResponseTool[];
 }) {
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    signal: controller.signal,
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.OPENAI_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: env.OPENAI_MODEL,
-      instructions,
-      input,
-      max_output_tokens: maxOutputTokens,
-      max_tool_calls: tools?.length ? 3 : undefined,
-      store: false,
-      tools: tools?.length ? tools : undefined,
-    }),
-  });
+  openAIResponsesCircuit.assertCanAttempt();
+  let failureRecorded = false;
 
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`OpenAI response failed: ${response.status} ${body}`);
+  try {
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      signal: controller.signal,
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: env.OPENAI_MODEL,
+        instructions,
+        input,
+        max_output_tokens: maxOutputTokens,
+        max_tool_calls: tools?.length ? 3 : undefined,
+        store: false,
+        tools: tools?.length ? tools : undefined,
+      }),
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      openAIResponsesCircuit.recordFailure();
+      failureRecorded = true;
+      throw new Error(`OpenAI response failed: ${response.status} ${body}`);
+    }
+
+    openAIResponsesCircuit.recordSuccess();
+    return (await response.json()) as { output_text?: string; output?: unknown[] };
+  } catch (error) {
+    if (!failureRecorded) openAIResponsesCircuit.recordFailure();
+    throw error;
   }
-
-  return (await response.json()) as { output_text?: string; output?: unknown[] };
 }
 
 function extractToolCalls(data: { output?: unknown[] }): RestaurantToolCall[] {

@@ -33,6 +33,7 @@ export interface CompleteCallInput {
   channel?: "phone" | "web_chat";
   confidence?: number;
   durationSeconds: number;
+  externalCallSid?: string;
   intent?: "order" | "reservation" | "faq" | "hours" | "other";
   orderId?: string;
   outcome?: string;
@@ -152,6 +153,7 @@ class NoopCallStore implements CallStore {
 
   async completeCall(input: CompleteCallInput) {
     console.info("[call-store] Supabase not configured; call close not persisted", {
+      externalCallSid: input.externalCallSid,
       durationSeconds: input.durationSeconds,
     });
   }
@@ -276,19 +278,23 @@ class SupabaseCallStore implements CallStore {
   }
 
   async completeCall(input: CompleteCallInput) {
-    if (!input.callId) return;
+    if (!input.callId && !input.externalCallSid) return;
 
     const body: Record<string, unknown> = {
       duration_seconds: Math.max(0, Math.round(input.durationSeconds)),
       status: input.status ?? "resolved",
-      summary: input.summary ?? null,
     };
+    if (input.summary !== undefined) body.summary = input.summary;
     if (input.confidence !== undefined) body.confidence = clampConfidence(input.confidence);
     if (input.intent) body.intent = input.intent;
     if (input.outcome) body.outcome = input.outcome;
     if (input.recordingUrl) body.recording_url = input.recordingUrl;
 
-    await this.patchCallWithInsightFallback(input.callId, body, {
+    const query = input.callId
+      ? `id=eq.${encodeURIComponent(input.callId)}`
+      : `external_call_sid=eq.${encodeURIComponent(input.externalCallSid ?? "")}`;
+
+    await this.patchCallWithInsightFallback(query, input.callId ?? input.externalCallSid ?? "unknown", body, {
       channel: input.channel,
       confidence: input.confidence,
       intent: input.intent,
@@ -391,7 +397,7 @@ class SupabaseCallStore implements CallStore {
       const intent = input.requestType === "reservation" ? "reservation" : input.requestType === "order" ? "order" : "other";
       const status = "new";
       const insightSummary = `${title}. Type: ${input.requestType}. Priority: ${input.priority ?? "normal"}. ${summary}`;
-      await this.patchCallWithInsightFallback(input.callId, {
+      await this.patchCallWithInsightFallback(`id=eq.${encodeURIComponent(input.callId)}`, input.callId, {
         intent,
         outcome: "customer_request_created",
         status,
@@ -456,7 +462,7 @@ class SupabaseCallStore implements CallStore {
       method: "POST",
     });
 
-    await this.patchCallWithInsightFallback(input.callId, {
+    await this.patchCallWithInsightFallback(`id=eq.${encodeURIComponent(input.callId)}`, input.callId, {
       intent: "order",
       outcome: "order_placed",
       summary: `Staff-review pickup order created with ${input.items.length} item type${input.items.length === 1 ? "" : "s"}.`,
@@ -504,7 +510,7 @@ class SupabaseCallStore implements CallStore {
       input.status === "confirmed"
         ? `${providerLabel(input.provider)} reservation confirmed for ${input.partySize} on ${input.date} at ${input.time}.`
         : `Staff-confirmed reservation request created for ${input.partySize} on ${input.date} at ${input.time}.`;
-    await this.patchCallWithInsightFallback(input.callId, {
+    await this.patchCallWithInsightFallback(`id=eq.${encodeURIComponent(input.callId)}`, input.callId, {
       intent: "reservation",
       outcome: input.status === "confirmed" ? "reservation_booked" : "message_taken",
       status: input.status === "confirmed" ? "resolved" : "new",
@@ -521,11 +527,16 @@ class SupabaseCallStore implements CallStore {
     return { reservationId };
   }
 
-  private async patchCallWithInsightFallback(callId: string, body: Record<string, unknown>, insight: Parameters<typeof buildPersistedCallInsightPatch>[0]) {
+  private async patchCallWithInsightFallback(
+    query: string,
+    logId: string,
+    body: Record<string, unknown>,
+    insight: Parameters<typeof buildPersistedCallInsightPatch>[0],
+  ) {
     const insightPatch = buildPersistedCallInsightPatch(insight);
 
     try {
-      await this.patchCall(callId, {
+      await this.patchCall(query, {
         ...body,
         ...insightPatch,
       });
@@ -533,18 +544,18 @@ class SupabaseCallStore implements CallStore {
     } catch (error) {
       if (!isMissingCallInsightColumnError(error)) throw error;
       console.warn("[call-store] calls insight columns missing; patched call with legacy fields only", {
-        callId,
+        callId: logId,
       });
     }
 
-    await this.patchCall(callId, body);
+    await this.patchCall(query, body);
   }
 
-  private async patchCall(callId: string, body: Record<string, unknown>) {
+  private async patchCall(query: string, body: Record<string, unknown>) {
     await this.request("calls", {
       body,
       method: "PATCH",
-      query: `id=eq.${encodeURIComponent(callId)}`,
+      query,
     });
   }
 

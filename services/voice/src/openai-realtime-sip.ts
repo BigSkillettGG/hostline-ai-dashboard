@@ -20,6 +20,7 @@ import type { RestaurantContextStore } from "./restaurant-context-store";
 import type { ReservationPlatformService } from "./reservation-platform-service";
 import type { TranscriptRole, TranscriptTurn } from "./types";
 import { createTwilioCallRecordingService, isTwilioCallSid, type CallRecordingService } from "./twilio-recording-service";
+import { recordToolCallMetric } from "./metrics";
 import type { TrustedContact } from "../../../src/domain/trusted-contacts";
 import { resolveSignalHostOpenAIVoice } from "../../../src/domain/voice-selection";
 
@@ -279,6 +280,10 @@ export function createOpenAIRealtimeSipService(
   return {
     get configured() {
       return Boolean(env.OPENAI_API_KEY && env.PUBLIC_HTTP_BASE_URL);
+    },
+
+    get activeSocketCount() {
+      return activeSockets.size;
     },
 
     closeAll() {
@@ -2000,6 +2005,8 @@ async function handleOpenAIRealtimeToolCalls({
     } catch (error) {
       output = {
         error: error instanceof Error ? error.message : "Tool call failed.",
+        errorType: classifyRealtimeToolError(error),
+        callerGuidance: "Tell the caller the request was captured for staff review if possible; do not promise the action completed.",
         ok: false,
       };
     }
@@ -2057,6 +2064,16 @@ function recordOpenAIRealtimeToolResult(
     name: toolCall.name,
     ok,
   });
+  recordToolCallMetric({ latencyMs, name: toolCall.name, ok });
+}
+
+function classifyRealtimeToolError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  if (/supabase|rest\/v1|PGRST|relation|schema cache|database/i.test(message)) return "persistence_error";
+  if (/twilio|sms|message|phone/i.test(message)) return "messaging_error";
+  if (/reservation|opentable|resy|sevenrooms|tock|yelp/i.test(message)) return "reservation_provider_error";
+  if (/validation|required|invalid|missing/i.test(message)) return "validation_error";
+  return "tool_error";
 }
 
 function isErrorToolOutput(output: unknown) {

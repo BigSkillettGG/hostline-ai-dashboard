@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyOrderChangeRequest,
   calculateCapturedOrderTotalCents,
   captureCustomerName,
   capturePickupOrder,
@@ -72,6 +73,26 @@ describe("pickup order intake", () => {
       { modifiers: ["Light cheese"], name: "Margherita Pizza", priceCents: 1800, quantity: 3 },
     ]);
     expect(summarizeCapturedOrderItems(items)).toBe("3 Margherita Pizza");
+  });
+
+  it("removes and changes draft order items when callers correct themselves", () => {
+    const draft = [
+      { name: "Margherita Pizza", priceCents: 1800, quantity: 2 },
+      { name: "Caesar Salad", priceCents: 1400, quantity: 1 },
+    ];
+
+    expect(applyOrderChangeRequest(draft, "Actually remove the caesar salad", demoRestaurantContext)).toMatchObject({
+      changed: true,
+      items: [{ name: "Margherita Pizza", priceCents: 1800, quantity: 2 }],
+    });
+
+    expect(applyOrderChangeRequest(draft, "Make that three margherita pizzas instead", demoRestaurantContext)).toMatchObject({
+      changed: true,
+      items: [
+        { name: "Margherita Pizza", priceCents: 1800, quantity: 3 },
+        { name: "Caesar Salad", priceCents: 1400, quantity: 1 },
+      ],
+    });
   });
 
   it("calculates an estimated pickup order subtotal", () => {
