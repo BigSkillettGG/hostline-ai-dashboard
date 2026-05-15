@@ -110,7 +110,7 @@ export const defaultRestaurantAgentConfig: RestaurantAgentConfig = {
   voiceProfileId: "ava",
   tone: "warm",
   greetingTemplate:
-    "Hi, thank you for calling {restaurant_name}. How can I help you?",
+    "Thank you for calling {restaurant_name}. How can I help you?",
   disclosureEnabled: true,
   callHandlingMode: "answer_after_rings",
   answerAfterRings: 3,

@@ -465,7 +465,7 @@ function buildAgentConfigPayload({
 }) {
   const isRestaurant = businessType === "restaurant";
   const businessName = stringValue(draft.restaurantName) ?? getBusinessTemplate(businessType).defaultName;
-  const greeting = stringValue(draft.greeting) ?? `Hi, thank you for calling ${businessName}. How can I help you?`;
+  const greeting = `Thank you for calling ${businessName}. How can I help you?`;
   const reservationMode = normalizeReservationMode(draft.reservationHandlingMode);
   const orderMode = normalizeOrderMode(draft.orderHandlingMode);
 

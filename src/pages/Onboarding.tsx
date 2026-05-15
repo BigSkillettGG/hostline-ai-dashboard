@@ -308,7 +308,7 @@ export default function Onboarding() {
 
   const playVoiceProfilePreview = async (voiceProfileId: SignalHostVoiceProfileId) => {
     const profile = getSignalHostVoiceProfile(voiceProfileId);
-    const previewText = `Hi, thank you for calling ${businessName}. How can I help you?`;
+    const previewText = `Thank you for calling ${businessName}. How can I help you?`;
 
     if (!isVoiceServiceConfigured()) {
       toast.error("Voice service is not configured yet. Set VITE_VOICE_SERVICE_URL first.");
@@ -1444,7 +1444,7 @@ function renderFieldInput({
                   </div>
                   <p className="mt-1 text-xs leading-5 text-muted-foreground">{profile.description}</p>
                   <p className="mt-2 text-[11px] leading-5 text-muted-foreground">
-                    Preview: Hi, thank you for calling {businessName}. How can I help you?
+                    Preview: Thank you for calling {businessName}. How can I help you?
                   </p>
                 </button>
                 <Button
@@ -1613,7 +1613,7 @@ const fieldTips: Record<string, string> = {
   partyRules: "Mention large-party thresholds, deposits, private rooms, patio requests, and blackout dates.",
   allergyPolicy: "For severe allergies, prefer staff confirmation over certainty.",
   complaintPolicy: "Do not promise refunds unless the business explicitly allows that.",
-  greeting: "Keep it short. The strongest default is: Hi, thank you for calling {restaurant_name}. How can I help you?",
+  greeting: "Keep it short. The strongest default is: Thank you for calling {restaurant_name}. How can I help you?",
   voiceProfileId: "Preview all four voices. The selected name becomes the employee name owners see in calls, texts, reports, and settings.",
   firstTestCall: "Write the calls you want the owner to try first, like hours, pricing, booking, and complaints.",
   phoneLineType: "If unsure, choose Not sure. The launch packet will produce a safe provider script instead of brittle instructions.",

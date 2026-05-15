@@ -542,14 +542,14 @@ export function buildOpenAIRealtimeInstructions(
     "Realtime phone behavior:",
     "This is one continuous live phone call. Never restart the opening greeting in the middle of the call.",
     `Opening greeting to use when the call begins: "${openingGreeting}"`,
-    "Say the opening greeting once at the start of the call. Do not introduce yourself by name and do not say you are virtual or AI in the opening.",
+    "Say the opening greeting once at the start of the call, exactly as written. Do not add 'hi', 'hello', your name, or any extra words before or after it. Do not say you are virtual or AI in the opening.",
     "If the caller says 'hello' before you have greeted them, immediately give the full opening greeting instead of only saying hello back.",
     profile.isRestaurant
-      ? "Voice style: warm, polished, friendly, and conversational. Avoid IVR cadence, monotone delivery, robotic precision, or over-enunciating the restaurant name."
-      : "Voice style: warm, polished, friendly, and conversational. Avoid IVR cadence, monotone delivery, robotic precision, or over-enunciating the business name.",
-    "Greeting energy: the opening should be friendly and lightly upbeat, but short and not theatrical.",
+      ? "Voice style: bright, upbeat, polished, and genuinely delighted to help, like an excellent restaurant host. Avoid IVR cadence, monotone delivery, robotic precision, or over-enunciating the restaurant name."
+      : "Voice style: bright, upbeat, polished, and genuinely delighted to help, like an excellent front desk employee. Avoid IVR cadence, monotone delivery, robotic precision, or over-enunciating the business name.",
+    "Greeting energy: deliver the exact opening greeting with a big smile in your voice, confident warmth, and high hospitality energy. Do not add extra words like 'hi'.",
     "Pacing: speak briskly enough for a phone call, with varied intonation and short sentence chunks. Do not drag out 'Olive and Ember'.",
-    "Voice color: let a small smile come through in the greeting and positive answers; use gentle concern for allergies or complaints; keep the warmth subtle and professional.",
+    "Voice color: keep a clear smile in the greeting and positive answers; use gentle concern for allergies or complaints; stay lively and human without becoming silly.",
     "Make answers feel specific to what the caller just said. For example, if they ask about a table for 6 tonight, say 'For 6 tonight...' before asking only for the missing detail.",
     profile.isRestaurant
       ? "Use 'we' when speaking for the restaurant, such as 'we're open until 10' or 'we have parking behind the building.'"
@@ -1125,11 +1125,11 @@ export function buildOpeningGreetingInstructions(context: RestaurantVoiceContext
     "Say this exact opening greeting once as soon as the call starts, then stop and listen:",
     greeting,
     profile.isRestaurant
-      ? "Deliver it warmly, like a friendly restaurant host with a smile in your voice."
-      : `Deliver it warmly, like a friendly ${profile.staffNoun} with a smile in your voice.`,
+      ? "Deliver it with bright, high-energy hospitality, like a friendly restaurant host with a big smile in your voice."
+      : `Deliver it with bright, high-energy hospitality, like a friendly ${profile.staffNoun} with a big smile in your voice.`,
     profile.isRestaurant
-      ? "Do not add your name, do not say you are virtual or AI, and do not add menu, hours, or reservation information."
-      : `Do not add your name, do not say you are virtual or AI, and do not add ${profile.offeringNoun}, hours, or ${profile.appointmentNoun} information.`,
+      ? "Do not add 'hi' or 'hello', do not add your name, do not say you are virtual or AI, and do not add menu, hours, or reservation information."
+      : `Do not add 'hi' or 'hello', do not add your name, do not say you are virtual or AI, and do not add ${profile.offeringNoun}, hours, or ${profile.appointmentNoun} information.`,
   ].join(" ");
 }
 
@@ -1146,7 +1146,7 @@ export function buildOwnerOpeningGreeting(ownerContact: TrustedContact) {
 }
 
 export function buildShortOpeningGreeting(context: RestaurantVoiceContext) {
-  return `Hi, thank you for calling ${toSpokenRestaurantName(context.restaurantName)}. How can I help you?`;
+  return `Thank you for calling ${toSpokenRestaurantName(context.restaurantName)}. How can I help you?`;
 }
 
 function createRealtimeQualityMetrics(): RealtimeQualityMetrics {

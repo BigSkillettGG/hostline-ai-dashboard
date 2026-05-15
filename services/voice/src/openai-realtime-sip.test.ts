@@ -108,10 +108,10 @@ describe("OpenAI Realtime SIP", () => {
     expect(payload.audio.output.voice).toBe("marin");
     expect(payload.audio.output.speed).toBe(1.02);
     expect(payload.instructions).toContain("Never restart the opening greeting");
-    expect(payload.instructions).toContain("Hi, thank you for calling Olive and Ember. How can I help you?");
-    expect(payload.instructions).toContain("do not say you are virtual or AI");
+    expect(payload.instructions).toContain("Thank you for calling Olive and Ember. How can I help you?");
+    expect(payload.instructions).toContain("Do not say you are virtual or AI");
     expect(payload.instructions).toContain("Avoid IVR cadence");
-    expect(payload.instructions).toContain("polished restaurant host");
+    expect(payload.instructions).toContain("excellent restaurant host");
     expect(payload.instructions).toContain("Voice color");
     expect(payload.instructions).toContain("Make answers feel specific to what the caller just said");
     expect(payload.instructions).toContain("Use 'we' when speaking for the restaurant");
@@ -204,7 +204,7 @@ describe("OpenAI Realtime SIP", () => {
     });
     expect(payload.instructions).toContain("internal owner-assistant call");
     expect(payload.instructions).toContain("run_owner_command");
-    expect(payload.instructions).not.toContain("Hi, thank you for calling Olive and Ember");
+    expect(payload.instructions).not.toContain("Thank you for calling Olive and Ember. How can I help you?");
     expect(payload.tools.map((tool) => tool.name)).toEqual(["run_owner_command", "finish_call"]);
     expect(buildOwnerRealtimeInstructions(demoRestaurantContext, ownerContact)).toContain("trusted owner");
     expect(buildOwnerOpeningGreeting(ownerContact)).toBe("Hi Maria, it's SignalHost. What would you like to check or update?");
@@ -493,7 +493,7 @@ describe("OpenAI Realtime SIP", () => {
 
   it("builds a short opening greeting that does not introduce the host", () => {
     expect(buildShortOpeningGreeting(demoRestaurantContext)).toBe(
-      "Hi, thank you for calling Olive and Ember. How can I help you?",
+      "Thank you for calling Olive and Ember. How can I help you?",
     );
   });
 
@@ -501,9 +501,9 @@ describe("OpenAI Realtime SIP", () => {
     const instructions = buildOpeningGreetingInstructions(demoRestaurantContext);
 
     expect(instructions).toContain("Say this exact opening greeting once");
-    expect(instructions).toContain("Hi, thank you for calling Olive and Ember. How can I help you?");
+    expect(instructions).toContain("Thank you for calling Olive and Ember. How can I help you?");
     expect(instructions).toContain("smile in your voice");
-    expect(instructions).toContain("Do not add your name");
+    expect(instructions).toContain("do not add your name");
   });
 
   it("clamps realtime playback speed to a safe phone range", () => {

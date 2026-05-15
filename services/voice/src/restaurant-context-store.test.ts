@@ -149,7 +149,7 @@ describe("restaurant context store", () => {
     expect(context.hostName).toBe("Miles");
     expect(context.voiceGender).toBe("male");
     expect(context.voiceProfileId).toBe("miles");
-    expect(context.greeting).toBe("Hello from Saffron Table, Miles speaking.");
+    expect(context.greeting).toBe("Thank you for calling Saffron Table. How can I help you?");
     expect(context.defaultPickupEtaMinutes).toBe(20);
     expect(context.smsConfirmationsEnabled).toBe(false);
     expect(context.businessLiveContext?.activeMode.id).toBe("busy");
@@ -340,7 +340,7 @@ describe("restaurant context store", () => {
     );
   });
 
-  it("uses a spoken restaurant name in greeting templates without changing the stored name", () => {
+  it("uses a canonical public greeting without changing the stored name", () => {
     const context = buildRestaurantContext({
       agentConfig: {
         escalation_phone_number: null,
@@ -362,7 +362,7 @@ describe("restaurant context store", () => {
     });
 
     expect(context.restaurantName).toBe("Olive & Ember");
-    expect(context.greeting).toBe("Thanks for calling Olive and Ember. This is Ava. How can I help you?");
+    expect(context.greeting).toBe("Thank you for calling Olive and Ember. How can I help you?");
   });
 
   it("caches restaurant context lookups by location for the TTL window", async () => {

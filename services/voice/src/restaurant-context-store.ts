@@ -192,8 +192,7 @@ export function buildRestaurantContext({
       .find(Boolean) ?? getSignalHostVoiceProfile(undefined);
   const hostName = voiceProfile.employeeName;
   const timezone = stringValue(draft.timezone) ?? location?.timezone?.trim() ?? demoRestaurantContext.timezone;
-  const greetingTemplate =
-    stringValue(draft.greeting) ?? agentConfig?.greeting_template?.trim() ?? demoRestaurantContext.greeting;
+  const greetingTemplate = "Thank you for calling {restaurant_name}. How can I help you?";
   const menu = mapMenuItems(menuItems);
   const orderSettings = buildOrderSettings(draft);
   const menuHighlights = menu.length

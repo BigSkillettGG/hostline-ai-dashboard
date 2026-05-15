@@ -90,7 +90,7 @@ function buildCall(overrides: Partial<Call> = {}): Call {
     summary: "Caller asked about specials.",
     time: recentIso(),
     transcript: [
-      { speaker: "agent", t: "00:00", text: "Hi, thank you for calling Olive & Ember. How can I help you?" },
+      { speaker: "agent", t: "00:00", text: "Thank you for calling Olive & Ember. How can I help you?" },
       { speaker: "caller", t: "00:05", text: "Do you have specials tonight?" },
     ],
     ...overrides,

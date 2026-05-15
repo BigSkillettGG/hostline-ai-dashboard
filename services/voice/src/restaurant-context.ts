@@ -101,7 +101,7 @@ export const demoRestaurantContext: RestaurantVoiceContext = {
   voiceGender: "female",
   voiceProfileId: "ava",
   timezone: "America/Los_Angeles",
-  greeting: "Hi, thank you for calling Olive and Ember. How can I help you?",
+  greeting: "Thank you for calling Olive and Ember. How can I help you?",
   defaultPickupEtaMinutes: 25,
   smsConfirmationsEnabled: true,
   trustedContacts: [
