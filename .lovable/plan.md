@@ -1,29 +1,19 @@
-## Seed Olive & Ember demo organization + location
+## Plan
 
-Insert one organization and one location into Supabase so the voice service has a real `location_id` to write calls into.
+Apply `supabase/migrations/20260515130000_seed_vertical_demo_accounts.sql` to the Lovable Cloud database, then verify the seed.
 
-### Data to insert
+### Steps
 
-- `public.organizations`: name = `Olive & Ember`
-- `public.locations`:
-  - name = `Olive & Ember`
-  - organization_id = (the new org id)
-  - phone = `NULL` (placeholder until you provide a real Twilio number)
-  - ai_host_phone = `NULL`
-  - timezone = `America/Los_Angeles` (matches the existing mock for Olive & Ember in `src/data/mock.ts`)
+1. Run the full migration SQL via the migration tool. It is idempotent: it upserts six organizations, creates/refreshes six demo auth users (password `SignalHostDemo!2026`), and seeds locations, phone numbers, calls, and transcripts for each vertical.
 
-Both inserts go through the `supabase--insert` tool in a single statement using a CTE so we can capture and return both UUIDs deterministically.
+2. Verify with read queries:
+   - `public.locations` contains all six fixed UUIDs (Olive & Ember, Summit Air, Harbor Plumbing, RidgeLine Roofing, BrightWire Electric, Luna Studio).
+   - `auth.users` contains the six `demo.*@signalhost.ai` accounts with confirmed emails.
+   - Spot-check `public.phone_numbers` has one row per location.
 
-### After insert I will return
-
-1. `public.organizations.id` (UUID)
-2. `public.locations.id` (UUID)
-3. A confirming `SELECT` showing the new row in `public.locations`
-4. The exact UUID to paste into Render as `SUPABASE_DEMO_LOCATION_ID` (same as #2)
+3. Report back: migration status, location row presence, and demo user presence. (Login attempts via REST require running the script outside the SQL tool — confirming the rows + confirmed_at timestamp + password hash is the practical verification here.)
 
 ### Notes
 
-- No schema changes — pure data insert, no migration needed.
-- No code changes, no UI changes.
-- You can update `phone` / `ai_host_phone` later once your Twilio number is provisioned; the voice service only needs the `location_id` to start persisting calls.
-- After Render is updated with `SUPABASE_DEMO_LOCATION_ID`, `SUPABASE_URL`, and `SUPABASE_SECRET_KEY`, `/health` should flip `supabaseConfigured: true` and the next call will create rows in `calls` + `transcript_turns`, visible in `/super/calls`.
+- Olive & Ember location (`78d8053b-...`) already exists from prior seeds; the migration's `on conflict do update` will refresh it without breaking FKs.
+- No application code changes are needed.

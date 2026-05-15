@@ -120,6 +120,281 @@ export type Database = {
           },
         ]
       }
+      billing_accounts: {
+        Row: {
+          cancel_at_period_end: boolean
+          created_at: string
+          current_period_end: string | null
+          current_period_start: string | null
+          id: string
+          included_interactions: number | null
+          location_id: string | null
+          monthly_cents: number | null
+          organization_id: string
+          overage_label: string | null
+          plan_id: string | null
+          plan_name: string | null
+          status: string
+          stripe_checkout_session_id: string | null
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          trial_end: string | null
+          updated_at: string
+        }
+        Insert: {
+          cancel_at_period_end?: boolean
+          created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          id?: string
+          included_interactions?: number | null
+          location_id?: string | null
+          monthly_cents?: number | null
+          organization_id: string
+          overage_label?: string | null
+          plan_id?: string | null
+          plan_name?: string | null
+          status?: string
+          stripe_checkout_session_id?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          trial_end?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cancel_at_period_end?: boolean
+          created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          id?: string
+          included_interactions?: number | null
+          location_id?: string | null
+          monthly_cents?: number | null
+          organization_id?: string
+          overage_label?: string | null
+          plan_id?: string | null
+          plan_name?: string | null
+          status?: string
+          stripe_checkout_session_id?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          trial_end?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_accounts_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_accounts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      business_contacts: {
+        Row: {
+          can_add_live_updates: boolean
+          can_approve_permanent_knowledge: boolean
+          can_manage_alert_preferences: boolean
+          can_receive_alerts: boolean
+          can_resolve_customer_requests: boolean
+          can_use_owner_assistant: boolean
+          contact_type: string
+          created_at: string
+          email: string | null
+          id: string
+          location_id: string
+          name: string
+          phone: string | null
+          preferred_channel: string
+          requires_owner_approval: boolean
+          trusted_identity_enabled: boolean
+          updated_at: string
+        }
+        Insert: {
+          can_add_live_updates?: boolean
+          can_approve_permanent_knowledge?: boolean
+          can_manage_alert_preferences?: boolean
+          can_receive_alerts?: boolean
+          can_resolve_customer_requests?: boolean
+          can_use_owner_assistant?: boolean
+          contact_type?: string
+          created_at?: string
+          email?: string | null
+          id?: string
+          location_id: string
+          name: string
+          phone?: string | null
+          preferred_channel?: string
+          requires_owner_approval?: boolean
+          trusted_identity_enabled?: boolean
+          updated_at?: string
+        }
+        Update: {
+          can_add_live_updates?: boolean
+          can_approve_permanent_knowledge?: boolean
+          can_manage_alert_preferences?: boolean
+          can_receive_alerts?: boolean
+          can_resolve_customer_requests?: boolean
+          can_use_owner_assistant?: boolean
+          contact_type?: string
+          created_at?: string
+          email?: string | null
+          id?: string
+          location_id?: string
+          name?: string
+          phone?: string | null
+          preferred_channel?: string
+          requires_owner_approval?: boolean
+          trusted_identity_enabled?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_contacts_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      business_links: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          label: string
+          link_type: string
+          location_id: string
+          sort_order: number
+          updated_at: string
+          url: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          label: string
+          link_type: string
+          location_id: string
+          sort_order?: number
+          updated_at?: string
+          url: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          label?: string
+          link_type?: string
+          location_id?: string
+          sort_order?: number
+          updated_at?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_links_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      business_live_settings: {
+        Row: {
+          active_mode: string
+          location_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          active_mode?: string
+          location_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          active_mode?: string
+          location_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_live_settings_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: true
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      business_live_updates: {
+        Row: {
+          body: string
+          cleared_at: string | null
+          created_at: string
+          created_by: string | null
+          expiration: string
+          expires_at: string | null
+          id: string
+          location_id: string
+          mode: string | null
+          source: string
+          title: string
+          update_type: string
+        }
+        Insert: {
+          body: string
+          cleared_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          expiration?: string
+          expires_at?: string | null
+          id?: string
+          location_id: string
+          mode?: string | null
+          source?: string
+          title: string
+          update_type: string
+        }
+        Update: {
+          body?: string
+          cleared_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          expiration?: string
+          expires_at?: string | null
+          id?: string
+          location_id?: string
+          mode?: string | null
+          source?: string
+          title?: string
+          update_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_live_updates_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       call_feedback: {
         Row: {
           add_to_knowledge: boolean
@@ -256,6 +531,94 @@ export type Database = {
             columns: ["location_id"]
             isOneToOne: false
             referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_requests: {
+        Row: {
+          created_at: string
+          customer_name: string | null
+          customer_phone: string | null
+          details: Json
+          id: string
+          knowledge_suggestion_id: string | null
+          location_id: string
+          priority: string
+          request_type: string
+          responded_at: string | null
+          response_channel: string | null
+          response_status: string
+          response_text: string | null
+          source: string
+          source_call_id: string | null
+          status: string
+          summary: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          customer_name?: string | null
+          customer_phone?: string | null
+          details?: Json
+          id?: string
+          knowledge_suggestion_id?: string | null
+          location_id: string
+          priority?: string
+          request_type?: string
+          responded_at?: string | null
+          response_channel?: string | null
+          response_status?: string
+          response_text?: string | null
+          source?: string
+          source_call_id?: string | null
+          status?: string
+          summary: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          customer_name?: string | null
+          customer_phone?: string | null
+          details?: Json
+          id?: string
+          knowledge_suggestion_id?: string | null
+          location_id?: string
+          priority?: string
+          request_type?: string
+          responded_at?: string | null
+          response_channel?: string | null
+          response_status?: string
+          response_text?: string | null
+          source?: string
+          source_call_id?: string | null
+          status?: string
+          summary?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_requests_knowledge_suggestion_id_fkey"
+            columns: ["knowledge_suggestion_id"]
+            isOneToOne: false
+            referencedRelation: "knowledge_suggestions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_requests_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_requests_source_call_id_fkey"
+            columns: ["source_call_id"]
+            isOneToOne: false
+            referencedRelation: "calls"
             referencedColumns: ["id"]
           },
         ]
@@ -418,6 +781,92 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "knowledge_sections_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      knowledge_suggestions: {
+        Row: {
+          applied_knowledge_section_id: string | null
+          body: string
+          call_id: string | null
+          created_at: string
+          created_by: string | null
+          feedback_id: string | null
+          id: string
+          location_id: string
+          priority: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          source: string
+          source_question: string | null
+          status: string
+          suggested_answer: string | null
+          title: string
+        }
+        Insert: {
+          applied_knowledge_section_id?: string | null
+          body: string
+          call_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          feedback_id?: string | null
+          id?: string
+          location_id: string
+          priority?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          source?: string
+          source_question?: string | null
+          status?: string
+          suggested_answer?: string | null
+          title: string
+        }
+        Update: {
+          applied_knowledge_section_id?: string | null
+          body?: string
+          call_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          feedback_id?: string | null
+          id?: string
+          location_id?: string
+          priority?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          source?: string
+          source_question?: string | null
+          status?: string
+          suggested_answer?: string | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "knowledge_suggestions_applied_knowledge_section_id_fkey"
+            columns: ["applied_knowledge_section_id"]
+            isOneToOne: false
+            referencedRelation: "knowledge_sections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "knowledge_suggestions_call_id_fkey"
+            columns: ["call_id"]
+            isOneToOne: false
+            referencedRelation: "calls"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "knowledge_suggestions_feedback_id_fkey"
+            columns: ["feedback_id"]
+            isOneToOne: false
+            referencedRelation: "call_feedback"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "knowledge_suggestions_location_id_fkey"
             columns: ["location_id"]
             isOneToOne: false
             referencedRelation: "locations"
@@ -608,6 +1057,7 @@ export type Database = {
           direction: string
           from_phone: string
           id: string
+          location_id: string | null
           provider: string
           provider_message_sid: string | null
           raw_payload: Json
@@ -621,6 +1071,7 @@ export type Database = {
           direction: string
           from_phone: string
           id?: string
+          location_id?: string | null
           provider?: string
           provider_message_sid?: string | null
           raw_payload?: Json
@@ -634,6 +1085,7 @@ export type Database = {
           direction?: string
           from_phone?: string
           id?: string
+          location_id?: string | null
           provider?: string
           provider_message_sid?: string | null
           raw_payload?: Json
@@ -642,6 +1094,13 @@ export type Database = {
           to_phone?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "message_events_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "message_events_thread_id_fkey"
             columns: ["thread_id"]
@@ -941,6 +1400,77 @@ export type Database = {
           name?: string
         }
         Relationships: []
+      }
+      owner_reports: {
+        Row: {
+          copy_text: string
+          created_at: string
+          delivery_channels: Json
+          error_message: string | null
+          follow_ups: Json
+          generated_at: string
+          id: string
+          location_id: string
+          metrics: Json
+          owner_message: string
+          period_end: string
+          period_start: string
+          report_type: string
+          sent_at: string | null
+          status: string
+          suggested_updates: Json
+          title: string
+          totals: Json
+        }
+        Insert: {
+          copy_text: string
+          created_at?: string
+          delivery_channels?: Json
+          error_message?: string | null
+          follow_ups?: Json
+          generated_at?: string
+          id?: string
+          location_id: string
+          metrics?: Json
+          owner_message: string
+          period_end: string
+          period_start: string
+          report_type?: string
+          sent_at?: string | null
+          status?: string
+          suggested_updates?: Json
+          title: string
+          totals?: Json
+        }
+        Update: {
+          copy_text?: string
+          created_at?: string
+          delivery_channels?: Json
+          error_message?: string | null
+          follow_ups?: Json
+          generated_at?: string
+          id?: string
+          location_id?: string
+          metrics?: Json
+          owner_message?: string
+          period_end?: string
+          period_start?: string
+          report_type?: string
+          sent_at?: string | null
+          status?: string
+          suggested_updates?: Json
+          title?: string
+          totals?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "owner_reports_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       phone_numbers: {
         Row: {
