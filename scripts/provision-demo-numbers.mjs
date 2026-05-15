@@ -2,42 +2,42 @@ import fs from "node:fs";
 
 const demoTargets = [
   {
-    areaCode: "415",
+    areaCodes: ["415", "628"],
     business: "Olive & Ember",
     locationId: "78d8053b-631d-4811-939f-61f0efe1d82a",
     mainPhone: "+14155550148",
     vertical: "restaurant",
   },
   {
-    areaCode: "617",
+    areaCodes: ["617", "857", "781", "339"],
     business: "Summit Air",
     locationId: "11111111-1111-4111-8111-111111111111",
     mainPhone: "+16175550100",
     vertical: "hvac",
   },
   {
-    areaCode: "781",
+    areaCodes: ["781", "339", "617", "857"],
     business: "Harbor Plumbing",
     locationId: "22222222-2222-4222-8222-222222222222",
     mainPhone: "+17815550108",
     vertical: "plumbing",
   },
   {
-    areaCode: "508",
+    areaCodes: ["508", "774"],
     business: "RidgeLine Roofing",
     locationId: "33333333-3333-4333-8333-333333333333",
     mainPhone: "+15085550102",
     vertical: "roofing",
   },
   {
-    areaCode: "978",
+    areaCodes: ["978", "351"],
     business: "BrightWire Electric",
     locationId: "44444444-4444-4444-8444-444444444444",
     mainPhone: "+19785550120",
     vertical: "electrical",
   },
   {
-    areaCode: "339",
+    areaCodes: ["339", "781", "617", "857"],
     business: "Luna Studio",
     locationId: "55555555-5555-4555-8555-555555555555",
     mainPhone: "+13395550122",
@@ -111,6 +111,33 @@ for (const target of demoTargets) {
     token,
   ));
   if (existingRows?.[0]?.phone_number) {
+    const expectedVoiceWebhookUrl = `${voiceServiceUrl}/openai/realtime/webhook?locationId=${encodeURIComponent(target.locationId)}`;
+    const needsSync =
+      normalizePhone(liveLocation[0].ai_host_phone) !== normalizePhone(existingRows[0].phone_number) ||
+      existingRows[0].voice_webhook_url !== expectedVoiceWebhookUrl;
+    if (commit && needsSync) {
+      const synced = await voiceRequest("/telephony/attach-number", token, {
+        forwardingMode: "forward_unanswered",
+        locationId: target.locationId,
+        phoneNumber: existingRows[0].phone_number,
+        providerSid: existingRows[0].provider_sid,
+        restaurantMainLine: target.mainPhone,
+        status: existingRows[0].status,
+        trialDays: 7,
+        trialGraceDays: 14,
+        voiceWebhookUrl: expectedVoiceWebhookUrl,
+      });
+      results.push({
+        business: target.business,
+        locationId: target.locationId,
+        phoneNumber: synced.phoneNumber?.phoneNumber ?? existingRows[0].phone_number,
+        providerSid: synced.phoneNumber?.providerSid ?? existingRows[0].provider_sid,
+        status: "synced_existing_number",
+        voiceWebhookUrl: synced.phoneNumber?.voiceWebhookUrl ?? expectedVoiceWebhookUrl,
+      });
+      continue;
+    }
+
     results.push({
       business: target.business,
       locationId: target.locationId,
@@ -122,14 +149,10 @@ for (const target of demoTargets) {
     continue;
   }
 
-  const available = await voiceRequest(
-    `/telephony/available-numbers?areaCode=${encodeURIComponent(target.areaCode)}&limit=3`,
-    token,
-  );
-  const selected = available.numbers?.[0];
+  const selected = await findFirstAvailableNumber(target, token);
   if (!selected?.phoneNumber) {
     results.push({
-      areaCode: target.areaCode,
+      areaCodes: target.areaCodes,
       business: target.business,
       locationId: target.locationId,
       status: "no_available_number",
@@ -139,7 +162,7 @@ for (const target of demoTargets) {
 
   if (!commit) {
     results.push({
-      areaCode: target.areaCode,
+      areaCode: selected.areaCode,
       business: target.business,
       candidate: selected.phoneNumber,
       locationId: target.locationId,
@@ -149,7 +172,7 @@ for (const target of demoTargets) {
   }
 
   const provisioned = await voiceRequest("/telephony/provision-number", token, {
-    areaCode: target.areaCode,
+    areaCode: selected.areaCode,
     forwardingMode: "forward_unanswered",
     locationId: target.locationId,
     phoneNumber: selected.phoneNumber,
@@ -223,4 +246,20 @@ async function voiceRequest(path, token, body) {
   const text = await response.text();
   if (!response.ok) throw new Error(`Voice service ${path} failed: ${response.status} ${text}`);
   return text ? JSON.parse(text) : {};
+}
+
+async function findFirstAvailableNumber(target, token) {
+  for (const areaCode of target.areaCodes) {
+    const available = await voiceRequest(
+      `/telephony/available-numbers?areaCode=${encodeURIComponent(areaCode)}&limit=3`,
+      token,
+    );
+    const selected = available.numbers?.[0];
+    if (selected?.phoneNumber) return { ...selected, areaCode };
+  }
+  return undefined;
+}
+
+function normalizePhone(value) {
+  return String(value ?? "").replace(/\D/g, "");
 }

@@ -75,7 +75,16 @@ To make a vertical callable, provision a real Twilio number for that location. T
 
 Set `TWILIO_SIP_TRUNK_SID` on the voice service before provisioning demo numbers. With that variable set, the provisioner buys the Twilio number, attaches it to the Elastic SIP Trunk, and stores it on the matching location. The voice service then reads the dialed Twilio number from OpenAI/Twilio SIP headers and picks the matching `location_id` before loading knowledge. That means multiple demo numbers can share the same OpenAI SIP trunk.
 
-Current live state: Olive & Ember already has a real Twilio number. The other verticals need real Twilio numbers before phone testing.
+Current live callable demo numbers:
+
+| Vertical | Demo business | Real SignalHost number |
+| --- | --- | --- |
+| Restaurants | Olive & Ember | +1 781 423 3898 |
+| HVAC | Summit Air | +1 617 545 0460 |
+| Plumbers | Harbor Plumbing | +1 781 694 6083 |
+| Roofers | RidgeLine Roofing | +1 508 290 3711 |
+| Electricians | BrightWire Electric | +1 978 933 7955 |
+| Hair salons and barbershops | Luna Studio | +1 339 330 4271 |
 
 After the six demo locations exist in live Supabase and `TWILIO_SIP_TRUNK_SID` is set on Render, preview the demo number choices:
 
