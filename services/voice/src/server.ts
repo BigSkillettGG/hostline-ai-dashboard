@@ -17,7 +17,7 @@ import { createOpenAIVoicePreview } from "./openai-voice-preview";
 import { getVoiceServiceReadiness, loadEnv, type VoiceServiceEnv } from "./env";
 import { buildLiveCallConfig } from "./live-call";
 import {
-  checkRateLimit,
+  checkDistributedRateLimit,
   getRequestIp,
   HttpRequestError,
   parseJsonRequestBody,
@@ -249,7 +249,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
   }
 
   if (req.method === "POST" && url.pathname === "/tenant/bootstrap") {
-    if (!allowRateLimitedRequest(req, res, "tenant-bootstrap", 20)) return;
+    if (!(await allowRateLimitedRequest(req, res, "tenant-bootstrap", 20, currentEnv))) return;
 
     try {
       const body = parseJsonRequestBody(await readLimitedRequestBody(req, TENANT_BOOTSTRAP_BODY_LIMIT_BYTES)) as TenantBootstrapInput;
@@ -311,7 +311,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
   }
 
   if (req.method === "POST" && url.pathname === "/billing/checkout-session") {
-    if (!allowRateLimitedRequest(req, res, "billing-checkout", 20)) return;
+    if (!(await allowRateLimitedRequest(req, res, "billing-checkout", 20, currentEnv))) return;
 
     try {
       const body = parseJsonRequestBody(await readLimitedRequestBody(req, ADMIN_BODY_LIMIT_BYTES)) as {
@@ -339,7 +339,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
   }
 
   if (req.method === "POST" && url.pathname === "/billing/customer-portal") {
-    if (!allowRateLimitedRequest(req, res, "billing-portal", 20)) return;
+    if (!(await allowRateLimitedRequest(req, res, "billing-portal", 20, currentEnv))) return;
 
     try {
       const body = parseJsonRequestBody(await readLimitedRequestBody(req, ADMIN_BODY_LIMIT_BYTES)) as {
@@ -376,7 +376,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
   }
 
   if (req.method === "POST" && url.pathname === "/owner-reports/daily") {
-    if (!allowRateLimitedRequest(req, res, "owner-daily-report", 20)) return;
+    if (!(await allowRateLimitedRequest(req, res, "owner-daily-report", 20, currentEnv))) return;
 
     try {
       const body = parseJsonRequestBody(await readLimitedRequestBody(req, ADMIN_BODY_LIMIT_BYTES)) as {
@@ -398,7 +398,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
   }
 
   if (req.method === "POST" && url.pathname === "/owner-reports/daily/deliver") {
-    if (!allowRateLimitedRequest(req, res, "owner-daily-report-deliver", 10)) return;
+    if (!(await allowRateLimitedRequest(req, res, "owner-daily-report-deliver", 10, currentEnv))) return;
 
     try {
       const body = parseJsonRequestBody(await readLimitedRequestBody(req, ADMIN_BODY_LIMIT_BYTES)) as {
@@ -420,7 +420,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
   }
 
   if (req.method === "POST" && url.pathname === "/customer-follow-ups/send") {
-    if (!allowRateLimitedRequest(req, res, "customer-follow-up-send", 30)) return;
+    if (!(await allowRateLimitedRequest(req, res, "customer-follow-up-send", 30, currentEnv))) return;
 
     try {
       const body = parseJsonRequestBody(await readLimitedRequestBody(req, ADMIN_BODY_LIMIT_BYTES)) as CustomerFollowUpInput;
@@ -531,7 +531,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
   }
 
   if (req.method === "POST" && url.pathname === "/ingestion/run-next") {
-    if (!allowRateLimitedRequest(req, res, "ingestion", 20)) return;
+    if (!(await allowRateLimitedRequest(req, res, "ingestion", 20, currentEnv))) return;
 
     try {
       const body = parseJsonRequestBody(await readLimitedRequestBody(req, ADMIN_BODY_LIMIT_BYTES)) as {
@@ -560,7 +560,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
   }
 
   if (req.method === "GET" && url.pathname === "/telephony/available-numbers") {
-    if (!allowRateLimitedRequest(req, res, "number-search", 45)) return;
+    if (!(await allowRateLimitedRequest(req, res, "number-search", 45, currentEnv))) return;
 
     const authorization = await authorizeVoiceAdminRequest({
       currentEnv,
@@ -587,7 +587,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
   }
 
   if (req.method === "POST" && url.pathname === "/telephony/provision-number") {
-    if (!allowRateLimitedRequest(req, res, "number-provision", 10)) return;
+    if (!(await allowRateLimitedRequest(req, res, "number-provision", 10, currentEnv))) return;
 
     try {
       const body = parseJsonRequestBody(await readLimitedRequestBody(req, ADMIN_BODY_LIMIT_BYTES)) as {
@@ -668,7 +668,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
   }
 
   if (req.method === "POST" && url.pathname === "/telephony/attach-number") {
-    if (!allowRateLimitedRequest(req, res, "number-attach", 20)) return;
+    if (!(await allowRateLimitedRequest(req, res, "number-attach", 20, currentEnv))) return;
 
     try {
       const body = parseJsonRequestBody(await readLimitedRequestBody(req, ADMIN_BODY_LIMIT_BYTES)) as {
@@ -749,7 +749,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
   }
 
   if (req.method === "POST" && url.pathname === "/telephony/release-number") {
-    if (!allowRateLimitedRequest(req, res, "number-release", 20)) return;
+    if (!(await allowRateLimitedRequest(req, res, "number-release", 20, currentEnv))) return;
 
     try {
       const body = parseJsonRequestBody(await readLimitedRequestBody(req, ADMIN_BODY_LIMIT_BYTES)) as {
@@ -1103,7 +1103,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
   }
 
   if (req.method === "POST" && url.pathname === "/voice/preview") {
-    if (!allowRateLimitedRequest(req, res, "voice-preview", 20)) return;
+    if (!(await allowRateLimitedRequest(req, res, "voice-preview", 20, currentEnv))) return;
 
     try {
       const authorization = await authorizeVoiceAdminRequest({
@@ -1141,7 +1141,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
   }
 
   if (req.method === "POST" && url.pathname === "/web-chat/message") {
-    if (!allowRateLimitedRequest(req, res, "web-chat", 60)) return;
+    if (!(await allowRateLimitedRequest(req, res, "web-chat", 60, currentEnv))) return;
 
     try {
       const body = parseJsonRequestBody(await readLimitedRequestBody(req, WEB_CHAT_BODY_LIMIT_BYTES)) as WebChatMessageInput;
@@ -1154,7 +1154,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
   }
 
   if (req.method === "POST" && (url.pathname === "/owner/email-command" || url.pathname === "/email/owner-command")) {
-    if (!allowRateLimitedRequest(req, res, "owner-email-command", 60)) return;
+    if (!(await allowRateLimitedRequest(req, res, "owner-email-command", 60, currentEnv))) return;
 
     try {
       const body = parseJsonRequestBody(await readLimitedRequestBody(req, OWNER_EMAIL_BODY_LIMIT_BYTES)) as OwnerEmailCommandInput;
@@ -1189,7 +1189,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
   }
 
   if (req.method === "POST" && (url.pathname === "/resend/inbound-email" || url.pathname === "/email/resend-inbound")) {
-    if (!allowRateLimitedRequest(req, res, "resend-inbound-email", 120)) return;
+    if (!(await allowRateLimitedRequest(req, res, "resend-inbound-email", 120, currentEnv))) return;
 
     try {
       const result = await resendInboundEmailService.handleWebhook({
@@ -1208,7 +1208,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
   }
 
   if (req.method === "POST" && url.pathname === "/agent/test-reply") {
-    if (!allowRateLimitedRequest(req, res, "agent-test-reply", 45)) return;
+    if (!(await allowRateLimitedRequest(req, res, "agent-test-reply", 45, currentEnv))) return;
 
     try {
       const body = parseJsonRequestBody(await readLimitedRequestBody(req, ADMIN_BODY_LIMIT_BYTES)) as AgentTestReplyInput;
@@ -1240,7 +1240,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
   }
 
   if (req.method === "POST" && url.pathname === "/debug/reply" && currentEnv.NODE_ENV !== "production") {
-    if (!allowRateLimitedRequest(req, res, "debug-reply", 30)) return;
+    if (!(await allowRateLimitedRequest(req, res, "debug-reply", 30, currentEnv))) return;
 
     try {
       const body = parseJsonRequestBody(await readLimitedRequestBody(req, ADMIN_BODY_LIMIT_BYTES)) as {
@@ -1460,10 +1460,18 @@ async function reconcileConversationRelayEndedCallback(
   });
 }
 
-function allowRateLimitedRequest(req: IncomingMessage, res: ServerResponse, action: string, limit: number) {
-  const result = checkRateLimit({
+async function allowRateLimitedRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  action: string,
+  limit: number,
+  currentEnv: VoiceServiceEnv,
+) {
+  const result = await checkDistributedRateLimit({
     key: `${action}:${getRequestIp(req)}`,
     limit,
+    redisRestToken: currentEnv.RATE_LIMIT_REDIS_REST_TOKEN,
+    redisRestUrl: currentEnv.RATE_LIMIT_REDIS_REST_URL,
     windowMs: RATE_LIMIT_WINDOW_MS,
   });
 

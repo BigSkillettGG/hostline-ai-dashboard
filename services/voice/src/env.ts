@@ -37,6 +37,8 @@ const envSchema = z.object({
   EMAIL_REPLY_TO: z.string().optional(),
   OWNER_REPORT_WEBHOOK_URL: z.string().url().optional(),
   OWNER_EMAIL_INBOUND_ADDRESS: z.string().optional(),
+  RATE_LIMIT_REDIS_REST_TOKEN: z.string().optional(),
+  RATE_LIMIT_REDIS_REST_URL: z.string().url().optional(),
   RESEND_API_KEY: z.string().optional(),
   RESEND_WEBHOOK_SECRET: z.string().optional(),
   STAFF_ALERT_SMS_TO: z.string().optional(),

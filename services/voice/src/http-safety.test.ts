@@ -1,7 +1,8 @@
 import { Readable } from "node:stream";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   checkRateLimit,
+  checkDistributedRateLimit,
   getRequestIp,
   HttpRequestError,
   parseJsonRequestBody,
@@ -47,6 +48,66 @@ describe("http safety helpers", () => {
       allowed: true,
       remaining: 1,
     });
+  });
+
+  it("can use a Redis REST fixed-window limiter for multi-instance deployments", async () => {
+    const requests: unknown[] = [];
+    const result = await checkDistributedRateLimit({
+      fetchImpl: (async (_url, init) => {
+        requests.push(JSON.parse(String(init?.body)));
+        return new Response(JSON.stringify({ result: [2, 45_000] }), { status: 200 });
+      }) as typeof fetch,
+      key: "web-chat:203.0.113.1",
+      limit: 3,
+      now: 1_000,
+      redisRestToken: "redis-token",
+      redisRestUrl: "https://redis.example",
+      windowMs: 60_000,
+    });
+
+    expect(result).toMatchObject({
+      allowed: true,
+      backend: "redis",
+      remaining: 1,
+      resetAt: 46_000,
+      retryAfterSeconds: 45,
+    });
+    expect(requests[0]).toEqual([
+      "EVAL",
+      expect.stringContaining("INCR"),
+      1,
+      "signalhost:rate:web-chat:203.0.113.1",
+      "60000",
+    ]);
+  });
+
+  it("falls back to local buckets when Redis rate limiting is unavailable", async () => {
+    resetRateLimitBucketsForTests();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      const result = await checkDistributedRateLimit({
+        fetchImpl: (async () => new Response("nope", { status: 503 })) as typeof fetch,
+        key: "preview:redis-down",
+        limit: 1,
+        now: 1_000,
+        redisRestToken: "redis-token",
+        redisRestUrl: "https://redis.example",
+        windowMs: 60_000,
+      });
+
+      expect(result).toMatchObject({
+        allowed: true,
+        backend: "memory",
+        degraded: true,
+      });
+      expect(warn).toHaveBeenCalledWith(
+        "[http-safety] Redis rate limit unavailable; falling back to local memory bucket",
+        expect.objectContaining({ key: "preview:redis-down" }),
+      );
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("prefers forwarded IP headers", () => {

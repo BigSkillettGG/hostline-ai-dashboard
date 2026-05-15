@@ -382,6 +382,170 @@ describe("OpenAI Realtime SIP", () => {
     });
   });
 
+  it("runs a full reservation call lifecycle through SIP, tools, SMS, and completion", async () => {
+    const socket = createFakeRealtimeSocket();
+    const startedCalls: unknown[] = [];
+    const transcriptTurns: unknown[] = [];
+    const savedReservations: unknown[] = [];
+    const sentReservationTexts: unknown[] = [];
+    const completedCalls: unknown[] = [];
+    const service = createOpenAIRealtimeSipService(
+      {
+        ...baseEnv,
+        TWILIO_CALL_RECORDING_ENABLED: "false",
+      },
+      {
+        async getContext() {
+          return demoRestaurantContext;
+        },
+      },
+      {
+        callStore: {
+          async addTranscriptTurn(input) {
+            transcriptTurns.push(input);
+          },
+          async attachCallRecording() {},
+          async completeCall(input) {
+            completedCalls.push(input);
+          },
+          async createCustomerRequest() {
+            return {};
+          },
+          async createStaffReviewOrder() {
+            return {};
+          },
+          async createStaffReviewReservation(input) {
+            savedReservations.push(input);
+            return { reservationId: "res_uuid" };
+          },
+          async createStaffTask() {
+            return {};
+          },
+          async startCall() {
+            return {};
+          },
+          async startRealtimeCall(input) {
+            startedCalls.push(input);
+            return { callId: "call_uuid" };
+          },
+        },
+        fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+        guestConfirmationService: {
+          configured: true,
+          async sendOrderConfirmation() {},
+          async sendReservationConfirmation(input) {
+            sentReservationTexts.push(input);
+          },
+          async sendTextMessage() {},
+        },
+        websocketFactory: () => socket as never,
+      },
+    );
+
+    const result = await service.handleIncomingWebhook({
+      headers: {},
+      rawBody: JSON.stringify({
+        data: {
+          call_id: "rtc_lifecycle",
+          sip_headers: [
+            { name: "X-Twilio-CallSid", value: "CA555" },
+            { name: "Call-ID", value: "sip-lifecycle" },
+            { name: "From", value: "sip:+14155550123@twilio.com" },
+          ],
+        },
+        id: "evt_lifecycle",
+        object: "event",
+        type: "realtime.call.incoming",
+      }),
+    });
+
+    expect(result.status).toBe(200);
+    socket.emit("open");
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "caller_reservation",
+        transcript: "Can I make a reservation for four tonight at seven under Priya Shah?",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        response: {
+          output: [
+            {
+              arguments: JSON.stringify({
+                guest_name: "Priya Shah",
+                party_size: 4,
+                reservation_date: "2026-05-15",
+                reservation_time: "19:00",
+              }),
+              call_id: "tool_reservation",
+              name: "create_reservation_request",
+              type: "function_call",
+            },
+            {
+              arguments: JSON.stringify({
+                guest_name: "Priya Shah",
+                kind: "reservation",
+                party_size: 4,
+                phone_number: "+14155550123",
+                reservation_date: "2026-05-15",
+                reservation_time: "19:00",
+              }),
+              call_id: "tool_text",
+              name: "send_guest_confirmation",
+              type: "function_call",
+            },
+          ],
+        },
+        type: "response.done",
+      })),
+    );
+    await flushAsyncWork();
+
+    expect(startedCalls[0]).toMatchObject({
+      callerPhone: "+14155550123",
+      externalCallId: "CA555",
+      externalSessionId: "sip-lifecycle",
+    });
+    expect(transcriptTurns[0]).toMatchObject({
+      callId: "call_uuid",
+      speaker: "caller",
+      text: "Can I make a reservation for four tonight at seven under Priya Shah?",
+    });
+    expect(savedReservations[0]).toMatchObject({
+      callId: "call_uuid",
+      callerPhone: "+14155550123",
+      guestName: "Priya Shah",
+      locationId: "00000000-0000-0000-0000-000000000001",
+      partySize: 4,
+      time: "19:00",
+    });
+    expect(sentReservationTexts[0]).toMatchObject({
+      callId: "call_uuid",
+      guestName: "Priya Shah",
+      locationId: "00000000-0000-0000-0000-000000000001",
+      partySize: 4,
+      restaurantName: "Olive & Ember",
+      to: "+14155550123",
+    });
+    expect(
+      socket.sentEvents.filter((event) => isRealtimeEventType(event, "conversation.item.create")),
+    ).toHaveLength(2);
+
+    socket.emit("close", 1000, Buffer.from("normal"));
+    await flushAsyncWork();
+    expect(completedCalls[0]).toMatchObject({
+      callId: "call_uuid",
+      intent: "reservation",
+      outcome: "message_taken",
+      reservationId: "res_uuid",
+      status: "new",
+    });
+  });
+
   it("gates realtime responses so greeting echo and TV noise do not drive the call", async () => {
     const socket = createFakeRealtimeSocket();
     const transcriptTurns: unknown[] = [];
@@ -1877,4 +2041,8 @@ function createFakeRealtimeSocket() {
 
 function isRealtimeEventType(event: unknown, type: string) {
   return Boolean(event && typeof event === "object" && (event as { type?: unknown }).type === type);
+}
+
+async function flushAsyncWork() {
+  await new Promise((resolve) => setTimeout(resolve, 0));
 }
