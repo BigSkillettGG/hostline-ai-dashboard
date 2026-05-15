@@ -39,4 +39,25 @@ describe("call insight persistence", () => {
     expect(patch.workflow_status).toBe("escalated");
     expect(patch.tags).toEqual(expect.arrayContaining(["follow-up", "knowledge gap", "risk", "urgent"]));
   });
+
+  it("marks staff-confirmed reservation requests as open follow-up without a knowledge gap", () => {
+    const patch = buildPersistedCallInsightPatch({
+      confidence: 88,
+      intent: "reservation",
+      outcome: "message_taken",
+      reservationId: "reservation_uuid",
+      status: "resolved",
+      summary: "Reservation request saved. Staff will confirm it shortly.",
+    });
+
+    expect(patch).toMatchObject({
+      follow_up_needed: true,
+      knowledge_gap: false,
+      owner_report_bucket: "open_follow_up",
+      recommended_action: "Confirm the reservation or request status.",
+      urgency: "high",
+      value_tier: "medium",
+      workflow_status: "needs_follow_up",
+    });
+  });
 });

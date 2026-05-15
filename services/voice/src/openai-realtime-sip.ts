@@ -174,7 +174,10 @@ interface OpenAIRealtimeSidebandSession {
   locationId: string;
   ownerContact?: TrustedContact;
   quality: RealtimeQualityMetrics;
+  reservationCreatedId?: string;
+  reservationConfirmed?: boolean;
   staffCallbackRequested: boolean;
+  staffFollowUpRequired: boolean;
   startedAt: number;
   toolEvents: Array<{ kind?: string; latencyMs?: number; name: string; ok?: boolean }>;
   transcript: TranscriptTurn[];
@@ -578,6 +581,9 @@ export function buildOpenAIRealtimeInstructions(
     profile.isRestaurant
       ? "When reservation date, time, party size, and guest name are known, use create_reservation_request to save the request. If the tool says provider_confirmed, tell the caller the reservation is confirmed. If the tool says staff confirmation is needed, tell the caller it is requested and staff will confirm."
       : `When customer name, callback number, request summary, urgency, and useful details are known, use create_customer_request with service_appointment, quote, lead, callback, or complaint. Tell the caller ${profile.staffNoun} will follow up; do not promise a confirmed ${profile.appointmentNoun} unless the context explicitly says it is confirmed.`,
+    profile.isRestaurant
+      ? "Reservation name guardrail: do not treat 'no', 'none', 'that's all', 'I'm good', goodbye phrases, or refusal phrases as a guest name. If the caller declines or skips the name, ask once for a real name or offer to have staff use caller ID for follow-up; do not save a fake name."
+      : "Name guardrail: do not treat 'no', 'none', 'that's all', 'I'm good', goodbye phrases, or refusal phrases as a customer name.",
     profile.isRestaurant
       ? "For pickup orders, follow the configured order operating mode. If taking a manual request, collect items, quantities, name, and callback number. If link-first, offer to text the ordering link."
       : `For service requests, follow the configured request operating mode. If link-first, offer to text the booking, quote, or intake link. If staff-review, collect the details ${profile.staffNoun} need.`,
@@ -999,6 +1005,7 @@ function startSidebandSocket({
     ownerContact,
     quality: createRealtimeQualityMetrics(),
     staffCallbackRequested: false,
+    staffFollowUpRequired: false,
     startedAt: Date.now(),
     toolEvents: [],
     transcript: [],
@@ -1330,6 +1337,7 @@ async function completeOpenAIRealtimeLoggedCall({
       durationSeconds,
       intent: classification.intent,
       outcome: classification.outcome,
+      reservationId: session.reservationCreatedId,
       status: classification.status,
       summary,
     });
@@ -1390,11 +1398,16 @@ function classifyOpenAIRealtimeCall(session: OpenAIRealtimeSidebandSession): {
     session.quality.speechStartedDuringResponseCount >= 3 ||
     (session.quality.speechStartCount >= 3 && session.quality.callerTranscriptCount === 0);
   const needsReview = session.staffCallbackRequested || toolNames.has("request_staff_callback") || qualityNeedsReview;
+  const followUpToolUsed =
+    session.staffFollowUpRequired ||
+    toolNames.has("create_customer_request");
   const outcome = needsReview
     ? "escalated"
     : toolNames.has("create_customer_request")
       ? "message_taken"
-    : toolNames.has("create_reservation_request")
+    : session.reservationConfirmed
+      ? "reservation_booked"
+    : session.staffFollowUpRequired && toolNames.has("create_reservation_request")
       ? "message_taken"
     : toolNames.has("send_guest_confirmation") || toolNames.has("send_business_link")
       ? "resolved"
@@ -1406,7 +1419,7 @@ function classifyOpenAIRealtimeCall(session: OpenAIRealtimeSidebandSession): {
     confidence: session.transcript.length ? (needsReview ? 72 : 88) : 20,
     intent,
     outcome,
-    status: needsReview || !session.transcript.length ? "needs_review" : "resolved",
+    status: needsReview || !session.transcript.length ? "needs_review" : followUpToolUsed ? "new" : "resolved",
   };
 }
 
@@ -1556,6 +1569,22 @@ function recordOpenAIRealtimeToolResult(
   if (!ok) session.quality.toolErrorCount += 1;
   if (toolCall.name === "finish_call" && ok) {
     session.finishRequested = true;
+  }
+  if (ok && output && typeof output === "object") {
+    const record = output as Record<string, unknown>;
+    const reservationId = stringValue(record.reservationId);
+    const outputStatus = stringValue(record.status);
+    if (toolCall.name === "create_reservation_request") {
+      if (reservationId) session.reservationCreatedId = reservationId;
+      if (outputStatus === "confirmed") {
+        session.reservationConfirmed = true;
+      } else if (outputStatus !== "booking_link_required") {
+        session.staffFollowUpRequired = true;
+      }
+    }
+    if (toolCall.name === "create_customer_request") {
+      session.staffFollowUpRequired = true;
+    }
   }
 
   const existing = [...session.toolEvents].reverse().find((event) => event.name === toolCall.name && event.latencyMs === undefined);
@@ -1758,7 +1787,7 @@ export async function createOpenAIRealtimeReservationRequest({
   const date = stringValue(rawArguments.reservation_date);
   const time = normalizeRealtimeReservationTime(stringValue(rawArguments.reservation_time));
   const partySize = numberValue(rawArguments.party_size);
-  const guestName = stringValue(rawArguments.guest_name);
+  const guestName = normalizeRealtimeGuestName(stringValue(rawArguments.guest_name));
   const callbackPhone = normalizeCallerPhone(stringValue(rawArguments.phone_number) ?? callerPhone);
   if (!date || !time || !partySize || !guestName) {
     const missing = [
@@ -1771,7 +1800,15 @@ export async function createOpenAIRealtimeReservationRequest({
     return {
       ok: false,
       error: "missing_reservation_details",
-      message: `Ask only for the missing reservation detail${missing.length === 1 ? "" : "s"}: ${missing.join(", ")}.`,
+      message: [
+        `Ask only for the missing reservation detail${missing.length === 1 ? "" : "s"}: ${missing.join(", ")}.`,
+        missing.includes("guest_name")
+          ? "Do not treat words like no, none, that's all, I'm good, or goodbye as a reservation name."
+          : "",
+        missing.includes("guest_name") && callbackPhone
+          ? `If the caller does not want to give a name, ask whether staff may use the phone number ending ${callbackPhone.slice(-4)} for follow-up instead.`
+          : "",
+      ].filter(Boolean).join(" "),
       missing,
     };
   }
@@ -2453,7 +2490,7 @@ function buildOpenAIRealtimeTools(context: RestaurantVoiceContext = demoRestaura
         additionalProperties: false,
         properties: {
           guest_name: {
-            description: "Guest name for the reservation.",
+            description: "Real guest name for the reservation. Never use no, none, that's all, I'm good, goodbye, or refusal phrases as the name.",
             type: "string",
           },
           notes: {
@@ -2849,6 +2886,26 @@ function normalizeRealtimeReservationTime(value?: string) {
   if (isPm && hour < 12) hour += 12;
   if (!isPm && hour === 12) hour = 0;
   return `${String(hour).padStart(2, "0")}:${minutes}`;
+}
+
+function normalizeRealtimeGuestName(value?: string) {
+  if (!value) return undefined;
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[’']/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return undefined;
+  if (
+    /^(n\/?a|na|no|nope|none|nothing|no thanks|no thank you|not needed)$/.test(normalized) ||
+    /^(thats all|that is all|thats it|that is it|im good|i am good|all set|goodbye|bye)$/.test(normalized) ||
+    /^no\s+(thats|that is|thanks|thank you|im|i am|all)/.test(normalized)
+  ) {
+    return undefined;
+  }
+  return value.trim();
 }
 
 function parseOrderItems(value: unknown): CapturedOrderItem[] {

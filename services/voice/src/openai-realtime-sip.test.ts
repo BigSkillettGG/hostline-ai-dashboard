@@ -936,6 +936,54 @@ describe("OpenAI Realtime SIP", () => {
     });
   });
 
+  it("rejects refusal phrases as reservation guest names", async () => {
+    const savedReservations: unknown[] = [];
+    const result = await createOpenAIRealtimeReservationRequest({
+      callRecordId: "call_uuid",
+      callerPhone: "+14155550123",
+      context: demoRestaurantContext,
+      locationId: "location_uuid",
+      rawArguments: {
+        guest_name: "No",
+        party_size: 2,
+        reservation_date: "2026-05-12",
+        reservation_time: "18:00",
+      },
+      callStore: {
+        async addTranscriptTurn() {},
+        async attachCallRecording() {},
+        async completeCall() {},
+        async createCustomerRequest() {
+          return {};
+        },
+        async createStaffReviewOrder() {
+          return {};
+        },
+        async createStaffReviewReservation(input) {
+          savedReservations.push(input);
+          return { reservationId: "res_uuid" };
+        },
+        async createStaffTask() {
+          return {};
+        },
+        async startCall() {
+          return {};
+        },
+        async startRealtimeCall() {
+          return {};
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      error: "missing_reservation_details",
+      missing: ["guest_name"],
+      ok: false,
+    });
+    expect(String(result.message)).toContain("Do not treat words like no");
+    expect(savedReservations).toHaveLength(0);
+  });
+
   it("persists confirmed OpenTable reservations from realtime tool calls", async () => {
     const savedReservations: unknown[] = [];
     const context: RestaurantVoiceContext = {

@@ -357,7 +357,8 @@ describe("Supabase call store", () => {
         method: "PATCH",
       }),
     );
-    expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toContain('"workflow_status":"escalated"');
-    expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toContain('"knowledge_gap":true');
+    expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toContain('"workflow_status":"needs_follow_up"');
+    expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toContain('"follow_up_needed":true');
+    expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toContain('"knowledge_gap":false');
   });
 });

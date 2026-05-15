@@ -506,15 +506,15 @@ class SupabaseCallStore implements CallStore {
         : `Staff-confirmed reservation request created for ${input.partySize} on ${input.date} at ${input.time}.`;
     await this.patchCallWithInsightFallback(input.callId, {
       intent: "reservation",
-      outcome: input.status === "confirmed" ? "reservation_booked" : "escalated",
-      status: input.status === "confirmed" ? "resolved" : "needs_review",
+      outcome: input.status === "confirmed" ? "reservation_booked" : "message_taken",
+      status: input.status === "confirmed" ? "resolved" : "new",
       summary,
     }, {
       confidence: input.confidence,
       intent: "reservation",
-      outcome: input.status === "confirmed" ? "reservation_booked" : "escalated",
+      outcome: input.status === "confirmed" ? "reservation_booked" : "message_taken",
       reservationId,
-      status: input.status === "confirmed" ? "resolved" : "needs_review",
+      status: input.status === "confirmed" ? "resolved" : "new",
       summary,
     });
 

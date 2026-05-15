@@ -126,6 +126,9 @@ export function buildInteractionInsight({
   const staffOrKnowledgeUncertainty = containsAny(text, uncertaintyTerms);
   const safetyOrRisk = complaint || containsAny(text, safetyRiskTerms);
   const resolvedInteraction = isResolvedInteraction(call);
+  const capturedRequestNeedsFollowUp =
+    call.outcome === "message_taken" &&
+    (call.intent === "reservation" || call.intent === "order" || Boolean(call.orderId) || Boolean(call.reservationId));
   const openRisk = safetyOrRisk && !resolvedInteraction;
   const pendingComplaintEscalation = pendingEscalation && call.escalation?.type === "complaint";
   const knowledgeGap = feedbackNeedsReview || lowConfidence || staffOrKnowledgeUncertainty || call.status === "needs_review";
@@ -136,19 +139,21 @@ export function buildInteractionInsight({
   if (highValueOpportunity) evidence.push("High-value opportunity keywords were detected.");
   if (safetyOrRisk) evidence.push("Risk, complaint, or safety-sensitive language was detected.");
 
-  const followUpNeeded = !resolvedInteraction && (
-    pendingEscalation ||
-    missedOrVoicemail ||
-    feedbackNeedsReview ||
-    call.outcome === "escalated" ||
-    call.outcome === "manager_alerted" ||
-    call.outcome === "message_taken" ||
-    call.outcome === "unknown" ||
-    call.status === "needs_review" ||
-    highValueOpportunity ||
-    quoteRequest ||
-    customerWaiting
-  );
+  const followUpNeeded =
+    capturedRequestNeedsFollowUp ||
+    (!resolvedInteraction && (
+      pendingEscalation ||
+      missedOrVoicemail ||
+      feedbackNeedsReview ||
+      call.outcome === "escalated" ||
+      call.outcome === "manager_alerted" ||
+      call.outcome === "message_taken" ||
+      call.outcome === "unknown" ||
+      call.status === "needs_review" ||
+      highValueOpportunity ||
+      quoteRequest ||
+      customerWaiting
+    ));
 
   const valueTier = deriveValueTier({ call, highValueOpportunity, quoteRequest, safetyOrRisk, text });
   const urgency = deriveUrgency({ followUpNeeded, knowledgeGap, missedOrVoicemail, openRisk, pendingComplaintEscalation, vendorOrSales, valueTier });
@@ -329,6 +334,8 @@ function deriveRecommendedAction({
   if (knowledgeGap) return "Review the answer and add missing knowledge if needed.";
   if (call.orderId) return "Confirm the order reached the right destination.";
   if (call.reservationId) return "Confirm the reservation or request status.";
+  if (workflowStatus === "needs_follow_up" && call.intent === "reservation") return "Confirm the reservation request with staff.";
+  if (workflowStatus === "needs_follow_up" && call.intent === "order") return "Confirm the order request reached staff.";
   if (vendorOrSales) return "Review later or dismiss as vendor/sales.";
   return "No action needed.";
 }

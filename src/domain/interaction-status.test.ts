@@ -90,6 +90,26 @@ describe("interaction status", () => {
     expect(insight.recommendedAction).toBe("Follow up on this high-value request.");
   });
 
+  it("keeps staff-confirmed reservation requests in the follow-up queue", () => {
+    const insight = buildInteractionInsight({
+      call: {
+        ...baseCall,
+        confidence: 88,
+        intent: "reservation",
+        outcome: "message_taken",
+        reservationId: "reservation_1",
+        status: "resolved",
+        summary: "Caller requested a table for two at 6. Staff will confirm it shortly.",
+      },
+    });
+
+    expect(insight.workflowStatus).toBe("needs_follow_up");
+    expect(insight.followUpNeeded).toBe(true);
+    expect(insight.knowledgeGap).toBe(false);
+    expect(insight.ownerReportBucket).toBe("open_follow_up");
+    expect(insight.recommendedAction).toBe("Confirm the reservation or request status.");
+  });
+
   it("routes vendor sales calls to the low-value bucket when no action is needed", () => {
     const insight = buildInteractionInsight({
       call: {
