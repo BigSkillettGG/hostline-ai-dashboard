@@ -14,7 +14,7 @@ import {
   type TenantDirectoryRecord,
   type TenantDirectoryStatus,
 } from "@/lib/supabase-rest";
-import { updateCurrentUserAccess } from "@/lib/auth";
+import { startDemoSession, updateCurrentUserAccess } from "@/lib/auth";
 import { toast } from "sonner";
 
 interface TenantTableRow {
@@ -34,6 +34,7 @@ interface TenantTableRow {
   planName: string;
   source: "demo" | "live";
   status: TenantDirectoryStatus;
+  websiteDemoPath?: string;
 }
 
 export default function SuperTenants() {
@@ -65,6 +66,13 @@ export default function SuperTenants() {
   const needsAttention = rows.filter((tenant) => tenant.status !== "healthy").length;
 
   function viewAsTenant(tenant: TenantTableRow) {
+    if (tenant.source === "demo") {
+      startDemoSession("admin", tenant.id);
+      toast.success(`Opening ${tenant.name}'s demo workspace`);
+      navigate("/app");
+      return;
+    }
+
     if (tenant.source !== "live" || tenant.locationId === "not-created") {
       toast.error("Only live tenants with a Supabase location can be opened.");
       return;
@@ -209,11 +217,18 @@ export default function SuperTenants() {
                           <Button
                             size="sm"
                             onClick={() => viewAsTenant(tenant)}
-                            disabled={tenant.source !== "live" || tenant.locationId === "not-created"}
+                            disabled={tenant.source === "live" && tenant.locationId === "not-created"}
                           >
                             <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
                             App
                           </Button>
+                          {tenant.websiteDemoPath && (
+                            <Button size="sm" variant="outline" asChild>
+                              <Link to={tenant.websiteDemoPath} target="_blank">
+                                Site
+                              </Link>
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -246,6 +261,7 @@ function mapDirectoryTenant(tenant: TenantDirectoryRecord): TenantTableRow {
     planName: tenant.planName,
     source: "live",
     status: tenant.status,
+    websiteDemoPath: undefined,
   };
 }
 
@@ -253,20 +269,21 @@ function mapMockTenant(tenant: Tenant): TenantTableRow {
   return {
     addressOrArea: tenant.city,
     aiNumber: tenant.aiNumber,
-    businessLabel: "Restaurant",
+    businessLabel: tenant.businessLabel ?? "Restaurant",
     callsThisMonth: tenant.callsThisMonth,
     id: tenant.id,
     includedInteractions: tenant.includedCalls,
-    locationId: tenant.id,
+    locationId: tenant.locationId ?? tenant.id,
     monthlyPrice: tenant.mrrCents / 100,
     name: tenant.name,
     onboardingProgressPercent: tenant.status === "critical" ? 35 : tenant.status === "attention" ? 78 : 100,
     onboardingStatus: tenant.status === "healthy" ? "ready_for_test_call" : "needs_attention",
-    organizationId: tenant.id,
+    organizationId: tenant.organizationId ?? tenant.id,
     ownerEmail: tenant.ownerEmail,
     planName: tenant.plan,
     source: "demo",
     status: tenant.status,
+    websiteDemoPath: tenant.websiteDemoPath,
   };
 }
 

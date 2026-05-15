@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { isDemoAuthMode, signIn, startDemoSession } from "@/lib/auth";
+import { getDemoBusinessLabel, getVerticalDemoProfile, verticalDemoProfiles } from "@/domain/demo-verticals";
 import { toast } from "sonner";
 
 export default function Login() {
@@ -15,7 +16,11 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const demoAuth = isDemoAuthMode();
-  const localDemoEnabled = demoAuth || import.meta.env.DEV;
+  const params = new URLSearchParams(location.search);
+  const demoParamEnabled = params.get("demo") === "1";
+  const profileParam = params.get("profile") ?? undefined;
+  const selectedDemoProfile = profileParam ? getVerticalDemoProfile(profileParam) : undefined;
+  const localDemoEnabled = demoAuth || import.meta.env.DEV || demoParamEnabled;
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -36,8 +41,8 @@ export default function Login() {
     }
   };
 
-  const openDemoWorkspace = (role: "admin" | "superadmin" = "admin") => {
-    const user = startDemoSession(role);
+  const openDemoWorkspace = (role: "admin" | "superadmin" = "admin", profileSlug?: string) => {
+    const user = startDemoSession(role, profileSlug);
     toast.success(`Opening ${user.name}'s demo workspace`);
     navigate(user.role === "superadmin" ? "/super" : "/app", { replace: true });
   };
@@ -73,12 +78,31 @@ export default function Login() {
             </Button>
             {localDemoEnabled && (
               <div className="grid gap-2 sm:grid-cols-2">
-                <Button type="button" variant="outline" className="w-full" onClick={() => openDemoWorkspace("admin")}>
-                  Owner demo
-                </Button>
+                {selectedDemoProfile && (
+                  <Button
+                    type="button"
+                    className="h-auto min-h-11 w-full flex-col items-start gap-0.5 px-3 py-2 text-left sm:col-span-2"
+                    onClick={() => openDemoWorkspace("admin", selectedDemoProfile.demoSiteSlug)}
+                  >
+                    <span className="text-sm font-medium">Open {selectedDemoProfile.businessName}</span>
+                    <span className="text-[11px] opacity-80">{getDemoBusinessLabel(selectedDemoProfile)} demo workspace</span>
+                  </Button>
+                )}
                 <Button type="button" variant="outline" className="w-full" onClick={() => openDemoWorkspace("superadmin")}>
                   Staff console
                 </Button>
+                {verticalDemoProfiles.map((profile) => (
+                  <Button
+                    key={profile.demoSiteSlug}
+                    type="button"
+                    variant="outline"
+                    className="h-auto min-h-10 w-full flex-col items-start gap-0.5 px-3 py-2 text-left"
+                    onClick={() => openDemoWorkspace("admin", profile.demoSiteSlug)}
+                  >
+                    <span className="text-sm font-medium">{profile.businessName}</span>
+                    <span className="text-[11px] text-muted-foreground">{getDemoBusinessLabel(profile)}</span>
+                  </Button>
+                ))}
               </div>
             )}
             <p className="text-center text-xs text-muted-foreground">

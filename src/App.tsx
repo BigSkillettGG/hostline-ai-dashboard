@@ -10,6 +10,7 @@ import Pricing from "./pages/marketing/Pricing";
 import Login from "./pages/marketing/Login";
 import Signup from "./pages/marketing/Signup";
 import Solution from "./pages/marketing/Solution";
+import DemoSite from "./pages/demo/DemoSite";
 
 import AppLayout from "./components/AppLayout";
 import { RequireRole } from "./components/RequireRole";
@@ -36,6 +37,7 @@ import Billing from "./pages/settings/Billing";
 
 import SuperLayout from "./components/SuperLayout";
 import SuperOverview from "./pages/super/Overview";
+import SuperDemos from "./pages/super/Demos";
 import SuperTenants from "./pages/super/Tenants";
 import TenantDetail from "./pages/super/TenantDetail";
 import CallQA from "./pages/super/CallQA";
@@ -64,6 +66,9 @@ const App = () => (
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
           </Route>
+
+          {/* Demo websites */}
+          <Route path="/demo-sites/:demoSlug" element={<DemoSite />} />
 
           {/* Admin app */}
           <Route path="/app" element={<RequireRole role="admin"><AppLayout /></RequireRole>}>
@@ -94,6 +99,7 @@ const App = () => (
           {/* Super admin */}
           <Route path="/super" element={<RequireRole role="superadmin"><SuperLayout /></RequireRole>}>
             <Route index element={<SuperOverview />} />
+            <Route path="demos" element={<SuperDemos />} />
             <Route path="tenants" element={<SuperTenants />} />
             <Route path="tenants/:locationId" element={<TenantDetail />} />
             <Route path="qa" element={<CallQA />} />

@@ -8,6 +8,9 @@ import {
   type RestaurantMembershipRole,
   type UserRole,
 } from "@/domain/access-control";
+import { getVerticalDemoProfile, type VerticalDemoProfile } from "@/domain/demo-verticals";
+import { createOnboardingDraftForBusiness } from "@/domain/onboarding";
+import { saveOnboardingDraft } from "@/lib/onboarding-draft";
 
 export type { RestaurantMembershipRole, UserRole } from "@/domain/access-control";
 
@@ -78,7 +81,6 @@ interface SupabaseLocationRow {
 
 const STORAGE_KEY = "signalhost.currentUser";
 const EVENT = "signalhost.auth.changed";
-const DEMO_ORGANIZATION_ID = "demo-olive-ember";
 const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL ?? "").replace(/\/$/, "");
 const supabasePublishableKey =
   import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? import.meta.env.VITE_SUPABASE_ANON_KEY ?? "";
@@ -186,8 +188,22 @@ export async function signUp(input: {
   return user;
 }
 
-export function startDemoSession(role: UserRole = "admin") {
-  const user = role === "superadmin" ? buildDemoSuperAdmin() : buildDemoUser("maria@oliveandember.com", "Maria Lombardi");
+export function startDemoSession(role: UserRole = "admin", demoProfileValue?: string) {
+  const profile = getVerticalDemoProfile(demoProfileValue);
+  const user = role === "superadmin" ? buildDemoSuperAdmin() : buildDemoUser(profile.accountEmail, profile.ownerName, profile);
+  if (role !== "superadmin") {
+    saveOnboardingDraft(createOnboardingDraftForBusiness(profile.businessType, {
+      assignedSignalHostNumber: profile.aiNumber,
+      escalationPhone: profile.ownerPhone,
+      mainPhone: profile.mainPhone,
+      ownerEmail: profile.ownerEmail,
+      ownerName: profile.ownerName,
+      ownerPhone: profile.ownerPhone,
+      restaurantName: profile.businessName,
+      timezone: profile.timezone,
+      voiceProfileId: profile.voiceProfileId,
+    }));
+  }
   writeUser(user);
   return user;
 }
@@ -217,7 +233,7 @@ export function updateCurrentUserAccess(input: {
 
 export function setRole(role: UserRole) {
   if (!isDemoAuthMode()) return;
-  writeUser(role === "superadmin" ? buildDemoSuperAdmin() : buildDemoUser("maria@oliveandember.com", "Maria Lombardi"));
+  writeUser(role === "superadmin" ? buildDemoSuperAdmin() : buildDemoUser("demo.restaurant@signalhost.ai", "Maria Lombardi", getVerticalDemoProfile("restaurant")));
 }
 
 export function useCurrentUser(): CurrentUser | null {
@@ -234,24 +250,27 @@ export function useCurrentUser(): CurrentUser | null {
   return user;
 }
 
-export function buildDemoUser(email: string, name?: string): CurrentUser {
+export function buildDemoUser(email: string, name?: string, profileValue?: string | VerticalDemoProfile): CurrentUser {
   if (isSignalHostStaffEmail(email)) return buildDemoSuperAdmin(email, name);
+  const profile = typeof profileValue === "object" ? profileValue : getVerticalDemoProfile(profileValue);
 
   const memberships: RestaurantMembership[] = [
     {
       createdAt: new Date(0).toISOString(),
-      id: "demo-membership-owner",
-      organizationId: DEMO_ORGANIZATION_ID,
+      id: `demo-membership-${profile.demoSiteSlug}`,
+      organizationId: profile.organizationId,
       role: "owner",
     },
   ];
 
   return applyAccessModel({
+    activeLocationId: profile.locationId,
+    activeOrganizationId: profile.organizationId,
     authProvider: "demo",
     email,
     memberships,
     name: name?.trim() || defaultNameFor(email, "admin"),
-    restaurantId: "olive-ember",
+    restaurantId: profile.demoSiteSlug,
     role: "admin",
     workspaceKind: "demo",
   });
