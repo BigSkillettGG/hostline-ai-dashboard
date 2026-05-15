@@ -974,6 +974,24 @@ describe("OpenAI Realtime SIP", () => {
     expect(payload.audio.output.voice).toBe("cedar");
   });
 
+  it("uses the business voice profile even when a global realtime voice fallback is configured", () => {
+    const context: RestaurantVoiceContext = {
+      ...demoRestaurantContext,
+      voiceGender: "male",
+      voiceProfileId: "aiden",
+    };
+
+    const payload = buildOpenAIRealtimeAcceptPayload({
+      context,
+      env: {
+        ...baseEnv,
+        OPENAI_REALTIME_VOICE: "marin",
+      },
+    });
+
+    expect(payload.audio.output.voice).toBe("verse");
+  });
+
   it("keeps the no-mid-call-restart guidance in the reusable instructions", () => {
     const instructions = buildOpenAIRealtimeInstructions(demoRestaurantContext);
 
@@ -1156,6 +1174,54 @@ describe("OpenAI Realtime SIP", () => {
     expect(startedCalls[0]).toMatchObject({
       locationId: "hvac_location",
     });
+  });
+
+  it("lets the dialed phone number override a stale webhook location query param", async () => {
+    const socket = createFakeRealtimeSocket();
+    const requestedLocations: Array<string | undefined> = [];
+    const service = createOpenAIRealtimeSipService(
+      {
+        ...baseEnv,
+        SUPABASE_DEMO_LOCATION_ID: "olive_location",
+      },
+      {
+        async getContext(locationId) {
+          requestedLocations.push(locationId);
+          return {
+            ...demoRestaurantContext,
+            restaurantName: locationId === "hvac_location" ? "Summit Air" : "Olive & Ember",
+          };
+        },
+        async resolveLocationIdByPhoneNumber(phoneNumber) {
+          return phoneNumber === "+16175450460" ? "hvac_location" : undefined;
+        },
+      },
+      {
+        fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+        websocketFactory: () => socket as never,
+      },
+    );
+
+    const result = await service.handleIncomingWebhook({
+      headers: {},
+      locationId: "olive_location",
+      rawBody: JSON.stringify({
+        data: {
+          call_id: "rtc_hvac",
+          sip_headers: [
+            { name: "From", value: "sip:+14155550123@twilio.com" },
+            { name: "Diversion", value: "<sip:+16175450460@twilio.com>;reason=unconditional" },
+          ],
+        },
+        type: "realtime.call.incoming",
+      }),
+    });
+
+    expect(result.status).toBe(200);
+    expect(result.body).toMatchObject({
+      locationId: "hvac_location",
+    });
+    expect(requestedLocations).toEqual(["hvac_location"]);
   });
 
   it("extracts provider call ids and transcript turns from realtime events", () => {

@@ -333,10 +333,11 @@ export function createOpenAIRealtimeSipService(
       }
 
       const destinationPhone = extractOpenAIRealtimeDestinationPhone(event);
+      const phoneResolvedLocationId = await restaurantContextStore.resolveLocationIdByPhoneNumber?.(destinationPhone);
       const resolvedLocationId =
+        phoneResolvedLocationId ??
         locationId ??
         extractLocationId(event) ??
-        (await restaurantContextStore.resolveLocationIdByPhoneNumber?.(destinationPhone)) ??
         env.SUPABASE_DEMO_LOCATION_ID ??
         "demo-location";
       const context = await restaurantContextStore.getContext(resolvedLocationId);
@@ -3221,8 +3222,19 @@ export function resolveOpenAIRealtimeInterruptResponse(env: OpenAIRealtimeEnv) {
 }
 
 function resolveOpenAIRealtimeVoice(env: OpenAIRealtimeEnv, context: RestaurantVoiceContext) {
+  const configuredVoice = context.voiceProfileId ?? context.hostName ?? context.voiceGender;
+  if (configuredVoice) {
+    return resolveSignalHostOpenAIVoice(configuredVoice, {
+      aiden: env.OPENAI_REALTIME_AIDEN_VOICE || env.OPENAI_REALTIME_THEO_VOICE || env.OPENAI_REALTIME_MALE_VOICE,
+      ava: env.OPENAI_REALTIME_AVA_VOICE || env.OPENAI_REALTIME_VERA_VOICE || env.OPENAI_REALTIME_FEMALE_VOICE || OPENAI_REALTIME_DEFAULT_FEMALE_VOICE,
+      female: env.OPENAI_REALTIME_FEMALE_VOICE,
+      male: env.OPENAI_REALTIME_MALE_VOICE,
+      maya: env.OPENAI_REALTIME_MAYA_VOICE || env.OPENAI_REALTIME_FEMALE_VOICE,
+      miles: env.OPENAI_REALTIME_MILES_VOICE || env.OPENAI_REALTIME_MARCO_VOICE || env.OPENAI_REALTIME_MALE_VOICE || OPENAI_REALTIME_DEFAULT_MALE_VOICE,
+    });
+  }
   if (env.OPENAI_REALTIME_VOICE?.trim()) return env.OPENAI_REALTIME_VOICE.trim();
-  return resolveSignalHostOpenAIVoice(context.voiceProfileId ?? context.hostName ?? context.voiceGender, {
+  return resolveSignalHostOpenAIVoice(undefined, {
     aiden: env.OPENAI_REALTIME_AIDEN_VOICE || env.OPENAI_REALTIME_THEO_VOICE || env.OPENAI_REALTIME_MALE_VOICE,
     ava: env.OPENAI_REALTIME_AVA_VOICE || env.OPENAI_REALTIME_VERA_VOICE || env.OPENAI_REALTIME_FEMALE_VOICE || OPENAI_REALTIME_DEFAULT_FEMALE_VOICE,
     female: env.OPENAI_REALTIME_FEMALE_VOICE,
