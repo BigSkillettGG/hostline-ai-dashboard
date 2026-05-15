@@ -48,6 +48,8 @@ describe("live call config", () => {
       conversationRelayUrl: "wss://voice.signalhost.ai/twilio/conversation-relay",
       locationId: "00000000-0000-0000-0000-000000000001",
       ready: true,
+      recordingStatusCallbackUrl:
+        "https://voice.signalhost.ai/twilio/recording-status?locationId=00000000-0000-0000-0000-000000000001",
       twilioSignatureRequired: true,
       actionUrl:
         "https://voice.signalhost.ai/twilio/conversation-ended?locationId=00000000-0000-0000-0000-000000000001",

@@ -53,6 +53,7 @@ const baseEnv = {
   OPENAI_REALTIME_TURN_EAGERNESS: "low",
   PUBLIC_HTTP_BASE_URL: "https://voice.signalhost.ai/",
   SUPABASE_DEMO_LOCATION_ID: "00000000-0000-0000-0000-000000000001",
+  TWILIO_API_BASE_URL: "https://api.twilio.com",
 } satisfies Partial<VoiceServiceEnv>;
 
 describe("OpenAI Realtime SIP", () => {
@@ -70,6 +71,7 @@ describe("OpenAI Realtime SIP", () => {
       noiseReduction: "far_field",
       projectIdConfigured: true,
       ready: true,
+      recordingStatusCallbackUrl: "https://voice.signalhost.ai/twilio/recording-status",
       sipUri: "sip:proj_123@sip.api.openai.com;transport=tls",
       speed: 1.02,
       turnDetection: {
@@ -241,6 +243,7 @@ describe("OpenAI Realtime SIP", () => {
 
   it("starts and completes a persisted call for incoming SIP webhooks", async () => {
     const socket = createFakeRealtimeSocket();
+    const recordingRequests: unknown[] = [];
     const startedCalls: unknown[] = [];
     const transcriptTurns: unknown[] = [];
     const completedCalls: unknown[] = [];
@@ -252,6 +255,14 @@ describe("OpenAI Realtime SIP", () => {
         },
       },
       {
+        callRecordingService: {
+          callbackUrl: "https://voice.signalhost.ai/twilio/recording-status",
+          configured: true,
+          async startCallRecording(input) {
+            recordingRequests.push(input);
+            return { started: true };
+          },
+        },
         callStore: {
           async addTranscriptTurn(input) {
             transcriptTurns.push(input);
@@ -307,6 +318,12 @@ describe("OpenAI Realtime SIP", () => {
       callerPhone: "+14155550123",
       externalCallId: "CA123",
       externalSessionId: "sip-call-123",
+    });
+    expect(recordingRequests[0]).toMatchObject({
+      callRecordId: "call_uuid",
+      externalCallSid: "CA123",
+      locationId: "00000000-0000-0000-0000-000000000001",
+      openaiCallId: "rtc_123",
     });
 
     socket.emit("open");

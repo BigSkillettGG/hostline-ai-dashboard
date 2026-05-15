@@ -19,6 +19,7 @@ import { demoRestaurantContext, toSpokenRestaurantName, type RestaurantVoiceCont
 import type { RestaurantContextStore } from "./restaurant-context-store";
 import type { ReservationPlatformService } from "./reservation-platform-service";
 import type { TranscriptRole, TranscriptTurn } from "./types";
+import { createTwilioCallRecordingService, type CallRecordingService } from "./twilio-recording-service";
 import type { TrustedContact } from "../../../src/domain/trusted-contacts";
 import { resolveSignalHostOpenAIVoice } from "../../../src/domain/voice-selection";
 
@@ -57,10 +58,17 @@ type OpenAIRealtimeEnv = Pick<
   | "OPENAI_WEBHOOK_SECRET"
   | "PUBLIC_HTTP_BASE_URL"
   | "SUPABASE_DEMO_LOCATION_ID"
+  | "TWILIO_ACCOUNT_SID"
+  | "TWILIO_API_BASE_URL"
+  | "TWILIO_AUTH_TOKEN"
+  | "TWILIO_CALL_RECORDING_CHANNELS"
+  | "TWILIO_CALL_RECORDING_ENABLED"
+  | "TWILIO_CALL_RECORDING_TRACK"
 >;
 
 interface OpenAIRealtimeSipServiceOptions {
   callStore?: CallStore;
+  callRecordingService?: CallRecordingService;
   fetchImpl?: typeof fetch;
   guestConfirmationService?: GuestConfirmationService;
   ownerCommandRuntime?: OwnerCommandRuntime;
@@ -90,6 +98,8 @@ export interface OpenAIRealtimeLiveCallConfig {
   voice: string;
   webhookSecretConfigured: boolean;
   webhookUrl?: string;
+  callRecordingConfigured: boolean;
+  recordingStatusCallbackUrl?: string;
 }
 
 export interface OpenAIRealtimeWebhookResult {
@@ -245,6 +255,7 @@ export function createOpenAIRealtimeSipService(
 ) {
   const fetchImpl = options.fetchImpl ?? fetch;
   const callStore = options.callStore;
+  const callRecordingService = options.callRecordingService ?? createTwilioCallRecordingService(env, fetchImpl);
   const guestConfirmationService = options.guestConfirmationService;
   const ownerCommandRuntime = options.ownerCommandRuntime;
   const reservationPlatformService = options.reservationPlatformService;
@@ -318,7 +329,8 @@ export function createOpenAIRealtimeSipService(
       const context = await restaurantContextStore.getContext(resolvedLocationId);
       const callerPhone = extractOpenAIRealtimeCallerPhone(event);
       const ownerContact = findTrustedOwnerCaller(context, callerPhone);
-      const externalCallId = extractOpenAIRealtimeExternalCallId(event) ?? callId;
+      const twilioCallSid = extractOpenAIRealtimeExternalCallId(event);
+      const externalCallId = twilioCallSid ?? callId;
       const externalSessionId = extractOpenAIRealtimeSipCallId(event) ?? callId;
       let callRecordId: string | undefined;
       try {
@@ -340,6 +352,28 @@ export function createOpenAIRealtimeSipService(
         callRecordId = result?.callId;
       } catch (error) {
         console.error("[openai-realtime] call start persistence failed", { callId, error });
+      }
+      if (twilioCallSid) {
+        void callRecordingService.startCallRecording({
+          callRecordId,
+          externalCallSid: twilioCallSid,
+          locationId: resolvedLocationId,
+          openaiCallId: callId,
+        }).then((result) => {
+          if (result.started) {
+            console.info("[openai-realtime] Twilio call recording started", {
+              callId,
+              externalCallSid: twilioCallSid,
+              recordingSid: result.recordingSid,
+            });
+          }
+        }).catch((error) => {
+          console.warn("[openai-realtime] Twilio call recording start failed", {
+            callId,
+            error,
+            externalCallSid: twilioCallSid,
+          });
+        });
       }
       const payload = buildOpenAIRealtimeAcceptPayload({ callerPhone, context, env, ownerContact });
 
@@ -426,6 +460,17 @@ export async function buildOpenAIRealtimePreflight({
       ready: Boolean(env.OPENAI_WEBHOOK_SECRET),
       required: false,
     },
+    {
+      detail: "Needed to auto-start Twilio recordings and attach completed MP3 URLs to call records.",
+      id: "twilio_call_recording",
+      label: "Twilio call recording",
+      ready: env.TWILIO_CALL_RECORDING_ENABLED !== "false" && Boolean(
+        env.TWILIO_ACCOUNT_SID &&
+          env.TWILIO_AUTH_TOKEN &&
+          env.PUBLIC_HTTP_BASE_URL,
+      ),
+      required: false,
+    },
   ];
 
   checks.push(await checkOpenAIRealtimeModel({ env, fetchImpl }));
@@ -468,10 +513,18 @@ export function buildOpenAIRealtimeLiveCallConfig(env: OpenAIRealtimeEnv, locati
   const voice = env.OPENAI_REALTIME_VOICE?.trim() || env.OPENAI_REALTIME_FEMALE_VOICE?.trim() || OPENAI_REALTIME_DEFAULT_FEMALE_VOICE;
 
   return {
+    callRecordingConfigured: env.TWILIO_CALL_RECORDING_ENABLED !== "false" && Boolean(
+      env.TWILIO_ACCOUNT_SID &&
+        env.TWILIO_AUTH_TOKEN &&
+        env.PUBLIC_HTTP_BASE_URL,
+    ),
     model,
     noiseReduction: resolveOpenAIRealtimeNoiseReduction(env),
     projectIdConfigured: Boolean(env.OPENAI_PROJECT_ID),
     ready: Boolean(env.OPENAI_API_KEY && webhookUrl),
+    recordingStatusCallbackUrl: env.PUBLIC_HTTP_BASE_URL
+      ? `${env.PUBLIC_HTTP_BASE_URL.replace(/\/$/, "")}/twilio/recording-status`
+      : undefined,
     sipUri: env.OPENAI_PROJECT_ID ? `sip:${env.OPENAI_PROJECT_ID}@sip.api.openai.com;transport=tls` : undefined,
     speed: resolveOpenAIRealtimeSpeed(env),
     turnDetection: resolveOpenAIRealtimeTurnDetection(env),

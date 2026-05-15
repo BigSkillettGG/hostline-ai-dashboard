@@ -38,6 +38,7 @@ import { createResendInboundEmailService } from "./resend-inbound-email-service"
 import { createTenantProvisioningService, type TenantBootstrapInput } from "./tenant-provisioning";
 import { createTelephonyService } from "./telephony";
 import { releaseExpiredTrialNumbers } from "./trial-number-cleanup";
+import { createTwilioCallRecordingService } from "./twilio-recording-service";
 import { demoRestaurantContext } from "./restaurant-context";
 import { generateRestaurantReply } from "./restaurant-agent";
 import { validateTwilioSignature } from "./twilio-signature";
@@ -52,6 +53,7 @@ const phoneNumberStore = createPhoneNumberStore(env);
 const billingService = createBillingService(env, billingStore, phoneNumberStore);
 const restaurantContextStore = createRestaurantContextStore(env);
 const telephonyService = createTelephonyService(env);
+const callRecordingService = createTwilioCallRecordingService(env);
 const emailDeliveryService = createEmailDeliveryService(env);
 const customerFollowUpService = createCustomerFollowUpService(env, emailDeliveryService);
 const staffNotificationService = createStaffNotificationService(env, { emailDeliveryService });
@@ -71,6 +73,7 @@ const reservationPlatformService = createReservationPlatformService(env);
 const tenantProvisioningService = createTenantProvisioningService(env);
 const openAIRealtimeSipService = createOpenAIRealtimeSipService(env, restaurantContextStore, {
   callStore,
+  callRecordingService,
   guestConfirmationService,
   ownerCommandRuntime,
   reservationPlatformService,
@@ -164,6 +167,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
           currentEnv.SUPABASE_DEMO_LOCATION_ID,
       ),
       menuIngestionConfigured: menuIngestionService.configured,
+      callRecordingConfigured: callRecordingService.configured,
       openAIRealtimeSipConfigured: openAIRealtimeSipService.configured,
       ownerReportDeliveryConfigured: ownerReportService.deliveryConfigured,
       ownerReportsConfigured: ownerReportService.configured,
@@ -791,6 +795,19 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
         url.searchParams.get("locationId") ??
         currentEnv.SUPABASE_DEMO_LOCATION_ID ??
         "demo-location";
+      const twilioCallSid = firstNonEmpty(params.CallSid, params.callSid);
+      if (twilioCallSid) {
+        void callRecordingService.startCallRecording({
+          externalCallSid: twilioCallSid,
+          locationId,
+        }).catch((error) => {
+          console.warn("[voice-service] Twilio call recording start failed", {
+            callSid: twilioCallSid,
+            error,
+            locationId,
+          });
+        });
+      }
       const restaurantContext = await restaurantContextStore.getContext(locationId);
       const liveCallConfig = buildLiveCallConfig(currentEnv, locationId);
       const ttsVoice = resolveConversationRelayTtsVoice(currentEnv, restaurantContext);
@@ -857,6 +874,17 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
         return;
       }
 
+      const recordingStatus = firstNonEmpty(params.RecordingStatus, params.recordingStatus)?.toLowerCase();
+      if (recordingStatus && recordingStatus !== "completed") {
+        console.info("[voice-service] received non-completed recording callback", {
+          callSid: firstNonEmpty(params.CallSid, params.callSid, params.ParentCallSid, params.parentCallSid),
+          recordingSid: firstNonEmpty(params.RecordingSid, params.recordingSid),
+          recordingStatus,
+        });
+        sendJson(res, 200, { ignored: true, ok: true, recordingStatus });
+        return;
+      }
+
       const recordingUrl = normalizeRecordingUrl(firstNonEmpty(params.RecordingUrl, params.recordingUrl));
       const externalCallSid = firstNonEmpty(
         params.CallSid,
@@ -865,12 +893,14 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
         params.parentCallSid,
         url.searchParams.get("externalCallSid"),
       );
+      const callRecordId = firstNonEmpty(params.callRecordId, params.CallRecordId, url.searchParams.get("callRecordId"));
       if (!recordingUrl || !externalCallSid) {
         sendJson(res, 400, { error: "RecordingUrl and CallSid are required." });
         return;
       }
 
       await callStore.attachCallRecording({
+        callId: callRecordId,
         durationSeconds: parseOptionalSeconds(firstNonEmpty(params.RecordingDuration, params.recordingDuration)),
         externalCallSid,
         providerPayload: params,

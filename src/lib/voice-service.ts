@@ -6,6 +6,7 @@ import type { SignalHostVoiceGender, SignalHostVoiceProfileId } from "@/domain/v
 export interface VoiceServiceHealth {
   ok: boolean;
   service: string;
+  callRecordingConfigured?: boolean;
   customerFollowUpsConfigured?: boolean;
   openaiConfigured: boolean;
   openAIVoiceConfigured?: boolean;
@@ -148,11 +149,13 @@ export interface LiveCallConfig {
   publicHttpBaseUrl?: string;
   publicWsBaseUrl?: string;
   ready: boolean;
+  recordingStatusCallbackUrl?: string;
   twilioSignatureRequired: boolean;
   voiceWebhookUrl?: string;
 }
 
 export interface OpenAIRealtimeLiveCallConfig {
+  callRecordingConfigured?: boolean;
   model: string;
   noiseReduction?: "near_field" | "far_field";
   projectIdConfigured: boolean;
@@ -163,6 +166,7 @@ export interface OpenAIRealtimeLiveCallConfig {
   voice: string;
   webhookSecretConfigured: boolean;
   webhookUrl?: string;
+  recordingStatusCallbackUrl?: string;
 }
 
 export interface OpenAIRealtimePreflight {

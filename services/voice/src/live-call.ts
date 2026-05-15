@@ -1,4 +1,5 @@
 import type { VoiceServiceEnv } from "./env";
+import { buildTwilioRecordingStatusCallbackUrl } from "./twilio-recording-service";
 
 export interface LiveCallConfig {
   actionUrl?: string;
@@ -7,6 +8,7 @@ export interface LiveCallConfig {
   publicHttpBaseUrl?: string;
   publicWsBaseUrl?: string;
   ready: boolean;
+  recordingStatusCallbackUrl?: string;
   twilioSignatureRequired: boolean;
   voiceWebhookUrl?: string;
 }
@@ -26,6 +28,7 @@ export function buildLiveCallConfig(env: VoiceServiceEnv, requestedLocationId?: 
     publicHttpBaseUrl,
     publicWsBaseUrl,
     ready: Boolean(publicHttpBaseUrl && publicWsBaseUrl),
+    recordingStatusCallbackUrl: buildTwilioRecordingStatusCallbackUrl(env, { externalCallSid: "", locationId }),
     twilioSignatureRequired: env.REQUIRE_TWILIO_SIGNATURE,
     voiceWebhookUrl,
   };

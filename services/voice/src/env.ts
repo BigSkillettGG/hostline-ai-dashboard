@@ -24,6 +24,9 @@ const envSchema = z.object({
   TWILIO_ACCOUNT_SID: z.string().optional(),
   TWILIO_API_BASE_URL: z.string().url().default("https://api.twilio.com"),
   TWILIO_AUTH_TOKEN: z.string().optional(),
+  TWILIO_CALL_RECORDING_CHANNELS: z.enum(["mono", "dual"]).optional(),
+  TWILIO_CALL_RECORDING_ENABLED: z.enum(["true", "false"]).optional(),
+  TWILIO_CALL_RECORDING_TRACK: z.enum(["inbound", "outbound", "both"]).optional(),
   TWILIO_DEFAULT_COUNTRY: z.string().default("US"),
   TWILIO_MESSAGING_SERVICE_SID: z.string().optional(),
   TWILIO_SMS_FROM_NUMBER: z.string().optional(),
@@ -200,6 +203,17 @@ export function getVoiceServiceReadiness(env: VoiceServiceEnv): VoiceServiceRead
       id: "guest_confirmations",
       label: "Guest SMS confirmations",
       ready: Boolean(env.TWILIO_MESSAGING_SERVICE_SID || env.TWILIO_SMS_FROM_NUMBER),
+      required: false,
+    },
+    {
+      detail: "Starts Twilio recordings for OpenAI SIP calls and receives recording status callbacks.",
+      id: "call_recording",
+      label: "Call recordings",
+      ready: env.TWILIO_CALL_RECORDING_ENABLED !== "false" && Boolean(
+        env.TWILIO_ACCOUNT_SID &&
+          env.TWILIO_AUTH_TOKEN &&
+          env.PUBLIC_HTTP_BASE_URL,
+      ),
       required: false,
     },
     {

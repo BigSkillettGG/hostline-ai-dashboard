@@ -260,6 +260,7 @@ export default function Telephony() {
                 <UrlRow label="Voice service" value={voiceServiceBaseUrl || "Set VITE_VOICE_SERVICE_URL"} />
                 <UrlRow label="OpenAI Realtime webhook" value={realtimeConfigQuery.data?.webhookUrl ?? "Unavailable"} />
                 <UrlRow label="OpenAI SIP URI" value={realtimeConfigQuery.data?.sipUri ?? "Set OPENAI_PROJECT_ID or use the OpenAI project SIP URI"} />
+                <UrlRow label="Twilio recording callback" value={realtimeConfigQuery.data?.recordingStatusCallbackUrl ?? config?.recordingStatusCallbackUrl ?? "Unavailable"} />
                 <UrlRow label="Fallback Twilio Voice webhook" value={config?.voiceWebhookUrl ?? "Unavailable"} />
 
                 {liveCallQuery.isError && (
@@ -376,6 +377,7 @@ export default function Telephony() {
                 <StatusRow label="OpenAI" ready={Boolean(healthQuery.data?.openaiConfigured)} value={healthQuery.data?.openaiConfigured ? "Configured" : "Missing"} />
                 <StatusRow label="OpenAI voice" ready={Boolean(healthQuery.data?.openAIVoiceConfigured ?? healthQuery.data?.openaiConfigured)} value={(healthQuery.data?.openAIVoiceConfigured ?? healthQuery.data?.openaiConfigured) ? "Configured" : "Missing"} />
                 <StatusRow label="OpenAI Realtime SIP" ready={Boolean(healthQuery.data?.openAIRealtimeSipConfigured || realtimePreflightQuery.data?.ready)} value={realtimePreflightQuery.data?.ready ? "Preflight ready" : healthQuery.data?.openAIRealtimeSipConfigured ? "Configured" : "Missing"} />
+                <StatusRow label="Call recording" ready={Boolean(healthQuery.data?.callRecordingConfigured || realtimeConfigQuery.data?.callRecordingConfigured)} value={(healthQuery.data?.callRecordingConfigured || realtimeConfigQuery.data?.callRecordingConfigured) ? "Auto-start ready" : "Needs Twilio credentials + public URL"} />
                 <StatusRow label="Supabase context" ready={Boolean(healthQuery.data?.onboardedContextConfigured)} value={healthQuery.data?.onboardedContextConfigured ? "Configured" : "Missing"} />
                 <StatusRow label="Shared SMS routing" ready={Boolean(healthQuery.data?.sharedSmsRoutingConfigured)} value={healthQuery.data?.sharedSmsRoutingConfigured ? "Configured" : "Needs sender + Supabase"} />
               </CardContent>

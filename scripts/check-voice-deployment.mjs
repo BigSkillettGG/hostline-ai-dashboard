@@ -43,6 +43,7 @@ if (internalApiKey) {
   console.log(`ConversationRelay: ${liveCallConfig.conversationRelayUrl ?? "unavailable"}`);
   console.log(`OpenAI Realtime webhook: ${openAIRealtimeConfig.webhookUrl ?? "unavailable"}`);
   console.log(`OpenAI Realtime SIP URI: ${openAIRealtimeConfig.sipUri ?? "use the OpenAI dashboard/project SIP URI"}`);
+  console.log(`Twilio recording callback: ${openAIRealtimeConfig.recordingStatusCallbackUrl ?? liveCallConfig.recordingStatusCallbackUrl ?? "unavailable"}`);
   console.log(`OpenAI Realtime preflight: ${openAIRealtimePreflight.ready ? "ready" : "not ready"}`);
   for (const check of openAIRealtimePreflight.checks ?? []) {
     const marker = check.ready ? "OK" : check.required ? "MISSING" : "OPTIONAL";
