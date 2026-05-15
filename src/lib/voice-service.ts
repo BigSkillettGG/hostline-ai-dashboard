@@ -154,9 +154,12 @@ export interface LiveCallConfig {
 
 export interface OpenAIRealtimeLiveCallConfig {
   model: string;
+  noiseReduction?: "near_field" | "far_field";
   projectIdConfigured: boolean;
   ready: boolean;
   sipUri?: string;
+  speed?: number;
+  turnDetection?: Record<string, unknown>;
   voice: string;
   webhookSecretConfigured: boolean;
   webhookUrl?: string;

@@ -43,12 +43,12 @@ const baseEnv = {
   OPENAI_API_KEY: "sk-test",
   OPENAI_MODEL: "gpt-5-mini",
   OPENAI_REPLY_TIMEOUT_MS: 4500,
-  OPENAI_REALTIME_IDLE_TIMEOUT_MS: 9000,
+  OPENAI_REALTIME_IDLE_TIMEOUT_MS: 12000,
   OPENAI_REALTIME_INTERRUPT_RESPONSE: false,
   OPENAI_REALTIME_NOISE_REDUCTION: "far_field",
-  OPENAI_REALTIME_SERVER_VAD_PREFIX_PADDING_MS: 250,
-  OPENAI_REALTIME_SERVER_VAD_SILENCE_MS: 550,
-  OPENAI_REALTIME_SERVER_VAD_THRESHOLD: 0.72,
+  OPENAI_REALTIME_SERVER_VAD_PREFIX_PADDING_MS: 150,
+  OPENAI_REALTIME_SERVER_VAD_SILENCE_MS: 900,
+  OPENAI_REALTIME_SERVER_VAD_THRESHOLD: 0.88,
   OPENAI_REALTIME_TURN_DETECTION_MODE: "server_vad",
   OPENAI_REALTIME_TURN_EAGERNESS: "low",
   PUBLIC_HTTP_BASE_URL: "https://voice.signalhost.ai/",
@@ -67,9 +67,16 @@ describe("OpenAI Realtime SIP", () => {
 
     expect(config).toMatchObject({
       model: "gpt-realtime",
+      noiseReduction: "far_field",
       projectIdConfigured: true,
       ready: true,
       sipUri: "sip:proj_123@sip.api.openai.com;transport=tls",
+      speed: 1.02,
+      turnDetection: {
+        silence_duration_ms: 900,
+        threshold: 0.88,
+        type: "server_vad",
+      },
       voice: "marin",
       webhookSecretConfigured: false,
       webhookUrl: "https://voice.signalhost.ai/openai/realtime/webhook?locationId=loc_123",
@@ -90,11 +97,11 @@ describe("OpenAI Realtime SIP", () => {
     });
     expect(payload.audio.input.turn_detection).toMatchObject({
       create_response: true,
-      idle_timeout_ms: 9000,
+      idle_timeout_ms: 12000,
       interrupt_response: false,
-      prefix_padding_ms: 250,
-      silence_duration_ms: 550,
-      threshold: 0.72,
+      prefix_padding_ms: 150,
+      silence_duration_ms: 900,
+      threshold: 0.88,
       type: "server_vad",
     });
     expect(payload.audio.input.noise_reduction).toMatchObject({ type: "far_field" });
@@ -113,7 +120,8 @@ describe("OpenAI Realtime SIP", () => {
     expect(payload.instructions).toContain("Configured business links");
     expect(payload.instructions).toContain("Order operating mode");
     expect(payload.instructions).toContain("create_reservation_request");
-    expect(payload.instructions).toContain("Speakerphone and car audio behavior");
+    expect(payload.instructions).toContain("Noisy-room behavior");
+    expect(payload.instructions).toContain("Echo guardrail");
     expect(payload.instructions).toContain("Can I help you with anything else?");
     expect(payload.instructions).toContain("finish_call");
     expect(payload.tools[0].name).toBe("lookup_restaurant_context");
@@ -475,7 +483,8 @@ describe("OpenAI Realtime SIP", () => {
     expect(instructions).toContain("Greeting energy");
     expect(instructions).toContain("not 'Thanks, Schneider.'");
     expect(instructions).toContain("Handle clear interruptions gracefully");
-    expect(instructions).toContain("Speakerphone and car audio behavior");
+    expect(instructions).toContain("Noisy-room behavior");
+    expect(instructions).toContain("Echo guardrail");
     expect(instructions).toContain("Can I help you with anything else?");
     expect(instructions).toContain("Thanks for calling. Goodbye.");
     expect(instructions).toContain("Do not call finish_call until");
@@ -506,13 +515,13 @@ describe("OpenAI Realtime SIP", () => {
   it("uses server VAD speakerphone-safe turn detection by default", () => {
     expect(resolveOpenAIRealtimeNoiseReduction(baseEnv)).toBe("far_field");
     expect(resolveOpenAIRealtimeInterruptResponse(baseEnv)).toBe(false);
-    expect(resolveOpenAIRealtimeServerVadThreshold(baseEnv)).toBe(0.72);
-    expect(resolveOpenAIRealtimeServerVadSilenceMs(baseEnv)).toBe(550);
-    expect(resolveOpenAIRealtimeServerVadPrefixPaddingMs(baseEnv)).toBe(250);
-    expect(resolveOpenAIRealtimeIdleTimeoutMs(baseEnv)).toBe(9000);
+    expect(resolveOpenAIRealtimeServerVadThreshold(baseEnv)).toBe(0.88);
+    expect(resolveOpenAIRealtimeServerVadSilenceMs(baseEnv)).toBe(900);
+    expect(resolveOpenAIRealtimeServerVadPrefixPaddingMs(baseEnv)).toBe(150);
+    expect(resolveOpenAIRealtimeIdleTimeoutMs(baseEnv)).toBe(12000);
     expect(resolveOpenAIRealtimeTurnDetection(baseEnv)).toMatchObject({
       interrupt_response: false,
-      threshold: 0.72,
+      threshold: 0.88,
       type: "server_vad",
     });
     expect(

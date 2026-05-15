@@ -81,9 +81,12 @@ interface RealtimeSocket {
 
 export interface OpenAIRealtimeLiveCallConfig {
   model: string;
+  noiseReduction: "near_field" | "far_field";
   projectIdConfigured: boolean;
   ready: boolean;
   sipUri?: string;
+  speed: number;
+  turnDetection: OpenAIRealtimeAcceptPayload["audio"]["input"]["turn_detection"];
   voice: string;
   webhookSecretConfigured: boolean;
   webhookUrl?: string;
@@ -466,9 +469,12 @@ export function buildOpenAIRealtimeLiveCallConfig(env: OpenAIRealtimeEnv, locati
 
   return {
     model,
+    noiseReduction: resolveOpenAIRealtimeNoiseReduction(env),
     projectIdConfigured: Boolean(env.OPENAI_PROJECT_ID),
     ready: Boolean(env.OPENAI_API_KEY && webhookUrl),
     sipUri: env.OPENAI_PROJECT_ID ? `sip:${env.OPENAI_PROJECT_ID}@sip.api.openai.com;transport=tls` : undefined,
+    speed: resolveOpenAIRealtimeSpeed(env),
+    turnDetection: resolveOpenAIRealtimeTurnDetection(env),
     voice,
     webhookSecretConfigured: Boolean(env.OPENAI_WEBHOOK_SECRET),
     webhookUrl,
@@ -552,7 +558,9 @@ export function buildOpenAIRealtimeInstructions(
       ? "Use natural restaurant-host acknowledgements like 'Sure', 'Absolutely', 'Of course', 'One moment', and 'Let me check that' when they fit."
       : `Use natural ${profile.staffNoun} acknowledgements like 'Sure', 'Absolutely', 'Of course', 'One moment', and 'Let me check that' when they fit.`,
     "If the caller pauses, wait naturally. If silence continues, ask a gentle continuation question such as 'Take your time. What else can I help you with?'",
-    "Speakerphone and car audio behavior: ignore faint echoes, background noise, room noise, and your own voice coming back through the caller's speaker. Only treat clear human speech as caller intent.",
+    "Noisy-room behavior: ignore TV audio, background conversations, faint echoes, room noise, and your own voice coming back through the caller's phone. Only treat clear directed human speech as caller intent.",
+    "Echo guardrail: if the caller audio appears to repeat your own greeting or phrases like 'thank you for calling' or 'how can I help you', treat it as echo or background audio. Do not repeat the greeting or respond as if it were a new customer request.",
+    "If the caller only says 'hello', 'pardon', or 'are you there' after you have already greeted them, acknowledge once with 'I'm here' and wait for their actual request. Do not restart the opening greeting.",
     "Handle clear interruptions gracefully. If the caller clearly cuts you off with speech, answer their latest request. Do not restart the call because of a noise, echo, or short silence.",
     "If the caller is in a very loud place or the audio is too unclear to understand, do not guess. Say briefly that it is too noisy to hear clearly and ask them to move somewhere quieter, call back, or let staff follow up by text/callback.",
     "Before any lookup or task that may take a moment, say one short natural bridge such as 'Sure, let me check that' or 'One moment, I am checking now,' then use the tool. Vary the wording and do not sound like an IVR.",
@@ -2732,22 +2740,22 @@ export function resolveOpenAIRealtimeTurnEagerness(env: OpenAIRealtimeEnv) {
 
 export function resolveOpenAIRealtimeServerVadThreshold(env: OpenAIRealtimeEnv) {
   const threshold = env.OPENAI_REALTIME_SERVER_VAD_THRESHOLD;
-  return Number.isFinite(threshold) ? Math.min(0.95, Math.max(0.05, threshold)) : 0.72;
+  return Number.isFinite(threshold) ? Math.min(0.95, Math.max(0.05, threshold)) : 0.88;
 }
 
 export function resolveOpenAIRealtimeServerVadSilenceMs(env: OpenAIRealtimeEnv) {
   const silenceMs = env.OPENAI_REALTIME_SERVER_VAD_SILENCE_MS;
-  return Number.isFinite(silenceMs) ? Math.min(2000, Math.max(200, Math.round(silenceMs))) : 550;
+  return Number.isFinite(silenceMs) ? Math.min(2000, Math.max(200, Math.round(silenceMs))) : 900;
 }
 
 export function resolveOpenAIRealtimeServerVadPrefixPaddingMs(env: OpenAIRealtimeEnv) {
   const prefixPaddingMs = env.OPENAI_REALTIME_SERVER_VAD_PREFIX_PADDING_MS;
-  return Number.isFinite(prefixPaddingMs) ? Math.min(1000, Math.max(0, Math.round(prefixPaddingMs))) : 250;
+  return Number.isFinite(prefixPaddingMs) ? Math.min(1000, Math.max(0, Math.round(prefixPaddingMs))) : 150;
 }
 
 export function resolveOpenAIRealtimeIdleTimeoutMs(env: OpenAIRealtimeEnv) {
   const idleTimeoutMs = env.OPENAI_REALTIME_IDLE_TIMEOUT_MS;
-  return Number.isFinite(idleTimeoutMs) ? Math.min(30000, Math.max(5000, Math.round(idleTimeoutMs))) : 9000;
+  return Number.isFinite(idleTimeoutMs) ? Math.min(30000, Math.max(5000, Math.round(idleTimeoutMs))) : 12000;
 }
 
 export function resolveOpenAIRealtimeInterruptResponse(env: OpenAIRealtimeEnv) {
