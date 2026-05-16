@@ -196,6 +196,7 @@ interface OpenAIRealtimeSidebandSession {
   manualIdlePromptCount: number;
   manualIdleTimer?: ReturnType<typeof setTimeout>;
   manualIdleTimeoutMs: number;
+  manualResponseStartPending?: boolean;
   ownerContact?: TrustedContact;
   openingGreetingCompleted: boolean;
   pendingManualResponse: boolean;
@@ -1321,6 +1322,7 @@ function recordOpenAIRealtimeQualityEvent(session: OpenAIRealtimeSidebandSession
 
   if (eventType === "response.created") {
     clearOpenAIRealtimeManualIdleTimer(session);
+    delete session.manualResponseStartPending;
     session.quality.responseCount += 1;
     session.quality.activeResponseStartedAt = now;
     if (session.quality.responseCount === 1) {
@@ -1337,6 +1339,7 @@ function recordOpenAIRealtimeQualityEvent(session: OpenAIRealtimeSidebandSession
   }
 
   if (eventType === "response.done") {
+    delete session.manualResponseStartPending;
     if (session.quality.activeResponseStartedAt) {
       session.quality.lastResponseDurationMs = now - session.quality.activeResponseStartedAt;
     }
@@ -1423,6 +1426,7 @@ function requestOpenAIRealtimeManualResponse({
   socket: RealtimeSocket;
 }) {
   if (session.finishRequested) return;
+  if (session.manualResponseStartPending) return;
   if (!session.openingGreetingCompleted || session.quality.activeResponseStartedAt) {
     session.pendingManualResponse = true;
     return;
@@ -1441,6 +1445,7 @@ function sendOpenAIRealtimeManualResponse({
 }) {
   clearOpenAIRealtimeManualIdleTimer(session);
   session.pendingManualResponse = false;
+  session.manualResponseStartPending = true;
   console.info("[openai-realtime] creating gated response for accepted caller turn", { callId });
   sendRealtimeEvent(socket, { type: "response.create" });
 }
@@ -1454,10 +1459,20 @@ function scheduleOpenAIRealtimeManualIdlePrompt({
   session: OpenAIRealtimeSidebandSession;
   socket: RealtimeSocket;
 }) {
-  if (!session.manualResponseGating || session.finishRequested || session.quality.activeResponseStartedAt) return;
+  if (
+    !session.manualResponseGating ||
+    session.finishRequested ||
+    session.quality.activeResponseStartedAt ||
+    session.manualResponseStartPending
+  ) return;
   clearOpenAIRealtimeManualIdleTimer(session);
   session.manualIdleTimer = setTimeout(() => {
-    if (session.finishRequested || session.quality.activeResponseStartedAt || session.pendingManualResponse) return;
+    if (
+      session.finishRequested ||
+      session.quality.activeResponseStartedAt ||
+      session.pendingManualResponse ||
+      session.manualResponseStartPending
+    ) return;
     const isFinalPrompt = session.manualIdlePromptCount >= 3;
     session.manualIdlePromptCount += 1;
     if (isFinalPrompt) {
