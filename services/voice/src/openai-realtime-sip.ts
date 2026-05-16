@@ -1491,6 +1491,7 @@ function shouldAcceptRealtimeCallerTranscript(
   if (!normalized) return { accept: false, reason: "empty" };
   if (isOpenAIRealtimeTranscriptionPromptLeak(normalized)) return { accept: false, reason: "prompt_leak" };
   if (isLikelyOpenAIRealtimeAgentEcho(session, normalized)) return { accept: false, reason: "agent_echo" };
+  if (isLikelyBackgroundMediaFragment(normalized)) return { accept: false, reason: "background_media" };
 
   const wordCount = normalized.split(/\s+/).filter(Boolean).length;
   const activeResponse = Boolean(session.quality.activeResponseStartedAt);
@@ -1507,6 +1508,11 @@ function shouldAcceptRealtimeCallerTranscript(
     return { accept: false, reason: greetingPhase ? "greeting_noise" : "response_noise" };
   }
 
+  // Once the greeting is complete and SignalHost is listening, prefer letting the
+  // realtime model interpret natural speech over forcing caller intent through
+  // a brittle keyword list. The hard rejects above still catch prompt leakage,
+  // obvious agent echo, and common TV/radio fragments.
+  if (wordCount >= 2) return { accept: true };
   if (clearIntent || configuredOfferingIntent || directedSpeech || shortConfirmation || answerToAgentQuestion) {
     return { accept: true };
   }
