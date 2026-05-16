@@ -615,6 +615,7 @@ export function buildOpenAIRealtimeInstructions(
   const businessLinksContext = buildRealtimeBusinessLinksInstruction(context);
   const orderModeContext = buildRealtimeOrderModeInstruction(context);
   const reservationModeContext = buildRealtimeReservationModeInstruction(context);
+  const universalIntakeContext = buildRealtimeUniversalIntakeInstruction(context);
   const profile = getRuntimeBusinessProfile(context);
   const contextLookupTool = profile.isRestaurant ? "lookup_restaurant_context" : "lookup_business_context";
 
@@ -676,6 +677,7 @@ export function buildOpenAIRealtimeInstructions(
     profile.isRestaurant
       ? "When reservation date, time, party size, and guest name are known, use create_reservation_request to save the request. If the tool says provider_confirmed, tell the caller the reservation is confirmed. If the tool says staff confirmation is needed, tell the caller it is requested and staff will confirm."
       : `When customer name, callback number, request summary, urgency, and useful details are known, use create_customer_request with service_appointment, quote, lead, callback, or complaint. Tell the caller ${profile.staffNoun} will follow up; do not promise a confirmed ${profile.appointmentNoun} unless the context explicitly says it is confirmed.`,
+    universalIntakeContext,
     profile.isRestaurant
       ? "Reservation name guardrail: do not treat 'no', 'none', 'that's all', 'I'm good', goodbye phrases, or refusal phrases as a guest name. If the caller declines or skips the name, ask once for a real name or offer to have staff use caller ID for follow-up; do not save a fake name."
       : "Name guardrail: do not treat 'no', 'none', 'that's all', 'I'm good', goodbye phrases, or refusal phrases as a customer name.",
@@ -789,6 +791,26 @@ function buildRealtimeOrderModeInstruction(context: RestaurantVoiceContext) {
     return `${base} Ask whether the caller wants the online ordering link or wants you to take the order for staff review.`;
   }
   return `${base} Take the order details for staff review and never promise kitchen production until staff accepts it.`;
+}
+
+function buildRealtimeUniversalIntakeInstruction(context: RestaurantVoiceContext) {
+  const profile = getRuntimeBusinessProfile(context);
+  const requestTypes = profile.isRestaurant
+    ? "orders, reservations, messages, event inquiries, and customer requests"
+    : `${profile.appointmentNoun}s, quotes, messages, and customer requests`;
+
+  return [
+    `Universal intake style for ${profile.businessNoun} ${requestTypes}: ask one short question at a time.`,
+    "First understand what the caller wants, then ask only for the next missing detail.",
+    "If the caller gives several needs at once, briefly reflect what you heard and ask one focused follow-up.",
+    "Do not ask for the issue, address, name, phone, timing, urgency, and preferred follow-up all in one breath.",
+    "Do not infer urgency, availability, confirmation, or priority from an ambiguous or partial answer.",
+    "If the caller's answer could mean several things, ask a simple clarifying question instead of deciding for them.",
+    "Only label something urgent when the caller clearly describes immediate safety risk, active property damage, severe customer impact, time-critical business impact, or explicitly asks for emergency help.",
+    "If urgency is unclear, keep the tone calm, say what you understood, and ask one direct question to clarify.",
+    "When the caller seems confused, restate what you understood in one sentence, then ask the next easiest question.",
+    "If the caller becomes frustrated, slow down, acknowledge it briefly, and ask one simple next-step question.",
+  ].join(" ");
 }
 
 function buildRealtimeBusinessLinksInstruction(context: RestaurantVoiceContext) {

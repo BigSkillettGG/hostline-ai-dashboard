@@ -126,6 +126,9 @@ describe("OpenAI Realtime SIP", () => {
     expect(payload.instructions).toContain("Order operating mode");
     expect(payload.instructions).toContain("Margherita Pizza $18.00");
     expect(payload.instructions).toContain("For direct menu availability or orderability questions");
+    expect(payload.instructions).toContain("Universal intake style");
+    expect(payload.instructions).toContain("ask one short question at a time");
+    expect(payload.instructions).toContain("Do not infer urgency");
     expect(payload.instructions).toContain("create_reservation_request");
     expect(payload.instructions).toContain("Noisy-room behavior");
     expect(payload.instructions).toContain("Echo guardrail");
@@ -177,6 +180,14 @@ describe("OpenAI Realtime SIP", () => {
     expect(payload.instructions).toContain("service catalog");
     expect(payload.instructions).toContain("Service-request operating mode");
     expect(payload.instructions).toContain("use create_customer_request");
+    expect(payload.instructions).toContain("Universal intake style");
+    expect(payload.instructions).toContain("ask one short question at a time");
+    expect(payload.instructions).toContain("Do not infer urgency");
+    expect(payload.instructions).toContain("ambiguous or partial answer");
+    expect(payload.instructions).not.toContain("Plumbing urgency guardrail");
+    expect(payload.instructions).not.toContain("HVAC urgency guardrail");
+    expect(payload.instructions).not.toContain("Electrical urgency guardrail");
+    expect(payload.instructions).not.toContain("Roofing urgency guardrail");
     expect(payload.instructions).not.toContain("use create_reservation_request to save the request");
     expect(payload.tools[0].name).toBe("lookup_business_context");
     expect(payload.tools.map((tool) => tool.name)).not.toContain("create_reservation_request");
