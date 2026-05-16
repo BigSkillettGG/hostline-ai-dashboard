@@ -27,6 +27,7 @@ import { createMenuIngestionService } from "./menu-ingestion-service";
 import { recordHttpRequestMetric, renderPrometheusMetrics } from "./metrics";
 import { buildSmsTwiML, createMessageThreadStore } from "./message-thread-store";
 import { createStaffNotificationService } from "./notification-service";
+import { buildOpenAIAgentsRealtimePreflight } from "./openai-agents-realtime-spike";
 import { buildOpenAIRealtimeLiveCallConfig, createOpenAIRealtimeSipService } from "./openai-realtime-sip";
 import { createOwnerCommandRuntime } from "./owner-command-runtime";
 import { createOwnerEmailCommandService, type OwnerEmailCommandInput } from "./owner-email-command-service";
@@ -464,6 +465,24 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
     }
 
     const preflight = await openAIRealtimeSipService.getPreflight(locationId ?? undefined);
+    sendJson(res, preflight.ready ? 200 : 503, preflight);
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/openai/agents/realtime/preflight") {
+    const locationId = url.searchParams.get("locationId") ?? currentEnv.SUPABASE_DEMO_LOCATION_ID;
+    const authorization = await authorizeVoiceAdminRequest({ currentEnv, locationId, req });
+    if (!authorization.authorized) {
+      sendJson(res, authorization.status, { error: authorization.reason ?? "Unauthorized" });
+      return;
+    }
+
+    const preflight = await buildOpenAIAgentsRealtimePreflight({
+      callerPhone: url.searchParams.get("callerPhone") ?? undefined,
+      env: currentEnv,
+      locationId: locationId ?? undefined,
+      restaurantContextStore,
+    });
     sendJson(res, preflight.ready ? 200 : 503, preflight);
     return;
   }
