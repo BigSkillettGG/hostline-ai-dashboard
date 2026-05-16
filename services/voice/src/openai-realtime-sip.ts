@@ -658,6 +658,7 @@ export function buildOpenAIRealtimeInstructions(
       : `For direct service availability questions, first check the configured services in your instructions. If uncertain, call ${contextLookupTool} with the service or category before saying no.`,
     "After answering any normal question or completing any task, ask a short loop-closing question such as 'Can I help you with anything else?' unless the caller has already clearly said goodbye.",
     "Never end the call immediately after answering a question. The call should only close after the caller indicates they are done.",
+    "After saving a reservation, sending a confirmation text, sending a link, or taking an order request, do not call finish_call right away. Give the confirmation, then ask a brief anything-else question unless the caller already said they are done.",
     "If the caller says no, no thanks, that's all, that's it, I'm good, or similar after your anything-else question, call finish_call with a short closing line like 'Thanks for calling. Goodbye.' Do not ask another question.",
     "Do not call finish_call until the caller clearly indicates they are done or says goodbye.",
     "When finish_call returns ok, say only the closing line, then stop speaking. The call will end.",
@@ -1552,8 +1553,35 @@ function isLikelyOpenAIRealtimeAgentEcho(session: OpenAIRealtimeSidebandSession,
   return (
     normalized.includes("thank you for calling") ||
     normalized.includes("how can i help you") ||
-    (Boolean(businessName) && normalized.includes(businessName) && normalized.includes("how can i help"))
+    (Boolean(businessName) && normalized.includes(businessName) && normalized.includes("how can i help")) ||
+    isLikelyRecentAgentTranscriptEcho(session, normalized)
   );
+}
+
+function isLikelyRecentAgentTranscriptEcho(session: OpenAIRealtimeSidebandSession, normalized: string) {
+  const candidateWords = significantEchoWords(normalized);
+  if (candidateWords.length < 5) return false;
+
+  const recentAgentTurns = session.transcript
+    .filter((turn) => turn.role === "agent")
+    .slice(-3)
+    .map((turn) => normalizeRealtimeCallerText(turn.text))
+    .filter(Boolean);
+
+  return recentAgentTurns.some((agentTurn) => {
+    if (agentTurn.includes(normalized)) return true;
+    const agentWords = new Set(significantEchoWords(agentTurn));
+    if (agentWords.size < 5) return false;
+    const overlap = candidateWords.filter((word) => agentWords.has(word)).length / candidateWords.length;
+    return overlap >= 0.78;
+  });
+}
+
+function significantEchoWords(normalized: string) {
+  const stopWords = new Set(["a", "an", "and", "are", "can", "for", "i", "is", "it", "me", "of", "or", "that", "the", "to", "we", "you", "your"]);
+  return normalized
+    .split(/\s+/)
+    .filter((word) => word.length > 2 && !stopWords.has(word));
 }
 
 function hasLikelyCallerIntent(normalized: string) {
@@ -2026,6 +2054,7 @@ async function handleOpenAIRealtimeToolCalls({
         ownerCommandRuntime,
         ownerContact,
         reservationPlatformService,
+        session,
         staffNotificationService,
         toolCall,
       });
@@ -2110,6 +2139,7 @@ async function handleOpenAIRealtimeToolCall({
   ownerCommandRuntime,
   ownerContact,
   reservationPlatformService,
+  session,
   staffNotificationService,
   toolCall,
 }: {
@@ -2122,6 +2152,7 @@ async function handleOpenAIRealtimeToolCall({
   ownerCommandRuntime?: OwnerCommandRuntime;
   ownerContact?: TrustedContact;
   reservationPlatformService?: ReservationPlatformService;
+  session: OpenAIRealtimeSidebandSession;
   staffNotificationService?: StaffNotificationService;
   toolCall: OpenAIRealtimeToolCall;
 }) {
@@ -2200,6 +2231,7 @@ async function handleOpenAIRealtimeToolCall({
 
   if (toolCall.name === "finish_call") {
     return finishOpenAIRealtimeCall({
+      lastCallerText: getLastRealtimeCallerText(session),
       rawArguments: toolCall.arguments,
     });
   }
@@ -2251,14 +2283,59 @@ export async function runOpenAIRealtimeOwnerCommand({
   });
 }
 
-export function finishOpenAIRealtimeCall({ rawArguments }: { rawArguments: Record<string, unknown> }) {
+export function finishOpenAIRealtimeCall({
+  lastCallerText,
+  rawArguments,
+}: {
+  lastCallerText?: string;
+  rawArguments: Record<string, unknown>;
+}) {
   const closingLine = sanitizeClosingLine(stringValue(rawArguments.closing_line) ?? "Thanks for calling. Goodbye.");
+  const reason = stringValue(rawArguments.reason) ?? "caller_done";
+  if (lastCallerText && !canFinishAfterCallerTurn(lastCallerText, reason)) {
+    return {
+      ok: false,
+      action: "finish_call",
+      error: "caller_not_done",
+      callerGuidance:
+        "The caller has not clearly said they are done. Do not end the call yet. Confirm the completed task, then ask: 'Can I help you with anything else?'",
+      lastCallerText,
+    };
+  }
+
   return {
     ok: true,
     action: "finish_call",
     closingLine,
+    reason,
     message: `Say only this closing line, then stop speaking: "${closingLine}"`,
   };
+}
+
+function getLastRealtimeCallerText(session: OpenAIRealtimeSidebandSession) {
+  return session.transcript.filter((turn) => turn.role === "caller").at(-1)?.text;
+}
+
+function canFinishAfterCallerTurn(lastCallerText: string, reason: string) {
+  if (reason === "silent_or_abandoned" || reason === "wrong_number_complete") return true;
+  return isCallerDoneUtterance(normalizeRealtimeCallerText(lastCallerText));
+}
+
+function isCallerDoneUtterance(normalized: string) {
+  if (!normalized) return false;
+  if (
+    /^(no|nope|no thanks|no thank you|nothing else|that's all|that is all|that's it|that is it|i'm good|im good|i am good|all set|i'm all set|im all set)$/.test(
+      normalized,
+    )
+  ) {
+    return true;
+  }
+  if (/^(goodbye|bye|thanks|thank you|awesome thanks|awesome thank you|perfect thanks|perfect thank you)$/.test(normalized)) {
+    return true;
+  }
+  return /\b(no thanks|no thank you|nothing else|that's all|that is all|that's it|that is it|i'm good|im good|all set|goodbye|bye)\b/.test(
+    normalized,
+  );
 }
 
 export async function createOpenAIRealtimeReservationRequest({

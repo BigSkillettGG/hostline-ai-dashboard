@@ -989,6 +989,87 @@ describe("OpenAI Realtime SIP", () => {
     expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))).toHaveLength(1);
   });
 
+  it("rejects recent agent audio when it returns as caller echo", async () => {
+    const socket = createFakeRealtimeSocket();
+    const transcriptTurns: unknown[] = [];
+    const service = createOpenAIRealtimeSipService(
+      baseEnv,
+      {
+        async getContext() {
+          return demoRestaurantContext;
+        },
+      },
+      {
+        callStore: {
+          async addTranscriptTurn(input) {
+            transcriptTurns.push(input);
+          },
+          async attachCallRecording() {},
+          async completeCall() {},
+          async createCustomerRequest() {
+            return {};
+          },
+          async createStaffReviewOrder() {
+            return {};
+          },
+          async createStaffReviewReservation() {
+            return {};
+          },
+          async createStaffTask() {
+            return {};
+          },
+          async startCall() {
+            return {};
+          },
+          async startRealtimeCall() {
+            return { callId: "call_uuid" };
+          },
+        },
+        fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+        websocketFactory: () => socket as never,
+      },
+    );
+
+    await service.handleIncomingWebhook({
+      headers: {},
+      rawBody: JSON.stringify({
+        data: {
+          call_id: "rtc_agent_echo",
+          sip_headers: [{ name: "From", value: "sip:+14155550123@twilio.com" }],
+        },
+        type: "realtime.call.incoming",
+      }),
+    });
+
+    socket.emit("open");
+    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "agent_confirmation",
+        transcript: "Your reservation request is in, and staff will confirm it shortly.",
+        type: "response.output_audio_transcript.done",
+      })),
+    );
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "caller_echo",
+        transcript: "Your reservation request is in and staff will confirm it shortly.",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    await Promise.resolve();
+
+    expect(transcriptTurns).toEqual([
+      expect.objectContaining({
+        speaker: "agent",
+        text: "Your reservation request is in, and staff will confirm it shortly.",
+      }),
+    ]);
+    expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))).toHaveLength(1);
+  });
+
   it("treats repeated hello as a real reconnect attempt after a glitch", async () => {
     const socket = createFakeRealtimeSocket();
     const transcriptTurns: unknown[] = [];
@@ -1742,6 +1823,33 @@ describe("OpenAI Realtime SIP", () => {
     ).toMatchObject({
       action: "finish_call",
       closingLine: "Thanks for calling Olive and Ember. Goodbye.",
+      ok: true,
+    });
+  });
+
+  it("does not finish the call when the latest caller turn is not a goodbye", () => {
+    expect(
+      finishOpenAIRealtimeCall({
+        lastCallerText: "Yes, please.",
+        rawArguments: {
+          closing_line: "Thanks for calling. Goodbye.",
+          reason: "caller_done",
+        },
+      }),
+    ).toMatchObject({
+      error: "caller_not_done",
+      ok: false,
+    });
+
+    expect(
+      finishOpenAIRealtimeCall({
+        lastCallerText: "No thanks, that's all.",
+        rawArguments: {
+          closing_line: "Thanks for calling. Goodbye.",
+          reason: "caller_done",
+        },
+      }),
+    ).toMatchObject({
       ok: true,
     });
   });
