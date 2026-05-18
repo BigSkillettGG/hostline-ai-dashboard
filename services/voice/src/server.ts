@@ -47,6 +47,7 @@ import {
 } from "./twilio-recording-service";
 import { demoRestaurantContext } from "./restaurant-context";
 import { generateRestaurantReply } from "./restaurant-agent";
+import { buildSupabaseServiceHeaders } from "./supabase-headers";
 import { validateTwilioSignature } from "./twilio-signature";
 import { buildConversationRelayTwiML, buildEmptyTwiML, buildHangupTwiML, buildUnavailableTwiML } from "./twiml";
 import { resolveConversationRelayTtsVoice } from "./voice-selection";
@@ -88,6 +89,7 @@ const openAIRealtimeSipService = createOpenAIRealtimeSipService(env, restaurantC
 const webChatService = createWebChatService(env, restaurantContextStore, { callStore });
 const ADMIN_BODY_LIMIT_BYTES = 16 * 1024;
 const BILLING_BODY_LIMIT_BYTES = 32 * 1024;
+const CALL_DEBUG_AUDIO_LIMIT_BYTES = 25 * 1024 * 1024;
 const OPENAI_WEBHOOK_BODY_LIMIT_BYTES = 32 * 1024;
 const OWNER_EMAIL_BODY_LIMIT_BYTES = 64 * 1024;
 const PREVIEW_BODY_LIMIT_BYTES = 4 * 1024;
@@ -964,6 +966,50 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
     return;
   }
 
+  if (req.method === "GET" && url.pathname === "/debug/calls/latest") {
+    const locationId = url.searchParams.get("locationId") ?? currentEnv.SUPABASE_DEMO_LOCATION_ID;
+    const authorization = await authorizeVoiceAdminRequest({ currentEnv, locationId, req });
+    if (!authorization.authorized) {
+      sendJson(res, authorization.status, { error: authorization.reason ?? "Unauthorized" });
+      return;
+    }
+
+    try {
+      const debugPack = await buildCallDebugPack({
+        currentEnv,
+        includeAudio: isTruthyQueryParam(url.searchParams.get("audio")),
+        locationId: locationId ?? undefined,
+      });
+      sendJson(res, 200, debugPack);
+    } catch (error) {
+      sendCaughtError(res, error, "Call debug failed");
+    }
+    return;
+  }
+
+  const callDebugMatch = url.pathname.match(/^\/debug\/calls\/([^/]+)$/);
+  if (req.method === "GET" && callDebugMatch) {
+    const locationId = url.searchParams.get("locationId") ?? currentEnv.SUPABASE_DEMO_LOCATION_ID;
+    const authorization = await authorizeVoiceAdminRequest({ currentEnv, locationId, req });
+    if (!authorization.authorized) {
+      sendJson(res, authorization.status, { error: authorization.reason ?? "Unauthorized" });
+      return;
+    }
+
+    try {
+      const debugPack = await buildCallDebugPack({
+        callId: decodeURIComponent(callDebugMatch[1]),
+        currentEnv,
+        includeAudio: isTruthyQueryParam(url.searchParams.get("audio")),
+        locationId: locationId ?? undefined,
+      });
+      sendJson(res, 200, debugPack);
+    } catch (error) {
+      sendCaughtError(res, error, "Call debug failed");
+    }
+    return;
+  }
+
   const recordingPlaybackMatch = url.pathname.match(/^\/twilio\/recordings\/([^/]+)\.mp3$/);
   if (req.method === "GET" && recordingPlaybackMatch) {
     await streamTwilioRecordingPlayback({
@@ -1369,6 +1415,209 @@ function getStableCallSessionKey(params: Record<string, string>, fallback?: stri
 
 function firstNonEmpty(...values: Array<string | undefined | null>) {
   return values.find((value) => value?.trim())?.trim();
+}
+
+interface CallDebugRow {
+  caller_phone: string | null;
+  duration_seconds: number | null;
+  external_call_sid: string | null;
+  external_session_id: string | null;
+  id: string;
+  intent: string | null;
+  location_id: string;
+  outcome: string | null;
+  recording_url: string | null;
+  started_at: string;
+  status: string | null;
+  summary: string | null;
+  twilio_payload: unknown;
+}
+
+interface TranscriptDebugRow {
+  created_at: string;
+  offset_seconds: number;
+  speaker: string;
+  text: string;
+}
+
+const CALL_DEBUG_SELECT =
+  "select=id,location_id,external_call_sid,external_session_id,caller_phone,started_at,duration_seconds,intent,outcome,status,summary,recording_url,twilio_payload";
+
+async function buildCallDebugPack({
+  callId,
+  currentEnv,
+  includeAudio,
+  locationId,
+}: {
+  callId?: string;
+  currentEnv: VoiceServiceEnv;
+  includeAudio: boolean;
+  locationId?: string;
+}) {
+  if (!currentEnv.SUPABASE_URL || !currentEnv.SUPABASE_SECRET_KEY) {
+    throw new HttpRequestError(503, "Supabase service credentials are not configured.");
+  }
+  if (!locationId) {
+    throw new HttpRequestError(400, "locationId is required.");
+  }
+
+  const callQuery = callId
+    ? `calls?id=eq.${encodeURIComponent(callId)}&location_id=eq.${encodeURIComponent(locationId)}&${CALL_DEBUG_SELECT}`
+    : `calls?location_id=eq.${encodeURIComponent(locationId)}&${CALL_DEBUG_SELECT}&order=started_at.desc&limit=1`;
+  const calls = await supabaseServiceRequest<CallDebugRow[]>(currentEnv, callQuery);
+  const call = calls[0];
+  if (!call) {
+    throw new HttpRequestError(404, "No matching call found.");
+  }
+
+  const transcriptTurns = await supabaseServiceRequest<TranscriptDebugRow[]>(
+    currentEnv,
+    `transcript_turns?call_id=eq.${encodeURIComponent(call.id)}&select=speaker,text,offset_seconds,created_at&order=created_at.asc`,
+  );
+  const observations = buildCallDebugObservations(call, transcriptTurns);
+  const audioDiagnostic = includeAudio
+    ? await runOpenAIAudioDiagnostic({
+      currentEnv,
+      recordingUrl: call.recording_url,
+    })
+    : {
+      reason: "Pass audio=true to run a second-pass OpenAI transcription of the recording.",
+      skipped: true,
+    };
+
+  return {
+    audioDiagnostic,
+    call,
+    observations,
+    transcriptTurns,
+  };
+}
+
+async function supabaseServiceRequest<T>(currentEnv: VoiceServiceEnv, path: string): Promise<T> {
+  const response = await fetch(`${currentEnv.SUPABASE_URL?.replace(/\/$/, "")}/rest/v1/${path}`, {
+    headers: buildSupabaseServiceHeaders(currentEnv.SUPABASE_SECRET_KEY ?? ""),
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new HttpRequestError(response.status, `Supabase request failed: ${text}`);
+  }
+  return (text ? JSON.parse(text) : []) as T;
+}
+
+function buildCallDebugObservations(call: CallDebugRow, transcriptTurns: TranscriptDebugRow[]) {
+  const summary = call.summary ?? "";
+  const speechStartCount = numberFromSummary(summary, /speech starts (\d+)/i);
+  const speechStopCount = numberFromSummary(summary, /speech stops (\d+)/i);
+  const callerTurnCount = transcriptTurns.filter((turn) => turn.speaker === "caller").length;
+  const agentTurnCount = transcriptTurns.filter((turn) => turn.speaker === "agent").length;
+  const ignoredNoise = summary.match(/Ignored likely background:\s*(.+?)(?:\. Call close:|$)/i)?.[1];
+  const firstResponseMs = numberFromSummary(summary, /First post-caller response started after (\d+)ms/i);
+  const greetingMs = numberFromSummary(summary, /Greeting response started after (\d+)ms/i);
+  const notes = [
+    speechStartCount !== undefined && speechStartCount > callerTurnCount
+      ? `Realtime detected ${speechStartCount} speech starts but only ${callerTurnCount} caller transcript turns; false speech starts or echo may have interrupted audio.`
+      : undefined,
+    ignoredNoise ? `Ignored likely background transcript: ${ignoredNoise}` : undefined,
+    greetingMs !== undefined ? `Greeting began after ${greetingMs}ms.` : undefined,
+    firstResponseMs !== undefined ? `First post-caller response began ${firstResponseMs}ms after caller speech stopped.` : undefined,
+    !call.recording_url ? "No recording URL is attached to this call." : undefined,
+  ].filter((note): note is string => Boolean(note));
+
+  return {
+    agentTurnCount,
+    callerTurnCount,
+    firstResponseMs,
+    greetingMs,
+    ignoredNoise,
+    notes,
+    speechStartCount,
+    speechStopCount,
+  };
+}
+
+function numberFromSummary(summary: string, pattern: RegExp) {
+  const value = summary.match(pattern)?.[1];
+  if (!value) return undefined;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+async function runOpenAIAudioDiagnostic({
+  currentEnv,
+  recordingUrl,
+}: {
+  currentEnv: VoiceServiceEnv;
+  recordingUrl?: string | null;
+}) {
+  if (!recordingUrl) {
+    return { reason: "No recording URL is attached to this call.", skipped: true };
+  }
+  if (!currentEnv.OPENAI_API_KEY) {
+    return { reason: "OPENAI_API_KEY is not configured.", skipped: true };
+  }
+
+  const audioResponse = await fetch(recordingUrl);
+  if (!audioResponse.ok) {
+    return {
+      error: await audioResponse.text(),
+      recordingStatus: audioResponse.status,
+      skipped: true,
+    };
+  }
+
+  const contentLength = Number.parseInt(audioResponse.headers.get("content-length") ?? "", 10);
+  if (Number.isFinite(contentLength) && contentLength > CALL_DEBUG_AUDIO_LIMIT_BYTES) {
+    return {
+      reason: `Recording is too large for inline diagnostics (${contentLength} bytes).`,
+      skipped: true,
+    };
+  }
+
+  const audioBytes = new Uint8Array(await audioResponse.arrayBuffer());
+  if (audioBytes.byteLength > CALL_DEBUG_AUDIO_LIMIT_BYTES) {
+    return {
+      reason: `Recording is too large for inline diagnostics (${audioBytes.byteLength} bytes).`,
+      skipped: true,
+    };
+  }
+
+  const model = currentEnv.OPENAI_AUDIO_DIAGNOSTIC_MODEL?.trim() || "gpt-4o-transcribe-diarize";
+  const form = new FormData();
+  form.set("model", model);
+  form.set("file", new Blob([audioBytes], { type: "audio/mpeg" }), "call.mp3");
+  if (/diarize/i.test(model)) {
+    form.set("chunking_strategy", "auto");
+    form.set("response_format", "diarized_json");
+  } else {
+    form.set("response_format", "json");
+  }
+
+  const transcriptionResponse = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    body: form,
+    headers: {
+      Authorization: `Bearer ${currentEnv.OPENAI_API_KEY}`,
+    },
+    method: "POST",
+  });
+  const text = await transcriptionResponse.text();
+  if (!transcriptionResponse.ok) {
+    return {
+      error: text,
+      model,
+      skipped: true,
+      transcriptionStatus: transcriptionResponse.status,
+    };
+  }
+
+  return {
+    model,
+    result: text ? JSON.parse(text) : {},
+    skipped: false,
+  };
+}
+
+function isTruthyQueryParam(value?: string | null) {
+  return /^(1|true|yes)$/i.test(value?.trim() ?? "");
 }
 
 async function streamTwilioRecordingPlayback({

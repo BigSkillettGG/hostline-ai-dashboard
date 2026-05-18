@@ -58,6 +58,7 @@ const envSchema = z.object({
   TWILIO_SPEECH_TIMEOUT_MS: z.coerce.number().int().positive().default(1800),
   TWILIO_LANGUAGE: z.string().default("en-US"),
   OPENAI_API_KEY: z.string().optional(),
+  OPENAI_AUDIO_DIAGNOSTIC_MODEL: z.string().optional(),
   OPENAI_MODEL: z.string().default("gpt-5-mini"),
   OPENAI_REPLY_TIMEOUT_MS: z.coerce.number().int().positive().default(4500),
   OPENAI_PROJECT_ID: z.string().optional(),
