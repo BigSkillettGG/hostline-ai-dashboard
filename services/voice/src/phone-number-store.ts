@@ -129,14 +129,16 @@ class SupabasePhoneNumberStore implements PhoneNumberStore {
       await this.upsertPhoneNumber(legacyBody);
     }
 
-    await this.request("locations", {
-      body: {
-        ai_host_phone: provisioned.phoneNumber,
-        phone: input.restaurantMainLine ?? undefined,
-      },
-      method: "PATCH",
-      query: `id=eq.${encodeURIComponent(locationId)}`,
-    });
+    if (input.makePrimary !== false) {
+      await this.request("locations", {
+        body: {
+          ai_host_phone: provisioned.phoneNumber,
+          phone: input.restaurantMainLine ?? undefined,
+        },
+        method: "PATCH",
+        query: `id=eq.${encodeURIComponent(locationId)}`,
+      });
+    }
   }
 
   private async upsertPhoneNumber(body: Record<string, unknown>) {

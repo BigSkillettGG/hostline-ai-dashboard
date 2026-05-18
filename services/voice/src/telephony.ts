@@ -12,6 +12,7 @@ export interface AvailableTwilioNumber {
 export interface ProvisionPhoneNumberInput {
   forwardingMode?: string;
   locationId?: string;
+  makePrimary?: boolean;
   phoneNumber: string;
   restaurantMainLine?: string;
   trialDays?: number;

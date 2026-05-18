@@ -68,6 +68,9 @@ describe("LiveKit Harbor handoff", () => {
 
     expect(twiml).toContain("<Dial record=\"record-from-answer-dual\"");
     expect(twiml).toContain("recordingStatusCallback=\"https://voice.signalhost.ai/twilio/recording-status?");
+    expect(twiml).toContain("externalCallSid=CA11111111111111111111111111111111");
+    expect(twiml).toContain("recordingStatusCallbackMethod=\"POST\"");
+    expect(twiml).toContain("recordingStatusCallbackEvent=\"completed absent\"");
     expect(twiml).toContain("<Sip username=\"bridge-user\" password=\"bridge-pass\">");
     expect(twiml).toContain("sip:+17816946083@abc123.sip.livekit.cloud;transport=tcp");
     expect(twiml).not.toContain("ConversationRelay");

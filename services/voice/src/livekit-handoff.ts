@@ -171,7 +171,12 @@ export function buildLiveKitTwiML({
       locationId: config.locationId,
     });
   const dialAttributes = recordingCallbackUrl
-    ? ` record="record-from-answer-dual" recordingStatusCallback="${escapeXmlAttribute(recordingCallbackUrl)}"`
+    ? [
+      ` record="record-from-answer-dual"`,
+      ` recordingStatusCallback="${escapeXmlAttribute(recordingCallbackUrl)}"`,
+      ` recordingStatusCallbackMethod="POST"`,
+      ` recordingStatusCallbackEvent="completed absent"`,
+    ].join("")
     : "";
 
   return [

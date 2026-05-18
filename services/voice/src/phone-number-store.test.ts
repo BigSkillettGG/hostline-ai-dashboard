@@ -83,6 +83,31 @@ describe("phone number store", () => {
     );
   });
 
+  it("can persist an additional A/B test number without replacing the location primary phone", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const store = createPhoneNumberStore(env);
+
+    await store.saveProvisionedNumber(
+      {
+        locationId: "00000000-0000-4000-8000-000000000002",
+        makePrimary: false,
+        phoneNumber: "+14155550200",
+      },
+      {
+        capabilities: { sms: true, voice: true },
+        phoneNumber: "+14155550200",
+        providerSid: "PN456",
+        status: "in-use",
+        voiceWebhookUrl: "https://voice.signalhost.test/openai/realtime/webhook?locationId=loc",
+      },
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://example.supabase.co/rest/v1/phone_numbers?on_conflict=provider,phone_number");
+  });
+
   it("falls back to legacy phone number columns when lifecycle migration is missing", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")

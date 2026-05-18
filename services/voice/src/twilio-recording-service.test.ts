@@ -5,6 +5,7 @@ import {
   buildTwilioRecordingStatusCallbackUrl,
   createTwilioCallRecordingService,
   isTwilioCallSid,
+  resolveRecordingCallbackExternalCallSid,
   validateRecordingPlaybackToken,
 } from "./twilio-recording-service";
 
@@ -28,6 +29,29 @@ describe("Twilio call recording service", () => {
   it("recognizes Twilio call SIDs before trying the recording API", () => {
     expect(isTwilioCallSid("CA1234567890abcdef1234567890abcdef")).toBe(true);
     expect(isTwilioCallSid("rtc_123")).toBe(false);
+  });
+
+  it("prefers the original inbound call sid from callback query metadata", () => {
+    expect(
+      resolveRecordingCallbackExternalCallSid({
+        externalCallSidParam: "CAaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        params: {
+          CallSid: "CAbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          ParentCallSid: "CAcccccccccccccccccccccccccccccccc",
+        },
+      }),
+    ).toBe("CAaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+  });
+
+  it("falls back to parent call sid before the SIP child leg", () => {
+    expect(
+      resolveRecordingCallbackExternalCallSid({
+        params: {
+          CallSid: "CAbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          ParentCallSid: "CAcccccccccccccccccccccccccccccccc",
+        },
+      }),
+    ).toBe("CAcccccccccccccccccccccccccccccccc");
   });
 
   it("builds a Twilio recording media URL from a recording sid", () => {

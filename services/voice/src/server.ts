@@ -49,6 +49,7 @@ import {
   buildSignalHostRecordingPlaybackUrl,
   buildTwilioRecordingMediaUrl,
   createTwilioCallRecordingService,
+  resolveRecordingCallbackExternalCallSid,
   validateRecordingPlaybackToken,
 } from "./twilio-recording-service";
 import { demoRestaurantContext } from "./restaurant-context";
@@ -657,11 +658,13 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
 
     try {
       const body = parseJsonRequestBody(await readLimitedRequestBody(req, ADMIN_BODY_LIMIT_BYTES)) as {
+        allowAdditionalNumber?: boolean;
         areaCode?: string;
         contains?: string;
         country?: string;
         forwardingMode?: string;
         locationId?: string;
+        makePrimary?: boolean;
         phoneNumber?: string;
         restaurantMainLine?: string;
         trialDays?: number;
@@ -680,7 +683,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       }
 
       const guard = await phoneNumberStore.getLocationProvisioningGuard(locationId);
-      if (!guard.allowed) {
+      if (!guard.allowed && !body.allowAdditionalNumber) {
         sendJson(res, 409, {
           code: guard.reason,
           error: guard.reason === "trial_grace_expired"
@@ -706,6 +709,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       const input = {
         forwardingMode: body.forwardingMode,
         locationId,
+        makePrimary: body.makePrimary,
         phoneNumber: selectedPhoneNumber,
         restaurantMainLine: body.restaurantMainLine,
         trialDays: body.trialDays,
@@ -738,9 +742,11 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
 
     try {
       const body = parseJsonRequestBody(await readLimitedRequestBody(req, ADMIN_BODY_LIMIT_BYTES)) as {
+        allowAdditionalNumber?: boolean;
         capabilities?: Record<string, boolean>;
         forwardingMode?: string;
         locationId?: string;
+        makePrimary?: boolean;
         phoneNumber?: string;
         providerSid?: string;
         restaurantMainLine?: string;
@@ -767,7 +773,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       }
 
       const guard = await phoneNumberStore.getLocationProvisioningGuard(locationId);
-      if (!guard.allowed && guard.existingPhoneNumber !== phoneNumber) {
+      if (!guard.allowed && !body.allowAdditionalNumber && guard.existingPhoneNumber !== phoneNumber) {
         sendJson(res, 409, {
           code: guard.reason,
           error: "This location already has another active SignalHost phone number.",
@@ -802,6 +808,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       await phoneNumberStore.saveProvisionedNumber({
         forwardingMode: body.forwardingMode,
         locationId,
+        makePrimary: body.makePrimary,
         phoneNumber,
         restaurantMainLine: body.restaurantMainLine,
         trialDays: body.trialDays,
@@ -1179,19 +1186,24 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
           recordingSid,
           signingSecret: currentEnv.TWILIO_AUTH_TOKEN,
         }) ?? normalizeRecordingUrl(firstNonEmpty(params.RecordingUrl, params.recordingUrl));
-      const externalCallSid = firstNonEmpty(
-        params.CallSid,
-        params.callSid,
-        params.ParentCallSid,
-        params.parentCallSid,
-        url.searchParams.get("externalCallSid"),
-      );
+      const externalCallSid = resolveRecordingCallbackExternalCallSid({
+        externalCallSidParam: url.searchParams.get("externalCallSid"),
+        params,
+      });
       const callRecordId = firstNonEmpty(params.callRecordId, params.CallRecordId, url.searchParams.get("callRecordId"));
       if (!recordingUrl || !externalCallSid) {
         sendJson(res, 400, { error: "RecordingUrl and CallSid are required." });
         return;
       }
 
+      console.info("[voice-service] attaching Twilio recording", {
+        callbackCallSid: firstNonEmpty(params.CallSid, params.callSid),
+        callbackParentCallSid: firstNonEmpty(params.ParentCallSid, params.parentCallSid),
+        callRecordId,
+        externalCallSid,
+        queryExternalCallSid: url.searchParams.get("externalCallSid"),
+        recordingSid,
+      });
       await callStore.attachCallRecording({
         callId: callRecordId,
         durationSeconds: parseOptionalSeconds(firstNonEmpty(params.RecordingDuration, params.recordingDuration)),

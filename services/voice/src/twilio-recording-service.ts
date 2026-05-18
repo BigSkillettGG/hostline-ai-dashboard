@@ -93,6 +93,26 @@ export function isTwilioCallSid(value?: string) {
   return /^CA[a-f0-9]{32}$/i.test(value?.trim() ?? "");
 }
 
+export function resolveRecordingCallbackExternalCallSid({
+  externalCallSidParam,
+  params,
+}: {
+  externalCallSidParam?: string | null;
+  params: Record<string, string | undefined>;
+}) {
+  const candidates = [
+    externalCallSidParam,
+    params.externalCallSid,
+    params.ExternalCallSid,
+    params.ParentCallSid,
+    params.parentCallSid,
+    params.CallSid,
+    params.callSid,
+  ];
+  return candidates.find((candidate) => isTwilioCallSid(candidate ?? undefined))
+    ?? candidates.find((candidate) => Boolean(candidate?.trim()))?.trim();
+}
+
 export function buildTwilioRecordingMediaUrl({
   accountSid,
   baseUrl,
