@@ -892,6 +892,11 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       const params = Object.fromEntries(new URLSearchParams(rawBody));
 
       if (!isValidTwilioWebhook(req, currentEnv, params)) {
+        console.warn("[voice-service] rejected unsigned LiveKit Twilio webhook", {
+          callSid: firstNonEmpty(params.CallSid, params.callSid),
+          from: firstNonEmpty(params.From, params.from),
+          to: firstNonEmpty(params.To, params.to),
+        });
         sendText(res, 401, "Invalid Twilio signature");
         return;
       }
@@ -900,21 +905,40 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
         params.locationId ??
         url.searchParams.get("locationId") ??
         HARBOR_PLUMBING_DEMO_LOCATION_ID;
+      const callSid = firstNonEmpty(params.CallSid, params.callSid);
+      const callerPhone = firstNonEmpty(params.From, params.from);
+      const dialedPhone = firstNonEmpty(params.To, params.to);
+      console.info("[voice-service] LiveKit pilot webhook received", {
+        callSid,
+        callerPhone,
+        dialedPhone,
+        locationId,
+        userAgent: req.headers["user-agent"],
+      });
       const twiml = buildLiveKitTwiML({
-        callSid: firstNonEmpty(params.CallSid, params.callSid),
-        dialedPhone: firstNonEmpty(params.To, params.to),
+        callSid,
+        dialedPhone,
         env: currentEnv,
         locationId,
       });
       if (!twiml) {
         console.warn("[voice-service] LiveKit pilot webhook is not ready", {
-          callSid: params.CallSid ?? params.callSid,
+          callSid,
+          callerPhone,
+          dialedPhone,
           locationId,
         });
         sendXml(res, 503, buildUnavailableTwiML("SignalHost LiveKit pilot needs SIP routing setup before this test call."));
         return;
       }
 
+      console.info("[voice-service] LiveKit pilot TwiML issued", {
+        callSid,
+        dialedPhone,
+        locationId,
+        sipTarget: summarizeSipTarget(twiml),
+        twimlLength: twiml.length,
+      });
       sendXml(res, 200, twiml);
     } catch (error) {
       if (error instanceof HttpRequestError) {
@@ -1521,6 +1545,10 @@ function getStableCallSessionKey(params: Record<string, string>, fallback?: stri
 
 function firstNonEmpty(...values: Array<string | undefined | null>) {
   return values.find((value) => value?.trim())?.trim();
+}
+
+function summarizeSipTarget(twiml: string) {
+  return twiml.match(/<Sip\b[^>]*>(.*?)<\/Sip>/s)?.[1]?.trim();
 }
 
 interface CallDebugRow {
