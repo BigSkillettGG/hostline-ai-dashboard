@@ -81,6 +81,8 @@ const envSchema = z.object({
   OPENAI_REALTIME_SERVER_VAD_SILENCE_MS: z.coerce.number().int().min(200).max(2000).default(900),
   OPENAI_REALTIME_SERVER_VAD_PREFIX_PADDING_MS: z.coerce.number().int().min(0).max(1000).default(150),
   OPENAI_REALTIME_IDLE_TIMEOUT_MS: z.coerce.number().int().min(5000).max(30000).default(12000),
+  OPENAI_REALTIME_DETAIL_CAPTURE_RESPONSE_DELAY_MS: z.coerce.number().int().min(0).max(2000).optional(),
+  OPENAI_REALTIME_MANUAL_RESPONSE_DELAY_MS: z.coerce.number().int().min(0).max(2000).optional(),
   OPENAI_REALTIME_MANUAL_RESPONSE_GATING: z
     .enum(["true", "false"])
     .transform((value) => value === "true")

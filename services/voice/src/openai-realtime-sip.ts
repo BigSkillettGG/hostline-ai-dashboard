@@ -43,10 +43,12 @@ type OpenAIRealtimeEnv = Pick<
   | "OPENAI_REPLY_TIMEOUT_MS"
   | "OPENAI_REALTIME_AIDEN_VOICE"
   | "OPENAI_REALTIME_AVA_VOICE"
+  | "OPENAI_REALTIME_DETAIL_CAPTURE_RESPONSE_DELAY_MS"
   | "OPENAI_REALTIME_FEMALE_VOICE"
   | "OPENAI_REALTIME_IDLE_TIMEOUT_MS"
   | "OPENAI_REALTIME_INTERRUPT_RESPONSE"
   | "OPENAI_REALTIME_MALE_VOICE"
+  | "OPENAI_REALTIME_MANUAL_RESPONSE_DELAY_MS"
   | "OPENAI_REALTIME_MANUAL_RESPONSE_GATING"
   | "OPENAI_REALTIME_MARCO_VOICE"
   | "OPENAI_REALTIME_MAYA_VOICE"
@@ -198,13 +200,17 @@ interface OpenAIRealtimeSidebandSession {
   finishRequested: boolean;
   ignoredTranscriptSamples: Array<{ reason?: string; text: string }>;
   locationId: string;
+  manualDetailResponseDelayMs: number;
   manualResponseGating: boolean;
   manualIdlePromptCount: number;
   manualIdleTimer?: ReturnType<typeof setTimeout>;
   manualIdleTimeoutMs: number;
+  manualResponseDelayMs: number;
   manualResponseStartPending?: boolean;
+  manualResponseTimer?: ReturnType<typeof setTimeout>;
   ownerContact?: TrustedContact;
   openingGreetingCompleted: boolean;
+  pendingManualResponseDelayMs?: number;
   pendingManualResponse: boolean;
   quality: RealtimeQualityMetrics;
   recordingBackfilled?: boolean;
@@ -1196,8 +1202,10 @@ function startSidebandSocket({
     finishRequested: false,
     ignoredTranscriptSamples: [],
     locationId,
+    manualDetailResponseDelayMs: resolveOpenAIRealtimeDetailCaptureResponseDelayMs(env),
     manualIdlePromptCount: 0,
     manualIdleTimeoutMs: resolveOpenAIRealtimeIdleTimeoutMs(env),
+    manualResponseDelayMs: resolveOpenAIRealtimeManualResponseDelayMs(env),
     manualResponseGating: resolveOpenAIRealtimeManualResponseGating(env),
     ownerContact,
     openingGreetingCompleted: false,
@@ -1288,6 +1296,7 @@ function startSidebandSocket({
     activeSockets.delete(callId);
     clearOpenAIRealtimeFinishedClose(session);
     clearOpenAIRealtimeManualIdleTimer(session);
+    clearOpenAIRealtimeManualResponseTimer(session);
     void completeOpenAIRealtimeLoggedCall({
       callStore,
       callRecordingService,
@@ -1307,6 +1316,7 @@ function startSidebandSocket({
     activeSockets.delete(callId);
     clearOpenAIRealtimeFinishedClose(session);
     clearOpenAIRealtimeManualIdleTimer(session);
+    clearOpenAIRealtimeManualResponseTimer(session);
     void completeOpenAIRealtimeLoggedCall({
       callStore,
       callRecordingService,
@@ -1455,7 +1465,7 @@ function handleOpenAIRealtimeTranscriptTurn({
   if (turn.role === "caller" && session.manualResponseGating) {
     clearOpenAIRealtimeManualIdleTimer(session);
     session.manualIdlePromptCount = 0;
-    requestOpenAIRealtimeManualResponse({ callId, session, socket });
+    requestOpenAIRealtimeManualResponse({ callId, session, socket, turnText: turn.text });
   }
 }
 
@@ -1478,7 +1488,12 @@ function handleOpenAIRealtimeResponseDone({
   }
 
   if (session.manualResponseGating && session.pendingManualResponse) {
-    sendOpenAIRealtimeManualResponse({ callId, session, socket });
+    scheduleOpenAIRealtimeManualResponse({
+      callId,
+      delayMs: session.pendingManualResponseDelayMs ?? session.manualResponseDelayMs,
+      session,
+      socket,
+    });
     return;
   }
 
@@ -1489,18 +1504,48 @@ function requestOpenAIRealtimeManualResponse({
   callId,
   session,
   socket,
+  turnText,
 }: {
   callId: string;
   session: OpenAIRealtimeSidebandSession;
   socket: RealtimeSocket;
+  turnText?: string;
 }) {
   if (session.finishRequested) return;
   if (session.manualResponseStartPending) return;
+  const delayMs = resolveOpenAIRealtimeManualResponseDelayForTurn(session, turnText);
   if (!session.openingGreetingCompleted || session.quality.activeResponseStartedAt) {
     session.pendingManualResponse = true;
+    session.pendingManualResponseDelayMs = Math.max(session.pendingManualResponseDelayMs ?? 0, delayMs);
     return;
   }
-  sendOpenAIRealtimeManualResponse({ callId, session, socket });
+  scheduleOpenAIRealtimeManualResponse({ callId, delayMs, session, socket });
+}
+
+function scheduleOpenAIRealtimeManualResponse({
+  callId,
+  delayMs,
+  session,
+  socket,
+}: {
+  callId: string;
+  delayMs: number;
+  session: OpenAIRealtimeSidebandSession;
+  socket: RealtimeSocket;
+}) {
+  clearOpenAIRealtimeManualIdleTimer(session);
+  clearOpenAIRealtimeManualResponseTimer(session);
+  session.pendingManualResponse = true;
+  session.pendingManualResponseDelayMs = delayMs;
+  if (delayMs <= 0) {
+    sendOpenAIRealtimeManualResponse({ callId, session, socket });
+    return;
+  }
+  session.manualResponseTimer = setTimeout(() => {
+    delete session.manualResponseTimer;
+    if (session.finishRequested || session.quality.activeResponseStartedAt || session.manualResponseStartPending) return;
+    sendOpenAIRealtimeManualResponse({ callId, session, socket });
+  }, delayMs);
 }
 
 function sendOpenAIRealtimeManualResponse({
@@ -1513,7 +1558,9 @@ function sendOpenAIRealtimeManualResponse({
   socket: RealtimeSocket;
 }) {
   clearOpenAIRealtimeManualIdleTimer(session);
+  clearOpenAIRealtimeManualResponseTimer(session);
   session.pendingManualResponse = false;
+  delete session.pendingManualResponseDelayMs;
   session.manualResponseStartPending = true;
   console.info("[openai-realtime] creating gated response for accepted caller turn", { callId });
   sendRealtimeEvent(socket, { type: "response.create" });
@@ -1532,7 +1579,8 @@ function scheduleOpenAIRealtimeManualIdlePrompt({
     !session.manualResponseGating ||
     session.finishRequested ||
     session.quality.activeResponseStartedAt ||
-    session.manualResponseStartPending
+    session.manualResponseStartPending ||
+    session.manualResponseTimer
   ) return;
   clearOpenAIRealtimeManualIdleTimer(session);
   session.manualIdleTimer = setTimeout(() => {
@@ -1540,7 +1588,8 @@ function scheduleOpenAIRealtimeManualIdlePrompt({
       session.finishRequested ||
       session.quality.activeResponseStartedAt ||
       session.pendingManualResponse ||
-      session.manualResponseStartPending
+      session.manualResponseStartPending ||
+      session.manualResponseTimer
     ) return;
     const isFinalPrompt = session.manualIdlePromptCount >= 3;
     session.manualIdlePromptCount += 1;
@@ -1568,6 +1617,12 @@ function clearOpenAIRealtimeManualIdleTimer(session: OpenAIRealtimeSidebandSessi
   if (!session.manualIdleTimer) return;
   clearTimeout(session.manualIdleTimer);
   delete session.manualIdleTimer;
+}
+
+function clearOpenAIRealtimeManualResponseTimer(session: OpenAIRealtimeSidebandSession) {
+  if (!session.manualResponseTimer) return;
+  clearTimeout(session.manualResponseTimer);
+  delete session.manualResponseTimer;
 }
 
 function recordIgnoredRealtimeTranscriptSample(
@@ -1627,6 +1682,34 @@ function shouldAcceptRealtimeCallerTranscript(
     return { accept: true };
   }
   return { accept: false, reason: "no_caller_intent" };
+}
+
+function resolveOpenAIRealtimeManualResponseDelayForTurn(session: OpenAIRealtimeSidebandSession, text?: string) {
+  if (!text) return session.manualResponseDelayMs;
+  const normalized = normalizeRealtimeCallerText(text);
+  if (isLikelyShortCallerConfirmation(normalized)) {
+    return Math.min(250, session.manualResponseDelayMs);
+  }
+  if (isAnsweringDetailCaptureQuestion(session, normalized)) {
+    return Math.max(session.manualResponseDelayMs, session.manualDetailResponseDelayMs);
+  }
+  return session.manualResponseDelayMs;
+}
+
+function isAnsweringDetailCaptureQuestion(session: OpenAIRealtimeSidebandSession, normalized: string) {
+  if (!normalized) return false;
+  const lastAgentTurn = session.transcript.filter((turn) => turn.role === "agent").at(-1)?.text ?? "";
+  const lastAgent = normalizeRealtimeCallerText(lastAgentTurn);
+  if (!lastAgent) return false;
+
+  return (
+    /\b(address|where do you need|where you need|service address|come out|send someone|callback number|phone number|best number|email address)\b/.test(
+      lastAgent,
+    ) ||
+    /\b(street|road|rd|avenue|ave|drive|dr|lane|ln|court|ct|circle|cir|boulevard|blvd|way|place|pl|terrace|ter|unit|apt|suite|floor|duxbury|massachusetts)\b/.test(
+      normalized,
+    )
+  );
 }
 
 function discardIgnoredRealtimeConversationItem({
@@ -3090,6 +3173,16 @@ export function resolveOpenAIRealtimeNoiseReduction(env: OpenAIRealtimeEnv) {
 
 export function resolveOpenAIRealtimeManualResponseGating(env: OpenAIRealtimeEnv) {
   return env.OPENAI_REALTIME_MANUAL_RESPONSE_GATING !== false;
+}
+
+export function resolveOpenAIRealtimeManualResponseDelayMs(env: OpenAIRealtimeEnv) {
+  const delayMs = env.OPENAI_REALTIME_MANUAL_RESPONSE_DELAY_MS ?? 450;
+  return Number.isFinite(delayMs) ? Math.min(2000, Math.max(0, Math.round(delayMs))) : 450;
+}
+
+export function resolveOpenAIRealtimeDetailCaptureResponseDelayMs(env: OpenAIRealtimeEnv) {
+  const delayMs = env.OPENAI_REALTIME_DETAIL_CAPTURE_RESPONSE_DELAY_MS ?? 900;
+  return Number.isFinite(delayMs) ? Math.min(2000, Math.max(0, Math.round(delayMs))) : 900;
 }
 
 export function resolveOpenAIRealtimeTurnDetection(env: OpenAIRealtimeEnv): OpenAIRealtimeAcceptPayload["audio"]["input"]["turn_detection"] {
