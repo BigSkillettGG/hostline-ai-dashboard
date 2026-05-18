@@ -46,6 +46,12 @@ export default defineAgent({
     const env = loadEnv();
     const metadata = parseMetadata(ctx.job?.metadata ?? ctx.info?.acceptArguments?.metadata);
     const locationId = metadata.locationId ?? env.SUPABASE_DEMO_LOCATION_ID ?? HARBOR_PLUMBING_DEMO_LOCATION_ID;
+    console.info("[livekit-agent] job starting", {
+      jobId: ctx.job?.id,
+      locationId,
+      metadata,
+      room: ctx.room.name,
+    });
     const context = await createRestaurantContextStore(env).getContext(locationId);
     const callStore = createCallStore(env);
     const externalCallId = metadata.callSid ?? ctx.room.name ?? `livekit-${Date.now()}`;
@@ -162,25 +168,49 @@ export default defineAgent({
       });
     });
 
-    const agent = new voice.Agent<LiveKitAgentUserData>({
+    const openingGreeting = buildOpeningGreeting(context);
+    const agent = new SignalHostLiveKitAgent(openingGreeting, {
       instructions: buildOpenAIRealtimeInstructions(context, { callerPhone }),
       tools: buildLiveKitToolContext(userData),
     });
 
+    console.info("[livekit-agent] starting agent session", {
+      callRecordId: userData.callRecordId,
+      locationId,
+      nodeNoiseCancellationEnabled: isNodeNoiseCancellationEnabled(),
+      room: ctx.room.name,
+      voice: resolveLiveKitOpenAIVoice(env, context),
+    });
     await session.start({
       agent,
-      inputOptions: {
-        noiseCancellation: TelephonyBackgroundVoiceCancellation(),
-      },
+      inputOptions: buildLiveKitInputOptions(),
       room: ctx.room,
     });
-
-    session.say(buildOpeningGreeting(context), {
-      addToChatCtx: true,
-      allowInterruptions: false,
+    console.info("[livekit-agent] agent session started", {
+      callRecordId: userData.callRecordId,
+      room: ctx.room.name,
     });
   },
 });
+
+class SignalHostLiveKitAgent extends voice.Agent<LiveKitAgentUserData> {
+  constructor(
+    private readonly openingGreeting: string,
+    options: ConstructorParameters<typeof voice.Agent<LiveKitAgentUserData>>[0],
+  ) {
+    super(options);
+  }
+
+  override async onEnter(): Promise<void> {
+    console.info("[livekit-agent] agent entered room; speaking greeting", {
+      greeting: this.openingGreeting,
+    });
+    this.session.say(this.openingGreeting, {
+      addToChatCtx: true,
+      allowInterruptions: false,
+    });
+  }
+}
 
 function buildLiveKitToolContext(userData: LiveKitAgentUserData): llm.ToolContext<LiveKitAgentUserData> {
   const tools = buildOpenAIRealtimeTools(userData.context);
@@ -274,6 +304,25 @@ function buildOpeningGreeting(context: RestaurantVoiceContext) {
   return `Thank you for calling ${toSpokenRestaurantName(context.restaurantName)}. How can I help you?`;
 }
 
+function buildLiveKitInputOptions() {
+  if (!isNodeNoiseCancellationEnabled()) return undefined;
+
+  try {
+    return {
+      noiseCancellation: TelephonyBackgroundVoiceCancellation(),
+    };
+  } catch (error) {
+    console.error("[livekit-agent] failed to initialize Node noise cancellation; continuing without it", {
+      error: formatErrorForLog(error),
+    });
+    return undefined;
+  }
+}
+
+function isNodeNoiseCancellationEnabled() {
+  return process.env.LIVEKIT_AGENT_INPUT_NOISE_CANCELLATION === "true";
+}
+
 function parseMetadata(value: unknown): Record<string, string | undefined> {
   if (typeof value !== "string" || !value.trim()) return {};
   try {
@@ -285,6 +334,17 @@ function parseMetadata(value: unknown): Record<string, string | undefined> {
   } catch {
     return {};
   }
+}
+
+function formatErrorForLog(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      message: error.message,
+      name: error.name,
+      stack: error.stack,
+    };
+  }
+  return error;
 }
 
 function resolveLiveKitOpenAIVoice(env: VoiceServiceEnv, context: RestaurantVoiceContext) {
