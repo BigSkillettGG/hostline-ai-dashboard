@@ -26,6 +26,7 @@ import {
   lookupBusinessContext,
   lookupRestaurantContext,
   requestOpenAIRealtimeStaffCallback,
+  resolveOpenAIRealtimeAcceptProvider,
   resolveOpenAIRealtimeIdleTimeoutMs,
   resolveOpenAIRealtimeInterruptResponse,
   resolveOpenAIRealtimeManualResponseGating,
@@ -141,6 +142,13 @@ describe("OpenAI Realtime SIP", () => {
     expect(payload.tools.map((tool) => tool.name)).toContain("create_reservation_request");
     expect(payload.tools.map((tool) => tool.name)).toContain("request_staff_callback");
     expect(payload.tools.map((tool) => tool.name)).toContain("finish_call");
+  });
+
+  it("routes only the Harbor Plumbing demo location through the Agents SDK SIP accept payload by default", () => {
+    expect(resolveOpenAIRealtimeAcceptProvider(baseEnv, "22222222-2222-4222-8222-222222222222")).toBe("agents_sdk");
+    expect(resolveOpenAIRealtimeAcceptProvider(baseEnv, "78d8053b-631d-4811-939f-61f0efe1d82a")).toBe("custom");
+    expect(resolveOpenAIRealtimeAcceptProvider({ ...baseEnv, OPENAI_REALTIME_PROVIDER: "custom" }, "22222222-2222-4222-8222-222222222222")).toBe("custom");
+    expect(resolveOpenAIRealtimeAcceptProvider({ ...baseEnv, OPENAI_REALTIME_PROVIDER: "agents_sdk" }, "78d8053b-631d-4811-939f-61f0efe1d82a")).toBe("agents_sdk");
   });
 
   it("configures realtime payloads for service businesses without restaurant tooling", () => {
@@ -1794,6 +1802,89 @@ describe("OpenAI Realtime SIP", () => {
     expect(startedCalls[0]).toMatchObject({
       locationId: "hvac_location",
     });
+  });
+
+  it("uses the Agents SDK SIP accept payload for pilot locations while keeping the sideband active", async () => {
+    const socket = createFakeRealtimeSocket();
+    let acceptedPayload: any;
+    const startedCalls: any[] = [];
+    const service = createOpenAIRealtimeSipService(
+      {
+        ...baseEnv,
+        OPENAI_REALTIME_AGENTS_SDK_LOCATION_IDS: "hvac_location",
+      },
+      {
+        async getContext(locationId) {
+          return {
+            ...demoRestaurantContext,
+            businessType: "hvac",
+            restaurantName: locationId === "hvac_location" ? "Summit Air" : "Olive & Ember",
+          };
+        },
+      },
+      {
+        callStore: {
+          async addTranscriptTurn() {},
+          async attachCallRecording() {},
+          async completeCall() {},
+          async createCustomerRequest() {
+            return {};
+          },
+          async createStaffReviewOrder() {
+            return {};
+          },
+          async createStaffReviewReservation() {
+            return {};
+          },
+          async createStaffTask() {
+            return {};
+          },
+          async startCall() {
+            return {};
+          },
+          async startRealtimeCall(input) {
+            startedCalls.push(input);
+            return { callId: "call_uuid" };
+          },
+        },
+        fetchImpl: (async (_url, init) => {
+          acceptedPayload = JSON.parse(String(init?.body));
+          return new Response(null, { status: 200 });
+        }) as typeof fetch,
+        websocketFactory: () => socket as never,
+      },
+    );
+
+    const result = await service.handleIncomingWebhook({
+      headers: {},
+      locationId: "hvac_location",
+      rawBody: JSON.stringify({
+        data: {
+          call_id: "rtc_agents_sdk",
+          sip_headers: [{ name: "From", value: "sip:+14155550123@twilio.com" }],
+        },
+        type: "realtime.call.incoming",
+      }),
+    });
+
+    expect(result.status).toBe(200);
+    expect(result.body).toMatchObject({
+      locationId: "hvac_location",
+      realtimeAcceptProvider: "agents_sdk",
+    });
+    expect(startedCalls[0].providerPayload).toMatchObject({
+      realtimeAcceptProvider: "agents_sdk",
+    });
+    expect(acceptedPayload.instructions).toContain("Summit Air");
+    expect(acceptedPayload.audio.input.turn_detection).toMatchObject({
+      create_response: false,
+      interrupt_response: false,
+      type: "server_vad",
+    });
+    expect(acceptedPayload.audio.input.turn_detection).not.toHaveProperty("threshold");
+    expect(acceptedPayload.audio.input.turn_detection).not.toHaveProperty("prefix_padding_ms");
+    expect(acceptedPayload.audio.input.turn_detection).not.toHaveProperty("silence_duration_ms");
+    expect(acceptedPayload.tools.map((tool: { name: string }) => tool.name)).toContain("lookup_business_context");
   });
 
   it("lets the dialed phone number override a stale webhook location query param", async () => {

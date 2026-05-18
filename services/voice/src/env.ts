@@ -72,6 +72,8 @@ const envSchema = z.object({
   OPENAI_REALTIME_MILES_VOICE: z.string().optional(),
   OPENAI_REALTIME_MODEL: z.string().optional(),
   OPENAI_REALTIME_NOISE_REDUCTION: z.enum(["near_field", "far_field"]).default("far_field"),
+  OPENAI_REALTIME_PROVIDER: z.enum(["custom", "agents_sdk"]).optional(),
+  OPENAI_REALTIME_AGENTS_SDK_LOCATION_IDS: z.string().optional(),
   OPENAI_REALTIME_SPEED: z.string().optional(),
   OPENAI_REALTIME_TURN_DETECTION_MODE: z.enum(["semantic_vad", "server_vad"]).default("server_vad"),
   OPENAI_REALTIME_SERVER_VAD_THRESHOLD: z.coerce.number().min(0.05).max(0.95).default(0.88),

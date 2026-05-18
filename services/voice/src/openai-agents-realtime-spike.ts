@@ -1,6 +1,5 @@
 import { OpenAIRealtimeSIP, RealtimeAgent, tool } from "@openai/agents/realtime";
 import type { FunctionTool } from "@openai/agents";
-import type { VoiceServiceEnv } from "./env";
 import type { OpenAIRealtimeFunctionTool } from "./openai-realtime-tools";
 import { buildOpenAIRealtimeAcceptPayload, buildOpenAIRealtimeLiveCallConfig } from "./openai-realtime-sip";
 import type { RestaurantVoiceContext } from "./restaurant-context";
@@ -8,11 +7,12 @@ import type { RestaurantContextStore } from "./restaurant-context-store";
 import type { TrustedContact } from "../../../src/domain/trusted-contacts";
 
 type LegacyTurnDetection = ReturnType<typeof buildOpenAIRealtimeAcceptPayload>["audio"]["input"]["turn_detection"];
+type OpenAIAgentsRealtimeEnv = Parameters<typeof buildOpenAIRealtimeAcceptPayload>[0]["env"];
 
 export interface OpenAIAgentsRealtimeAcceptInput {
   callerPhone?: string;
   context: RestaurantVoiceContext;
-  env: VoiceServiceEnv;
+  env: OpenAIAgentsRealtimeEnv;
   now?: Date;
   ownerContact?: TrustedContact;
 }
@@ -93,7 +93,7 @@ export async function buildOpenAIAgentsRealtimePreflight({
   restaurantContextStore,
 }: {
   callerPhone?: string;
-  env: VoiceServiceEnv;
+  env: OpenAIAgentsRealtimeEnv;
   locationId?: string;
   now?: Date;
   ownerContact?: TrustedContact;

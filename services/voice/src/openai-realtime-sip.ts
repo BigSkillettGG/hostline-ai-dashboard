@@ -31,6 +31,9 @@ const OPENAI_REALTIME_DEFAULT_FEMALE_VOICE = "marin";
 const OPENAI_REALTIME_DEFAULT_MALE_VOICE = "cedar";
 const OPENAI_REALTIME_ACCEPT_URL = "https://api.openai.com/v1/realtime/calls";
 const OPENAI_REALTIME_WEBSOCKET_URL = "wss://api.openai.com/v1/realtime";
+const HARBOR_PLUMBING_DEMO_LOCATION_ID = "22222222-2222-4222-8222-222222222222";
+
+export type OpenAIRealtimeAcceptProvider = "custom" | "agents_sdk";
 
 type OpenAIRealtimeEnv = Pick<
   VoiceServiceEnv,
@@ -50,6 +53,8 @@ type OpenAIRealtimeEnv = Pick<
   | "OPENAI_REALTIME_MILES_VOICE"
   | "OPENAI_REALTIME_MODEL"
   | "OPENAI_REALTIME_NOISE_REDUCTION"
+  | "OPENAI_REALTIME_AGENTS_SDK_LOCATION_IDS"
+  | "OPENAI_REALTIME_PROVIDER"
   | "OPENAI_REALTIME_SERVER_VAD_PREFIX_PADDING_MS"
   | "OPENAI_REALTIME_SERVER_VAD_SILENCE_MS"
   | "OPENAI_REALTIME_SERVER_VAD_THRESHOLD"
@@ -92,6 +97,7 @@ interface RealtimeSocket {
 }
 
 export interface OpenAIRealtimeLiveCallConfig {
+  acceptProvider: OpenAIRealtimeAcceptProvider;
   model: string;
   noiseReduction: "near_field" | "far_field";
   projectIdConfigured: boolean;
@@ -354,6 +360,7 @@ export function createOpenAIRealtimeSipService(
       const twilioCallSid = extractOpenAIRealtimeExternalCallId(event);
       const externalCallId = twilioCallSid ?? callId;
       const externalSessionId = extractOpenAIRealtimeSipCallId(event) ?? callId;
+      const acceptProvider = resolveOpenAIRealtimeAcceptProvider(env, resolvedLocationId);
       let callRecordId: string | undefined;
       try {
         const result = await callStore?.startRealtimeCall({
@@ -367,6 +374,7 @@ export function createOpenAIRealtimeSipService(
             ownerContactId: ownerContact?.id,
             ownerContactType: ownerContact?.contactType,
             ownerMode: Boolean(ownerContact),
+            realtimeAcceptProvider: acceptProvider,
             sipHeaders: event.data?.sip_headers ?? [],
             webhookEventId: event.id,
           },
@@ -405,7 +413,14 @@ export function createOpenAIRealtimeSipService(
           });
         });
       }
-      const payload = buildOpenAIRealtimeAcceptPayload({ callerPhone, context, env, ownerContact });
+      const payload = await buildOpenAIRealtimeWebhookAcceptPayload({
+        acceptProvider,
+        callerPhone,
+        context,
+        env,
+        locationId: resolvedLocationId,
+        ownerContact,
+      });
 
       await acceptOpenAIRealtimeCall({
         callId,
@@ -440,6 +455,7 @@ export function createOpenAIRealtimeSipService(
           locationId: resolvedLocationId,
           model: payload.model,
           ownerMode: Boolean(ownerContact),
+          realtimeAcceptProvider: acceptProvider,
           voice: payload.audio.output.voice,
           callerPhone,
         },
@@ -544,6 +560,7 @@ export function buildOpenAIRealtimeLiveCallConfig(env: OpenAIRealtimeEnv, locati
   const voice = env.OPENAI_REALTIME_VOICE?.trim() || env.OPENAI_REALTIME_FEMALE_VOICE?.trim() || OPENAI_REALTIME_DEFAULT_FEMALE_VOICE;
 
   return {
+    acceptProvider: resolveOpenAIRealtimeAcceptProvider(env, locationId),
     callRecordingConfigured: env.TWILIO_CALL_RECORDING_ENABLED !== "false" && Boolean(
       env.TWILIO_ACCOUNT_SID &&
         env.TWILIO_AUTH_TOKEN &&
@@ -598,6 +615,58 @@ export function buildOpenAIRealtimeAcceptPayload({
     tools: buildOpenAIRealtimeTools(context, ownerContact),
     type: "realtime",
   };
+}
+
+async function buildOpenAIRealtimeWebhookAcceptPayload({
+  acceptProvider,
+  callerPhone,
+  context,
+  env,
+  locationId,
+  ownerContact,
+}: BuildOpenAIRealtimeAcceptPayloadInput & {
+  acceptProvider: OpenAIRealtimeAcceptProvider;
+  locationId?: string;
+}): Promise<OpenAIRealtimeAcceptPayload | Record<string, any>> {
+  if (acceptProvider === "agents_sdk") {
+    const { buildOpenAIAgentsRealtimeAcceptPayload } = await import("./openai-agents-realtime-spike");
+    const sdkPayload = await buildOpenAIAgentsRealtimeAcceptPayload({ callerPhone, context, env, ownerContact });
+    console.info("[openai-realtime] using OpenAI Agents SDK SIP accept payload", {
+      locationId,
+      restaurantName: context.restaurantName,
+    });
+    return sdkPayload;
+  }
+
+  return buildOpenAIRealtimeAcceptPayload({ callerPhone, context, env, ownerContact });
+}
+
+export function resolveOpenAIRealtimeAcceptProvider(
+  env: {
+    OPENAI_REALTIME_AGENTS_SDK_LOCATION_IDS?: string;
+    OPENAI_REALTIME_PROVIDER?: OpenAIRealtimeAcceptProvider;
+    [key: string]: unknown;
+  },
+  locationId?: string,
+): OpenAIRealtimeAcceptProvider {
+  if (env.OPENAI_REALTIME_PROVIDER === "agents_sdk") return "agents_sdk";
+  if (env.OPENAI_REALTIME_PROVIDER === "custom") return "custom";
+
+  const normalizedLocationId = locationId?.trim().toLowerCase();
+  const pilotIds = parseAgentsSdkPilotLocationIds(env.OPENAI_REALTIME_AGENTS_SDK_LOCATION_IDS);
+  if (pilotIds.has("*") || pilotIds.has("all")) return "agents_sdk";
+  if (normalizedLocationId && pilotIds.has(normalizedLocationId)) return "agents_sdk";
+  return "custom";
+}
+
+export function parseAgentsSdkPilotLocationIds(rawValue?: string) {
+  const value = rawValue?.trim() || HARBOR_PLUMBING_DEMO_LOCATION_ID;
+  return new Set(
+    value
+      .split(/[,\s]+/)
+      .map((part) => part.trim().toLowerCase())
+      .filter(Boolean),
+  );
 }
 
 export function buildOpenAIRealtimeInstructions(
@@ -1056,7 +1125,7 @@ async function acceptOpenAIRealtimeCall({
   callId: string;
   env: OpenAIRealtimeEnv;
   fetchImpl: typeof fetch;
-  payload: OpenAIRealtimeAcceptPayload;
+  payload: OpenAIRealtimeAcceptPayload | Record<string, any>;
 }) {
   const response = await fetchImpl(`${OPENAI_REALTIME_ACCEPT_URL}/${encodeURIComponent(callId)}/accept`, {
     body: JSON.stringify(payload),
