@@ -18,6 +18,7 @@
     "marketing:audio": "node scripts/generate-vera-audio.mjs",
     "preview": "vite preview",
     "provision:demos": "node scripts/provision-demo-numbers.mjs",
+    "provision:harbor-ab": "node scripts/provision-harbor-ab-number.mjs",
     "scenario:lab": "tsx scripts/run-scenario-lab.ts",
     "start:livekit-agent": "node dist-livekit-agent/agent.mjs start",
     "start:voice": "node dist-voice/server.mjs",

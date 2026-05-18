@@ -21,6 +21,10 @@ Use Harbor Plumbing as the controlled test business. Keep the knowledge base, pr
   - `areaCode`: a preferred test area code, usually `781` or `617`
   - `allowAdditionalNumber`: `true`
   - `makePrimary`: `false`
+- Or use the helper script:
+  - Dry run: `npm run provision:harbor-ab`
+  - Buy the number: `npm run provision:harbor-ab -- --provision`
+  - The script requires `SIGNALHOST_ADMIN_PASSWORD` in the shell environment.
 - Both variants must write calls to the same Harbor location:
   `22222222-2222-4222-8222-222222222222`.
 - Both variants must attach recordings to `calls.recording_url`.
