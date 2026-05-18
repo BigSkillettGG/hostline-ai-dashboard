@@ -733,6 +733,9 @@ export function buildOpenAIRealtimeInstructions(
     profile.isRestaurant
       ? `For direct menu availability or orderability questions like "do you have pizza" or "can I get meatballs," first check the configured menu items in your instructions. If uncertain, call ${contextLookupTool} with the item or category before saying no. Specials are not the full menu.`
       : `For direct service availability questions, first check the configured services in your instructions. If uncertain, call ${contextLookupTool} with the service or category before saying no.`,
+    profile.isRestaurant
+      ? "If the caller asks a direct price, rate, fee, minimum, or cost question, answer the policy first from context. If exact pricing is not available, say pricing depends on details and staff can confirm. Only then ask whether they want staff follow-up; do not skip straight to collecting contact info."
+      : "If the caller asks a direct price, hourly-rate, fee, trip-charge, estimate, or cost question, answer the policy first from context. If exact pricing is not available, say pricing depends on the job and staff can confirm. Only then ask whether they want staff follow-up; do not skip straight to collecting contact info.",
     "After answering any normal question or completing any task, ask a short loop-closing question such as 'Can I help you with anything else?' unless the caller has already clearly said goodbye.",
     "Never end the call immediately after answering a question. The call should only close after the caller indicates they are done.",
     "After saving a reservation, sending a confirmation text, sending a link, or taking an order request, do not call finish_call right away. Give the confirmation, then ask a brief anything-else question unless the caller already said they are done.",
@@ -771,6 +774,7 @@ export function buildOpenAIRealtimeInstructions(
     profile.isRestaurant
       ? "For generic leads, service appointments, quote requests, or requests outside the restaurant-specific tools, use create_customer_request after collecting the name, callback number, and request summary."
       : `For leads, ${profile.appointmentNoun}s, quote requests, and anything outside the specialized tools, use create_customer_request after collecting the name, callback number, request summary, urgency, and key details.`,
+    "When collecting a name, address, phone number, email, spelling, or other detail, let the caller finish the full detail before responding. If they spell a name, capture the spelled last name and do not treat it as background noise.",
     "If the send_guest_confirmation tool succeeds, tell the caller the text is sent. Do not mention backend setup, SMS providers, or placeholder mode.",
     "Close naturally only after the caller is done. Use finish_call, say a short goodbye, and do not ask another question after goodbye.",
   ].join("\n");
@@ -1688,7 +1692,7 @@ function resolveOpenAIRealtimeManualResponseDelayForTurn(session: OpenAIRealtime
   if (!text) return session.manualResponseDelayMs;
   const normalized = normalizeRealtimeCallerText(text);
   if (isLikelyShortCallerConfirmation(normalized)) {
-    return Math.min(250, session.manualResponseDelayMs);
+    return Math.min(350, session.manualResponseDelayMs);
   }
   if (isAnsweringDetailCaptureQuestion(session, normalized)) {
     return Math.max(session.manualResponseDelayMs, session.manualDetailResponseDelayMs);
@@ -1706,7 +1710,16 @@ function isAnsweringDetailCaptureQuestion(session: OpenAIRealtimeSidebandSession
     /\b(address|where do you need|where you need|service address|come out|send someone|callback number|phone number|best number|email address)\b/.test(
       lastAgent,
     ) ||
-    /\b(street|road|rd|avenue|ave|drive|dr|lane|ln|court|ct|circle|cir|boulevard|blvd|way|place|pl|terrace|ter|unit|apt|suite|floor|duxbury|massachusetts)\b/.test(
+    /\b(name|full name|first name|last name|who should|who is this|who am i speaking|spell|spelling|callback|phone|number|email|address|where do you need|where you need|service address|come out|send someone|best number|email address)\b/.test(
+      lastAgent,
+    ) ||
+    /\b(street|road|rd|avenue|ave|drive|dr|lane|ln|court|ct|circle|cir|boulevard|blvd|way|place|pl|terrace|ter|unit|apt|apartment|suite|floor|duxbury|massachusetts)\b/.test(
+      normalized,
+    ) ||
+    /\b(at|dot|com|net|org|gmail|yahoo|outlook|icloud|hotmail|dash|underscore)\b/.test(
+      normalized,
+    ) ||
+    /(?:\b[a-z]\b[\s-]*){3,}/i.test(
       normalized,
     )
   );
@@ -3176,13 +3189,13 @@ export function resolveOpenAIRealtimeManualResponseGating(env: OpenAIRealtimeEnv
 }
 
 export function resolveOpenAIRealtimeManualResponseDelayMs(env: OpenAIRealtimeEnv) {
-  const delayMs = env.OPENAI_REALTIME_MANUAL_RESPONSE_DELAY_MS ?? 450;
-  return Number.isFinite(delayMs) ? Math.min(2000, Math.max(0, Math.round(delayMs))) : 450;
+  const delayMs = env.OPENAI_REALTIME_MANUAL_RESPONSE_DELAY_MS ?? 650;
+  return Number.isFinite(delayMs) ? Math.min(2000, Math.max(0, Math.round(delayMs))) : 650;
 }
 
 export function resolveOpenAIRealtimeDetailCaptureResponseDelayMs(env: OpenAIRealtimeEnv) {
-  const delayMs = env.OPENAI_REALTIME_DETAIL_CAPTURE_RESPONSE_DELAY_MS ?? 900;
-  return Number.isFinite(delayMs) ? Math.min(2000, Math.max(0, Math.round(delayMs))) : 900;
+  const delayMs = env.OPENAI_REALTIME_DETAIL_CAPTURE_RESPONSE_DELAY_MS ?? 1300;
+  return Number.isFinite(delayMs) ? Math.min(2000, Math.max(0, Math.round(delayMs))) : 1300;
 }
 
 export function resolveOpenAIRealtimeTurnDetection(env: OpenAIRealtimeEnv): OpenAIRealtimeAcceptPayload["audio"]["input"]["turn_detection"] {
