@@ -27,7 +27,6 @@ import { createMenuIngestionService } from "./menu-ingestion-service";
 import { recordHttpRequestMetric, renderPrometheusMetrics } from "./metrics";
 import { buildSmsTwiML, createMessageThreadStore } from "./message-thread-store";
 import { createStaffNotificationService } from "./notification-service";
-import { buildOpenAIAgentsRealtimePreflight } from "./openai-agents-realtime-spike";
 import { buildOpenAIRealtimeLiveCallConfig, createOpenAIRealtimeSipService } from "./openai-realtime-sip";
 import { createOwnerCommandRuntime } from "./owner-command-runtime";
 import { createOwnerEmailCommandService, type OwnerEmailCommandInput } from "./owner-email-command-service";
@@ -477,6 +476,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       return;
     }
 
+    const { buildOpenAIAgentsRealtimePreflight } = await import("./openai-agents-realtime-spike");
     const preflight = await buildOpenAIAgentsRealtimePreflight({
       callerPhone: url.searchParams.get("callerPhone") ?? undefined,
       env: currentEnv,

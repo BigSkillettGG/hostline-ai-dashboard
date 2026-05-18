@@ -8,6 +8,9 @@ await rm(outdir, { force: true, recursive: true });
 await mkdir(outdir, { recursive: true });
 
 await build({
+  banner: {
+    js: 'import { createRequire } from "node:module";\nconst require = createRequire(import.meta.url);',
+  },
   bundle: true,
   entryPoints: ["services/voice/src/server.ts"],
   external: ["ws", "zod"],
