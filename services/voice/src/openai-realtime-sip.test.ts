@@ -1114,7 +1114,7 @@ describe("OpenAI Realtime SIP", () => {
         })),
       );
       await Promise.resolve();
-      await vi.advanceTimersByTimeAsync(1299);
+      await vi.advanceTimersByTimeAsync(1799);
       expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))).toHaveLength(1);
 
       await vi.advanceTimersByTimeAsync(1);
@@ -1128,6 +1128,291 @@ describe("OpenAI Realtime SIP", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("keeps buffering single-word address fragments before asking the next question", async () => {
+    vi.useFakeTimers();
+    try {
+      const socket = createFakeRealtimeSocket();
+      const transcriptTurns: unknown[] = [];
+      const service = createOpenAIRealtimeSipService(
+        {
+          ...baseEnv,
+          OPENAI_REALTIME_DETAIL_CAPTURE_RESPONSE_DELAY_MS: 1300,
+          OPENAI_REALTIME_MANUAL_RESPONSE_DELAY_MS: 650,
+        },
+        {
+          async getContext() {
+            return demoRestaurantContext;
+          },
+        },
+        {
+          callStore: {
+            async addTranscriptTurn(input) {
+              transcriptTurns.push(input);
+            },
+            async attachCallRecording() {},
+            async completeCall() {},
+            async createCustomerRequest() {
+              return {};
+            },
+            async createStaffReviewOrder() {
+              return {};
+            },
+            async createStaffReviewReservation() {
+              return {};
+            },
+            async createStaffTask() {
+              return {};
+            },
+            async startCall() {
+              return {};
+            },
+            async startRealtimeCall() {
+              return { callId: "call_uuid" };
+            },
+          },
+          fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+          websocketFactory: () => socket as never,
+        },
+      );
+
+      await service.handleIncomingWebhook({
+        headers: {},
+        rawBody: JSON.stringify({
+          data: {
+            call_id: "rtc_single_word_address_fragments",
+            sip_headers: [{ name: "From", value: "sip:+14155550123@twilio.com" }],
+          },
+          type: "realtime.call.incoming",
+        }),
+      });
+
+      socket.emit("open");
+      socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+      socket.emit(
+        "message",
+        Buffer.from(JSON.stringify({
+          item_id: "agent_address_question",
+          response_id: "resp_address_question",
+          transcript: "What's the address where you need the plumber to come out?",
+          type: "response.output_audio_transcript.done",
+        })),
+      );
+      socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+
+      for (const [index, transcript] of ["Five.", "Old.", "Barn.", "Road.", "In Duxbury, Massachusetts."].entries()) {
+        socket.emit(
+          "message",
+          Buffer.from(JSON.stringify({
+            item_id: `caller_address_fragment_${index}`,
+            transcript,
+            type: "conversation.item.input_audio_transcription.completed",
+          })),
+        );
+        await Promise.resolve();
+        await vi.advanceTimersByTimeAsync(500);
+      }
+
+      expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(1299);
+      expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))).toHaveLength(1);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(transcriptTurns).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ speaker: "caller", text: "Five." }),
+          expect.objectContaining({ speaker: "caller", text: "Old." }),
+          expect.objectContaining({ speaker: "caller", text: "Barn." }),
+          expect.objectContaining({ speaker: "caller", text: "Road." }),
+          expect.objectContaining({ speaker: "caller", text: "In Duxbury, Massachusetts." }),
+        ]),
+      );
+      expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("cancels active audio when the caller says they were not done", async () => {
+    const socket = createFakeRealtimeSocket();
+    const transcriptTurns: unknown[] = [];
+    const service = createOpenAIRealtimeSipService(
+      baseEnv,
+      {
+        async getContext() {
+          return demoRestaurantContext;
+        },
+      },
+      {
+        callStore: {
+          async addTranscriptTurn(input) {
+            transcriptTurns.push(input);
+          },
+          async attachCallRecording() {},
+          async completeCall() {},
+          async createCustomerRequest() {
+            return {};
+          },
+          async createStaffReviewOrder() {
+            return {};
+          },
+          async createStaffReviewReservation() {
+            return {};
+          },
+          async createStaffTask() {
+            return {};
+          },
+          async startCall() {
+            return {};
+          },
+          async startRealtimeCall() {
+            return { callId: "call_uuid" };
+          },
+        },
+        fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+        websocketFactory: () => socket as never,
+      },
+    );
+
+    await service.handleIncomingWebhook({
+      headers: {},
+      rawBody: JSON.stringify({
+        data: {
+          call_id: "rtc_caller_repair_interrupt",
+          sip_headers: [{ name: "From", value: "sip:+14155550123@twilio.com" }],
+        },
+        type: "realtime.call.incoming",
+      }),
+    });
+
+    socket.emit("open");
+    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "agent_time_question",
+        response_id: "resp_time_question",
+        transcript: "Are you looking for something this week, morning or afternoon?",
+        type: "response.output_audio_transcript.done",
+      })),
+    );
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        response: { id: "resp_premature" },
+        type: "response.created",
+      })),
+    );
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "caller_repair",
+        transcript: "I didn't even answer, but I would say in the next couple of days you could do it.",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    await Promise.resolve();
+
+    expect(transcriptTurns).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          speaker: "caller",
+          text: "I didn't even answer, but I would say in the next couple of days you could do it.",
+        }),
+      ]),
+    );
+    expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.cancel"))).toHaveLength(1);
+    expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "output_audio_buffer.clear"))).toHaveLength(1);
+  });
+
+  it("accepts city and state fragments during a premature active response", async () => {
+    const socket = createFakeRealtimeSocket();
+    const transcriptTurns: unknown[] = [];
+    const service = createOpenAIRealtimeSipService(
+      baseEnv,
+      {
+        async getContext() {
+          return demoRestaurantContext;
+        },
+      },
+      {
+        callStore: {
+          async addTranscriptTurn(input) {
+            transcriptTurns.push(input);
+          },
+          async attachCallRecording() {},
+          async completeCall() {},
+          async createCustomerRequest() {
+            return {};
+          },
+          async createStaffReviewOrder() {
+            return {};
+          },
+          async createStaffReviewReservation() {
+            return {};
+          },
+          async createStaffTask() {
+            return {};
+          },
+          async startCall() {
+            return {};
+          },
+          async startRealtimeCall() {
+            return { callId: "call_uuid" };
+          },
+        },
+        fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+        websocketFactory: () => socket as never,
+      },
+    );
+
+    await service.handleIncomingWebhook({
+      headers: {},
+      rawBody: JSON.stringify({
+        data: {
+          call_id: "rtc_city_state_during_response",
+          sip_headers: [{ name: "From", value: "sip:+14155550123@twilio.com" }],
+        },
+        type: "realtime.call.incoming",
+      }),
+    });
+
+    socket.emit("open");
+    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "agent_address_question",
+        response_id: "resp_address_question",
+        transcript: "What's the address where you'd like service?",
+        type: "response.output_audio_transcript.done",
+      })),
+    );
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        response: { id: "resp_premature" },
+        type: "response.created",
+      })),
+    );
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "caller_city_state",
+        transcript: "In Duxbury, Massachusetts.",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    await Promise.resolve();
+
+    expect(transcriptTurns).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ speaker: "caller", text: "In Duxbury, Massachusetts." }),
+      ]),
+    );
+    expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.cancel"))).toHaveLength(1);
+    expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "output_audio_buffer.clear"))).toHaveLength(1);
   });
 
   it("waits for spelled name fragments before thanking the caller", async () => {
@@ -1221,7 +1506,7 @@ describe("OpenAI Realtime SIP", () => {
         })),
       );
       await Promise.resolve();
-      await vi.advanceTimersByTimeAsync(1299);
+      await vi.advanceTimersByTimeAsync(1799);
       expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))).toHaveLength(1);
 
       await vi.advanceTimersByTimeAsync(1);

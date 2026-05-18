@@ -210,6 +210,7 @@ interface OpenAIRealtimeSidebandSession {
   manualResponseTimer?: ReturnType<typeof setTimeout>;
   ownerContact?: TrustedContact;
   openingGreetingCompleted: boolean;
+  activeResponseCancelRequested?: boolean;
   pendingManualResponseDelayMs?: number;
   pendingManualResponse: boolean;
   quality: RealtimeQualityMetrics;
@@ -704,6 +705,7 @@ export function buildOpenAIRealtimeInstructions(
     `Opening greeting to use when the call begins: "${openingGreeting}"`,
     "Say the opening greeting once at the start of the call, exactly as written. Do not add 'hi', 'hello', your name, or any extra words before or after it. Do not say you are virtual or AI in the opening.",
     "If the caller says 'hello' before you have greeted them, immediately give the full opening greeting instead of only saying hello back.",
+    "If the caller says 'hello', 'are you there', or 'can you hear me' after you have already started or completed the opening greeting, do not repeat the full greeting. Say briefly, 'I'm here. How can I help?'",
     profile.isRestaurant
       ? "Voice style: bright, upbeat, polished, and genuinely delighted to help, like an excellent restaurant host. Avoid IVR cadence, monotone delivery, robotic precision, or over-enunciating the restaurant name."
       : "Voice style: bright, upbeat, polished, and genuinely delighted to help, like an excellent front desk employee. Avoid IVR cadence, monotone delivery, robotic precision, or over-enunciating the business name.",
@@ -722,6 +724,7 @@ export function buildOpenAIRealtimeInstructions(
     "Echo guardrail: if the caller audio appears to repeat your own greeting or phrases like 'thank you for calling' or 'how can I help you', treat it as echo or background audio. Do not repeat the greeting or respond as if it were a new customer request.",
     "If the caller only says 'hello', 'pardon', or 'are you there' after you have already greeted them, acknowledge once with 'I'm here' and wait for their actual request. Do not restart the opening greeting.",
     "Handle clear interruptions gracefully. If the caller clearly cuts you off with speech, answer their latest request. Do not restart the call because of a noise, echo, or short silence.",
+    "Repair behavior: if the caller says 'wait', 'hold on', 'I didn't answer', 'I wasn't done', 'that's not what I said', 'no, I said', or sounds frustrated because you talked over them, stop the current flow. Say a brief apology like 'Sorry about that, go ahead, I'm listening.' Do not say 'No problem' in this situation.",
     "If the caller is in a very loud place or the audio is too unclear to understand, do not guess. Say briefly that it is too noisy to hear clearly and ask them to move somewhere quieter, call back, or let staff follow up by text/callback.",
     "Before any lookup or task that may take a moment, say one short natural bridge such as 'Sure, let me check that' or 'One moment, I am checking now,' then use the tool. Vary the wording and do not sound like an IVR.",
     profile.isRestaurant
@@ -1406,6 +1409,7 @@ function recordOpenAIRealtimeQualityEvent(session: OpenAIRealtimeSidebandSession
   if (eventType === "response.created") {
     clearOpenAIRealtimeManualIdleTimer(session);
     delete session.manualResponseStartPending;
+    delete session.activeResponseCancelRequested;
     session.quality.responseCount += 1;
     session.quality.activeResponseStartedAt = now;
     if (session.quality.responseCount === 1) {
@@ -1423,6 +1427,7 @@ function recordOpenAIRealtimeQualityEvent(session: OpenAIRealtimeSidebandSession
 
   if (eventType === "response.done") {
     delete session.manualResponseStartPending;
+    delete session.activeResponseCancelRequested;
     if (session.quality.activeResponseStartedAt) {
       session.quality.lastResponseDurationMs = now - session.quality.activeResponseStartedAt;
     }
@@ -1458,6 +1463,13 @@ function handleOpenAIRealtimeTranscriptTurn({
       });
       return;
     }
+    maybeCancelOpenAIRealtimeActiveResponseForCallerTurn({
+      callId,
+      reason: decision.reason,
+      session,
+      socket,
+      text: turn.text,
+    });
   }
 
   void persistOpenAIRealtimeTranscriptTurn({
@@ -1668,9 +1680,17 @@ function shouldAcceptRealtimeCallerTranscript(
   const directedSpeech = hasLikelyDirectedCallerSpeech(normalized);
   const shortConfirmation = isLikelyShortCallerConfirmation(normalized);
   const answerToAgentQuestion = isLikelyAnswerToRecentAgentQuestion(session, normalized);
+  const correctionOrRepair = isLikelyCallerCorrectionOrRepair(normalized);
+  const detailAnswer = isAnsweringDetailCaptureQuestion(session, normalized);
 
   if (greetingPhase || activeResponse) {
-    if (strongIntent || configuredOfferingIntent || directedSpeech || shortConfirmation) return { accept: true };
+    if (correctionOrRepair) return { accept: true, reason: "caller_repair" };
+    if (answerToAgentQuestion) return { accept: true, reason: "answer_to_agent_question" };
+    if (detailAnswer) return { accept: true, reason: "detail_capture" };
+    if (strongIntent) return { accept: true, reason: "strong_intent" };
+    if (configuredOfferingIntent) return { accept: true, reason: "configured_offering" };
+    if (directedSpeech) return { accept: true, reason: "directed_speech" };
+    if (shortConfirmation) return { accept: true, reason: "short_confirmation" };
     return { accept: false, reason: greetingPhase ? "greeting_noise" : "response_noise" };
   }
 
@@ -1688,6 +1708,56 @@ function shouldAcceptRealtimeCallerTranscript(
   return { accept: false, reason: "no_caller_intent" };
 }
 
+function maybeCancelOpenAIRealtimeActiveResponseForCallerTurn({
+  callId,
+  reason,
+  session,
+  socket,
+  text,
+}: {
+  callId: string;
+  reason?: string;
+  session: OpenAIRealtimeSidebandSession;
+  socket: RealtimeSocket;
+  text: string;
+}) {
+  if (!session.quality.activeResponseStartedAt || session.activeResponseCancelRequested || session.finishRequested) return;
+  const normalized = normalizeRealtimeCallerText(text);
+  if (!shouldCancelActiveResponseForCallerTurn(session, normalized, reason)) return;
+
+  session.activeResponseCancelRequested = true;
+  console.info("[openai-realtime] cancelling active response for caller repair/answer", {
+    callId,
+    reason,
+    sample: text.slice(0, 100),
+  });
+  sendRealtimeEvent(socket, { type: "response.cancel" });
+  sendRealtimeEvent(socket, { type: "output_audio_buffer.clear" });
+}
+
+function shouldCancelActiveResponseForCallerTurn(
+  session: OpenAIRealtimeSidebandSession,
+  normalized: string,
+  reason?: string,
+) {
+  if (!normalized || !session.openingGreetingCompleted) {
+    return isLikelyCallerCorrectionOrRepair(normalized) || hasStrongCallerIntent(normalized);
+  }
+
+  if (
+    reason === "caller_repair" ||
+    reason === "answer_to_agent_question" ||
+    reason === "detail_capture" ||
+    reason === "strong_intent" ||
+    reason === "configured_offering" ||
+    reason === "directed_speech"
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 function resolveOpenAIRealtimeManualResponseDelayForTurn(session: OpenAIRealtimeSidebandSession, text?: string) {
   if (!text) return session.manualResponseDelayMs;
   const normalized = normalizeRealtimeCallerText(text);
@@ -1695,9 +1765,21 @@ function resolveOpenAIRealtimeManualResponseDelayForTurn(session: OpenAIRealtime
     return Math.min(350, session.manualResponseDelayMs);
   }
   if (isAnsweringDetailCaptureQuestion(session, normalized)) {
-    return Math.max(session.manualResponseDelayMs, session.manualDetailResponseDelayMs);
+    return Math.max(
+      session.manualResponseDelayMs,
+      session.manualDetailResponseDelayMs,
+      getMinimumDetailCaptureDelayMs(session, normalized),
+    );
   }
   return session.manualResponseDelayMs;
+}
+
+function getMinimumDetailCaptureDelayMs(session: OpenAIRealtimeSidebandSession, normalized: string) {
+  const lastAgentTurn = session.transcript.filter((turn) => turn.role === "agent").at(-1)?.text ?? "";
+  const lastAgent = normalizeRealtimeCallerText(lastAgentTurn);
+  if (isAddressCapturePrompt(lastAgent) || isLikelyAddressFragment(normalized)) return 1800;
+  if (isSpelledFragment(normalized)) return 1800;
+  return 0;
 }
 
 function isAnsweringDetailCaptureQuestion(session: OpenAIRealtimeSidebandSession, normalized: string) {
@@ -1707,22 +1789,39 @@ function isAnsweringDetailCaptureQuestion(session: OpenAIRealtimeSidebandSession
   if (!lastAgent) return false;
 
   return (
-    /\b(address|where do you need|where you need|service address|come out|send someone|callback number|phone number|best number|email address)\b/.test(
-      lastAgent,
-    ) ||
+    isAddressCapturePrompt(lastAgent) ||
     /\b(name|full name|first name|last name|who should|who is this|who am i speaking|spell|spelling|callback|phone|number|email|address|where do you need|where you need|service address|come out|send someone|best number|email address)\b/.test(
       lastAgent,
     ) ||
-    /\b(street|road|rd|avenue|ave|drive|dr|lane|ln|court|ct|circle|cir|boulevard|blvd|way|place|pl|terrace|ter|unit|apt|apartment|suite|floor|duxbury|massachusetts)\b/.test(
-      normalized,
-    ) ||
+    isLikelyAddressFragment(normalized) ||
     /\b(at|dot|com|net|org|gmail|yahoo|outlook|icloud|hotmail|dash|underscore)\b/.test(
       normalized,
     ) ||
-    /(?:\b[a-z]\b[\s-]*){3,}/i.test(
-      normalized,
-    )
+    isSpelledFragment(normalized)
   );
+}
+
+function isAddressCapturePrompt(lastAgent: string) {
+  return /\b(address|where do you need|where you need|service address|come out|send someone|where should|job location|service location)\b/.test(
+    lastAgent,
+  );
+}
+
+function isLikelyAddressFragment(normalized: string) {
+  return (
+    /\b(street|st|road|rd|avenue|ave|drive|dr|lane|ln|court|ct|circle|cir|boulevard|blvd|way|place|pl|terrace|ter|trail|trl|parkway|pkwy|highway|hwy|route|unit|apt|apartment|suite|floor)\b/.test(
+      normalized,
+    ) ||
+    /\b(alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|hampshire|jersey|mexico|york|carolina|dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|tennessee|texas|utah|vermont|virginia|washington|wisconsin|wyoming)\b/.test(
+      normalized,
+    ) ||
+    /\b(?:in|near|by|around)\s+[a-z][a-z'-]{2,}(?:\s+[a-z][a-z'-]{2,}){0,2}\b/.test(normalized) ||
+    /\b\d{5}(?:\s*-\s*\d{4})?\b/.test(normalized)
+  );
+}
+
+function isSpelledFragment(normalized: string) {
+  return /(?:\b[a-z]\b[\s-]*){3,}/i.test(normalized);
 }
 
 function discardIgnoredRealtimeConversationItem({
@@ -1818,6 +1917,12 @@ function hasLikelyDirectedCallerSpeech(normalized: string) {
     /\b(what|when|where|why|how|who|do you|are you|can i|can you|could i|could you|would you|i need|i want|i'd like|i would like|i'm calling|i am calling|i was wondering|let me|get me|looking for|are you there|can you hear me|i'm here|i am here)\b/.test(
       normalized,
     ) || /\?$/.test(normalized)
+  );
+}
+
+function isLikelyCallerCorrectionOrRepair(normalized: string) {
+  return /\b(wait|hold on|hang on|one second|just a second|let me finish|i'?m not done|i was not done|i wasn'?t done|i didn'?t answer|i did not answer|i didn'?t say|i did not say|that'?s not what i said|that is not what i said|no i said|no that'?s|actually|you cut me off|you interrupted|stop talking|listen|go back|start over|what are you talking about)\b/.test(
+    normalized,
   );
 }
 
