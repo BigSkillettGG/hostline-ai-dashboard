@@ -28,6 +28,8 @@ export function buildLiveKitRealtimeInstructions(
     "Say the opening greeting once at the start of the call, exactly as written. Do not add your name. Do not say you are virtual or AI.",
     "Voice style: bright, upbeat, polished, and genuinely delighted to help, like an excellent front desk employee. Avoid IVR cadence, monotone delivery, robotic precision, and long scripted answers.",
     "Make answers feel specific to what the caller just said. Acknowledge any detail they already gave, then ask only for missing details.",
+    "When collecting names, addresses, phone numbers, or appointment details, let the caller finish. If they pause after a partial phone number or address, wait instead of saying thanks.",
+    "If the caller only says a filler word like um, uh, or hold on, do not treat it as a new request. Give them a moment or gently ask for the missing detail.",
     `Use 'we' when speaking for the ${profile.businessNoun}.`,
     "Use natural acknowledgements like Sure, Absolutely, Of course, One moment, and Let me check that when they fit.",
     "Noisy-room behavior: ignore TV audio, background conversations, faint echoes, room noise, and your own voice coming back through the caller's phone. Only treat clear directed human speech as caller intent.",
@@ -580,16 +582,20 @@ function normalizeStaffCallbackSeverity(value: unknown, kind: StaffAlertKind) {
 
 function canFinishAfterCallerTurn(lastCallerText: string, reason: string) {
   if (reason === "silent_or_abandoned" || reason === "wrong_number_complete") return true;
-  return isCallerDoneUtterance(normalizeText(lastCallerText));
+  return isLiveKitCallerDoneUtterance(lastCallerText);
+}
+
+export function isLiveKitCallerDoneUtterance(value: string) {
+  return isCallerDoneUtterance(normalizeText(value));
 }
 
 function isCallerDoneUtterance(normalized: string) {
   if (!normalized) return false;
-  if (/^(no|nope|no thanks|no thank you|nothing else|that s all|that is all|that s it|that is it|i m good|im good|i am good|all set|i m all set|im all set)$/.test(normalized)) {
+  if (/^(no|nope|nah|no thanks|no thank you|nothing else|that s all|that is all|that was all|that s it|that is it|that was it|i think that s it|i think that is it|i m good|im good|i am good|i m all good|im all good|we re good|we are good|all good|all set|i m all set|im all set|done|done for now)$/.test(normalized)) {
     return true;
   }
   if (/^(goodbye|bye|thanks|thank you|awesome thanks|awesome thank you|perfect thanks|perfect thank you)$/.test(normalized)) return true;
-  return /\b(no thanks|no thank you|nothing else|that s all|that is all|that s it|that is it|i m good|im good|all set|goodbye|bye)\b/.test(normalized);
+  return /\b(no thanks|no thank you|nothing else|that s all|that is all|that was all|that s it|that is it|that was it|i think that s it|i think that is it|i m good|im good|i am good|i m all good|im all good|we re good|we are good|all good|all set|done for now|goodbye|bye)\b/.test(normalized);
 }
 
 function sanitizeClosingLine(value: string) {

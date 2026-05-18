@@ -17,6 +17,7 @@ import {
   createLiveKitCustomerRequest,
   createLiveKitReservationRequest,
   finishLiveKitCall,
+  isLiveKitCallerDoneUtterance,
   lookupLiveKitBusinessContext,
   lookupLiveKitRestaurantContext,
   requestLiveKitStaffCallback,
@@ -43,6 +44,8 @@ interface LiveKitAgentUserData {
   env: VoiceServiceEnv;
   jobContext: JobContext;
   linkedParticipantIdentity?: string;
+  closeRequested?: boolean;
+  lastAgentText?: string;
   lastCallerAudioAt?: number;
   lastCallerText?: string;
   locationId: string;
@@ -125,8 +128,8 @@ export default defineAgent({
       maxToolSteps: 4,
       turnHandling: {
         endpointing: {
-          maxDelay: 2200,
-          minDelay: 650,
+          maxDelay: 3200,
+          minDelay: 950,
           mode: "dynamic",
         },
         turnDetection: "realtime_llm",
@@ -151,6 +154,9 @@ export default defineAgent({
         speaker: "caller",
         text: transcript,
       });
+      if (shouldCloseAfterLoopClosingQuestion(transcript, userData.lastAgentText)) {
+        closeAfterCallerDone(session, userData);
+      }
     });
 
     session.on("agent_state_changed" as any, (event: any) => {
@@ -194,6 +200,7 @@ export default defineAgent({
     session.on("conversation_item_added" as any, (event: any) => {
       const text = event.item?.type === "message" && event.item.role === "assistant" ? event.item.textContent?.trim() : undefined;
       if (!text) return;
+      userData.lastAgentText = text;
       void callStore.addTranscriptTurn({
         callId: userData.callRecordId,
         speaker: "agent",
@@ -401,6 +408,58 @@ async function executeLiveKitTool(name: string, args: Record<string, unknown>, u
 
 function buildOpeningGreeting(context: RestaurantVoiceContext) {
   return `Thank you for calling ${toSpokenRestaurantName(context.restaurantName)}. How can I help you?`;
+}
+
+function shouldCloseAfterLoopClosingQuestion(callerText: string, lastAgentText?: string) {
+  return Boolean(lastAgentText && didAgentAskLoopClosingQuestion(lastAgentText) && isLiveKitCallerDoneUtterance(callerText));
+}
+
+function didAgentAskLoopClosingQuestion(text: string) {
+  return /\b(anything else|something else|anything more|anything i can help|can i help you with anything else|what else can i)\b/i.test(text);
+}
+
+function closeAfterCallerDone(session: voice.AgentSession<LiveKitAgentUserData>, userData: LiveKitAgentUserData) {
+  if (userData.closeRequested) return;
+  userData.closeRequested = true;
+
+  try {
+    session.clearUserTurn();
+  } catch {
+    // Best-effort: the turn may already be committed by the realtime model.
+  }
+
+  try {
+    session.interrupt({ force: true });
+  } catch {
+    // Best-effort: there may be no active speech handle to interrupt.
+  }
+
+  const closingLine = "Thanks for calling. Goodbye.";
+  console.info("[livekit-agent] deterministic close after caller done", {
+    callRecordId: userData.callRecordId,
+    lastAgentText: userData.lastAgentText,
+    lastCallerText: userData.lastCallerText,
+    locationId: userData.locationId,
+  });
+  const closeHandle = session.generateReply({
+    allowInterruptions: false,
+    instructions: [
+      "The caller just said they are done after you asked whether they needed anything else.",
+      `Say exactly this closing line and nothing else: "${closingLine}"`,
+      "Do not ask another question.",
+    ].join(" "),
+  });
+  void closeHandle.waitForPlayout().then(
+    () => {
+      setTimeout(() => userData.jobContext.shutdown("caller_done"), 500);
+    },
+    (error) => {
+      console.error("[livekit-agent] deterministic close failed", {
+        error: formatErrorForLog(error),
+      });
+      userData.jobContext.shutdown("caller_done");
+    },
+  );
 }
 
 async function buildLiveKitInputOptions(participantIdentity?: string) {
