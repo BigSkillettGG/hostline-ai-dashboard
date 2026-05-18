@@ -4,19 +4,19 @@ import { fileURLToPath } from "node:url";
 import { createGuestConfirmationService } from "../../voice/src/guest-confirmation-service";
 import { HARBOR_PLUMBING_DEMO_LOCATION_ID } from "../../voice/src/livekit-handoff";
 import {
-  buildOpenAIRealtimeInstructions,
-  createOpenAIRealtimeCustomerRequest,
-  createOpenAIRealtimeReservationRequest,
-  finishOpenAIRealtimeCall,
-  lookupBusinessContext,
-  lookupRestaurantContext,
-  requestOpenAIRealtimeStaffCallback,
-  resolveOpenAIRealtimeNoiseReduction,
-  resolveOpenAIRealtimeSpeed,
-  resolveOpenAIRealtimeTurnDetection,
-  sendOpenAIRealtimeBusinessLink,
-  sendOpenAIRealtimeGuestConfirmation,
-} from "../../voice/src/openai-realtime-sip";
+  buildLiveKitRealtimeInstructions,
+  createLiveKitCustomerRequest,
+  createLiveKitReservationRequest,
+  finishLiveKitCall,
+  lookupLiveKitBusinessContext,
+  lookupLiveKitRestaurantContext,
+  requestLiveKitStaffCallback,
+  resolveLiveKitRealtimeNoiseReduction,
+  resolveLiveKitRealtimeSpeed,
+  resolveLiveKitRealtimeTurnDetection,
+  sendLiveKitBusinessLink,
+  sendLiveKitGuestConfirmation,
+} from "./realtime-runtime";
 import { buildOpenAIRealtimeTools } from "../../voice/src/openai-realtime-tools";
 import { createRestaurantContextStore } from "../../voice/src/restaurant-context-store";
 import { toSpokenRestaurantName, type RestaurantVoiceContext } from "../../voice/src/restaurant-context";
@@ -83,14 +83,14 @@ export default defineAgent({
     const session = new voice.AgentSession<LiveKitAgentUserData>({
       llm: new openai.realtime.RealtimeModel({
         apiKey: env.OPENAI_API_KEY,
-        inputAudioNoiseReduction: { type: resolveOpenAIRealtimeNoiseReduction(env) },
+        inputAudioNoiseReduction: { type: resolveLiveKitRealtimeNoiseReduction(env) },
         inputAudioTranscription: {
           language: "en",
           model: "gpt-4o-mini-transcribe",
         },
         model: env.OPENAI_REALTIME_MODEL?.trim() || "gpt-realtime",
-        speed: resolveOpenAIRealtimeSpeed(env),
-        turnDetection: resolveLiveKitRealtimeTurnDetection(env),
+        speed: resolveLiveKitRealtimeSpeed(env),
+        turnDetection: resolveLiveKitModelTurnDetection(env),
         voice: resolveLiveKitOpenAIVoice(env, context),
       }),
       maxToolSteps: 4,
@@ -169,7 +169,7 @@ export default defineAgent({
 
     const openingGreeting = buildOpeningGreeting(context);
     const agent = new SignalHostLiveKitAgent(openingGreeting, {
-      instructions: buildOpenAIRealtimeInstructions(context, { callerPhone }),
+      instructions: buildLiveKitRealtimeInstructions(context, { callerPhone }),
       tools: buildLiveKitToolContext(userData),
     });
 
@@ -241,13 +241,13 @@ function buildLiveKitToolContext(userData: LiveKitAgentUserData): llm.ToolContex
 
 async function executeLiveKitTool(name: string, args: Record<string, unknown>, userData: LiveKitAgentUserData) {
   if (name === "lookup_restaurant_context") {
-    return lookupRestaurantContext(userData.context, args.topic);
+    return lookupLiveKitRestaurantContext(userData.context, args.topic);
   }
   if (name === "lookup_business_context") {
-    return lookupBusinessContext(userData.context, args.topic);
+    return lookupLiveKitBusinessContext(userData.context, args.topic);
   }
   if (name === "send_guest_confirmation") {
-    return sendOpenAIRealtimeGuestConfirmation({
+    return sendLiveKitGuestConfirmation({
       callRecordId: userData.callRecordId,
       callerPhone: userData.callerPhone,
       context: userData.context,
@@ -257,7 +257,7 @@ async function executeLiveKitTool(name: string, args: Record<string, unknown>, u
     });
   }
   if (name === "send_business_link") {
-    return sendOpenAIRealtimeBusinessLink({
+    return sendLiveKitBusinessLink({
       callRecordId: userData.callRecordId,
       callerPhone: userData.callerPhone,
       context: userData.context,
@@ -267,17 +267,16 @@ async function executeLiveKitTool(name: string, args: Record<string, unknown>, u
     });
   }
   if (name === "create_customer_request") {
-    return createOpenAIRealtimeCustomerRequest({
+    return createLiveKitCustomerRequest({
       callRecordId: userData.callRecordId,
       callerPhone: userData.callerPhone,
       callStore: userData.callStore,
-      context: userData.context,
       locationId: userData.locationId,
       rawArguments: args,
     });
   }
   if (name === "create_reservation_request") {
-    return createOpenAIRealtimeReservationRequest({
+    return createLiveKitReservationRequest({
       callRecordId: userData.callRecordId,
       callerPhone: userData.callerPhone,
       callStore: userData.callStore,
@@ -288,7 +287,7 @@ async function executeLiveKitTool(name: string, args: Record<string, unknown>, u
     });
   }
   if (name === "request_staff_callback") {
-    return requestOpenAIRealtimeStaffCallback({
+    return requestLiveKitStaffCallback({
       callRecordId: userData.callRecordId,
       callerPhone: userData.callerPhone,
       context: userData.context,
@@ -298,7 +297,7 @@ async function executeLiveKitTool(name: string, args: Record<string, unknown>, u
     });
   }
   if (name === "finish_call") {
-    const result = finishOpenAIRealtimeCall({
+    const result = finishLiveKitCall({
       lastCallerText: userData.lastCallerText,
       rawArguments: args,
     });
@@ -374,8 +373,8 @@ function resolveLiveKitOpenAIVoice(env: VoiceServiceEnv, context: RestaurantVoic
   });
 }
 
-function resolveLiveKitRealtimeTurnDetection(env: VoiceServiceEnv) {
-  const turnDetection = resolveOpenAIRealtimeTurnDetection(env);
+function resolveLiveKitModelTurnDetection(env: VoiceServiceEnv) {
+  const turnDetection = resolveLiveKitRealtimeTurnDetection(env);
   const { idle_timeout_ms: _idleTimeoutMs, ...supportedTurnDetection } = turnDetection as typeof turnDetection & {
     idle_timeout_ms?: number;
   };
