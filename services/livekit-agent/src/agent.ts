@@ -1,5 +1,12 @@
 import { AutoSubscribe, cli, defineAgent, llm, ServerOptions, voice, type JobContext } from "@livekit/agents";
 import * as openai from "@livekit/agents-plugin-openai";
+import {
+  RoomEvent,
+  TrackSource,
+  type RemoteParticipant,
+  type RemoteTrack,
+  type RemoteTrackPublication,
+} from "@livekit/rtc-node";
 import { fileURLToPath } from "node:url";
 import { createGuestConfirmationService } from "../../voice/src/guest-confirmation-service";
 import { HARBOR_PLUMBING_DEMO_LOCATION_ID } from "../../voice/src/livekit-handoff";
@@ -33,8 +40,10 @@ interface LiveKitAgentUserData {
   context: RestaurantVoiceContext;
   env: VoiceServiceEnv;
   jobContext: JobContext;
+  lastCallerAudioAt?: number;
   lastCallerText?: string;
   locationId: string;
+  noInputPrompted?: boolean;
   startedAt: number;
 }
 
@@ -80,6 +89,7 @@ export default defineAgent({
       locationId,
       startedAt,
     };
+    installLiveKitRoomDiagnostics(ctx, userData);
     const session = new voice.AgentSession<LiveKitAgentUserData>({
       llm: new openai.realtime.RealtimeModel({
         apiKey: env.OPENAI_API_KEY,
@@ -100,18 +110,6 @@ export default defineAgent({
           minDelay: 650,
           mode: "dynamic",
         },
-        interruption: {
-          enabled: true,
-          falseInterruptionTimeout: 2400,
-          minDuration: 700,
-          minWords: 2,
-          mode: "adaptive",
-          resumeFalseInterruption: true,
-        },
-        preemptiveGeneration: {
-          enabled: true,
-          preemptiveTts: false,
-        },
         turnDetection: "realtime_llm",
       },
       userAwayTimeout: 14,
@@ -119,12 +117,58 @@ export default defineAgent({
     });
 
     session.on("user_input_transcribed" as any, (event: any) => {
-      if (!event.isFinal || !event.transcript.trim()) return;
-      userData.lastCallerText = event.transcript.trim();
+      const transcript = typeof event.transcript === "string" ? event.transcript.trim() : "";
+      console.info("[livekit-agent] user transcript event", {
+        isFinal: Boolean(event.isFinal),
+        language: event.language,
+        room: ctx.room.name,
+        speakerId: event.speakerId,
+        transcriptPreview: transcript.slice(0, 160),
+      });
+      if (!event.isFinal || !transcript) return;
+      userData.lastCallerText = transcript;
       void callStore.addTranscriptTurn({
         callId: userData.callRecordId,
         speaker: "caller",
-        text: event.transcript.trim(),
+        text: transcript,
+      });
+    });
+
+    session.on("agent_state_changed" as any, (event: any) => {
+      console.info("[livekit-agent] agent state changed", {
+        newState: event.newState,
+        oldState: event.oldState,
+        room: ctx.room.name,
+      });
+    });
+
+    session.on("user_state_changed" as any, (event: any) => {
+      if (event.newState === "speaking") {
+        userData.lastCallerAudioAt = Date.now();
+      }
+      console.info("[livekit-agent] user state changed", {
+        newState: event.newState,
+        oldState: event.oldState,
+        room: ctx.room.name,
+      });
+    });
+
+    session.on("speech_created" as any, (event: any) => {
+      console.info("[livekit-agent] speech created", {
+        room: ctx.room.name,
+        source: event.source,
+        userInitiated: event.userInitiated,
+      });
+    });
+
+    session.on("metrics_collected" as any, (event: any) => {
+      const metrics = event.metrics ?? {};
+      console.info("[livekit-agent] metrics collected", {
+        label: metrics.label,
+        modelName: metrics.modelName,
+        room: ctx.room.name,
+        sequenceId: metrics.sequenceId,
+        type: metrics.type,
       });
     });
 
@@ -215,6 +259,28 @@ class SignalHostLiveKitAgent extends voice.Agent<LiveKitAgentUserData> {
     void greetingHandle.waitForPlayout().then(
       () => {
         console.info("[livekit-agent] realtime greeting playout finished");
+        const userData = this.session.userData;
+        setTimeout(() => {
+          if (userData.lastCallerText || userData.noInputPrompted) return;
+          userData.noInputPrompted = true;
+          console.warn("[livekit-agent] no caller transcript after greeting; prompting once", {
+            callRecordId: userData.callRecordId,
+            lastCallerAudioAt: userData.lastCallerAudioAt,
+            locationId: userData.locationId,
+          });
+          const promptHandle = this.session.generateReply({
+            instructions: [
+              "The caller has not been transcribed after the greeting.",
+              "Briefly say exactly: \"I'm here. What can I help with?\"",
+              "Keep it warm and do not explain the technical issue.",
+            ].join(" "),
+          });
+          void promptHandle.waitForPlayout().catch((error) => {
+            console.error("[livekit-agent] no-input prompt failed", {
+              error: formatErrorForLog(error),
+            });
+          });
+        }, 8000);
       },
       (error) => {
         console.error("[livekit-agent] realtime greeting failed", {
@@ -317,19 +383,127 @@ function buildOpeningGreeting(context: RestaurantVoiceContext) {
 }
 
 async function buildLiveKitInputOptions() {
-  if (!isNodeNoiseCancellationEnabled()) return undefined;
+  const baseOptions = {
+    audioEnabled: true,
+    audioNumChannels: 1,
+    audioSampleRate: 24000,
+    closeOnDisconnect: true,
+    textEnabled: false,
+    videoEnabled: false,
+  };
+  if (!isNodeNoiseCancellationEnabled()) return baseOptions;
 
   try {
     const { TelephonyBackgroundVoiceCancellation } = await import("@livekit/noise-cancellation-node");
     return {
+      ...baseOptions,
       noiseCancellation: TelephonyBackgroundVoiceCancellation(),
     };
   } catch (error) {
     console.error("[livekit-agent] failed to initialize Node noise cancellation; continuing without it", {
       error: formatErrorForLog(error),
     });
-    return undefined;
+    return baseOptions;
   }
+}
+
+function installLiveKitRoomDiagnostics(ctx: JobContext, userData: LiveKitAgentUserData) {
+  const room = ctx.room;
+  const labels = {
+    callRecordId: userData.callRecordId,
+    locationId: userData.locationId,
+    room: room.name,
+  };
+
+  const logRemoteParticipants = (reason: string) => {
+    console.info("[livekit-agent] room participant snapshot", {
+      ...labels,
+      reason,
+      remoteParticipants: Array.from(room.remoteParticipants.values()).map((participant) => summarizeParticipant(participant)),
+    });
+  };
+
+  room.on(RoomEvent.ParticipantConnected, (participant: RemoteParticipant) => {
+    console.info("[livekit-agent] room participant connected", {
+      ...labels,
+      participant: summarizeParticipant(participant),
+    });
+  });
+  room.on(RoomEvent.ParticipantDisconnected, (participant: RemoteParticipant) => {
+    console.info("[livekit-agent] room participant disconnected", {
+      ...labels,
+      participant: summarizeParticipant(participant),
+    });
+  });
+  room.on(RoomEvent.TrackPublished, (publication: RemoteTrackPublication, participant: RemoteParticipant) => {
+    console.info("[livekit-agent] room track published", {
+      ...labels,
+      participant: summarizeParticipant(participant),
+      publication: summarizePublication(publication),
+    });
+  });
+  room.on(RoomEvent.TrackSubscribed, (track: RemoteTrack, publication: RemoteTrackPublication, participant: RemoteParticipant) => {
+    if (publication.source === TrackSource.SOURCE_MICROPHONE) {
+      userData.lastCallerAudioAt = Date.now();
+    }
+    console.info("[livekit-agent] room track subscribed", {
+      ...labels,
+      participant: summarizeParticipant(participant),
+      publication: summarizePublication(publication),
+      trackKind: track.kind,
+      trackSid: track.sid,
+    });
+  });
+  room.on(RoomEvent.TrackSubscriptionFailed, (trackSid: string, participant: RemoteParticipant, reason?: string) => {
+    console.error("[livekit-agent] room track subscription failed", {
+      ...labels,
+      participant: summarizeParticipant(participant),
+      reason,
+      trackSid,
+    });
+  });
+  room.on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack, publication: RemoteTrackPublication, participant: RemoteParticipant) => {
+    console.info("[livekit-agent] room track unsubscribed", {
+      ...labels,
+      participant: summarizeParticipant(participant),
+      publication: summarizePublication(publication),
+      trackKind: track.kind,
+      trackSid: track.sid,
+    });
+  });
+  room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
+    console.info("[livekit-agent] room active speakers changed", {
+      ...labels,
+      speakers: speakers.map((speaker) => speaker.identity),
+    });
+  });
+
+  logRemoteParticipants("after-connect");
+  setTimeout(() => logRemoteParticipants("after-connect-plus-2s"), 2000);
+  setTimeout(() => logRemoteParticipants("after-connect-plus-6s"), 6000);
+}
+
+function summarizeParticipant(participant: RemoteParticipant) {
+  return {
+    identity: participant.identity,
+    kind: participant.info.kind,
+    metadata: participant.metadata,
+    name: participant.name,
+    sid: participant.sid,
+    trackCount: participant.trackPublications.size,
+    tracks: Array.from(participant.trackPublications.values()).map((publication) => summarizePublication(publication)),
+  };
+}
+
+function summarizePublication(publication: RemoteTrackPublication) {
+  return {
+    kind: publication.kind,
+    muted: publication.muted,
+    sid: publication.sid,
+    source: publication.source,
+    subscribed: publication.subscribed,
+    trackSid: publication.track?.sid,
+  };
 }
 
 function isNodeNoiseCancellationEnabled() {
