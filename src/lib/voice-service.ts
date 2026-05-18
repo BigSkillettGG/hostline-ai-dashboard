@@ -8,6 +8,9 @@ export interface VoiceServiceHealth {
   service: string;
   callRecordingConfigured?: boolean;
   customerFollowUpsConfigured?: boolean;
+  liveKitConfigured?: boolean;
+  liveKitHarborPilotConfigured?: boolean;
+  liveKitHarborPilotRoutingEnabled?: boolean;
   openaiConfigured: boolean;
   openAIVoiceConfigured?: boolean;
   openAIRealtimeSipConfigured?: boolean;
@@ -175,6 +178,24 @@ export interface OpenAIRealtimePreflight {
   locationId: string;
   ready: boolean;
   restaurantName?: string;
+}
+
+export interface LiveKitPilotConfig {
+  agentName: string;
+  agentRuntimeReady: boolean;
+  callRoutingReady: boolean;
+  checks: VoiceServiceReadinessCheck[];
+  dispatchRuleJson: Record<string, unknown>;
+  enabledForLocation: boolean;
+  inboundTrunkJson: Record<string, unknown>;
+  krispEnabled: boolean;
+  locationId: string;
+  ready: boolean;
+  roomPrefix: string;
+  routeOnTwilioVoice: boolean;
+  sipEndpoint?: string;
+  sipUri?: string;
+  twilioVoiceWebhookUrl?: string;
 }
 
 export interface BillingAccountStatus {
@@ -400,6 +421,27 @@ export async function fetchOpenAIRealtimePreflight(locationId = getActiveLocatio
   }
 
   return payload as OpenAIRealtimePreflight;
+}
+
+export async function fetchLiveKitPilotConfig(locationId = getActiveLocationId()) {
+  if (!voiceServiceBaseUrl) {
+    throw new Error("VITE_VOICE_SERVICE_URL is not configured.");
+  }
+
+  const params = new URLSearchParams();
+  if (locationId?.trim()) params.set("locationId", locationId.trim());
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const response = await fetch(`${voiceServiceBaseUrl}/livekit/pilot-config${query}`, {
+    headers: buildVoiceAdminHeaders(),
+  });
+  const text = await response.text();
+  const payload = text ? JSON.parse(text) as LiveKitPilotConfig | { error?: string } : undefined;
+
+  if (!response.ok && !isLiveKitPilotConfigPayload(payload)) {
+    throw new Error(payload?.error || text || `LiveKit pilot config failed with ${response.status}.`);
+  }
+
+  return payload as LiveKitPilotConfig;
 }
 
 export async function fetchVoicePreviewAudio(
@@ -920,4 +962,8 @@ function isOpenAIRealtimeConfigPayload(value: unknown): value is OpenAIRealtimeL
 
 function isOpenAIRealtimePreflightPayload(value: unknown): value is OpenAIRealtimePreflight {
   return Boolean(value && typeof value === "object" && Array.isArray((value as OpenAIRealtimePreflight).checks));
+}
+
+function isLiveKitPilotConfigPayload(value: unknown): value is LiveKitPilotConfig {
+  return Boolean(value && typeof value === "object" && "ready" in value && "agentName" in value);
 }

@@ -37,6 +37,7 @@ import {
   fetchLiveCallConfig,
   attachExistingVoicePhoneNumber,
   fetchEmailReadiness,
+  fetchLiveKitPilotConfig,
   fetchOpenAIRealtimeLiveCallConfig,
   fetchOpenAIRealtimePreflight,
   fetchTwiMLPreview,
@@ -79,6 +80,12 @@ export default function Telephony() {
     enabled: voiceConfigured,
     queryFn: () => fetchOpenAIRealtimePreflight(locationId),
     queryKey: ["openai-realtime-preflight", locationId],
+  });
+
+  const liveKitPilotQuery = useQuery({
+    enabled: voiceConfigured,
+    queryFn: () => fetchLiveKitPilotConfig(locationId),
+    queryKey: ["livekit-pilot-config", locationId],
   });
 
   const twimlQuery = useQuery({
@@ -142,6 +149,7 @@ export default function Telephony() {
     void healthQuery.refetch();
     void emailReadinessQuery.refetch();
     void liveCallQuery.refetch();
+    void liveKitPilotQuery.refetch();
     void realtimeConfigQuery.refetch();
     void realtimePreflightQuery.refetch();
     void twimlQuery.refetch();
@@ -262,6 +270,7 @@ export default function Telephony() {
                 <UrlRow label="OpenAI SIP URI" value={realtimeConfigQuery.data?.sipUri ?? "Set OPENAI_PROJECT_ID or use the OpenAI project SIP URI"} />
                 <UrlRow label="Twilio recording callback" value={realtimeConfigQuery.data?.recordingStatusCallbackUrl ?? config?.recordingStatusCallbackUrl ?? "Unavailable"} />
                 <UrlRow label="Fallback Twilio Voice webhook" value={config?.voiceWebhookUrl ?? "Unavailable"} />
+                <UrlRow label="LiveKit pilot webhook" value={liveKitPilotQuery.data?.twilioVoiceWebhookUrl ?? "Harbor-only pilot not configured"} />
 
                 {liveCallQuery.isError && (
                   <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
@@ -377,9 +386,53 @@ export default function Telephony() {
                 <StatusRow label="OpenAI" ready={Boolean(healthQuery.data?.openaiConfigured)} value={healthQuery.data?.openaiConfigured ? "Configured" : "Missing"} />
                 <StatusRow label="OpenAI voice" ready={Boolean(healthQuery.data?.openAIVoiceConfigured ?? healthQuery.data?.openaiConfigured)} value={(healthQuery.data?.openAIVoiceConfigured ?? healthQuery.data?.openaiConfigured) ? "Configured" : "Missing"} />
                 <StatusRow label="OpenAI Realtime SIP" ready={Boolean(healthQuery.data?.openAIRealtimeSipConfigured || realtimePreflightQuery.data?.ready)} value={realtimePreflightQuery.data?.ready ? "Preflight ready" : healthQuery.data?.openAIRealtimeSipConfigured ? "Configured" : "Missing"} />
+                <StatusRow label="LiveKit Harbor pilot" ready={Boolean(healthQuery.data?.liveKitHarborPilotConfigured || liveKitPilotQuery.data?.ready)} value={liveKitPilotQuery.data?.routeOnTwilioVoice ? "Routing switch on" : liveKitPilotQuery.data?.ready ? "Ready, switch off" : "Not configured"} />
                 <StatusRow label="Call recording" ready={Boolean(healthQuery.data?.callRecordingConfigured || realtimeConfigQuery.data?.callRecordingConfigured)} value={(healthQuery.data?.callRecordingConfigured || realtimeConfigQuery.data?.callRecordingConfigured) ? "Auto-start ready" : "Needs Twilio credentials + public URL"} />
                 <StatusRow label="Supabase context" ready={Boolean(healthQuery.data?.onboardedContextConfigured)} value={healthQuery.data?.onboardedContextConfigured ? "Configured" : "Missing"} />
                 <StatusRow label="Shared SMS routing" ready={Boolean(healthQuery.data?.sharedSmsRoutingConfigured)} value={healthQuery.data?.sharedSmsRoutingConfigured ? "Configured" : "Needs sender + Supabase"} />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-start justify-between gap-3 pb-3">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <ServerCog className="h-4 w-4 text-primary" />
+                    LiveKit pilot
+                  </CardTitle>
+                  <p className="mt-1 text-xs text-muted-foreground">Harbor-only test path for Krisp SIP noise cancellation and LiveKit turn handling.</p>
+                </div>
+                <Badge
+                  variant="outline"
+                  className={liveKitPilotQuery.data?.ready ? "border-success/30 bg-success/10 text-success" : "border-warning/30 bg-warning/10 text-warning"}
+                >
+                  {liveKitPilotQuery.data?.routeOnTwilioVoice ? "Routing on" : liveKitPilotQuery.data?.ready ? "Ready" : "Needs setup"}
+                </Badge>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <StatusRow label="Pilot location" ready={Boolean(liveKitPilotQuery.data?.enabledForLocation)} value={liveKitPilotQuery.data?.enabledForLocation ? "This location is eligible" : "Not in pilot list"} />
+                <StatusRow label="Call routing" ready={Boolean(liveKitPilotQuery.data?.callRoutingReady)} value={liveKitPilotQuery.data?.callRoutingReady ? "Twilio can dial LiveKit" : "Needs SIP endpoint + auth"} />
+                <StatusRow label="Agent runtime" ready={Boolean(liveKitPilotQuery.data?.agentRuntimeReady)} value={liveKitPilotQuery.data?.agentRuntimeReady ? liveKitPilotQuery.data?.agentName ?? "Ready" : "Needs LiveKit + OpenAI secrets"} />
+                <StatusRow label="Krisp" ready={Boolean(liveKitPilotQuery.data?.krispEnabled)} value={liveKitPilotQuery.data?.krispEnabled ? "Enabled in trunk JSON" : "Disabled"} />
+                <UrlRow label="Twilio webhook" value={liveKitPilotQuery.data?.twilioVoiceWebhookUrl ?? "Unavailable"} />
+                <UrlRow label="LiveKit SIP URI" value={liveKitPilotQuery.data?.sipUri ?? "Set LIVEKIT_SIP_ENDPOINT"} />
+                <div className="rounded-md border border-border p-3">
+                  <div className="mb-2 text-xs font-medium text-foreground">Inbound trunk JSON</div>
+                  <pre className="max-h-48 overflow-auto rounded-md bg-muted/40 p-2 text-[11px] text-muted-foreground">
+                    {JSON.stringify(liveKitPilotQuery.data?.inboundTrunkJson ?? {}, null, 2)}
+                  </pre>
+                </div>
+                <div className="rounded-md border border-border p-3">
+                  <div className="mb-2 text-xs font-medium text-foreground">Dispatch rule JSON</div>
+                  <pre className="max-h-48 overflow-auto rounded-md bg-muted/40 p-2 text-[11px] text-muted-foreground">
+                    {JSON.stringify(liveKitPilotQuery.data?.dispatchRuleJson ?? {}, null, 2)}
+                  </pre>
+                </div>
+                {liveKitPilotQuery.isError && (
+                  <div className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
+                    {liveKitPilotQuery.error instanceof Error ? liveKitPilotQuery.error.message : "LiveKit pilot config could not be loaded."}
+                  </div>
+                )}
               </CardContent>
             </Card>
 

@@ -17,6 +17,12 @@ import { createOpenAIVoicePreview } from "./openai-voice-preview";
 import { getVoiceServiceReadiness, loadEnv, type VoiceServiceEnv } from "./env";
 import { buildLiveCallConfig } from "./live-call";
 import {
+  buildLiveKitPilotConfig,
+  buildLiveKitTwiML,
+  HARBOR_PLUMBING_DEMO_LOCATION_ID,
+  shouldRouteTwilioVoiceToLiveKit,
+} from "./livekit-handoff";
+import {
   checkDistributedRateLimit,
   getRequestIp,
   HttpRequestError,
@@ -173,6 +179,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
 
   if (req.method === "GET" && url.pathname === "/health") {
     const readiness = getVoiceServiceReadiness(currentEnv);
+    const liveKitHarborPilot = buildLiveKitPilotConfig(currentEnv, HARBOR_PLUMBING_DEMO_LOCATION_ID);
     sendJson(res, 200, {
       ok: true,
       service: "signalhost-voice",
@@ -193,6 +200,9 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       ),
       menuIngestionConfigured: menuIngestionService.configured,
       callRecordingConfigured: callRecordingService.configured,
+      liveKitConfigured: Boolean(currentEnv.LIVEKIT_URL && currentEnv.LIVEKIT_API_KEY && currentEnv.LIVEKIT_API_SECRET),
+      liveKitHarborPilotConfigured: liveKitHarborPilot.ready,
+      liveKitHarborPilotRoutingEnabled: liveKitHarborPilot.routeOnTwilioVoice,
       openAIRealtimeSipConfigured: openAIRealtimeSipService.configured,
       ownerReportDeliveryConfigured: ownerReportService.deliveryConfigured,
       ownerReportsConfigured: ownerReportService.configured,
@@ -489,6 +499,19 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
     return;
   }
 
+  if (req.method === "GET" && url.pathname === "/livekit/pilot-config") {
+    const locationId = url.searchParams.get("locationId") ?? HARBOR_PLUMBING_DEMO_LOCATION_ID;
+    const authorization = await authorizeVoiceAdminRequest({ currentEnv, locationId, req });
+    if (!authorization.authorized) {
+      sendJson(res, authorization.status, { error: authorization.reason ?? "Unauthorized" });
+      return;
+    }
+
+    const config = buildLiveKitPilotConfig(currentEnv, locationId ?? undefined);
+    sendJson(res, config.ready ? 200 : 503, config);
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/openai/realtime/webhook") {
     try {
       const result = await openAIRealtimeSipService.handleIncomingWebhook({
@@ -546,6 +569,28 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
         ttsVoice,
         websocketUrl: liveCallConfig.conversationRelayUrl,
       });
+
+    sendXml(res, 200, twiml);
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/twilio/livekit-twiml-preview") {
+    const locationId = url.searchParams.get("locationId") ?? HARBOR_PLUMBING_DEMO_LOCATION_ID;
+    const authorization = await authorizeVoiceAdminRequest({ currentEnv, locationId, req });
+    if (!authorization.authorized) {
+      sendText(res, authorization.status, authorization.reason ?? "Unauthorized");
+      return;
+    }
+
+    const twiml = buildLiveKitTwiML({
+      dialedPhone: url.searchParams.get("dialedPhone") ?? undefined,
+      env: currentEnv,
+      locationId: locationId ?? undefined,
+    });
+    if (!twiml) {
+      sendXml(res, 503, buildUnavailableTwiML("LiveKit pilot routing needs the SIP endpoint, SIP auth, and pilot phone number."));
+      return;
+    }
 
     sendXml(res, 200, twiml);
     return;
@@ -841,6 +886,47 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
     return;
   }
 
+  if (req.method === "POST" && url.pathname === "/twilio/livekit-voice") {
+    try {
+      const rawBody = await readLimitedRequestBody(req, TWILIO_BODY_LIMIT_BYTES);
+      const params = Object.fromEntries(new URLSearchParams(rawBody));
+
+      if (!isValidTwilioWebhook(req, currentEnv, params)) {
+        sendText(res, 401, "Invalid Twilio signature");
+        return;
+      }
+
+      const locationId =
+        params.locationId ??
+        url.searchParams.get("locationId") ??
+        HARBOR_PLUMBING_DEMO_LOCATION_ID;
+      const twiml = buildLiveKitTwiML({
+        callSid: firstNonEmpty(params.CallSid, params.callSid),
+        dialedPhone: firstNonEmpty(params.To, params.to),
+        env: currentEnv,
+        locationId,
+      });
+      if (!twiml) {
+        console.warn("[voice-service] LiveKit pilot webhook is not ready", {
+          callSid: params.CallSid ?? params.callSid,
+          locationId,
+        });
+        sendXml(res, 503, buildUnavailableTwiML("SignalHost LiveKit pilot needs SIP routing setup before this test call."));
+        return;
+      }
+
+      sendXml(res, 200, twiml);
+    } catch (error) {
+      if (error instanceof HttpRequestError) {
+        sendText(res, error.statusCode, error.message);
+      } else {
+        console.error("[voice-service] Twilio LiveKit voice webhook failed", error);
+        sendXml(res, 500, buildUnavailableTwiML("SignalHost hit a LiveKit setup issue. Please try again soon."));
+      }
+    }
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/twilio/voice") {
     try {
       const rawBody = await readLimitedRequestBody(req, TWILIO_BODY_LIMIT_BYTES);
@@ -851,16 +937,36 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
         return;
       }
 
-      if (!currentEnv.PUBLIC_WS_BASE_URL) {
-        sendXml(res, 503, buildUnavailableTwiML());
-        return;
-      }
-
       const locationId =
         params.locationId ??
         url.searchParams.get("locationId") ??
         currentEnv.SUPABASE_DEMO_LOCATION_ID ??
         "demo-location";
+      if (shouldRouteTwilioVoiceToLiveKit(currentEnv, locationId)) {
+        const twiml = buildLiveKitTwiML({
+          callSid: firstNonEmpty(params.CallSid, params.callSid),
+          dialedPhone: firstNonEmpty(params.To, params.to),
+          env: currentEnv,
+          locationId,
+        });
+        if (!twiml) {
+          console.warn("[voice-service] LiveKit pilot routing switch is enabled but not ready", {
+            callSid: params.CallSid ?? params.callSid,
+            locationId,
+          });
+          sendXml(res, 503, buildUnavailableTwiML("SignalHost LiveKit pilot needs SIP routing setup before this test call."));
+          return;
+        }
+
+        sendXml(res, 200, twiml);
+        return;
+      }
+
+      if (!currentEnv.PUBLIC_WS_BASE_URL) {
+        sendXml(res, 503, buildUnavailableTwiML());
+        return;
+      }
+
       const twilioCallSid = firstNonEmpty(params.CallSid, params.callSid);
       if (twilioCallSid) {
         void callRecordingService.startCallRecording({

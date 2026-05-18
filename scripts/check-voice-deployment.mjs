@@ -33,6 +33,10 @@ if (internalApiKey) {
     allowFailure: true,
     headers: { "x-signalhost-api-key": internalApiKey },
   });
+  const liveKitPilotConfig = await readJson(`${baseUrl}/livekit/pilot-config${query}`, {
+    allowFailure: true,
+    headers: { "x-signalhost-api-key": internalApiKey },
+  });
   const twiml = await readText(`${baseUrl}/twilio/twiml-preview${query}`, {
     allowFailure: true,
     headers: { "x-signalhost-api-key": internalApiKey },
@@ -43,6 +47,9 @@ if (internalApiKey) {
   console.log(`ConversationRelay: ${liveCallConfig.conversationRelayUrl ?? "unavailable"}`);
   console.log(`OpenAI Realtime webhook: ${openAIRealtimeConfig.webhookUrl ?? "unavailable"}`);
   console.log(`OpenAI Realtime SIP URI: ${openAIRealtimeConfig.sipUri ?? "use the OpenAI dashboard/project SIP URI"}`);
+  console.log(`LiveKit pilot webhook: ${liveKitPilotConfig.twilioVoiceWebhookUrl ?? "unavailable"}`);
+  console.log(`LiveKit pilot: ${liveKitPilotConfig.ready ? "ready" : liveKitPilotConfig.enabledForLocation ? "needs setup" : "not selected"}`);
+  console.log(`LiveKit routing switch: ${liveKitPilotConfig.routeOnTwilioVoice ? "on" : "off"}`);
   console.log(`Twilio recording callback: ${openAIRealtimeConfig.recordingStatusCallbackUrl ?? liveCallConfig.recordingStatusCallbackUrl ?? "unavailable"}`);
   console.log(`OpenAI Realtime preflight: ${openAIRealtimePreflight.ready ? "ready" : "not ready"}`);
   for (const check of openAIRealtimePreflight.checks ?? []) {

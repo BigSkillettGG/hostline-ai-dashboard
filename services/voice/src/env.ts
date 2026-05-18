@@ -35,6 +35,25 @@ const envSchema = z.object({
   EMAIL_FROM: z.string().optional(),
   EMAIL_PROVIDER: z.enum(["resend"]).optional(),
   EMAIL_REPLY_TO: z.string().optional(),
+  LIVEKIT_AGENT_NAME: z.string().optional(),
+  LIVEKIT_API_KEY: z.string().optional(),
+  LIVEKIT_API_SECRET: z.string().optional(),
+  LIVEKIT_HARBOR_LOCATION_IDS: z.string().optional(),
+  LIVEKIT_INBOUND_AUTH_PASSWORD: z.string().optional(),
+  LIVEKIT_INBOUND_AUTH_USERNAME: z.string().optional(),
+  LIVEKIT_KRISP_ENABLED: z
+    .enum(["true", "false"])
+    .transform((value) => value === "true")
+    .optional(),
+  LIVEKIT_PHONE_NUMBER: z.string().optional(),
+  LIVEKIT_PILOT_LOCATION_IDS: z.string().optional(),
+  LIVEKIT_ROOM_PREFIX: z.string().optional(),
+  LIVEKIT_ROUTE_ON_TWILIO_VOICE: z
+    .enum(["true", "false"])
+    .transform((value) => value === "true")
+    .optional(),
+  LIVEKIT_SIP_ENDPOINT: z.string().optional(),
+  LIVEKIT_URL: z.string().url().optional(),
   OWNER_REPORT_WEBHOOK_URL: z.string().url().optional(),
   OWNER_EMAIL_INBOUND_ADDRESS: z.string().optional(),
   RATE_LIMIT_REDIS_REST_TOKEN: z.string().optional(),
@@ -197,6 +216,21 @@ export function getVoiceServiceReadiness(env: VoiceServiceEnv): VoiceServiceRead
       label: "OpenAI Realtime SIP",
       ready: Boolean(env.OPENAI_API_KEY && env.PUBLIC_HTTP_BASE_URL),
       required: true,
+    },
+    {
+      detail: "Optional Harbor Plumbing pilot path that bridges Twilio into LiveKit SIP with Krisp noise cancellation and an OpenAI-powered LiveKit agent.",
+      id: "livekit_harbor_pilot",
+      label: "LiveKit Harbor pilot",
+      ready: Boolean(
+        env.LIVEKIT_URL &&
+          env.LIVEKIT_API_KEY &&
+          env.LIVEKIT_API_SECRET &&
+          env.LIVEKIT_SIP_ENDPOINT &&
+          env.LIVEKIT_INBOUND_AUTH_USERNAME &&
+          env.LIVEKIT_INBOUND_AUTH_PASSWORD &&
+          env.OPENAI_API_KEY,
+      ),
+      required: false,
     },
     {
       detail: "Searches and provisions phone numbers, then receives inbound calls.",

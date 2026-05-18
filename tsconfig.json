@@ -1,6 +1,11 @@
 {
   "files": [],
-  "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.node.json" }, { "path": "./tsconfig.voice.json" }],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" },
+    { "path": "./tsconfig.voice.json" },
+    { "path": "./tsconfig.livekit-agent.json" }
+  ],
   "compilerOptions": {
     "paths": {
       "@/*": ["./src/*"]
