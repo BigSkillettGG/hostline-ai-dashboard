@@ -1,7 +1,9 @@
-import { AutoSubscribe, cli, defineAgent, llm, ServerOptions, voice, type JobContext } from "@livekit/agents";
+import { cli, defineAgent, llm, ServerOptions, voice, type JobContext } from "@livekit/agents";
 import * as openai from "@livekit/agents-plugin-openai";
 import {
+  ParticipantKind,
   RoomEvent,
+  TrackKind,
   TrackSource,
   type RemoteParticipant,
   type RemoteTrack,
@@ -40,6 +42,7 @@ interface LiveKitAgentUserData {
   context: RestaurantVoiceContext;
   env: VoiceServiceEnv;
   jobContext: JobContext;
+  linkedParticipantIdentity?: string;
   lastCallerAudioAt?: number;
   lastCallerText?: string;
   locationId: string;
@@ -60,24 +63,39 @@ export default defineAgent({
       metadata,
       room: ctx.room.name,
     });
+
+    await ctx.connect();
+
     const context = await createRestaurantContextStore(env).getContext(locationId);
     const callStore = createCallStore(env);
-    const externalCallId = metadata.callSid ?? ctx.room.name ?? `livekit-${Date.now()}`;
-    const callerPhone = metadata.callerPhone;
+    const callerParticipant = await waitForLiveKitCallerParticipant(ctx, { timeoutMs: 7000 });
+    if (callerParticipant) {
+      subscribeToAudioPublications(callerParticipant);
+    }
+    const roomName = ctx.room.name;
+    const callerAttributes = callerParticipant?.attributes ?? {};
+    const externalCallId = metadata.callSid
+      ?? callerAttributes["sip.twilio.callSid"]
+      ?? callerAttributes["sip.callIDFull"]
+      ?? callerAttributes["sip.callID"]
+      ?? roomName
+      ?? `livekit-${Date.now()}`;
+    const callerPhone = metadata.callerPhone
+      ?? callerAttributes["sip.phoneNumber"]
+      ?? extractPhoneFromRoomName(roomName);
     const startedAt = Date.now();
     const callStart = await callStore.startRealtimeCall({
       callerPhone,
       externalCallId,
-      externalSessionId: ctx.room.name,
+      externalSessionId: roomName,
       locationId,
       provider: "livekit_openai_realtime",
       providerPayload: {
-        livekitRoom: ctx.room.name,
+        linkedParticipant: callerParticipant ? summarizeParticipant(callerParticipant) : undefined,
+        livekitRoom: roomName,
         metadata,
       },
     });
-
-    await ctx.connect(undefined, AutoSubscribe.AUDIO_ONLY);
 
     const userData: LiveKitAgentUserData = {
       callRecordId: callStart.callId,
@@ -86,6 +104,7 @@ export default defineAgent({
       context,
       env,
       jobContext: ctx,
+      linkedParticipantIdentity: callerParticipant?.identity,
       locationId,
       startedAt,
     };
@@ -219,14 +238,16 @@ export default defineAgent({
 
     console.info("[livekit-agent] starting agent session", {
       callRecordId: userData.callRecordId,
+      callerPhone,
+      linkedParticipantIdentity: callerParticipant?.identity,
       locationId,
       nodeNoiseCancellationEnabled: isNodeNoiseCancellationEnabled(),
-      room: ctx.room.name,
+      room: roomName,
       voice: resolveLiveKitOpenAIVoice(env, context),
     });
     await session.start({
       agent,
-      inputOptions: await buildLiveKitInputOptions(),
+      inputOptions: await buildLiveKitInputOptions(callerParticipant?.identity),
       room: ctx.room,
     });
     console.info("[livekit-agent] agent session started", {
@@ -382,12 +403,14 @@ function buildOpeningGreeting(context: RestaurantVoiceContext) {
   return `Thank you for calling ${toSpokenRestaurantName(context.restaurantName)}. How can I help you?`;
 }
 
-async function buildLiveKitInputOptions() {
+async function buildLiveKitInputOptions(participantIdentity?: string) {
   const baseOptions = {
     audioEnabled: true,
     audioNumChannels: 1,
     audioSampleRate: 24000,
     closeOnDisconnect: true,
+    participantIdentity,
+    participantKinds: [ParticipantKind.SIP, ParticipantKind.STANDARD],
     textEnabled: false,
     videoEnabled: false,
   };
@@ -436,6 +459,9 @@ function installLiveKitRoomDiagnostics(ctx: JobContext, userData: LiveKitAgentUs
     });
   });
   room.on(RoomEvent.TrackPublished, (publication: RemoteTrackPublication, participant: RemoteParticipant) => {
+    if (publication.kind === TrackKind.KIND_AUDIO) {
+      publication.setSubscribed(true);
+    }
     console.info("[livekit-agent] room track published", {
       ...labels,
       participant: summarizeParticipant(participant),
@@ -485,14 +511,71 @@ function installLiveKitRoomDiagnostics(ctx: JobContext, userData: LiveKitAgentUs
 
 function summarizeParticipant(participant: RemoteParticipant) {
   return {
+    attributes: participant.attributes,
     identity: participant.identity,
-    kind: participant.info.kind,
+    kind: participant.kind,
     metadata: participant.metadata,
     name: participant.name,
     sid: participant.sid,
     trackCount: participant.trackPublications.size,
     tracks: Array.from(participant.trackPublications.values()).map((publication) => summarizePublication(publication)),
   };
+}
+
+async function waitForLiveKitCallerParticipant(ctx: JobContext, { timeoutMs }: { timeoutMs: number }) {
+  const existingParticipant = findLiveKitCallerParticipant(ctx);
+  if (existingParticipant) return existingParticipant;
+
+  const timeout = new Promise<undefined>((resolve) => {
+    setTimeout(() => resolve(undefined), timeoutMs);
+  });
+
+  const participant = await Promise.race([
+    ctx.waitForParticipant().catch((error) => {
+      console.error("[livekit-agent] waitForParticipant failed", {
+        error: formatErrorForLog(error),
+        room: ctx.room.name,
+      });
+      return undefined;
+    }),
+    timeout,
+  ]);
+
+  const selectedParticipant = findLiveKitCallerParticipant(ctx) ?? participant;
+  if (!selectedParticipant) {
+    console.warn("[livekit-agent] no caller participant found before session start", {
+      room: ctx.room.name,
+      timeoutMs,
+    });
+    return undefined;
+  }
+
+  console.info("[livekit-agent] selected caller participant", {
+    participant: summarizeParticipant(selectedParticipant),
+    room: ctx.room.name,
+  });
+  return selectedParticipant;
+}
+
+function findLiveKitCallerParticipant(ctx: JobContext) {
+  const participants = Array.from(ctx.room.remoteParticipants.values()).filter((participant) => participant.kind !== ParticipantKind.AGENT);
+  return participants.find((participant) => participant.kind === ParticipantKind.SIP)
+    ?? participants.find((participant) => participant.identity.startsWith("sip_"))
+    ?? participants[0];
+}
+
+function subscribeToAudioPublications(participant: RemoteParticipant) {
+  for (const publication of participant.trackPublications.values()) {
+    if (publication.kind === TrackKind.KIND_AUDIO) {
+      publication.setSubscribed(true);
+    }
+  }
+}
+
+function extractPhoneFromRoomName(roomName?: string) {
+  if (!roomName) return undefined;
+  const match = roomName.match(/(?:^|[-_])(\+1\d{10})(?:[_-]|$)/);
+  return match?.[1];
 }
 
 function summarizePublication(publication: RemoteTrackPublication) {
