@@ -201,13 +201,27 @@ class SignalHostLiveKitAgent extends voice.Agent<LiveKitAgentUserData> {
   }
 
   override async onEnter(): Promise<void> {
-    console.info("[livekit-agent] agent entered room; speaking greeting", {
+    console.info("[livekit-agent] agent entered room; generating realtime greeting", {
       greeting: this.openingGreeting,
     });
-    this.session.say(this.openingGreeting, {
-      addToChatCtx: true,
-      allowInterruptions: false,
+    const greetingHandle = this.session.generateReply({
+      instructions: [
+        `Say exactly this greeting now: "${this.openingGreeting}"`,
+        "Do not add your name.",
+        "Do not mention that you are virtual or AI.",
+        "Use an upbeat, confident, friendly front-desk tone.",
+      ].join(" "),
     });
+    void greetingHandle.waitForPlayout().then(
+      () => {
+        console.info("[livekit-agent] realtime greeting playout finished");
+      },
+      (error) => {
+        console.error("[livekit-agent] realtime greeting failed", {
+          error: formatErrorForLog(error),
+        });
+      },
+    );
   }
 }
 
