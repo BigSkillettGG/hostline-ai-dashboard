@@ -1,6 +1,5 @@
 import { AutoSubscribe, cli, defineAgent, llm, ServerOptions, voice, type JobContext } from "@livekit/agents";
 import * as openai from "@livekit/agents-plugin-openai";
-import { TelephonyBackgroundVoiceCancellation } from "@livekit/noise-cancellation-node";
 import { fileURLToPath } from "node:url";
 import { createGuestConfirmationService } from "../../voice/src/guest-confirmation-service";
 import { HARBOR_PLUMBING_DEMO_LOCATION_ID } from "../../voice/src/livekit-handoff";
@@ -183,7 +182,7 @@ export default defineAgent({
     });
     await session.start({
       agent,
-      inputOptions: buildLiveKitInputOptions(),
+      inputOptions: await buildLiveKitInputOptions(),
       room: ctx.room,
     });
     console.info("[livekit-agent] agent session started", {
@@ -304,10 +303,11 @@ function buildOpeningGreeting(context: RestaurantVoiceContext) {
   return `Thank you for calling ${toSpokenRestaurantName(context.restaurantName)}. How can I help you?`;
 }
 
-function buildLiveKitInputOptions() {
+async function buildLiveKitInputOptions() {
   if (!isNodeNoiseCancellationEnabled()) return undefined;
 
   try {
+    const { TelephonyBackgroundVoiceCancellation } = await import("@livekit/noise-cancellation-node");
     return {
       noiseCancellation: TelephonyBackgroundVoiceCancellation(),
     };
@@ -369,8 +369,38 @@ function resolveLiveKitRealtimeTurnDetection(env: VoiceServiceEnv) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  installProcessDiagnostics();
+  console.info("[livekit-agent] booting worker", {
+    agentName: process.env.LIVEKIT_AGENT_NAME?.trim() || DEFAULT_LIVEKIT_AGENT_NAME,
+    liveKitUrlConfigured: Boolean(process.env.LIVEKIT_URL?.trim()),
+    nodeNoiseCancellationEnabled: isNodeNoiseCancellationEnabled(),
+    openAIConfigured: Boolean(process.env.OPENAI_API_KEY?.trim()),
+    supabaseConfigured: Boolean(process.env.SUPABASE_URL?.trim() && process.env.SUPABASE_SECRET_KEY?.trim()),
+  });
   cli.runApp(new ServerOptions({
     agent: fileURLToPath(import.meta.url),
     agentName: process.env.LIVEKIT_AGENT_NAME?.trim() || DEFAULT_LIVEKIT_AGENT_NAME,
   }));
+}
+
+function installProcessDiagnostics() {
+  process.on("uncaughtException", (error) => {
+    console.error("[livekit-agent] uncaught exception", {
+      error: formatErrorForLog(error),
+    });
+  });
+  process.on("unhandledRejection", (reason) => {
+    console.error("[livekit-agent] unhandled rejection", {
+      error: formatErrorForLog(reason),
+    });
+  });
+  process.on("SIGINT", () => {
+    console.info("[livekit-agent] SIGINT received");
+  });
+  process.on("SIGTERM", () => {
+    console.info("[livekit-agent] SIGTERM received");
+  });
+  process.on("exit", (code) => {
+    console.info("[livekit-agent] process exiting", { code });
+  });
 }
