@@ -1579,6 +1579,10 @@ function scheduleOpenAIRealtimeResponseCompletionFallback({
 }) {
   clearOpenAIRealtimeResponseCompletionFallbackTimer(session);
   if (!session.quality.activeResponseStartedAt || session.finishRequested) return;
+  // Text transcript completion can arrive before PSTN audio finishes playing.
+  // Never use it to complete the opening greeting, because that re-enables
+  // caller handling while speakerphone/handset echo may still be coming back.
+  if (!session.openingGreetingCompleted) return;
 
   const delayMs = estimateOpenAIRealtimeResponseCompletionFallbackMs(transcript);
   session.responseAudioCompleteFallbackTimer = setTimeout(() => {
@@ -1875,6 +1879,7 @@ function shouldAcceptRealtimeCallerTranscript(
   const normalized = normalizeRealtimeCallerText(text);
   if (!normalized) return { accept: false, reason: "empty" };
   if (isOpenAIRealtimeTranscriptionPromptLeak(normalized)) return { accept: false, reason: "prompt_leak" };
+  if (isLikelyOpeningGreetingEcho(session, normalized)) return { accept: false, reason: "opening_greeting_echo" };
   if (isLikelyOpenAIRealtimeAgentEcho(session, normalized)) return { accept: false, reason: "agent_echo" };
   if (isLikelyBackgroundMediaFragment(normalized)) return { accept: false, reason: "background_media" };
   if (isLikelyOpeningBackchannelEcho(session, normalized)) return { accept: false, reason: "opening_backchannel_echo" };
@@ -2112,11 +2117,32 @@ function normalizeRealtimeCallerText(text: string) {
 function isLikelyOpenAIRealtimeAgentEcho(session: OpenAIRealtimeSidebandSession, normalized: string) {
   const businessName = normalizeRealtimeCallerText(toSpokenRestaurantName(session.context.restaurantName));
   return (
-    normalized.includes("thank you for calling") ||
+    isLikelyGreetingEchoText(normalized) ||
     normalized.includes("how can i help you") ||
     (Boolean(businessName) && normalized.includes(businessName) && normalized.includes("how can i help")) ||
     isLikelyRecentAgentTranscriptEcho(session, normalized)
   );
+}
+
+function isLikelyGreetingEchoText(normalized: string) {
+  return (
+    /\b(thank you|thanks)\s+for\s+calling\b/.test(normalized) ||
+    /\bthanks?\s+calling\b/.test(normalized)
+  );
+}
+
+function isLikelyOpeningGreetingEcho(session: OpenAIRealtimeSidebandSession, normalized: string) {
+  if (!isLikelyGreetingEchoText(normalized)) return false;
+  if (session.transcript.some((turn) => turn.role === "caller")) return false;
+  if (Date.now() - session.startedAt > 20000) return false;
+
+  const recentAgentGreeting = session.transcript
+    .filter((turn) => turn.role === "agent")
+    .slice(-2)
+    .map((turn) => normalizeRealtimeCallerText(turn.text))
+    .some((turn) => isLikelyGreetingEchoText(turn) || turn.includes("how can i help"));
+
+  return !session.openingGreetingCompleted || Boolean(session.quality.activeResponseStartedAt) || recentAgentGreeting;
 }
 
 function isLikelyRecentAgentTranscriptEcho(session: OpenAIRealtimeSidebandSession, normalized: string) {
@@ -2211,7 +2237,14 @@ function isLikelyShortCallerConfirmation(normalized: string) {
 }
 
 function isLikelyOpeningBackchannelEcho(session: OpenAIRealtimeSidebandSession, normalized: string) {
-  if (!/^(thanks?|thank you|okay|ok|yeah|yep|sure|uh huh|mhm|mm hmm)$/.test(normalized)) return false;
+  if (
+    !(
+      isLikelyGreetingEchoText(normalized) ||
+      /^(thanks?|thank you|okay|ok|yeah|yep|sure|uh huh|mhm|mm hmm)$/.test(normalized)
+    )
+  ) {
+    return false;
+  }
   if (session.transcript.some((turn) => turn.role === "caller")) return false;
   if (Date.now() - session.startedAt > 15000) return false;
 
@@ -2219,7 +2252,7 @@ function isLikelyOpeningBackchannelEcho(session: OpenAIRealtimeSidebandSession, 
   return (
     !session.openingGreetingCompleted ||
     Boolean(session.quality.activeResponseStartedAt) ||
-    lastAgent.includes("thank you for calling") ||
+    isLikelyGreetingEchoText(lastAgent) ||
     lastAgent.includes("how can i help")
   );
 }
