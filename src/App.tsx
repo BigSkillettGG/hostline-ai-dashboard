@@ -10,6 +10,7 @@ import Pricing from "./pages/marketing/Pricing";
 import Login from "./pages/marketing/Login";
 import Signup from "./pages/marketing/Signup";
 import Solution from "./pages/marketing/Solution";
+import { Privacy, SmsConsent, Terms } from "./pages/marketing/Legal";
 import DemoSite from "./pages/demo/DemoSite";
 
 import AppLayout from "./components/AppLayout";
@@ -63,6 +64,9 @@ const App = () => (
             <Route path="/" element={<MarketingHome />} />
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/solutions/:industrySlug" element={<Solution />} />
+            <Route path="/sms-consent" element={<SmsConsent />} />
+            <Route path="/privacy" element={<Privacy />} />
+            <Route path="/terms" element={<Terms />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
           </Route>

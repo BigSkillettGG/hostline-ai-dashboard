@@ -122,7 +122,7 @@ export default function MarketingLayout() {
               { title: "Product", links: [["Overview", "/"], ["Pricing", "/pricing"], ["How it works", "/#how"], ["Live demo", "/#live-demo"]] },
               { title: "Solutions", links: industrySolutions.slice(0, 4).map((solution) => [solution.label, `/solutions/${solution.slug}`]) },
               { title: "Company", links: [["Contact", "mailto:hello@signalhost.ai"], ["Sales", "mailto:sales@signalhost.ai"], ["Log in", "/login"]] },
-              { title: "Legal", links: [["Privacy", "#"], ["Terms", "#"], ["Security", "#"], ["DPA", "#"]] },
+              { title: "Legal", links: [["SMS consent", "/sms-consent"], ["Privacy", "/privacy"], ["Terms", "/terms"]] },
             ].map((column) => (
               <div key={column.title}>
                 <div className="text-xs font-semibold uppercase text-foreground">{column.title}</div>
