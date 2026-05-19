@@ -222,7 +222,7 @@ interface OpenAIRealtimeSidebandSession {
   staffCallbackRequested: boolean;
   staffFollowUpRequired: boolean;
   startedAt: number;
-  toolEvents: Array<{ kind?: string; latencyMs?: number; name: string; ok?: boolean }>;
+  toolEvents: Array<{ callId?: string; kind?: string; latencyMs?: number; name: string; ok?: boolean }>;
   transcript: TranscriptTurn[];
   transcriptKeys: Set<string>;
 }
@@ -2076,6 +2076,7 @@ async function persistOpenAIRealtimeTranscriptTurn({
 function markRealtimeToolCalls(session: OpenAIRealtimeSidebandSession, toolCalls: OpenAIRealtimeToolCall[]) {
   for (const toolCall of toolCalls) {
     session.toolEvents.push({
+      callId: toolCall.callId,
       kind:
         toolCall.name === "create_reservation_request"
           ? "reservation"
@@ -2291,8 +2292,9 @@ function classifyOpenAIRealtimeCall(session: OpenAIRealtimeSidebandSession): {
           ? "faq"
           : "other";
 
+  const hasUnresolvedToolError = hasUnresolvedRealtimeToolError(session);
   const qualityNeedsReview =
-    session.quality.toolErrorCount > 0 ||
+    hasUnresolvedToolError ||
     session.quality.speechStartedDuringResponseCount >= 3 ||
     (session.quality.speechStartCount >= 3 && session.quality.callerTranscriptCount === 0) ||
     shortGreetingOnlyCall;
@@ -2376,7 +2378,7 @@ function buildRealtimeQualitySummary(session: OpenAIRealtimeSidebandSession) {
     session.quality.speechStartedDuringResponseCount >= 3 && "possible speakerphone echo/false interruptions",
     session.quality.speechStartCount >= 3 && session.quality.callerTranscriptCount === 0 && "speech detected but no caller transcript",
     session.quality.ignoredNoiseTranscriptCount > 0 && `${session.quality.ignoredNoiseTranscriptCount} likely background transcript(s) ignored`,
-    session.quality.toolErrorCount > 0 && "tool errors",
+    hasUnresolvedRealtimeToolError(session) && "tool errors",
   ].filter((flag): flag is string => Boolean(flag));
 
   return [
@@ -2388,6 +2390,15 @@ function buildRealtimeQualitySummary(session: OpenAIRealtimeSidebandSession) {
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+function hasUnresolvedRealtimeToolError(session: OpenAIRealtimeSidebandSession) {
+  const latestByToolAndKind = new Map<string, boolean>();
+  for (const event of session.toolEvents) {
+    if (event.ok === undefined) continue;
+    latestByToolAndKind.set(`${event.name}:${event.kind ?? ""}`, event.ok !== false);
+  }
+  return [...latestByToolAndKind.values()].some((ok) => !ok);
 }
 
 function isOpenAIRealtimeTranscriptionPromptLeak(text: string) {
@@ -2500,7 +2511,10 @@ function recordOpenAIRealtimeToolResult(
     }
   }
 
-  const existing = [...session.toolEvents].reverse().find((event) => event.name === toolCall.name && event.latencyMs === undefined);
+  const existing = [...session.toolEvents]
+    .reverse()
+    .find((event) => event.callId === toolCall.callId && event.name === toolCall.name && event.latencyMs === undefined) ??
+    [...session.toolEvents].reverse().find((event) => event.name === toolCall.name && event.latencyMs === undefined);
   if (existing) {
     existing.latencyMs = latencyMs;
     existing.ok = ok;

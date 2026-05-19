@@ -338,6 +338,27 @@ describe("Supabase call store", () => {
     expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain('"duration_seconds":32');
   });
 
+  it("does not overwrite call duration when a recording callback reports zero seconds", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 204 }));
+    const store = createCallStore(env);
+
+    await store.attachCallRecording({
+      durationSeconds: 0,
+      externalCallSid: "CA123",
+      recordingSid: "RE123",
+      recordingUrl: "https://api.twilio.com/recordings/RE123.mp3",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://example.supabase.co/rest/v1/calls?external_call_sid=eq.CA123",
+      expect.objectContaining({
+        body: expect.stringContaining('"recording_url":"https://api.twilio.com/recordings/RE123.mp3"'),
+        method: "PATCH",
+      }),
+    );
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).not.toContain("duration_seconds");
+  });
+
   it("creates a staff-confirmed reservation request", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")

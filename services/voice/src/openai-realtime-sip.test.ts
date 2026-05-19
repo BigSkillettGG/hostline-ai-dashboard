@@ -626,6 +626,120 @@ describe("OpenAI Realtime SIP", () => {
     });
   });
 
+  it("does not mark a call needs-review when an optional text tool failure is recovered", async () => {
+    const socket = createFakeRealtimeSocket();
+    const completedCalls: unknown[] = [];
+    const service = createOpenAIRealtimeSipService(
+      baseEnv,
+      {
+        async getContext() {
+          return demoRestaurantContext;
+        },
+      },
+      {
+        callStore: {
+          async addTranscriptTurn() {},
+          async attachCallRecording() {},
+          async completeCall(input) {
+            completedCalls.push(input);
+          },
+          async createCustomerRequest() {
+            return { requestId: "request_uuid", taskId: "task_uuid" };
+          },
+          async createStaffReviewOrder() {
+            return {};
+          },
+          async createStaffReviewReservation() {
+            return {};
+          },
+          async createStaffTask() {
+            return {};
+          },
+          async startCall() {
+            return {};
+          },
+          async startRealtimeCall() {
+            return { callId: "call_uuid" };
+          },
+        },
+        fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+        websocketFactory: () => socket as never,
+      },
+    );
+
+    await service.handleIncomingWebhook({
+      headers: {},
+      rawBody: JSON.stringify({
+        data: {
+          call_id: "rtc_recovered_text",
+          sip_headers: [{ name: "Call-ID", value: "sip-recovered-text" }],
+        },
+        type: "realtime.call.incoming",
+      }),
+    });
+
+    socket.emit("open");
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "caller_service",
+        transcript: "I need someone to look at a leaking water heater as soon as possible.",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        response: {
+          output: [
+            {
+              arguments: JSON.stringify({
+                callback_phone: "+16034899218",
+                request_type: "service_appointment",
+                summary: "Caller needs help with a leaking water heater.",
+              }),
+              call_id: "tool_request",
+              name: "create_customer_request",
+              type: "function_call",
+            },
+            {
+              arguments: JSON.stringify({
+                kind: "appointment",
+                message: "We received your plumbing service request.",
+              }),
+              call_id: "tool_text_missing_phone",
+              name: "send_guest_confirmation",
+              type: "function_call",
+            },
+            {
+              arguments: JSON.stringify({
+                kind: "appointment",
+                message: "We received your plumbing service request.",
+                phone_number: "+16034899218",
+              }),
+              call_id: "tool_text_success",
+              name: "send_guest_confirmation",
+              type: "function_call",
+            },
+          ],
+        },
+        type: "response.done",
+      })),
+    );
+    await flushAsyncWork();
+
+    socket.emit("close", 1000, Buffer.from("normal"));
+    await flushAsyncWork();
+
+    expect(completedCalls[0]).toMatchObject({
+      callId: "call_uuid",
+      intent: "faq",
+      outcome: "message_taken",
+      status: "new",
+    });
+    expect(String((completedCalls[0] as { summary?: string }).summary)).not.toContain("Quality flags: tool errors");
+  });
+
   it("gates realtime responses so greeting echo and TV noise do not drive the call", async () => {
     const socket = createFakeRealtimeSocket();
     const transcriptTurns: unknown[] = [];

@@ -312,7 +312,9 @@ class SupabaseCallStore implements CallStore {
     const body: Record<string, unknown> = {
       recording_url: input.recordingUrl,
     };
-    if (input.durationSeconds !== undefined) body.duration_seconds = Math.max(0, Math.round(input.durationSeconds));
+    if (input.durationSeconds !== undefined && input.durationSeconds > 0) {
+      body.duration_seconds = Math.max(1, Math.round(input.durationSeconds));
+    }
 
     const query = input.callId
       ? `id=eq.${encodeURIComponent(input.callId)}`
