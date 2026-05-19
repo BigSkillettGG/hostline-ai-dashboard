@@ -331,8 +331,8 @@ class SignalHostLiveKitAgent extends voice.Agent<LiveKitAgentUserData> {
           });
           const promptHandle = this.session.generateReply({
             instructions: [
-              "The caller has not been transcribed after the greeting.",
-              "Briefly say exactly: \"I'm here. What can I help with?\"",
+              "The caller has not been transcribed after the initial greeting.",
+              `Say exactly this greeting one more time: "${this.openingGreeting}"`,
               "Keep it warm and do not explain the technical issue.",
             ].join(" "),
           });
@@ -341,7 +341,7 @@ class SignalHostLiveKitAgent extends voice.Agent<LiveKitAgentUserData> {
               error: formatErrorForLog(error),
             });
           });
-        }, 8000);
+        }, 12000);
       },
       (error) => {
         console.error("[livekit-agent] realtime greeting failed", {
@@ -526,6 +526,8 @@ function scheduleLiveKitManualResponse(
           "Do not infer missing words, hidden requests, or unstated details.",
           "If the caller's request is broad or incomplete, ask one brief clarifying question.",
           "Do not restart the greeting and do not answer a different request than the caller made.",
+          "Do not invent dates, times, party sizes, addresses, service details, fixtures, urgency, names, menu items, or quantities.",
+          "Do not say a request was marked, saved, placed, submitted, or sent unless a tool returned ok for that action.",
         ].join(" "),
       });
       void replyHandle.waitForPlayout().catch((error) => {

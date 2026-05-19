@@ -1581,8 +1581,48 @@ function sendOpenAIRealtimeManualResponse({
   session.pendingManualResponse = false;
   delete session.pendingManualResponseDelayMs;
   session.manualResponseStartPending = true;
-  console.info("[openai-realtime] creating gated response for accepted caller turn", { callId });
-  sendRealtimeEvent(socket, { type: "response.create" });
+  const latestCallerText = getLastRealtimeCallerText(session);
+  console.info("[openai-realtime] creating gated response for accepted caller turn", {
+    callId,
+    latestCallerText: latestCallerText?.slice(0, 100),
+  });
+  sendRealtimeEvent(socket, {
+    response: {
+      instructions: buildManualRealtimeResponseInstructions(session, latestCallerText),
+    },
+    type: "response.create",
+  });
+}
+
+function buildManualRealtimeResponseInstructions(
+  session: OpenAIRealtimeSidebandSession,
+  latestCallerText?: string,
+) {
+  const profile = getRuntimeBusinessProfile(session.context);
+  const latest = latestCallerText?.trim();
+  const base = [
+    latest
+      ? `Reply to this latest completed caller message only: "${latest}"`
+      : "Reply only if there is a completed caller message in the conversation.",
+    "Do not infer hidden words, omitted details, background speech, or answers that the caller did not clearly give.",
+    "Do not continue a form, reservation, order, estimate, or service-intake flow as if the caller answered your prior question unless the latest caller message actually contains the answer.",
+    "If the latest caller message is only 'hello', 'are you there', 'what?', 'pardon?', or another connection check, briefly acknowledge and ask how you can help; do not invent or advance any details.",
+    "Never invent date, time, party size, guest name, menu items, quantities, address, service type, fixture, urgency, or pricing.",
+    "Never say you have marked, saved, placed, submitted, or sent a request unless a tool call has returned ok for that action.",
+  ];
+
+  if (profile.isRestaurant) {
+    base.push(
+      "For reservations, if the caller has not clearly provided date, time, party size, and guest name, ask only for the missing detail. Do not supply your own party size or time.",
+      "For pickup orders, if the caller has not clearly provided items, quantities, name, and callback details, ask only for the missing detail. Do not supply your own items or quantities.",
+    );
+  } else {
+    base.push(
+      `For ${profile.appointmentNoun}, quote, or service requests, ask only for the missing details. Do not supply your own service type, address, fixture, timing, or urgency.`,
+    );
+  }
+
+  return base.join(" ");
 }
 
 function scheduleOpenAIRealtimeManualIdlePrompt({
@@ -2212,10 +2252,10 @@ function classifyOpenAIRealtimeCall(session: OpenAIRealtimeSidebandSession): {
   const hasReservationIntent =
     toolKinds.has("reservation") || /\b(reservation|reserve|book|table for|party of)\b/.test(callerText);
   const hasHoursIntent = /\b(hour|hours|open|close|closing|tonight|today|tomorrow)\b/.test(callerText);
-  const intent = hasOrderIntent
-    ? "order"
-    : hasReservationIntent
-      ? "reservation"
+  const intent = hasReservationIntent
+    ? "reservation"
+    : hasOrderIntent
+      ? "order"
       : hasHoursIntent
         ? "hours"
         : hasCallerTranscript
