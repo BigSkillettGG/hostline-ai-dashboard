@@ -1858,6 +1858,29 @@ function buildDeterministicRealtimeRepairInstructions(
     ].join(" ");
   }
 
+  const outOfScope = getClearlyOutOfScopeVerticalRequest(session.context, normalized);
+  if (outOfScope) {
+    const businessName = toSpokenRestaurantName(session.context.restaurantName);
+    return [
+      `The caller is asking for ${outOfScope.requestedLabel}, which is outside the usual scope for ${businessName}.`,
+      `${businessName} mainly handles ${outOfScope.currentExamples}.`,
+      "Respond naturally and briefly. Do not create or confirm an appointment for the out-of-scope service unless the caller explicitly asks you to take a message for the team.",
+      "Offer one next step: take a message for staff follow-up, or help with an in-scope request.",
+    ].join(" ");
+  }
+
+  if (isCallerClarificationRequest(normalized)) {
+    const lastClearCallerRequest = getLastClearCallerRequestBeforeLatest(session);
+    return [
+      "The caller did not understand or did not hear your last answer.",
+      lastClearCallerRequest
+        ? `Use this last clear caller request as context: "${lastClearCallerRequest}".`
+        : "Use the conversation so far as context.",
+      "Briefly apologize, clarify without sounding robotic, and ask only the next missing detail.",
+      "Do not restart the greeting, do not restart the whole intake flow, and do not invent any details.",
+    ].join(" ");
+  }
+
   return null;
 }
 
@@ -1876,6 +1899,126 @@ function isCallerIdentityQuestion(normalized: string) {
     ) ||
     /\b(is this|did i reach|did i call|am i calling)\b/.test(normalized)
   );
+}
+
+const verticalScopeMatchers = {
+  electrical: {
+    label: "electrical work",
+    patterns: [
+      /\bbreaker(?:s)?\b/,
+      /\belectric(?:al)?\b/,
+      /\belectrician\b/,
+      /\bev charger\b/,
+      /\bgenerator\b/,
+      /\boutlets?\b/,
+      /\bpanel upgrade\b/,
+      /\bsparking\b/,
+      /\bwiring\b/,
+    ],
+  },
+  hvac: {
+    label: "heating or cooling service",
+    patterns: [
+      /\bair conditioning\b/,
+      /\bac\b/,
+      /\ba c\b/,
+      /\bboiler\b/,
+      /\bcompressor\b/,
+      /\bcondenser\b/,
+      /\bducts?\b/,
+      /\bfurnace\b/,
+      /\bheat pump\b/,
+      /\bno heat\b/,
+      /\bthermostat\b/,
+    ],
+  },
+  plumbing: {
+    label: "plumbing work",
+    patterns: [
+      /\bburst pipe\b/,
+      /\bclogged? drain\b/,
+      /\bdrains?\b/,
+      /\bfaucets?\b/,
+      /\bleaky faucet\b/,
+      /\bsewer\b/,
+      /\bshutoff valve\b/,
+      /\bsinks?\b/,
+      /\btoilets?\b/,
+    ],
+  },
+  restaurant: {
+    label: "restaurant service",
+    patterns: [
+      /\ballerg(?:y|ies|ic)\b/,
+      /\bcatering\b/,
+      /\bmenu\b/,
+      /\border\b/,
+      /\bparking\b/,
+      /\breservation\b/,
+      /\bspecials?\b/,
+      /\btable\b/,
+    ],
+  },
+  roofing: {
+    label: "roofing work",
+    patterns: [
+      /\bemergency tarp(?:ing)?\b/,
+      /\bgutters?\b/,
+      /\broof(?:ing)?\b/,
+      /\broof leak\b/,
+      /\bshingles?\b/,
+      /\bskylights?\b/,
+      /\bstorm damage\b/,
+    ],
+  },
+  salon_barber: {
+    label: "salon or barbershop service",
+    patterns: [
+      /\bbalayage\b/,
+      /\bbarber\b/,
+      /\bbeard\b/,
+      /\bblowout\b/,
+      /\bcolor\b/,
+      /\bhair ?cuts?\b/,
+      /\bstylists?\b/,
+    ],
+  },
+} as const;
+
+function getClearlyOutOfScopeVerticalRequest(context: RestaurantVoiceContext, normalized: string) {
+  const profile = getRuntimeBusinessProfile(context);
+  const currentMatcher = verticalScopeMatchers[profile.businessType];
+  if (!currentMatcher) return null;
+
+  const matchesCurrentScope = currentMatcher.patterns.some((pattern) => pattern.test(normalized));
+  if (matchesCurrentScope) return null;
+
+  for (const [businessType, matcher] of Object.entries(verticalScopeMatchers)) {
+    if (businessType === profile.businessType || businessType === "restaurant") continue;
+    if (!matcher.patterns.some((pattern) => pattern.test(normalized))) continue;
+
+    return {
+      currentExamples: profile.commonIntents.slice(0, 4).join(", "),
+      requestedLabel: matcher.label,
+    };
+  }
+
+  return null;
+}
+
+function getLastClearCallerRequestBeforeLatest(session: OpenAIRealtimeSidebandSession) {
+  const callerTurns = session.transcript.filter((turn) => turn.role === "caller");
+  if (callerTurns.length < 2) return undefined;
+
+  for (const turn of callerTurns.slice(0, -1).reverse()) {
+    const normalized = normalizeRealtimeCallerText(turn.text);
+    if (!normalized || isCallerClarificationRequest(normalized) || isLikelyShortCallerConfirmation(normalized)) continue;
+    if (isLikelyStrayTranscriptText(normalized)) continue;
+    if (normalized.split(/\s+/).filter(Boolean).length < 3) continue;
+    return turn.text;
+  }
+
+  return undefined;
 }
 
 function getIncompleteCallbackPhoneRepair(
@@ -1992,6 +2135,7 @@ function shouldAcceptRealtimeCallerTranscript(
   if (isLikelyOpenAIRealtimeAgentEcho(session, normalized)) return { accept: false, reason: "agent_echo" };
   if (isLikelyBackgroundMediaFragment(normalized)) return { accept: false, reason: "background_media" };
   if (isLikelyOpeningBackchannelEcho(session, normalized)) return { accept: false, reason: "opening_backchannel_echo" };
+  if (isLikelyStrayPostDetailFragment(session, normalized)) return { accept: false, reason: "stray_post_detail_fragment" };
 
   const wordCount = normalized.split(/\s+/).filter(Boolean).length;
   const activeResponse = Boolean(session.quality.activeResponseStartedAt);
@@ -2000,12 +2144,14 @@ function shouldAcceptRealtimeCallerTranscript(
   const configuredOfferingIntent = hasConfiguredOfferingIntent(session.context, normalized);
   const directedSpeech = hasLikelyDirectedCallerSpeech(normalized);
   const shortConfirmation = isLikelyShortCallerConfirmation(normalized);
+  const clarificationRequest = isCallerClarificationRequest(normalized);
   const answerToAgentQuestion = isLikelyAnswerToRecentAgentQuestion(session, normalized);
   const correctionOrRepair = isLikelyCallerCorrectionOrRepair(normalized);
   const detailAnswer = isAnsweringDetailCaptureQuestion(session, normalized);
 
   if (activeResponse) {
     if (correctionOrRepair) return { accept: true, reason: "caller_repair" };
+    if (clarificationRequest) return { accept: true, reason: "caller_clarification" };
     if (answerToAgentQuestion) return { accept: true, reason: "answer_to_agent_question" };
     if (detailAnswer) return { accept: true, reason: "detail_capture" };
     if (strongIntent) return { accept: true, reason: "strong_intent" };
@@ -2019,6 +2165,7 @@ function shouldAcceptRealtimeCallerTranscript(
   // realtime model interpret natural speech over forcing caller intent through
   // a brittle keyword list. The hard rejects above still catch prompt leakage,
   // obvious agent echo, and common TV/radio fragments.
+  if (clarificationRequest) return { accept: true, reason: "caller_clarification" };
   if (wordCount >= 2) return { accept: true };
   if (clearIntent || configuredOfferingIntent || directedSpeech || shortConfirmation || answerToAgentQuestion) {
     return { accept: true };
@@ -2067,6 +2214,7 @@ function shouldCancelActiveResponseForCallerTurn(
 
   if (
     reason === "caller_repair" ||
+    reason === "caller_clarification" ||
     reason === "answer_to_agent_question" ||
     reason === "detail_capture" ||
     reason === "strong_intent" ||
@@ -2322,6 +2470,7 @@ function isLikelyCallerCorrectionOrRepair(normalized: string) {
 
 function isLikelyAnswerToRecentAgentQuestion(session: OpenAIRealtimeSidebandSession, normalized: string) {
   if (isLikelyBackgroundMediaFragment(normalized)) return false;
+  if (isCallerClarificationRequest(normalized)) return false;
   const lastAgentTurn = session.transcript.filter((turn) => turn.role === "agent").at(-1)?.text ?? "";
   const lastAgent = normalizeRealtimeCallerText(lastAgentTurn);
   if (!lastAgent || !lastAgentTurn.includes("?")) return false;
@@ -2338,10 +2487,49 @@ function isLikelyBackgroundMediaFragment(normalized: string) {
   );
 }
 
+function isCallerClarificationRequest(normalized: string) {
+  return /^(what|what was that|what did you say|huh|pardon|sorry|say that again|can you repeat that|could you repeat that|i didn'?t hear you|i did not hear you|i didn'?t catch that|i did not catch that|come again)$/.test(
+    normalized,
+  );
+}
+
 function isLikelyShortCallerConfirmation(normalized: string) {
   return /^(yes|yeah|yep|sure|please|no|nope|no thank you|no thanks|that's all|that is all|thanks|thank you|goodbye|bye|hello|hi|hello hello|hi hi|hello are you there|hi are you there)$/.test(
     normalized,
   );
+}
+
+function isLikelyStrayPostDetailFragment(session: OpenAIRealtimeSidebandSession, normalized: string) {
+  if (!isLikelyStrayTranscriptText(normalized)) return false;
+
+  const transcript = session.transcript;
+  const lastCallerIndex = findLastTranscriptIndex(transcript, "caller");
+  if (lastCallerIndex < 0) return false;
+
+  const lastAgentIndex = findLastTranscriptIndex(transcript, "agent");
+  if (lastAgentIndex > lastCallerIndex) return false;
+
+  const lastCaller = transcript[lastCallerIndex];
+  const lastCallerAt = Date.parse(lastCaller.at);
+  if (Number.isFinite(lastCallerAt) && Date.now() - lastCallerAt > 3500) return false;
+
+  const previous = normalizeRealtimeCallerText(lastCaller.text);
+  if (previous.split(/\s+/).filter(Boolean).length < 5) return false;
+
+  return hasLikelyCallerIntent(previous) || hasLikelyDirectedCallerSpeech(previous) || isAnsweringDetailCaptureQuestion(session, previous);
+}
+
+function isLikelyStrayTranscriptText(normalized: string) {
+  return /^(i'?m fixed|im fixed|i am fixed|it'?s fixed|its fixed|fixed|fixed what|fix what|what fixed|fixed it|i fixed it)$/.test(
+    normalized,
+  );
+}
+
+function findLastTranscriptIndex(transcript: TranscriptTurn[], role: TranscriptRole) {
+  for (let index = transcript.length - 1; index >= 0; index -= 1) {
+    if (transcript[index].role === role) return index;
+  }
+  return -1;
 }
 
 function isLikelyOpeningBackchannelEcho(session: OpenAIRealtimeSidebandSession, normalized: string) {
