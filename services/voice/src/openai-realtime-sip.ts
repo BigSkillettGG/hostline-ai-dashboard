@@ -214,6 +214,9 @@ interface OpenAIRealtimeSidebandSession {
   manualResponseTimer?: ReturnType<typeof setTimeout>;
   ownerContact?: TrustedContact;
   openingGreetingCompleted: boolean;
+  openingGreetingUnlockTimer?: ReturnType<typeof setTimeout>;
+  openingTurnDetectionDisabled?: boolean;
+  openingTurnDetectionRestored?: boolean;
   activeResponseCancelRequested?: boolean;
   pendingManualResponseDelayMs?: number;
   pendingManualResponse: boolean;
@@ -228,6 +231,7 @@ interface OpenAIRealtimeSidebandSession {
   toolEvents: Array<{ callId?: string; kind?: string; latencyMs?: number; name: string; ok?: boolean }>;
   transcript: TranscriptTurn[];
   transcriptKeys: Set<string>;
+  turnDetection: OpenAIRealtimeAcceptPayload["audio"]["input"]["turn_detection"];
 }
 
 interface BuildOpenAIRealtimeAcceptPayloadInput {
@@ -1237,12 +1241,18 @@ function startSidebandSocket({
     toolEvents: [],
     transcript: [],
     transcriptKeys: new Set(),
+    turnDetection: resolveOpenAIRealtimeTurnDetection(env),
   };
 
   socket.on("open", () => {
     console.info("[openai-realtime] sideband connected", { callId, locationId });
     sendRealtimeEvent(socket, {
       session: {
+        audio: {
+          input: {
+            turn_detection: null,
+          },
+        },
         instructions: buildOpenAIRealtimeInstructions(context, { callerPhone, ownerContact }),
         tool_choice: "auto",
         tools: buildOpenAIRealtimeTools(context, ownerContact),
@@ -1250,6 +1260,8 @@ function startSidebandSocket({
       },
       type: "session.update",
     });
+    session.openingTurnDetectionDisabled = true;
+    console.info("[openai-realtime] disabled turn detection during opening greeting", { callId });
     const sendOpeningGreeting = () => {
       if (session.completed || activeSockets.get(callId) !== socket) return;
       sendRealtimeEvent(socket, {
@@ -1290,12 +1302,21 @@ function startSidebandSocket({
         turn: transcriptTurn,
       });
       if (transcriptTurn.role === "agent" && eventType === "response.output_audio_transcript.done") {
-        scheduleOpenAIRealtimeResponseCompletionFallback({
-          callId,
-          session,
-          socket,
-          transcript: transcriptTurn.text,
-        });
+        if (!session.openingGreetingCompleted && session.quality.responseCount <= 1) {
+          scheduleOpenAIRealtimeOpeningGreetingUnlockFallback({
+            callId,
+            session,
+            socket,
+            transcript: transcriptTurn.text,
+          });
+        } else {
+          scheduleOpenAIRealtimeResponseCompletionFallback({
+            callId,
+            session,
+            socket,
+            transcript: transcriptTurn.text,
+          });
+        }
       }
     }
 
@@ -1337,6 +1358,7 @@ function startSidebandSocket({
     clearOpenAIRealtimeManualIdleTimer(session);
     clearOpenAIRealtimeManualResponseTimer(session);
     clearOpenAIRealtimeResponseCompletionFallbackTimer(session);
+    clearOpenAIRealtimeOpeningGreetingUnlockTimer(session);
     void completeOpenAIRealtimeLoggedCall({
       callStore,
       callRecordingService,
@@ -1358,6 +1380,7 @@ function startSidebandSocket({
     clearOpenAIRealtimeManualIdleTimer(session);
     clearOpenAIRealtimeManualResponseTimer(session);
     clearOpenAIRealtimeResponseCompletionFallbackTimer(session);
+    clearOpenAIRealtimeOpeningGreetingUnlockTimer(session);
     void completeOpenAIRealtimeLoggedCall({
       callStore,
       callRecordingService,
@@ -1460,6 +1483,7 @@ function recordOpenAIRealtimeQualityEvent(session: OpenAIRealtimeSidebandSession
   }
 
   if (eventType === "response.done") {
+    if (!session.openingGreetingCompleted) return;
     delete session.manualResponseStartPending;
     delete session.activeResponseCancelRequested;
     if (session.quality.activeResponseStartedAt) {
@@ -1530,6 +1554,14 @@ function handleOpenAIRealtimeResponseDone({
   socket: RealtimeSocket;
   source?: string;
 }) {
+  if (!session.openingGreetingCompleted && source === "response.done" && session.openingGreetingUnlockTimer) {
+    console.info("[openai-realtime] opening greeting generated; waiting for audio playout before listening", {
+      callId,
+      source,
+    });
+    return;
+  }
+
   clearOpenAIRealtimeResponseCompletionFallbackTimer(session);
   if (session.quality.activeResponseStartedAt) {
     session.quality.lastResponseDurationMs = Date.now() - session.quality.activeResponseStartedAt;
@@ -1540,6 +1572,8 @@ function handleOpenAIRealtimeResponseDone({
 
   if (!session.openingGreetingCompleted) {
     session.openingGreetingCompleted = true;
+    clearOpenAIRealtimeOpeningGreetingUnlockTimer(session);
+    restoreOpenAIRealtimeTurnDetectionAfterOpening({ callId, session, socket, source });
   }
 
   console.info("[openai-realtime] response completed", {
@@ -1564,6 +1598,80 @@ function handleOpenAIRealtimeResponseDone({
   }
 
   scheduleOpenAIRealtimeManualIdlePrompt({ callId, session, socket });
+}
+
+function scheduleOpenAIRealtimeOpeningGreetingUnlockFallback({
+  callId,
+  session,
+  socket,
+  transcript,
+}: {
+  callId: string;
+  session: OpenAIRealtimeSidebandSession;
+  socket: RealtimeSocket;
+  transcript: string;
+}) {
+  clearOpenAIRealtimeOpeningGreetingUnlockTimer(session);
+  if (session.openingGreetingCompleted || session.finishRequested) return;
+
+  const delayMs = estimateOpenAIRealtimeOpeningGreetingUnlockFallbackMs(transcript);
+  session.openingGreetingUnlockTimer = setTimeout(() => {
+    delete session.openingGreetingUnlockTimer;
+    if (session.openingGreetingCompleted || session.finishRequested) return;
+    handleOpenAIRealtimeResponseDone({
+      callId,
+      session,
+      socket,
+      source: "opening_greeting_audio_guard",
+    });
+  }, delayMs);
+  session.openingGreetingUnlockTimer.unref?.();
+  console.info("[openai-realtime] scheduled opening greeting audio guard", {
+    callId,
+    delayMs,
+  });
+}
+
+function clearOpenAIRealtimeOpeningGreetingUnlockTimer(session: OpenAIRealtimeSidebandSession) {
+  if (!session.openingGreetingUnlockTimer) return;
+  clearTimeout(session.openingGreetingUnlockTimer);
+  delete session.openingGreetingUnlockTimer;
+}
+
+function estimateOpenAIRealtimeOpeningGreetingUnlockFallbackMs(transcript: string) {
+  // The transcript event can arrive before PSTN playout catches up. Add a
+  // conservative buffer so speakerphone echo cannot reopen the microphone early.
+  return Math.min(4500, estimateOpenAIRealtimeResponseCompletionFallbackMs(transcript) + 900);
+}
+
+function restoreOpenAIRealtimeTurnDetectionAfterOpening({
+  callId,
+  session,
+  socket,
+  source,
+}: {
+  callId: string;
+  session: OpenAIRealtimeSidebandSession;
+  socket: RealtimeSocket;
+  source?: string;
+}) {
+  if (!session.openingTurnDetectionDisabled || session.openingTurnDetectionRestored) return;
+  session.openingTurnDetectionRestored = true;
+  sendRealtimeEvent(socket, {
+    session: {
+      audio: {
+        input: {
+          turn_detection: session.turnDetection,
+        },
+      },
+      type: "realtime",
+    },
+    type: "session.update",
+  });
+  console.info("[openai-realtime] restored turn detection after opening greeting", {
+    callId,
+    source,
+  });
 }
 
 function scheduleOpenAIRealtimeResponseCompletionFallback({

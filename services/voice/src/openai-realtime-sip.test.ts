@@ -1130,6 +1130,91 @@ describe("OpenAI Realtime SIP", () => {
     expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))).toHaveLength(2);
   });
 
+  it("disables realtime turn detection during the opening greeting and restores it after audio completion", async () => {
+    const socket = createFakeRealtimeSocket();
+    const service = createOpenAIRealtimeSipService(
+      baseEnv,
+      {
+        async getContext() {
+          return demoRestaurantContext;
+        },
+      },
+      {
+        fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+        websocketFactory: () => socket as never,
+      },
+    );
+
+    await service.handleIncomingWebhook({
+      headers: {},
+      rawBody: JSON.stringify({
+        data: {
+          call_id: "rtc_greeting_turn_detection",
+          sip_headers: [{ name: "From", value: "sip:+14155550123@twilio.com" }],
+        },
+        type: "realtime.call.incoming",
+      }),
+    });
+
+    socket.emit("open");
+    expect(socket.sentEvents[0]).toMatchObject({
+      session: {
+        audio: {
+          input: {
+            turn_detection: null,
+          },
+        },
+      },
+      type: "session.update",
+    });
+
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        response: { id: "resp_greeting" },
+        type: "response.created",
+      })),
+    );
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "agent_greeting",
+        transcript: "Thank you for calling Olive and Ember. How can I help you?",
+        type: "response.output_audio_transcript.done",
+      })),
+    );
+    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+    expect(
+      socket.sentEvents.filter(
+        (event) =>
+          isRealtimeEventType(event, "session.update") &&
+          (event as { session?: { audio?: { input?: { turn_detection?: unknown } } } }).session?.audio?.input
+            ?.turn_detection,
+      ),
+    ).toHaveLength(0);
+
+    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.audio.done" })));
+    expect(socket.sentEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          session: expect.objectContaining({
+            audio: {
+              input: {
+                turn_detection: expect.objectContaining({
+                  create_response: false,
+                  eagerness: "low",
+                  interrupt_response: false,
+                  type: "semantic_vad",
+                }),
+              },
+            },
+          }),
+          type: "session.update",
+        }),
+      ]),
+    );
+  });
+
   it("marks short greeting-only SIP calls for review instead of resolved", async () => {
     const socket = createFakeRealtimeSocket();
     const completedCalls: unknown[] = [];
