@@ -1782,7 +1782,7 @@ describe("OpenAI Realtime SIP", () => {
     const responses = socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"));
     expect(JSON.stringify(responses.at(-1))).not.toContain("outside the usual scope");
     expect(JSON.stringify(responses.at(-1))).toContain("qualified lead, not a troubleshooting session");
-    expect(JSON.stringify(responses.at(-1))).toContain("Ask one short intake question at a time");
+    expect(JSON.stringify(responses.at(-1))).toContain("Ask exactly one short intake question at a time");
   });
 
   it("keeps service-problem calls focused on lead capture instead of troubleshooting", async () => {
@@ -1856,6 +1856,8 @@ describe("OpenAI Realtime SIP", () => {
     const instructions = JSON.stringify(responses.at(-1));
     expect(instructions).toContain("qualified lead, not a troubleshooting session");
     expect(instructions).toContain("Do not diagnose");
+    expect(instructions).toContain("Ask exactly one short intake question");
+    expect(instructions).toContain("Do not end with an unfinished lead-in");
     expect(instructions).toContain("create_customer_request");
     expect(instructions).not.toContain("outside the usual scope");
   });
@@ -2022,6 +2024,114 @@ describe("OpenAI Realtime SIP", () => {
     expect(JSON.stringify(responses.at(-1))).toContain("What day and time window");
     expect(JSON.stringify(responses.at(-1))).toContain("Do not restart the call");
     expect(JSON.stringify(responses.at(-1))).not.toContain("Thank you for calling");
+  });
+
+  it("does not repeat the service need after a service lead connection check", async () => {
+    const socket = createFakeRealtimeSocket();
+    const hvacContext: RestaurantVoiceContext = {
+      ...demoRestaurantContext,
+      businessType: "hvac",
+      restaurantName: "Summit Air",
+    };
+    const service = createOpenAIRealtimeSipService(
+      baseEnv,
+      {
+        async getContext() {
+          return hvacContext;
+        },
+      },
+      {
+        callStore: {
+          async addTranscriptTurn() {},
+          async attachCallRecording() {},
+          async completeCall() {},
+          async createCustomerRequest() {
+            return {};
+          },
+          async createStaffReviewOrder() {
+            return {};
+          },
+          async createStaffReviewReservation() {
+            return {};
+          },
+          async createStaffTask() {
+            return {};
+          },
+          async startCall() {
+            return {};
+          },
+          async startRealtimeCall() {
+            return { callId: "call_uuid" };
+          },
+        },
+        fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+        websocketFactory: () => socket as never,
+      },
+    );
+
+    await service.handleIncomingWebhook({
+      headers: {},
+      rawBody: JSON.stringify({
+        data: {
+          call_id: "rtc_service_connection_recovery",
+          sip_headers: [{ name: "From", value: "sip:+14155550123@twilio.com" }],
+        },
+        type: "realtime.call.incoming",
+      }),
+    });
+
+    socket.emit("open");
+    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "caller_schedule",
+        transcript: "I was calling to make an appointment.",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "agent_problem_question",
+        transcript: "Sure. What would you like the appointment for?",
+        type: "response.output_audio_transcript.done",
+      })),
+    );
+    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "caller_hvac_problem",
+        transcript: "We have a leaky air conditioning unit that's not getting cold.",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "agent_broken_answer",
+        transcript: "Got it, that's something we should get on the schedule. What",
+        type: "response.output_audio_transcript.done",
+      })),
+    );
+    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "caller_connection_check",
+        transcript: "Hello?",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    await flushAsyncWork();
+
+    const responses = socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"));
+    const instructions = JSON.stringify(responses.at(-1));
+    expect(instructions).toContain("in-progress service lead");
+    expect(instructions).toContain("air conditioning unit");
+    expect(instructions).toContain("Ask what day or time they would prefer");
+    expect(instructions).toContain("Do not ask what the appointment is for again");
   });
 
   it("accepts ASAP as enough timing detail for service businesses", async () => {

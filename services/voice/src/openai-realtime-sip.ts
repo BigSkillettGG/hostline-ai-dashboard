@@ -1882,8 +1882,9 @@ function buildDeterministicRealtimeRepairInstructions(
     return [
       "The caller is describing a service problem that should become a qualified lead, not a troubleshooting session.",
       `Acknowledge the problem naturally and collect the next most useful missing detail for ${profile.staffNoun}.`,
-      "Ask one short intake question at a time. Prefer address or service area, urgency or safety risk, preferred timing, name, and callback number.",
+      "Ask exactly one short intake question at a time. Prefer preferred timing first, then service address or service area, urgency or safety risk, name, and callback number.",
       "Do not diagnose the issue, do not list likely causes, do not suggest thermostat/filter/breaker/drain/shutoff/panel/roof/equipment checks, and do not say you will think through next possibilities.",
+      "Do not end with an unfinished lead-in like 'What...' or start a second separate answer.",
       "Use create_customer_request once name, callback number, request summary, urgency, address or service area, and preferred timing are known.",
     ].join(" ");
   }
@@ -1896,6 +1897,9 @@ function buildDeterministicRealtimeRepairInstructions(
   }
 
   if (isMidCallConnectionCheck(normalized)) {
+    const serviceLeadRecovery = getServiceLeadConnectionRecoveryInstruction(session);
+    if (serviceLeadRecovery) return serviceLeadRecovery;
+
     const lastAgentQuestion = getLastAgentQuestionBeforeLatest(session);
     return [
       "The caller is checking the connection or says the audio cut out during an existing conversation.",
@@ -2113,6 +2117,74 @@ function getLastClearCallerRequestBeforeLatest(session: OpenAIRealtimeSidebandSe
   }
 
   return undefined;
+}
+
+function getServiceLeadConnectionRecoveryInstruction(session: OpenAIRealtimeSidebandSession) {
+  const profile = getRuntimeBusinessProfile(session.context);
+  if (profile.isRestaurant) return null;
+
+  const lastServiceProblem = getLastServiceProblemCallerTurnBeforeLatest(session);
+  if (!lastServiceProblem) return null;
+
+  const turnsAfterProblem = session.transcript.slice(lastServiceProblem.index + 1, -1);
+  const callerTextAfterProblem = turnsAfterProblem
+    .filter((turn) => turn.role === "caller")
+    .map((turn) => normalizeRealtimeCallerText(turn.text))
+    .filter(Boolean);
+  const hasTiming = callerTextAfterProblem.some(hasServiceTimingCue);
+  const hasAddress = callerTextAfterProblem.some(isLikelyServiceAddressDetail);
+  const hasCallback = callerTextAfterProblem.some(hasLikelyCallbackPhoneDetail);
+
+  let nextStep = "Ask what day or time they would prefer.";
+  if (hasTiming && !hasAddress) {
+    nextStep = "Ask for the service address or town.";
+  } else if (hasTiming && hasAddress && !hasCallback) {
+    nextStep =
+      "Say you heard the address but want to make sure the request is complete, then ask for the best name and callback number.";
+  } else if (hasTiming && hasAddress && hasCallback) {
+    nextStep = "Continue with the one missing detail, or create_customer_request if the intake is complete.";
+  }
+
+  return [
+    "The caller is checking the connection during an in-progress service lead. Do not restart or repeat an already-answered question.",
+    `Use this already-captured service problem as context: "${lastServiceProblem.text.trim()}".`,
+    "Briefly apologize for the glitch, then ask exactly one next intake question.",
+    nextStep,
+    "Do not ask what the appointment is for again. Do not diagnose or troubleshoot the service issue.",
+  ].join(" ");
+}
+
+function getLastServiceProblemCallerTurnBeforeLatest(session: OpenAIRealtimeSidebandSession) {
+  for (let index = session.transcript.length - 2; index >= 0; index -= 1) {
+    const turn = session.transcript[index];
+    if (turn?.role !== "caller") continue;
+    const normalized = normalizeRealtimeCallerText(turn.text);
+    if (!isNonRestaurantServiceProblemRequest(session.context, normalized)) continue;
+    return { index, text: turn.text };
+  }
+  return null;
+}
+
+function hasServiceTimingCue(normalized: string) {
+  return (
+    hasAsapTimingCue(normalized) ||
+    isLikelySchedulingDateFragment(normalized) ||
+    hasSpecificSchedulingTime(normalized) ||
+    /\b(today|tomorrow|tonight|this morning|this afternoon|this evening|next week|weekday|weekend|morning|afternoon|evening)\b/.test(
+      normalized,
+    )
+  );
+}
+
+function isLikelyServiceAddressDetail(normalized: string) {
+  return (
+    isLikelyAddressFragment(normalized) ||
+    /\b\d{1,6}\s+[a-z][a-z'-]*(?:\s+[a-z][a-z'-]*){0,5}\b/.test(normalized)
+  );
+}
+
+function hasLikelyCallbackPhoneDetail(normalized: string) {
+  return /\b(?:\+?1\s*)?(?:\(?\d{3}\)?[\s.-]*)?\d{3}[\s.-]*\d{4}\b/.test(normalized);
 }
 
 function getLastAgentQuestionBeforeLatest(session: OpenAIRealtimeSidebandSession) {
