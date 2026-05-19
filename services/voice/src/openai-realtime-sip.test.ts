@@ -27,6 +27,7 @@ import {
   lookupRestaurantContext,
   requestOpenAIRealtimeStaffCallback,
   resolveOpenAIRealtimeAcceptProvider,
+  resolveOpenAIRealtimeGreetingDelayMs,
   resolveOpenAIRealtimeIdleTimeoutMs,
   resolveOpenAIRealtimeInterruptResponse,
   resolveOpenAIRealtimeManualResponseGating,
@@ -49,6 +50,7 @@ const baseEnv = {
   OPENAI_REALTIME_IDLE_TIMEOUT_MS: 12000,
   OPENAI_REALTIME_INTERRUPT_RESPONSE: false,
   OPENAI_REALTIME_DETAIL_CAPTURE_RESPONSE_DELAY_MS: 0,
+  OPENAI_REALTIME_GREETING_DELAY_MS: 0,
   OPENAI_REALTIME_MANUAL_RESPONSE_DELAY_MS: 0,
   OPENAI_REALTIME_MANUAL_RESPONSE_GATING: true,
   OPENAI_REALTIME_NOISE_REDUCTION: "far_field",
@@ -119,6 +121,8 @@ describe("OpenAI Realtime SIP", () => {
     expect(payload.audio.output.speed).toBe(1.02);
     expect(payload.instructions).toContain("Never restart the opening greeting");
     expect(payload.instructions).toContain("Thank you for calling Olive and Ember. How can I help you?");
+    expect(payload.instructions).toContain("if the caller asks whether they reached Olive & Ember");
+    expect(payload.instructions).toContain("Never answer no");
     expect(payload.instructions).toContain("Do not say you are virtual or AI");
     expect(payload.instructions).toContain("Avoid IVR cadence");
     expect(payload.instructions).toContain("excellent restaurant host");
@@ -190,6 +194,8 @@ describe("OpenAI Realtime SIP", () => {
     expect(payload.audio.input.transcription.prompt).toContain("Transcription vocabulary hints for Summit Air (HVAC company)");
     expect(payload.audio.input.transcription.prompt).toContain("no heat");
     expect(payload.instructions).toContain("Business profile: HVAC company");
+    expect(payload.instructions).toContain("if the caller asks whether they reached Summit Air");
+    expect(payload.instructions).toContain("answer yes");
     expect(payload.instructions).toContain("dispatcher");
     expect(payload.instructions).toContain("service catalog");
     expect(payload.instructions).toContain("Service-request operating mode");
@@ -409,6 +415,51 @@ describe("OpenAI Realtime SIP", () => {
       intent: "hours",
       status: "resolved",
     });
+  });
+
+  it("delays the opening greeting so callers hear the full business greeting", async () => {
+    vi.useFakeTimers();
+    try {
+      const socket = createFakeRealtimeSocket();
+      const service = createOpenAIRealtimeSipService(
+        {
+          ...baseEnv,
+          OPENAI_REALTIME_GREETING_DELAY_MS: 900,
+          TWILIO_CALL_RECORDING_ENABLED: "false",
+        },
+        {
+          async getContext() {
+            return demoRestaurantContext;
+          },
+        },
+        {
+          fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+          websocketFactory: () => socket as never,
+        },
+      );
+
+      await service.handleIncomingWebhook({
+        headers: {},
+        rawBody: JSON.stringify({
+          data: {
+            call_id: "rtc_delayed_greeting",
+            sip_headers: [{ name: "From", value: "sip:+14155550123@twilio.com" }],
+          },
+          id: "evt_delayed_greeting",
+          object: "event",
+          type: "realtime.call.incoming",
+        }),
+      });
+
+      socket.emit("open");
+      expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(899);
+      expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("runs a full reservation call lifecycle through SIP, tools, SMS, and completion", async () => {
@@ -2235,6 +2286,13 @@ describe("OpenAI Realtime SIP", () => {
     expect(resolveOpenAIRealtimeSpeed({ ...baseEnv, OPENAI_REALTIME_SPEED: "1.08" })).toBe(1.08);
     expect(resolveOpenAIRealtimeSpeed({ ...baseEnv, OPENAI_REALTIME_SPEED: "2" })).toBe(1.12);
     expect(resolveOpenAIRealtimeSpeed({ ...baseEnv, OPENAI_REALTIME_SPEED: "fast" })).toBe(1.02);
+  });
+
+  it("clamps the opening greeting delay so the phone audio path can connect", () => {
+    expect(resolveOpenAIRealtimeGreetingDelayMs(baseEnv)).toBe(0);
+    expect(resolveOpenAIRealtimeGreetingDelayMs({ ...baseEnv, OPENAI_REALTIME_GREETING_DELAY_MS: 900 })).toBe(900);
+    expect(resolveOpenAIRealtimeGreetingDelayMs({ ...baseEnv, OPENAI_REALTIME_GREETING_DELAY_MS: 3000 })).toBe(2500);
+    expect(resolveOpenAIRealtimeGreetingDelayMs({ ...baseEnv, OPENAI_REALTIME_GREETING_DELAY_MS: -1 })).toBe(0);
   });
 
   it("uses OpenAI semantic VAD with SignalHost response gating by default", () => {

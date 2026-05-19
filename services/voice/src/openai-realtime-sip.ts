@@ -45,6 +45,7 @@ type OpenAIRealtimeEnv = Pick<
   | "OPENAI_REALTIME_AVA_VOICE"
   | "OPENAI_REALTIME_DETAIL_CAPTURE_RESPONSE_DELAY_MS"
   | "OPENAI_REALTIME_FEMALE_VOICE"
+  | "OPENAI_REALTIME_GREETING_DELAY_MS"
   | "OPENAI_REALTIME_IDLE_TIMEOUT_MS"
   | "OPENAI_REALTIME_INTERRUPT_RESPONSE"
   | "OPENAI_REALTIME_MALE_VOICE"
@@ -100,6 +101,7 @@ interface RealtimeSocket {
 
 export interface OpenAIRealtimeLiveCallConfig {
   acceptProvider: OpenAIRealtimeAcceptProvider;
+  greetingDelayMs: number;
   model: string;
   noiseReduction: "near_field" | "far_field";
   projectIdConfigured: boolean;
@@ -573,6 +575,7 @@ export function buildOpenAIRealtimeLiveCallConfig(env: OpenAIRealtimeEnv, locati
         env.TWILIO_AUTH_TOKEN &&
         env.PUBLIC_HTTP_BASE_URL,
     ),
+    greetingDelayMs: resolveOpenAIRealtimeGreetingDelayMs(env),
     model,
     noiseReduction: resolveOpenAIRealtimeNoiseReduction(env),
     projectIdConfigured: Boolean(env.OPENAI_PROJECT_ID),
@@ -704,6 +707,7 @@ export function buildOpenAIRealtimeInstructions(
     "This is one continuous live phone call. Never restart the opening greeting in the middle of the call.",
     `Opening greeting to use when the call begins: "${openingGreeting}"`,
     "Say the opening greeting once at the start of the call, exactly as written. Do not add 'hi', 'hello', your name, or any extra words before or after it. Do not say you are virtual or AI in the opening.",
+    `Identity check: if the caller asks whether they reached ${context.restaurantName}, asks "is this ${context.restaurantName}", or asks if this is the ${profile.businessNoun}, answer yes. Say something like "Yes, you've reached ${context.restaurantName}. I'm ${context.hostName}, the SignalHost helping with their calls. How can I help?" Never answer no, never say this is only a generic assistant, and never send them to a directory for the business they already reached.`,
     "If the caller says 'hello' before you have greeted them, immediately give the full opening greeting instead of only saying hello back.",
     "If the caller says 'hello', 'are you there', or 'can you hear me' after you have already started or completed the opening greeting, do not repeat the full greeting. Say briefly, 'I'm here. How can I help?'",
     profile.isRestaurant
@@ -1240,12 +1244,22 @@ function startSidebandSocket({
       },
       type: "session.update",
     });
-    sendRealtimeEvent(socket, {
-      response: {
-        instructions: buildOpeningGreetingInstructions(context, ownerContact),
-      },
-      type: "response.create",
-    });
+    const sendOpeningGreeting = () => {
+      if (session.completed || activeSockets.get(callId) !== socket) return;
+      sendRealtimeEvent(socket, {
+        response: {
+          instructions: buildOpeningGreetingInstructions(context, ownerContact),
+        },
+        type: "response.create",
+      });
+    };
+    const greetingDelayMs = resolveOpenAIRealtimeGreetingDelayMs(env);
+    if (greetingDelayMs > 0) {
+      const greetingTimer = setTimeout(sendOpeningGreeting, greetingDelayMs);
+      greetingTimer.unref?.();
+    } else {
+      sendOpeningGreeting();
+    }
   });
 
   socket.on("message", (data) => {
@@ -1346,7 +1360,7 @@ export function buildOpeningGreetingInstructions(context: RestaurantVoiceContext
   const greeting = buildShortOpeningGreeting(context);
   const profile = getRuntimeBusinessProfile(context);
   return [
-    "Say this exact opening greeting once as soon as the call starts, then stop and listen:",
+    "Say this exact opening greeting once after the phone audio path is connected, then stop and listen:",
     greeting,
     profile.isRestaurant
       ? "Deliver it with bright, high-energy hospitality, like a friendly restaurant host with a big smile in your voice."
@@ -3356,6 +3370,11 @@ export function resolveOpenAIRealtimeManualResponseDelayMs(env: OpenAIRealtimeEn
 export function resolveOpenAIRealtimeDetailCaptureResponseDelayMs(env: OpenAIRealtimeEnv) {
   const delayMs = env.OPENAI_REALTIME_DETAIL_CAPTURE_RESPONSE_DELAY_MS ?? 1300;
   return Number.isFinite(delayMs) ? Math.min(2000, Math.max(0, Math.round(delayMs))) : 1300;
+}
+
+export function resolveOpenAIRealtimeGreetingDelayMs(env: OpenAIRealtimeEnv) {
+  const delayMs = env.OPENAI_REALTIME_GREETING_DELAY_MS ?? 900;
+  return Number.isFinite(delayMs) ? Math.min(2500, Math.max(0, Math.round(delayMs))) : 900;
 }
 
 export function resolveOpenAIRealtimeTurnDetection(env: OpenAIRealtimeEnv): OpenAIRealtimeAcceptPayload["audio"]["input"]["turn_detection"] {

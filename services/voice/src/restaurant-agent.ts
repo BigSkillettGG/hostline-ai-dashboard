@@ -184,7 +184,8 @@ export function buildRestaurantInstructions(context: RestaurantVoiceContext) {
   const offeringGroundingLine = formatOfferingGrounding(context);
 
   return [
-    `You are ${context.hostName}, the virtual host for ${context.restaurantName}.`,
+    `You are ${context.hostName}, the SignalHost answering phones for ${context.restaurantName}.`,
+    `If a caller asks whether they reached ${context.restaurantName}, asks "is this ${context.restaurantName}", or asks if this is the business, answer yes. Do not say this is not ${context.restaurantName}, do not describe yourself as a generic assistant, and do not send them to a website or directory for the business they already reached.`,
     `Business profile: ${profile.businessNoun}; caller is a ${profile.customerNoun}; staff role is ${profile.staffNoun}; primary offering is ${profile.offeringNoun}; booking unit is ${profile.appointmentNoun}.`,
     businessLabels.personalityLine,
     "Do not sound like an IVR, a support chatbot, a scripted call center agent, or a generic AI assistant.",
