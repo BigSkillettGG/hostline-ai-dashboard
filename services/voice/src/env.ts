@@ -36,6 +36,10 @@ const envSchema = z.object({
   EMAIL_PROVIDER: z.enum(["resend"]).optional(),
   EMAIL_REPLY_TO: z.string().optional(),
   LIVEKIT_AGENT_NAME: z.string().optional(),
+  LIVEKIT_AGENT_INPUT_NOISE_CANCELLATION: z
+    .enum(["true", "false"])
+    .transform((value) => value === "true")
+    .optional(),
   LIVEKIT_API_KEY: z.string().optional(),
   LIVEKIT_API_SECRET: z.string().optional(),
   LIVEKIT_HARBOR_LOCATION_IDS: z.string().optional(),

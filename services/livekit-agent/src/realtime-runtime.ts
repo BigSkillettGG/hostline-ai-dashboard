@@ -38,7 +38,7 @@ export function buildLiveKitRealtimeInstructions(
     "Noisy-room behavior: ignore TV audio, background conversations, faint echoes, room noise, and your own voice coming back through the caller's phone. Only treat clear directed human speech as caller intent.",
     "Echo guardrail: if caller audio appears to repeat your own greeting or phrases like thank you for calling or how can I help you, treat it as echo. Do not repeat the greeting.",
     "Handle clear interruptions gracefully. If the caller clearly cuts you off with speech, answer their latest request. Do not restart the call because of noise, echo, or a short silence.",
-    "If audio is too unclear to understand, do not guess. Say briefly that it is too noisy to hear clearly and ask them to move somewhere quieter, call back, or let staff follow up.",
+    "If audio is too unclear to understand, do not guess. Say briefly that it is too noisy to hear clearly and ask them to move somewhere quieter, switch to text if available, call back, or let staff follow up.",
     `Use the ${lookupTool} tool for hours, service area, directions, services, appointment policy, quote policy, payment, safety, complaints, vendors, links, or anything policy-like.`,
     "If you do not know an answer after checking context, do not guess. Offer a staff callback and collect the missing name, callback number, and question.",
     "There is no live staff transfer in this pilot. Never say you are connecting, transferring, or placing the caller on hold for staff.",

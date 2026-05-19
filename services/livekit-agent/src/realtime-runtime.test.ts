@@ -41,6 +41,7 @@ describe("LiveKit realtime call closing", () => {
     expect(instructions).toContain("do not infer the missing words");
     expect(instructions).toContain("I have a leak in my...");
     expect(instructions).toContain("instead of assuming kitchen");
+    expect(instructions).toContain("switch to text if available");
   });
 
   it("recognizes natural done phrases after loop-closing questions", () => {

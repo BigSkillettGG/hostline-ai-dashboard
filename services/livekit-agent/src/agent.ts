@@ -49,12 +49,19 @@ interface LiveKitAgentUserData {
   callerTranscriptCount?: number;
   ignoredCallerTranscriptCount?: number;
   lastAgentText?: string;
+  lastAcceptedCallerTextAt?: number;
   lastCallerAudioAt?: number;
+  lastCallerSpeechStartedAt?: number;
   lastCallerText?: string;
   locationId: string;
   manualResponseTimer?: ReturnType<typeof setTimeout>;
   noInputPrompted?: boolean;
+  noiseFallbackPrompted?: boolean;
+  pendingUnusableSpeechTimer?: ReturnType<typeof setTimeout>;
   startedAt: number;
+  unclearAudioStreak?: number;
+  unusableSpeechBurstCount?: number;
+  unusableSpeechBurstTotal?: number;
 }
 
 const DEFAULT_LIVEKIT_AGENT_NAME = "signalhost-harbor";
@@ -155,16 +162,21 @@ export default defineAgent({
       const decision = shouldAcceptLiveKitCallerTranscript(userData, transcript);
       if (!decision.accept) {
         userData.ignoredCallerTranscriptCount = (userData.ignoredCallerTranscriptCount ?? 0) + 1;
+        userData.unclearAudioStreak = (userData.unclearAudioStreak ?? 0) + 1;
         console.info("[livekit-agent] ignored likely background caller transcript", {
           callRecordId: userData.callRecordId,
           reason: decision.reason,
           room: ctx.room.name,
           transcriptPreview: transcript.slice(0, 160),
         });
+        maybeOfferNoisyAudioFallback(session, userData, `ignored_transcript_${decision.reason ?? "unknown"}`);
         return;
       }
 
       userData.lastCallerText = transcript;
+      userData.lastAcceptedCallerTextAt = Date.now();
+      userData.unusableSpeechBurstCount = 0;
+      userData.unclearAudioStreak = 0;
       userData.callerTranscriptCount = (userData.callerTranscriptCount ?? 0) + 1;
       void callStore.addTranscriptTurn({
         callId: userData.callRecordId,
@@ -187,8 +199,14 @@ export default defineAgent({
     });
 
     session.on("user_state_changed" as any, (event: any) => {
+      const now = Date.now();
       if (event.newState === "speaking") {
-        userData.lastCallerAudioAt = Date.now();
+        userData.lastCallerAudioAt = now;
+        userData.lastCallerSpeechStartedAt = now;
+        clearUnusableSpeechTimer(userData);
+      }
+      if (event.oldState === "speaking" && event.newState !== "speaking") {
+        scheduleUnusableSpeechCheck(session, userData, now);
       }
       console.info("[livekit-agent] user state changed", {
         newState: event.newState,
@@ -244,6 +262,7 @@ export default defineAgent({
 
     session.on("close" as any, (event: any) => {
       clearLiveKitManualResponseTimer(userData);
+      clearUnusableSpeechTimer(userData);
       const durationSeconds = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
       const callerTranscriptCount = userData.callerTranscriptCount ?? 0;
       const agentTranscriptCount = userData.agentTranscriptCount ?? 0;
@@ -263,9 +282,10 @@ export default defineAgent({
         status: needsReview ? "needs_review" : "new",
         summary: [
           `LiveKit pilot call for ${context.restaurantName}.`,
-          `Caller turns ${callerTranscriptCount}; agent turns ${agentTranscriptCount}; ignored likely background turns ${userData.ignoredCallerTranscriptCount ?? 0}.`,
+          `Caller turns ${callerTranscriptCount}; agent turns ${agentTranscriptCount}; ignored likely background turns ${userData.ignoredCallerTranscriptCount ?? 0}; unusable speech bursts ${userData.unusableSpeechBurstTotal ?? 0}.`,
           noCallerAudio ? "No caller transcript was captured after the greeting." : "",
           extraAssistantTurn ? "Agent produced more turns than expected for the captured caller turns." : "",
+          userData.noiseFallbackPrompted ? "Noisy-audio fallback was offered." : "",
         ].filter(Boolean).join(" "),
       });
     });
@@ -549,6 +569,115 @@ function clearLiveKitManualResponseTimer(userData: LiveKitAgentUserData) {
   delete userData.manualResponseTimer;
 }
 
+function scheduleUnusableSpeechCheck(
+  session: voice.AgentSession<LiveKitAgentUserData>,
+  userData: LiveKitAgentUserData,
+  stoppedAt: number,
+) {
+  clearUnusableSpeechTimer(userData);
+  const speechStartedAt = userData.lastCallerSpeechStartedAt ?? stoppedAt;
+  userData.pendingUnusableSpeechTimer = setTimeout(() => {
+    delete userData.pendingUnusableSpeechTimer;
+    if (userData.closeRequested || userData.noiseFallbackPrompted) return;
+    if ((userData.lastAcceptedCallerTextAt ?? 0) >= speechStartedAt) return;
+
+    userData.unusableSpeechBurstCount = (userData.unusableSpeechBurstCount ?? 0) + 1;
+    userData.unusableSpeechBurstTotal = (userData.unusableSpeechBurstTotal ?? 0) + 1;
+    userData.unclearAudioStreak = (userData.unclearAudioStreak ?? 0) + 1;
+    console.warn("[livekit-agent] caller speech ended without usable final transcript", {
+      callRecordId: userData.callRecordId,
+      lastAcceptedCallerTextAt: userData.lastAcceptedCallerTextAt,
+      lastCallerSpeechStartedAt: speechStartedAt,
+      locationId: userData.locationId,
+      stoppedAt,
+      unusableSpeechBurstCount: userData.unusableSpeechBurstCount,
+    });
+    maybeOfferNoisyAudioFallback(session, userData, "speech_without_usable_transcript");
+  }, 1600);
+}
+
+function clearUnusableSpeechTimer(userData: LiveKitAgentUserData) {
+  if (!userData.pendingUnusableSpeechTimer) return;
+  clearTimeout(userData.pendingUnusableSpeechTimer);
+  delete userData.pendingUnusableSpeechTimer;
+}
+
+function maybeOfferNoisyAudioFallback(
+  session: voice.AgentSession<LiveKitAgentUserData>,
+  userData: LiveKitAgentUserData,
+  reason: string,
+) {
+  if (userData.closeRequested || userData.noiseFallbackPrompted) return;
+  const ignoredCount = userData.ignoredCallerTranscriptCount ?? 0;
+  const unclearAudioStreak = userData.unclearAudioStreak ?? 0;
+  const unusableCount = userData.unusableSpeechBurstCount ?? 0;
+  if (unclearAudioStreak < 3) return;
+
+  userData.noiseFallbackPrompted = true;
+  clearLiveKitManualResponseTimer(userData);
+  clearUnusableSpeechTimer(userData);
+  const textService = createGuestConfirmationService(userData.env);
+  const canText = Boolean(textService.configured && userData.callerPhone);
+  const fallbackLine = canText
+    ? `I'm having trouble hearing you clearly over the background noise. I'll text this number ending in ${userData.callerPhone?.slice(-4)} so we can keep going there, or you can call back from a quieter spot.`
+    : "I'm having trouble hearing you clearly over the background noise. Could you move somewhere quieter, or call back from a quieter spot? I can also take a callback request for the team.";
+
+  console.warn("[livekit-agent] noisy audio fallback offered", {
+    callRecordId: userData.callRecordId,
+    callerPhoneLastFour: userData.callerPhone?.slice(-4),
+    canText,
+    ignoredCount,
+    locationId: userData.locationId,
+    reason,
+    unclearAudioStreak,
+    unusableCount,
+  });
+
+  if (canText) {
+    void textService.sendTextMessage({
+      callId: userData.callRecordId,
+      locationId: userData.locationId,
+      message: "I'm having trouble hearing you clearly on the call. Reply here and I can keep helping.",
+      restaurantName: userData.context.restaurantName,
+      threadType: "general",
+      to: userData.callerPhone,
+    }).catch((error) => {
+      console.warn("[livekit-agent] noisy audio fallback text failed", {
+        callRecordId: userData.callRecordId,
+        error: formatErrorForLog(error),
+      });
+    });
+  }
+
+  userData.lastAgentText = fallbackLine;
+  void userData.callStore.addTranscriptTurn({
+    callId: userData.callRecordId,
+    speaker: "agent",
+    text: fallbackLine,
+  }).catch((error) => {
+    console.warn("[livekit-agent] noisy audio fallback transcript persistence failed", {
+      callRecordId: userData.callRecordId,
+      error: formatErrorForLog(error),
+    });
+  });
+
+  try {
+    const handle = session.say(fallbackLine, {
+      allowInterruptions: false,
+      addToChatCtx: true,
+    });
+    void handle.waitForPlayout().catch((error) => {
+      console.error("[livekit-agent] noisy audio fallback playout failed", {
+        error: formatErrorForLog(error),
+      });
+    });
+  } catch (error) {
+    console.error("[livekit-agent] noisy audio fallback could not be created", {
+      error: formatErrorForLog(error),
+    });
+  }
+}
+
 function shouldAcceptLiveKitCallerTranscript(
   userData: LiveKitAgentUserData,
   text: string,
@@ -795,7 +924,7 @@ function summarizePublication(publication: RemoteTrackPublication) {
 }
 
 function isNodeNoiseCancellationEnabled() {
-  return process.env.LIVEKIT_AGENT_INPUT_NOISE_CANCELLATION === "true";
+  return process.env.LIVEKIT_AGENT_INPUT_NOISE_CANCELLATION !== "false";
 }
 
 function parseMetadata(value: unknown): Record<string, string | undefined> {

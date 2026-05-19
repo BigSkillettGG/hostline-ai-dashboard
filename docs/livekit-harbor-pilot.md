@@ -48,6 +48,7 @@ LIVEKIT_INBOUND_AUTH_USERNAME=choose-a-username
 LIVEKIT_INBOUND_AUTH_PASSWORD=choose-a-long-password
 LIVEKIT_PHONE_NUMBER=+17816946083
 LIVEKIT_AGENT_NAME=signalhost-harbor
+LIVEKIT_AGENT_INPUT_NOISE_CANCELLATION=true
 LIVEKIT_ROOM_PREFIX=harbor-call-
 LIVEKIT_PILOT_LOCATION_IDS=22222222-2222-4222-8222-222222222222
 LIVEKIT_KRISP_ENABLED=true
@@ -79,6 +80,17 @@ In LiveKit Cloud:
 4. Create a dispatch rule from the JSON in `/livekit/pilot-config`.
 5. The dispatch rule should send calls to agent name `signalhost-harbor`.
 6. Deploy and start the LiveKit worker before pointing Harbor's Twilio number at the LiveKit webhook.
+
+## Speakerphone/noise test requirements
+
+For Harbor speakerphone testing, both LiveKit noise layers should be on:
+
+- The LiveKit inbound trunk should have `krispEnabled: true`.
+- The Render LiveKit worker should have `LIVEKIT_AGENT_INPUT_NOISE_CANCELLATION=true`.
+
+The worker defaults this setting on unless it is explicitly set to `false`, but keeping the variable visible in Render makes the test easier to audit. When it is active, the worker boot log prints `nodeNoiseCancellationEnabled: true`.
+
+If a caller produces repeated audio bursts that cannot become a clean final transcript, the worker now marks the call for review and offers the caller a quieter-place/text fallback instead of letting background audio drive the conversation.
 
 ## Twilio setup
 
