@@ -1880,13 +1880,13 @@ function shouldAcceptRealtimeCallerTranscript(
   if (!normalized) return { accept: false, reason: "empty" };
   if (isOpenAIRealtimeTranscriptionPromptLeak(normalized)) return { accept: false, reason: "prompt_leak" };
   if (isLikelyOpeningGreetingEcho(session, normalized)) return { accept: false, reason: "opening_greeting_echo" };
+  if (!session.openingGreetingCompleted) return { accept: false, reason: "opening_greeting_locked" };
   if (isLikelyOpenAIRealtimeAgentEcho(session, normalized)) return { accept: false, reason: "agent_echo" };
   if (isLikelyBackgroundMediaFragment(normalized)) return { accept: false, reason: "background_media" };
   if (isLikelyOpeningBackchannelEcho(session, normalized)) return { accept: false, reason: "opening_backchannel_echo" };
 
   const wordCount = normalized.split(/\s+/).filter(Boolean).length;
   const activeResponse = Boolean(session.quality.activeResponseStartedAt);
-  const greetingPhase = !session.openingGreetingCompleted;
   const strongIntent = hasStrongCallerIntent(normalized);
   const clearIntent = hasLikelyCallerIntent(normalized);
   const configuredOfferingIntent = hasConfiguredOfferingIntent(session.context, normalized);
@@ -1896,7 +1896,7 @@ function shouldAcceptRealtimeCallerTranscript(
   const correctionOrRepair = isLikelyCallerCorrectionOrRepair(normalized);
   const detailAnswer = isAnsweringDetailCaptureQuestion(session, normalized);
 
-  if (greetingPhase || activeResponse) {
+  if (activeResponse) {
     if (correctionOrRepair) return { accept: true, reason: "caller_repair" };
     if (answerToAgentQuestion) return { accept: true, reason: "answer_to_agent_question" };
     if (detailAnswer) return { accept: true, reason: "detail_capture" };
@@ -1904,7 +1904,7 @@ function shouldAcceptRealtimeCallerTranscript(
     if (configuredOfferingIntent) return { accept: true, reason: "configured_offering" };
     if (directedSpeech) return { accept: true, reason: "directed_speech" };
     if (shortConfirmation) return { accept: true, reason: "short_confirmation" };
-    return { accept: false, reason: greetingPhase ? "greeting_noise" : "response_noise" };
+    return { accept: false, reason: "response_noise" };
   }
 
   // Once the greeting is complete and SignalHost is listening, prefer letting the

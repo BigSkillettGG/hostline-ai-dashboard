@@ -388,6 +388,7 @@ describe("OpenAI Realtime SIP", () => {
     });
 
     socket.emit("open");
+    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.audio.done" })));
     socket.emit(
       "message",
       Buffer.from(JSON.stringify({
@@ -547,6 +548,7 @@ describe("OpenAI Realtime SIP", () => {
 
     expect(result.status).toBe(200);
     socket.emit("open");
+    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.audio.done" })));
     socket.emit(
       "message",
       Buffer.from(JSON.stringify({
@@ -685,6 +687,7 @@ describe("OpenAI Realtime SIP", () => {
     });
 
     socket.emit("open");
+    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.audio.done" })));
     socket.emit(
       "message",
       Buffer.from(JSON.stringify({
@@ -1011,6 +1014,120 @@ describe("OpenAI Realtime SIP", () => {
         }),
       ]),
     );
+  });
+
+  it("locks out all caller speech until the opening greeting audio completes", async () => {
+    const socket = createFakeRealtimeSocket();
+    const transcriptTurns: unknown[] = [];
+    const service = createOpenAIRealtimeSipService(
+      baseEnv,
+      {
+        async getContext() {
+          return demoRestaurantContext;
+        },
+      },
+      {
+        callStore: {
+          async addTranscriptTurn(input) {
+            transcriptTurns.push(input);
+          },
+          async attachCallRecording() {},
+          async completeCall() {},
+          async createCustomerRequest() {
+            return {};
+          },
+          async createStaffReviewOrder() {
+            return {};
+          },
+          async createStaffReviewReservation() {
+            return {};
+          },
+          async createStaffTask() {
+            return {};
+          },
+          async startCall() {
+            return {};
+          },
+          async startRealtimeCall() {
+            return { callId: "call_uuid" };
+          },
+        },
+        fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+        websocketFactory: () => socket as never,
+      },
+    );
+
+    await service.handleIncomingWebhook({
+      headers: {},
+      rawBody: JSON.stringify({
+        data: {
+          call_id: "rtc_greeting_lock",
+          sip_headers: [{ name: "From", value: "sip:+14155550123@twilio.com" }],
+        },
+        type: "realtime.call.incoming",
+      }),
+    });
+
+    socket.emit("open");
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        response: { id: "resp_greeting" },
+        type: "response.created",
+      })),
+    );
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "agent_greeting",
+        transcript: "Thank you for calling Olive and Ember. How can I help you?",
+        type: "response.output_audio_transcript.done",
+      })),
+    );
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "caller_talked_over_greeting",
+        transcript: "I need emergency plumbing help.",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    await Promise.resolve();
+
+    expect(transcriptTurns).toEqual([
+      expect.objectContaining({
+        speaker: "agent",
+      }),
+    ]);
+    expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))).toHaveLength(1);
+    expect(socket.sentEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          item_id: "caller_talked_over_greeting",
+          type: "conversation.item.delete",
+        }),
+      ]),
+    );
+
+    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.audio.done" })));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "caller_after_greeting",
+        transcript: "I need emergency plumbing help.",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    await flushAsyncWork();
+
+    expect(transcriptTurns).toEqual([
+      expect.objectContaining({ speaker: "agent" }),
+      expect.objectContaining({
+        speaker: "caller",
+        text: "I need emergency plumbing help.",
+      }),
+    ]);
+    expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))).toHaveLength(2);
   });
 
   it("marks short greeting-only SIP calls for review instead of resolved", async () => {
