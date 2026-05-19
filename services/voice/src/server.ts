@@ -211,6 +211,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       openAIRealtimeSipConfigured: openAIRealtimeSipService.configured,
       openAIRealtimeConfig: {
         acceptProvider: openAIRealtimeConfig.acceptProvider,
+        greetingDelayMs: openAIRealtimeConfig.greetingDelayMs,
         model: openAIRealtimeConfig.model,
         noiseReduction: openAIRealtimeConfig.noiseReduction,
         speed: openAIRealtimeConfig.speed,
