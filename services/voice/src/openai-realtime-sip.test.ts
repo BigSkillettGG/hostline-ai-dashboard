@@ -1067,6 +1067,256 @@ describe("OpenAI Realtime SIP", () => {
     expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))).toHaveLength(2);
   });
 
+  it("answers a connection check after the greeting without restarting the greeting", async () => {
+    const socket = createFakeRealtimeSocket();
+    const service = createOpenAIRealtimeSipService(
+      baseEnv,
+      {
+        async getContext() {
+          return demoRestaurantContext;
+        },
+      },
+      {
+        callStore: {
+          async addTranscriptTurn() {},
+          async attachCallRecording() {},
+          async completeCall() {},
+          async createCustomerRequest() {
+            return {};
+          },
+          async createStaffReviewOrder() {
+            return {};
+          },
+          async createStaffReviewReservation() {
+            return {};
+          },
+          async createStaffTask() {
+            return {};
+          },
+          async startCall() {
+            return {};
+          },
+          async startRealtimeCall() {
+            return { callId: "call_uuid" };
+          },
+        },
+        fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+        websocketFactory: () => socket as never,
+      },
+    );
+
+    await service.handleIncomingWebhook({
+      headers: {},
+      rawBody: JSON.stringify({
+        data: {
+          call_id: "rtc_connection_check",
+          sip_headers: [{ name: "From", value: "sip:+14155550123@twilio.com" }],
+        },
+        type: "realtime.call.incoming",
+      }),
+    });
+
+    socket.emit("open");
+    socket.emit("message", Buffer.from(JSON.stringify({ type: "response.created" })));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "agent_greeting",
+        transcript: "Thank you for calling Olive and Ember. How can I help you?",
+        type: "response.output_audio_transcript.done",
+      })),
+    );
+    socket.emit("message", Buffer.from(JSON.stringify({ type: "response.audio.done" })));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "caller_hello",
+        transcript: "Hello?",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    await flushAsyncWork();
+
+    const responses = socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"));
+    expect(responses).toHaveLength(2);
+    expect(responses.at(-1)).toMatchObject({
+      response: {
+        instructions: expect.stringContaining("I'm here. How can I help you?"),
+      },
+    });
+    expect(JSON.stringify(responses.at(-1))).not.toContain("Thank you for calling");
+  });
+
+  it("answers who-is-this questions with the business identity", async () => {
+    const socket = createFakeRealtimeSocket();
+    const service = createOpenAIRealtimeSipService(
+      baseEnv,
+      {
+        async getContext() {
+          return demoRestaurantContext;
+        },
+      },
+      {
+        callStore: {
+          async addTranscriptTurn() {},
+          async attachCallRecording() {},
+          async completeCall() {},
+          async createCustomerRequest() {
+            return {};
+          },
+          async createStaffReviewOrder() {
+            return {};
+          },
+          async createStaffReviewReservation() {
+            return {};
+          },
+          async createStaffTask() {
+            return {};
+          },
+          async startCall() {
+            return {};
+          },
+          async startRealtimeCall() {
+            return { callId: "call_uuid" };
+          },
+        },
+        fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+        websocketFactory: () => socket as never,
+      },
+    );
+
+    await service.handleIncomingWebhook({
+      headers: {},
+      rawBody: JSON.stringify({
+        data: {
+          call_id: "rtc_identity_question",
+          sip_headers: [{ name: "From", value: "sip:+14155550123@twilio.com" }],
+        },
+        type: "realtime.call.incoming",
+      }),
+    });
+
+    socket.emit("open");
+    socket.emit("message", Buffer.from(JSON.stringify({ type: "response.created" })));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "agent_greeting",
+        transcript: "Thank you for calling Olive and Ember. How can I help you?",
+        type: "response.output_audio_transcript.done",
+      })),
+    );
+    socket.emit("message", Buffer.from(JSON.stringify({ type: "response.audio.done" })));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "caller_who",
+        transcript: "Who is this?",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    await flushAsyncWork();
+
+    const responses = socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"));
+    expect(responses.at(-1)).toMatchObject({
+      response: {
+        instructions: expect.stringContaining("You've reached Olive and Ember."),
+      },
+    });
+    expect(JSON.stringify(responses.at(-1))).not.toContain("I'm an automated assistant");
+  });
+
+  it("asks for the missing digits when a callback number is incomplete", async () => {
+    const socket = createFakeRealtimeSocket();
+    const service = createOpenAIRealtimeSipService(
+      baseEnv,
+      {
+        async getContext() {
+          return {
+            ...demoRestaurantContext,
+            restaurantName: "Summit Air",
+            vertical: "hvac",
+          };
+        },
+      },
+      {
+        callStore: {
+          async addTranscriptTurn() {},
+          async attachCallRecording() {},
+          async completeCall() {},
+          async createCustomerRequest() {
+            return {};
+          },
+          async createStaffReviewOrder() {
+            return {};
+          },
+          async createStaffReviewReservation() {
+            return {};
+          },
+          async createStaffTask() {
+            return {};
+          },
+          async startCall() {
+            return {};
+          },
+          async startRealtimeCall() {
+            return { callId: "call_uuid" };
+          },
+        },
+        fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+        websocketFactory: () => socket as never,
+      },
+    );
+
+    await service.handleIncomingWebhook({
+      headers: {},
+      rawBody: JSON.stringify({
+        data: {
+          call_id: "rtc_incomplete_phone",
+          sip_headers: [{ name: "From", value: "sip:+16034899218@twilio.com" }],
+        },
+        type: "realtime.call.incoming",
+      }),
+    });
+
+    socket.emit("open");
+    socket.emit("message", Buffer.from(JSON.stringify({ type: "response.created" })));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "agent_greeting",
+        transcript: "Thank you for calling Summit Air. How can I help you?",
+        type: "response.output_audio_transcript.done",
+      })),
+    );
+    socket.emit("message", Buffer.from(JSON.stringify({ type: "response.audio.done" })));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "agent_phone_prompt",
+        transcript: "Sure. What's your name and best callback number?",
+        type: "response.output_audio_transcript.done",
+      })),
+    );
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "caller_partial_phone",
+        transcript: "My name is Kim Schneider, and my callback number is 603-489-92.",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    await flushAsyncWork();
+
+    const responses = socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"));
+    expect(responses.at(-1)).toMatchObject({
+      response: {
+        instructions: expect.stringContaining("I only got 603-489-92. Could you repeat the rest of the phone number?"),
+      },
+    });
+    expect(JSON.stringify(responses.at(-1))).not.toContain("Customer request saved");
+  });
+
   it("accepts short restaurant intents instead of filtering them as background noise", async () => {
     const socket = createFakeRealtimeSocket();
     const transcriptTurns: unknown[] = [];

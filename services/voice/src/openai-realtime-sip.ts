@@ -221,6 +221,7 @@ interface OpenAIRealtimeSidebandSession {
   recordingBackfilled?: boolean;
   reservationCreatedId?: string;
   reservationConfirmed?: boolean;
+  responseAudioCompleteFallbackTimer?: ReturnType<typeof setTimeout>;
   staffCallbackRequested: boolean;
   staffFollowUpRequired: boolean;
   startedAt: number;
@@ -1288,6 +1289,14 @@ function startSidebandSocket({
         socket,
         turn: transcriptTurn,
       });
+      if (transcriptTurn.role === "agent" && eventType === "response.output_audio_transcript.done") {
+        scheduleOpenAIRealtimeResponseCompletionFallback({
+          callId,
+          session,
+          socket,
+          transcript: transcriptTurn.text,
+        });
+      }
     }
 
     const toolCalls = extractOpenAIRealtimeToolCalls(event);
@@ -1312,8 +1321,8 @@ function startSidebandSocket({
       return;
     }
 
-    if (eventType === "response.done") {
-      handleOpenAIRealtimeResponseDone({ callId, session, socket });
+    if (eventType === "response.done" || eventType === "response.audio.done" || eventType === "output_audio_buffer.stopped") {
+      handleOpenAIRealtimeResponseDone({ callId, session, socket, source: eventType });
       return;
     }
 
@@ -1327,6 +1336,7 @@ function startSidebandSocket({
     clearOpenAIRealtimeFinishedClose(session);
     clearOpenAIRealtimeManualIdleTimer(session);
     clearOpenAIRealtimeManualResponseTimer(session);
+    clearOpenAIRealtimeResponseCompletionFallbackTimer(session);
     void completeOpenAIRealtimeLoggedCall({
       callStore,
       callRecordingService,
@@ -1347,6 +1357,7 @@ function startSidebandSocket({
     clearOpenAIRealtimeFinishedClose(session);
     clearOpenAIRealtimeManualIdleTimer(session);
     clearOpenAIRealtimeManualResponseTimer(session);
+    clearOpenAIRealtimeResponseCompletionFallbackTimer(session);
     void completeOpenAIRealtimeLoggedCall({
       callStore,
       callRecordingService,
@@ -1512,14 +1523,30 @@ function handleOpenAIRealtimeResponseDone({
   callId,
   session,
   socket,
+  source,
 }: {
   callId: string;
   session: OpenAIRealtimeSidebandSession;
   socket: RealtimeSocket;
+  source?: string;
 }) {
+  clearOpenAIRealtimeResponseCompletionFallbackTimer(session);
+  if (session.quality.activeResponseStartedAt) {
+    session.quality.lastResponseDurationMs = Date.now() - session.quality.activeResponseStartedAt;
+  }
+  delete session.quality.activeResponseStartedAt;
+  delete session.manualResponseStartPending;
+  delete session.activeResponseCancelRequested;
+
   if (!session.openingGreetingCompleted) {
     session.openingGreetingCompleted = true;
   }
+
+  console.info("[openai-realtime] response completed", {
+    callId,
+    pendingManualResponse: session.pendingManualResponse,
+    source: source ?? "response.done",
+  });
 
   if (session.finishRequested) {
     scheduleOpenAIRealtimeFinishedClose({ callId, session, socket });
@@ -1537,6 +1564,46 @@ function handleOpenAIRealtimeResponseDone({
   }
 
   scheduleOpenAIRealtimeManualIdlePrompt({ callId, session, socket });
+}
+
+function scheduleOpenAIRealtimeResponseCompletionFallback({
+  callId,
+  session,
+  socket,
+  transcript,
+}: {
+  callId: string;
+  session: OpenAIRealtimeSidebandSession;
+  socket: RealtimeSocket;
+  transcript: string;
+}) {
+  clearOpenAIRealtimeResponseCompletionFallbackTimer(session);
+  if (!session.quality.activeResponseStartedAt || session.finishRequested) return;
+
+  const delayMs = estimateOpenAIRealtimeResponseCompletionFallbackMs(transcript);
+  session.responseAudioCompleteFallbackTimer = setTimeout(() => {
+    delete session.responseAudioCompleteFallbackTimer;
+    if (!session.quality.activeResponseStartedAt || session.finishRequested) return;
+    handleOpenAIRealtimeResponseDone({
+      callId,
+      session,
+      socket,
+      source: "response.output_audio_transcript.done_fallback",
+    });
+  }, delayMs);
+  session.responseAudioCompleteFallbackTimer.unref?.();
+}
+
+function clearOpenAIRealtimeResponseCompletionFallbackTimer(session: OpenAIRealtimeSidebandSession) {
+  if (!session.responseAudioCompleteFallbackTimer) return;
+  clearTimeout(session.responseAudioCompleteFallbackTimer);
+  delete session.responseAudioCompleteFallbackTimer;
+}
+
+function estimateOpenAIRealtimeResponseCompletionFallbackMs(transcript: string) {
+  const wordCount = transcript.trim().split(/\s+/).filter(Boolean).length;
+  if (!wordCount) return 900;
+  return Math.min(3000, Math.max(900, wordCount * 170 + 350));
 }
 
 function requestOpenAIRealtimeManualResponse({
@@ -1620,6 +1687,9 @@ function buildManualRealtimeResponseInstructions(
 ) {
   const profile = getRuntimeBusinessProfile(session.context);
   const latest = latestCallerText?.trim();
+  const deterministicRepair = buildDeterministicRealtimeRepairInstructions(session, latest);
+  if (deterministicRepair) return deterministicRepair;
+
   const base = [
     latest
       ? `Reply to this latest completed caller message only: "${latest}"`
@@ -1643,6 +1713,80 @@ function buildManualRealtimeResponseInstructions(
   }
 
   return base.join(" ");
+}
+
+function buildDeterministicRealtimeRepairInstructions(
+  session: OpenAIRealtimeSidebandSession,
+  latest?: string,
+) {
+  if (!latest) return null;
+  const normalized = normalizeRealtimeCallerText(latest);
+  if (!normalized) return null;
+
+  const incompletePhone = getIncompleteCallbackPhoneRepair(session, latest, normalized);
+  if (incompletePhone) {
+    return [
+      `The caller gave an incomplete callback phone number. Say exactly and only: "I only got ${incompletePhone}. Could you repeat the rest of the phone number?"`,
+      "Do not save, submit, text, finish, or move to another question until the caller gives the missing digits.",
+    ].join(" ");
+  }
+
+  if (isOpeningConnectionCheck(session, normalized)) {
+    return [
+      'The caller is checking the connection right after the opening greeting. Say exactly and only: "I\'m here. How can I help you?"',
+      "Do not restart the greeting, do not say hi or hello, and do not add any other words.",
+    ].join(" ");
+  }
+
+  if (isCallerIdentityQuestion(normalized)) {
+    const businessName = toSpokenRestaurantName(session.context.restaurantName);
+    return [
+      `The caller is asking who they reached. Say exactly and only: "You've reached ${businessName}. I can help with questions or service requests. How can I help you?"`,
+      "Do not say you are not the business. Do not over-explain that you are automated unless the caller specifically asks if you are AI.",
+    ].join(" ");
+  }
+
+  return null;
+}
+
+function isOpeningConnectionCheck(session: OpenAIRealtimeSidebandSession, normalized: string) {
+  const callerTurnCount = session.transcript.filter((turn) => turn.role === "caller").length;
+  if (callerTurnCount > 1) return false;
+  return /^(hello|hello there|hi|hey|are you there|you there|can you hear me|is anyone there|anyone there|are you still there)$/.test(
+    normalized,
+  );
+}
+
+function isCallerIdentityQuestion(normalized: string) {
+  return (
+    /^(who is this|who am i speaking with|who am i talking to|what company is this|what business is this)$/.test(
+      normalized,
+    ) ||
+    /\b(is this|did i reach|did i call|am i calling)\b/.test(normalized)
+  );
+}
+
+function getIncompleteCallbackPhoneRepair(
+  session: OpenAIRealtimeSidebandSession,
+  originalText: string,
+  normalized: string,
+) {
+  const lastAgentText = session.transcript.filter((turn) => turn.role === "agent").at(-1)?.text ?? "";
+  const lastAgent = normalizeRealtimeCallerText(lastAgentText);
+  const lastAgentAskedForPhone = /\b(callback|phone|number|best number|mobile|cell)\b/.test(lastAgent);
+  const callerIsGivingPhone = /\b(callback|phone|number|mobile|cell)\b/.test(normalized) || /\b\d[\d\s().-]{3,}\d\b/.test(originalText);
+  if (!lastAgentAskedForPhone || !callerIsGivingPhone) return null;
+
+  const digitCount = originalText.replace(/\D/g, "").length;
+  if (digitCount < 4 || digitCount >= 10) return null;
+
+  return extractIncompletePhoneFragment(originalText) ?? "part of the number";
+}
+
+function extractIncompletePhoneFragment(text: string) {
+  const match = text.match(/\+?\d[\d\s().-]{2,}\d/);
+  if (!match) return null;
+  return match[0].replace(/\s+/g, " ").trim();
 }
 
 function scheduleOpenAIRealtimeManualIdlePrompt({
