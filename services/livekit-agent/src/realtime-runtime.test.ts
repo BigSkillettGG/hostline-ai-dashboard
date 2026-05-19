@@ -1,8 +1,39 @@
 import { describe, expect, it } from "vitest";
 import { demoRestaurantContext } from "../../voice/src/restaurant-context";
-import { buildLiveKitRealtimeInstructions, finishLiveKitCall, isLiveKitCallerDoneUtterance } from "./realtime-runtime";
+import {
+  buildLiveKitRealtimeInstructions,
+  finishLiveKitCall,
+  isLiveKitCallerDoneUtterance,
+  resolveLiveKitRealtimeTurnDetection,
+} from "./realtime-runtime";
 
 describe("LiveKit realtime call closing", () => {
+  it("uses manual response creation so background audio cannot make Harbor jump ahead", () => {
+    expect(resolveLiveKitRealtimeTurnDetection({
+      OPENAI_REALTIME_INTERRUPT_RESPONSE: true,
+      OPENAI_REALTIME_SERVER_VAD_PREFIX_PADDING_MS: 150,
+      OPENAI_REALTIME_SERVER_VAD_SILENCE_MS: 900,
+      OPENAI_REALTIME_SERVER_VAD_THRESHOLD: 0.88,
+      OPENAI_REALTIME_TURN_DETECTION_MODE: "server_vad",
+      OPENAI_REALTIME_TURN_EAGERNESS: "low",
+    } as any)).toMatchObject({
+      create_response: false,
+      interrupt_response: false,
+      type: "server_vad",
+    });
+
+    expect(resolveLiveKitRealtimeTurnDetection({
+      OPENAI_REALTIME_INTERRUPT_RESPONSE: true,
+      OPENAI_REALTIME_TURN_DETECTION_MODE: "semantic_vad",
+      OPENAI_REALTIME_TURN_EAGERNESS: "low",
+    } as any)).toMatchObject({
+      create_response: false,
+      eagerness: "low",
+      interrupt_response: false,
+      type: "semantic_vad",
+    });
+  });
+
   it("keeps incomplete caller speech from being guessed into a full request", () => {
     const instructions = buildLiveKitRealtimeInstructions(demoRestaurantContext);
 

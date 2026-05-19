@@ -2197,6 +2197,11 @@ function classifyOpenAIRealtimeCall(session: OpenAIRealtimeSidebandSession): {
     .map((turn) => turn.text)
     .join(" ")
     .toLowerCase();
+  const hasCallerTranscript = Boolean(callerText.trim()) || session.quality.callerTranscriptCount > 0;
+  const shortGreetingOnlyCall =
+    !hasCallerTranscript &&
+    session.quality.agentTranscriptCount > 0 &&
+    getRealtimeSessionOffsetSeconds(session) <= 12;
   const toolNames = new Set(session.toolEvents.map((event) => event.name));
   const toolKinds = new Set(session.toolEvents.map((event) => event.kind).filter(Boolean));
   const hasOrderIntent =
@@ -2213,19 +2218,22 @@ function classifyOpenAIRealtimeCall(session: OpenAIRealtimeSidebandSession): {
       ? "reservation"
       : hasHoursIntent
         ? "hours"
-        : session.transcript.length
+        : hasCallerTranscript
           ? "faq"
           : "other";
 
   const qualityNeedsReview =
     session.quality.toolErrorCount > 0 ||
     session.quality.speechStartedDuringResponseCount >= 3 ||
-    (session.quality.speechStartCount >= 3 && session.quality.callerTranscriptCount === 0);
+    (session.quality.speechStartCount >= 3 && session.quality.callerTranscriptCount === 0) ||
+    shortGreetingOnlyCall;
   const needsReview = session.staffCallbackRequested || toolNames.has("request_staff_callback") || qualityNeedsReview;
   const followUpToolUsed =
     session.staffFollowUpRequired ||
     toolNames.has("create_customer_request");
-  const outcome = needsReview
+  const outcome = shortGreetingOnlyCall
+    ? "audio_unavailable"
+    : needsReview
     ? "escalated"
     : toolNames.has("create_customer_request")
       ? "message_taken"
@@ -2240,10 +2248,10 @@ function classifyOpenAIRealtimeCall(session: OpenAIRealtimeSidebandSession): {
         : "resolved";
 
   return {
-    confidence: session.transcript.length ? (needsReview ? 72 : 88) : 20,
+    confidence: hasCallerTranscript ? (needsReview ? 72 : 88) : 20,
     intent,
     outcome,
-    status: needsReview || !session.transcript.length ? "needs_review" : followUpToolUsed ? "new" : "resolved",
+    status: needsReview || !hasCallerTranscript ? "needs_review" : followUpToolUsed ? "new" : "resolved",
   };
 }
 
@@ -2292,6 +2300,10 @@ function buildRealtimeQualitySummary(session: OpenAIRealtimeSidebandSession) {
     ? Math.round(session.quality.toolLatencyMs.reduce((sum, latency) => sum + latency, 0) / session.quality.toolLatencyMs.length)
     : undefined;
   const flags = [
+    session.quality.agentTranscriptCount > 0 &&
+      session.quality.callerTranscriptCount === 0 &&
+      getRealtimeSessionOffsetSeconds(session) <= 12 &&
+      "short greeting-only call with no caller audio captured",
     session.quality.speechStartedDuringResponseCount >= 3 && "possible speakerphone echo/false interruptions",
     session.quality.speechStartCount >= 3 && session.quality.callerTranscriptCount === 0 && "speech detected but no caller transcript",
     session.quality.ignoredNoiseTranscriptCount > 0 && `${session.quality.ignoredNoiseTranscriptCount} likely background transcript(s) ignored`,
@@ -3357,8 +3369,8 @@ export function resolveOpenAIRealtimeIdleTimeoutMs(env: OpenAIRealtimeEnv) {
   return Number.isFinite(idleTimeoutMs) ? Math.min(45000, Math.max(15000, Math.round(idleTimeoutMs))) : 18000;
 }
 
-export function resolveOpenAIRealtimeInterruptResponse(env: OpenAIRealtimeEnv) {
-  return env.OPENAI_REALTIME_INTERRUPT_RESPONSE === true;
+export function resolveOpenAIRealtimeInterruptResponse(_env: OpenAIRealtimeEnv) {
+  return false;
 }
 
 function resolveOpenAIRealtimeVoice(env: OpenAIRealtimeEnv, context: RestaurantVoiceContext) {

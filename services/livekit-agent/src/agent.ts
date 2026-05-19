@@ -44,11 +44,15 @@ interface LiveKitAgentUserData {
   env: VoiceServiceEnv;
   jobContext: JobContext;
   linkedParticipantIdentity?: string;
+  agentTranscriptCount?: number;
   closeRequested?: boolean;
+  callerTranscriptCount?: number;
+  ignoredCallerTranscriptCount?: number;
   lastAgentText?: string;
   lastCallerAudioAt?: number;
   lastCallerText?: string;
   locationId: string;
+  manualResponseTimer?: ReturnType<typeof setTimeout>;
   noInputPrompted?: boolean;
   startedAt: number;
 }
@@ -148,7 +152,20 @@ export default defineAgent({
         transcriptPreview: transcript.slice(0, 160),
       });
       if (!event.isFinal || !transcript) return;
+      const decision = shouldAcceptLiveKitCallerTranscript(userData, transcript);
+      if (!decision.accept) {
+        userData.ignoredCallerTranscriptCount = (userData.ignoredCallerTranscriptCount ?? 0) + 1;
+        console.info("[livekit-agent] ignored likely background caller transcript", {
+          callRecordId: userData.callRecordId,
+          reason: decision.reason,
+          room: ctx.room.name,
+          transcriptPreview: transcript.slice(0, 160),
+        });
+        return;
+      }
+
       userData.lastCallerText = transcript;
+      userData.callerTranscriptCount = (userData.callerTranscriptCount ?? 0) + 1;
       void callStore.addTranscriptTurn({
         callId: userData.callRecordId,
         speaker: "caller",
@@ -156,7 +173,9 @@ export default defineAgent({
       });
       if (shouldCloseAfterLoopClosingQuestion(transcript, userData.lastAgentText)) {
         closeAfterCallerDone(session, userData);
+        return;
       }
+      scheduleLiveKitManualResponse(session, userData, transcript);
     });
 
     session.on("agent_state_changed" as any, (event: any) => {
@@ -201,6 +220,7 @@ export default defineAgent({
       const text = event.item?.type === "message" && event.item.role === "assistant" ? event.item.textContent?.trim() : undefined;
       if (!text) return;
       userData.lastAgentText = text;
+      userData.agentTranscriptCount = (userData.agentTranscriptCount ?? 0) + 1;
       void callStore.addTranscriptTurn({
         callId: userData.callRecordId,
         speaker: "agent",
@@ -223,17 +243,30 @@ export default defineAgent({
     });
 
     session.on("close" as any, (event: any) => {
+      clearLiveKitManualResponseTimer(userData);
       const durationSeconds = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
+      const callerTranscriptCount = userData.callerTranscriptCount ?? 0;
+      const agentTranscriptCount = userData.agentTranscriptCount ?? 0;
+      const noCallerAudio = callerTranscriptCount === 0;
+      const extraAssistantTurn = callerTranscriptCount > 0 && agentTranscriptCount > callerTranscriptCount + 1;
+      const needsReview = event.reason === "error" || noCallerAudio || extraAssistantTurn;
       void callStore.completeCall({
         callId: userData.callRecordId,
         channel: "phone",
-        confidence: event.reason === "participant_disconnected" ? 80 : 88,
+        confidence: needsReview ? 45 : event.reason === "participant_disconnected" ? 80 : 88,
         durationSeconds,
         externalCallSid: externalCallId,
         intent: "other",
-        outcome: event.reason === "error" ? "LiveKit pilot call closed with an error." : "LiveKit pilot call completed.",
-        status: event.reason === "error" ? "needs_review" : "new",
-        summary: `LiveKit pilot call for ${context.restaurantName}.`,
+        outcome: needsReview
+          ? "LiveKit pilot call needs review."
+          : "LiveKit pilot call completed.",
+        status: needsReview ? "needs_review" : "new",
+        summary: [
+          `LiveKit pilot call for ${context.restaurantName}.`,
+          `Caller turns ${callerTranscriptCount}; agent turns ${agentTranscriptCount}; ignored likely background turns ${userData.ignoredCallerTranscriptCount ?? 0}.`,
+          noCallerAudio ? "No caller transcript was captured after the greeting." : "",
+          extraAssistantTurn ? "Agent produced more turns than expected for the captured caller turns." : "",
+        ].filter(Boolean).join(" "),
       });
     });
 
@@ -421,6 +454,7 @@ function didAgentAskLoopClosingQuestion(text: string) {
 function closeAfterCallerDone(session: voice.AgentSession<LiveKitAgentUserData>, userData: LiveKitAgentUserData) {
   if (userData.closeRequested) return;
   userData.closeRequested = true;
+  clearLiveKitManualResponseTimer(userData);
 
   try {
     session.clearUserTurn();
@@ -466,6 +500,110 @@ function closeAfterCallerDone(session: voice.AgentSession<LiveKitAgentUserData>,
       userData.jobContext.shutdown("caller_done");
     },
   );
+}
+
+function scheduleLiveKitManualResponse(
+  session: voice.AgentSession<LiveKitAgentUserData>,
+  userData: LiveKitAgentUserData,
+  callerText: string,
+) {
+  clearLiveKitManualResponseTimer(userData);
+  userData.manualResponseTimer = setTimeout(() => {
+    delete userData.manualResponseTimer;
+    if (userData.closeRequested) return;
+    if (userData.lastCallerText?.trim() !== callerText.trim()) return;
+
+    console.info("[livekit-agent] creating manually gated reply for caller turn", {
+      callRecordId: userData.callRecordId,
+      locationId: userData.locationId,
+      transcriptPreview: callerText.slice(0, 160),
+    });
+
+    try {
+      const replyHandle = session.generateReply({
+        instructions: [
+          "Reply now to the caller's latest completed message in the conversation.",
+          "Do not infer missing words, hidden requests, or unstated details.",
+          "If the caller's request is broad or incomplete, ask one brief clarifying question.",
+          "Do not restart the greeting and do not answer a different request than the caller made.",
+        ].join(" "),
+      });
+      void replyHandle.waitForPlayout().catch((error) => {
+        console.error("[livekit-agent] manually gated reply failed", {
+          error: formatErrorForLog(error),
+        });
+      });
+    } catch (error) {
+      console.error("[livekit-agent] manually gated reply could not be created", {
+        error: formatErrorForLog(error),
+      });
+    }
+  }, 350);
+}
+
+function clearLiveKitManualResponseTimer(userData: LiveKitAgentUserData) {
+  if (!userData.manualResponseTimer) return;
+  clearTimeout(userData.manualResponseTimer);
+  delete userData.manualResponseTimer;
+}
+
+function shouldAcceptLiveKitCallerTranscript(
+  userData: LiveKitAgentUserData,
+  text: string,
+): { accept: boolean; reason?: string } {
+  const normalized = normalizeLiveKitCallerText(text);
+  if (!normalized) return { accept: false, reason: "empty" };
+  if (isLikelyLiveKitBackgroundMedia(normalized)) return { accept: false, reason: "background_media" };
+  if (isLikelyLiveKitAgentEcho(userData, normalized)) return { accept: false, reason: "agent_echo" };
+
+  const wordCount = normalized.split(/\s+/).filter(Boolean).length;
+  if (wordCount >= 2) return { accept: true };
+  if (hasLikelyLiveKitCallerIntent(normalized)) return { accept: true };
+  if (isLikelyLiveKitShortReply(normalized) && userData.lastAgentText?.includes("?")) {
+    return { accept: true };
+  }
+
+  return { accept: false, reason: "too_short" };
+}
+
+function normalizeLiveKitCallerText(text: string) {
+  return text.toLowerCase().replace(/[^\p{L}\p{N}'\s?]/gu, " ").replace(/\s+/g, " ").trim();
+}
+
+function isLikelyLiveKitBackgroundMedia(normalized: string) {
+  return /\b(coming up next|after the break|sponsored by|watch now|streaming|subscribe|commercial free|weather forecast|tonight on)\b/.test(
+    normalized,
+  );
+}
+
+function isLikelyLiveKitAgentEcho(userData: LiveKitAgentUserData, normalized: string) {
+  const agentText = normalizeLiveKitCallerText(userData.lastAgentText ?? "");
+  if (!agentText) return false;
+  if (agentText.includes(normalized) && normalized.length > 10) return true;
+
+  const candidateWords = significantLiveKitEchoWords(normalized);
+  if (candidateWords.length < 4) return false;
+  const agentWords = new Set(significantLiveKitEchoWords(agentText));
+  if (agentWords.size < 4) return false;
+  const overlap = candidateWords.filter((word) => agentWords.has(word)).length / candidateWords.length;
+  return overlap >= 0.8;
+}
+
+function significantLiveKitEchoWords(normalized: string) {
+  const stopWords = new Set(["a", "an", "and", "are", "can", "for", "i", "is", "it", "me", "of", "or", "that", "the", "to", "we", "you", "your"]);
+  return normalized
+    .split(/\s+/)
+    .filter((word) => word.length > 2 && !stopWords.has(word));
+}
+
+function hasLikelyLiveKitCallerIntent(normalized: string) {
+  return /\b(appointment|available|book|booking|callback|closed|cost|emergency|estimate|hours|how much|leak|open|plumb|plumbing|price|quote|repair|residential|service|services|text|water|where|when|what|why|who|how|do you|can i|can you|could i|could you|i need|i want|i was calling|i'm calling|looking for)\b/.test(
+    normalized,
+  );
+}
+
+function isLikelyLiveKitShortReply(normalized: string) {
+  return /^(yes|yeah|yep|sure|please|no|nope|no thanks|no thank you|thanks|thank you|hello|hi|bye|goodbye)$/.test(normalized);
 }
 
 async function buildLiveKitInputOptions(participantIdentity?: string) {

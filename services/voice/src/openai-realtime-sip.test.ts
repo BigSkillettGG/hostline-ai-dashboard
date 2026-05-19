@@ -656,6 +656,78 @@ describe("OpenAI Realtime SIP", () => {
     expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))).toHaveLength(1);
   });
 
+  it("marks short greeting-only SIP calls for review instead of resolved", async () => {
+    const socket = createFakeRealtimeSocket();
+    const completedCalls: unknown[] = [];
+    const service = createOpenAIRealtimeSipService(
+      baseEnv,
+      {
+        async getContext() {
+          return demoRestaurantContext;
+        },
+      },
+      {
+        callStore: {
+          async addTranscriptTurn() {},
+          async attachCallRecording() {},
+          async completeCall(input) {
+            completedCalls.push(input);
+          },
+          async createCustomerRequest() {
+            return {};
+          },
+          async createStaffReviewOrder() {
+            return {};
+          },
+          async createStaffReviewReservation() {
+            return {};
+          },
+          async createStaffTask() {
+            return {};
+          },
+          async startCall() {
+            return {};
+          },
+          async startRealtimeCall() {
+            return { callId: "call_uuid" };
+          },
+        },
+        fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+        websocketFactory: () => socket as never,
+      },
+    );
+
+    await service.handleIncomingWebhook({
+      headers: {},
+      rawBody: JSON.stringify({
+        data: {
+          call_id: "rtc_greeting_only",
+          sip_headers: [{ name: "From", value: "sip:+14155550123@twilio.com" }],
+        },
+        type: "realtime.call.incoming",
+      }),
+    });
+
+    socket.emit("open");
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "agent_greeting",
+        transcript: "Thank you for calling Olive and Ember. How can I help you?",
+        type: "response.output_audio_transcript.done",
+      })),
+    );
+    socket.emit("close", 1006, Buffer.from(""));
+    await flushAsyncWork();
+
+    expect(completedCalls[0]).toMatchObject({
+      confidence: 20,
+      intent: "other",
+      outcome: "audio_unavailable",
+      status: "needs_review",
+    });
+  });
+
   it("creates one gated response for a valid caller turn after the greeting completes", async () => {
     const socket = createFakeRealtimeSocket();
     const transcriptTurns: unknown[] = [];
@@ -2197,7 +2269,7 @@ describe("OpenAI Realtime SIP", () => {
     ).toMatchObject({
       create_response: true,
       eagerness: "high",
-      interrupt_response: true,
+      interrupt_response: false,
       type: "semantic_vad",
     });
   });

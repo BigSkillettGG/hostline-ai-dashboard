@@ -434,16 +434,16 @@ export function resolveLiveKitRealtimeTurnDetection(env: VoiceServiceEnv) {
       ? env.OPENAI_REALTIME_TURN_EAGERNESS
       : "low";
     return {
-      create_response: true,
+      create_response: false,
       eagerness: eagerness as "low" | "medium" | "high",
-      interrupt_response: env.OPENAI_REALTIME_INTERRUPT_RESPONSE === true,
+      interrupt_response: false,
       type: "semantic_vad" as const,
     };
   }
 
   return {
-    create_response: true,
-    interrupt_response: env.OPENAI_REALTIME_INTERRUPT_RESPONSE === true,
+    create_response: false,
+    interrupt_response: false,
     prefix_padding_ms: env.OPENAI_REALTIME_SERVER_VAD_PREFIX_PADDING_MS,
     silence_duration_ms: env.OPENAI_REALTIME_SERVER_VAD_SILENCE_MS,
     threshold: env.OPENAI_REALTIME_SERVER_VAD_THRESHOLD,
