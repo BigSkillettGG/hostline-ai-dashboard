@@ -146,6 +146,7 @@ describe("OpenAI Realtime SIP", () => {
     expect(payload.instructions).toContain("create_reservation_request");
     expect(payload.instructions).toContain("Noisy-room behavior");
     expect(payload.instructions).toContain("Echo guardrail");
+    expect(payload.instructions).toContain("explain the actual next step");
     expect(payload.instructions).toContain("Can I help you with anything else?");
     expect(payload.instructions).toContain("finish_call");
     expect(payload.tools[0].name).toBe("lookup_restaurant_context");
@@ -749,6 +750,115 @@ describe("OpenAI Realtime SIP", () => {
       outcome: "message_taken",
       status: "new",
     });
+    expect(String((completedCalls[0] as { summary?: string }).summary)).not.toContain("Quality flags: tool errors");
+  });
+
+  it("does not mark a call needs-review when a generic customer-request tool retry succeeds", async () => {
+    const socket = createFakeRealtimeSocket();
+    const completedCalls: unknown[] = [];
+    const service = createOpenAIRealtimeSipService(
+      baseEnv,
+      {
+        async getContext() {
+          return {
+            ...demoRestaurantContext,
+            businessType: "hvac",
+            restaurantName: "Summit Air",
+          };
+        },
+      },
+      {
+        callStore: {
+          async addTranscriptTurn() {},
+          async attachCallRecording() {},
+          async completeCall(input) {
+            completedCalls.push(input);
+          },
+          async createCustomerRequest() {
+            return { requestId: "request_uuid", taskId: "task_uuid" };
+          },
+          async createStaffReviewOrder() {
+            return {};
+          },
+          async createStaffReviewReservation() {
+            return {};
+          },
+          async createStaffTask() {
+            return {};
+          },
+          async startCall() {
+            return {};
+          },
+          async startRealtimeCall() {
+            return { callId: "call_uuid" };
+          },
+        },
+        fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+        websocketFactory: () => socket as never,
+      },
+    );
+
+    await service.handleIncomingWebhook({
+      headers: {},
+      rawBody: JSON.stringify({
+        data: {
+          call_id: "rtc_recovered_customer_request",
+          sip_headers: [{ name: "Call-ID", value: "sip-recovered-customer-request" }],
+        },
+        type: "realtime.call.incoming",
+      }),
+    });
+
+    socket.emit("open");
+    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.audio.done" })));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "caller_hvac",
+        transcript: "I need my air conditioning serviced as soon as possible.",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        response: {
+          output: [
+            {
+              arguments: JSON.stringify({
+                callback_phone: "+16034899218",
+              }),
+              call_id: "tool_request_missing_summary",
+              name: "create_customer_request",
+              type: "function_call",
+            },
+            {
+              arguments: JSON.stringify({
+                callback_phone: "+16034899218",
+                request_type: "service_appointment",
+                summary: "Caller needs AC service as soon as possible.",
+                urgency: "high",
+              }),
+              call_id: "tool_request_success",
+              name: "create_customer_request",
+              type: "function_call",
+            },
+          ],
+        },
+        type: "response.done",
+      })),
+    );
+    await flushAsyncWork();
+
+    socket.emit("close", 1000, Buffer.from("normal"));
+    await flushAsyncWork();
+
+    expect(completedCalls[0]).toMatchObject({
+      callId: "call_uuid",
+      outcome: "message_taken",
+      status: "new",
+    });
+    expect(String((completedCalls[0] as { summary?: string }).summary)).toContain("create_customer_request:service_appointment");
     expect(String((completedCalls[0] as { summary?: string }).summary)).not.toContain("Quality flags: tool errors");
   });
 

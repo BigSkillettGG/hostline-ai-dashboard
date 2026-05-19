@@ -742,6 +742,7 @@ export function buildOpenAIRealtimeInstructions(
     "Repair behavior: if the caller says 'wait', 'hold on', 'I didn't answer', 'I wasn't done', 'that's not what I said', 'no, I said', or sounds frustrated because you talked over them, stop the current flow. Say a brief apology like 'Sorry about that, go ahead, I'm listening.' Do not say 'No problem' in this situation.",
     "If the caller is in a very loud place or the audio is too unclear to understand, do not guess. Say briefly that it is too noisy to hear clearly and ask them to move somewhere quieter, call back, or let staff follow up by text/callback.",
     "Before any lookup or task that may take a moment, say one short natural bridge such as 'Sure, let me check that' or 'One moment, I am checking now,' then use the tool. Vary the wording and do not sound like an IVR.",
+    "After taking an action, explain the actual next step to the caller in plain language. Avoid narrating your internal response plan; say 'I'll send this to the team and they'll call you back,' not 'then explain the next step.'",
     profile.isRestaurant
       ? "Use cached restaurant facts naturally. The facts are not a script; keep your wording warm, human, and specific to the caller's question."
       : `Use cached ${profile.businessNoun} facts naturally. The facts are not a script; keep your wording warm, human, and specific to the caller's question.`,
@@ -3211,8 +3212,12 @@ function buildRealtimeQualitySummary(session: OpenAIRealtimeSidebandSession) {
 
 function hasUnresolvedRealtimeToolError(session: OpenAIRealtimeSidebandSession) {
   const latestByToolAndKind = new Map<string, boolean>();
-  for (const event of session.toolEvents) {
+  const events = session.toolEvents;
+  for (const [index, event] of events.entries()) {
     if (event.ok === undefined) continue;
+    if (event.ok === false && !event.kind && events.slice(index + 1).some((later) => later.name === event.name && later.ok === true)) {
+      continue;
+    }
     latestByToolAndKind.set(`${event.name}:${event.kind ?? ""}`, event.ok !== false);
   }
   return [...latestByToolAndKind.values()].some((ok) => !ok);
