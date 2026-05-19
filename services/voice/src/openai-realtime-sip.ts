@@ -705,6 +705,7 @@ export function buildOpenAIRealtimeInstructions(
   const universalIntakeContext = buildRealtimeUniversalIntakeInstruction(context);
   const profile = getRuntimeBusinessProfile(context);
   const contextLookupTool = profile.isRestaurant ? "lookup_restaurant_context" : "lookup_business_context";
+  const serviceLeadBoundaryContext = buildRealtimeServiceLeadBoundaryInstruction(context);
 
   return [
     buildRestaurantInstructions(context),
@@ -750,6 +751,7 @@ export function buildOpenAIRealtimeInstructions(
     profile.isRestaurant
       ? `For direct menu availability or orderability questions like "do you have pizza" or "can I get meatballs," first check the configured menu items in your instructions. If uncertain, call ${contextLookupTool} with the item or category before saying no. Specials are not the full menu.`
       : `For direct service availability questions, first check the configured services in your instructions. If uncertain, call ${contextLookupTool} with the service or category before saying no.`,
+    serviceLeadBoundaryContext,
     profile.isRestaurant
       ? "If the caller asks a direct price, rate, fee, minimum, or cost question, answer the policy first from context. If exact pricing is not available, say pricing depends on details and staff can confirm. Only then ask whether they want staff follow-up; do not skip straight to collecting contact info."
       : "If the caller asks a direct price, hourly-rate, fee, trip-charge, estimate, or cost question, answer the policy first from context. If exact pricing is not available, say pricing depends on the job and staff can confirm. Only then ask whether they want staff follow-up; do not skip straight to collecting contact info.",
@@ -899,7 +901,7 @@ function buildRealtimeUniversalIntakeInstruction(context: RestaurantVoiceContext
     ? "orders, reservations, messages, event inquiries, and customer requests"
     : `${profile.appointmentNoun}s, quotes, messages, and customer requests`;
 
-  return [
+  const lines = [
     `Universal intake style for ${profile.businessNoun} ${requestTypes}: ask one short question at a time.`,
     "First understand what the caller wants, then ask only for the next missing detail.",
     "If the caller gives several needs at once, briefly reflect what you heard and ask one focused follow-up.",
@@ -910,6 +912,27 @@ function buildRealtimeUniversalIntakeInstruction(context: RestaurantVoiceContext
     "If urgency is unclear, keep the tone calm, say what you understood, and ask one direct question to clarify.",
     "When the caller seems confused, restate what you understood in one sentence, then ask the next easiest question.",
     "If the caller becomes frustrated, slow down, acknowledge it briefly, and ask one simple next-step question.",
+  ];
+
+  if (!profile.isRestaurant) {
+    lines.push(
+      `For customer problem calls, qualify the lead for ${profile.staffNoun} instead of trying to solve the issue live.`,
+      "Good probing questions are allowed, but keep them operational: what is happening, how urgent it is, where the service is needed, when they want help, and how staff should reach them.",
+    );
+  }
+
+  return lines.join(" ");
+}
+
+function buildRealtimeServiceLeadBoundaryInstruction(context: RestaurantVoiceContext) {
+  const profile = getRuntimeBusinessProfile(context);
+  if (profile.isRestaurant) return "";
+  return [
+    "Service-problem boundary: when a caller describes a customer problem such as no cooling, no heat, a leak, a clog, a breaker issue, sparking, roof damage, or equipment failure, your job is to create a strong lead for staff, not to diagnose or solve the problem.",
+    "Ask concise qualifying questions that help staff respond: symptom, urgency or safety risk, service address or area, preferred timing, name, callback number, and useful context.",
+    "Do not walk callers through troubleshooting, do not list likely causes, and do not suggest thermostat, filter, breaker, drain, shutoff, panel, roof, or equipment checks unless the approved knowledge base explicitly gives that exact safe script or the caller asks what they can safely do while waiting.",
+    "If the caller asks for troubleshooting, keep it safe and brief, then pivot back to staff follow-up.",
+    "Use create_customer_request once the useful lead details are known, then tell the caller staff will follow up.",
   ].join(" ");
 }
 
@@ -1821,6 +1844,8 @@ function buildManualRealtimeResponseInstructions(
   } else {
     base.push(
       `For ${profile.appointmentNoun}, quote, or service requests, ask only for the missing details. Do not supply your own service type, address, fixture, timing, or urgency.`,
+      "For customer problem calls, do not troubleshoot, diagnose, list likely causes, or suggest DIY checks unless the approved business knowledge explicitly provides that safe script. Qualify the request and create a great lead for staff instead.",
+      "Useful lead details are symptom, urgency or safety risk, service address or area, preferred timing, name, callback number, and any context the caller already gave. Ask one short question at a time.",
       "If the caller says ASAP, as soon as possible, earliest available, soonest, or first available, treat that as a valid preferred timing. Do not demand an exact date or time just because they chose urgency over a calendar slot.",
     );
   }
@@ -1849,6 +1874,17 @@ function buildDeterministicRealtimeRepairInstructions(
       "The caller already gave a valid timing preference: as soon as possible, earliest available, soonest, or first available.",
       "Treat that as enough timing detail for a service request. Do not ask again for a specific date or time.",
       "Acknowledge it naturally, then continue with only the next missing detail or submit the request if the intake is complete.",
+    ].join(" ");
+  }
+
+  if (isNonRestaurantServiceProblemRequest(session.context, normalized)) {
+    const profile = getRuntimeBusinessProfile(session.context);
+    return [
+      "The caller is describing a service problem that should become a qualified lead, not a troubleshooting session.",
+      `Acknowledge the problem naturally and collect the next most useful missing detail for ${profile.staffNoun}.`,
+      "Ask one short intake question at a time. Prefer address or service area, urgency or safety risk, preferred timing, name, and callback number.",
+      "Do not diagnose the issue, do not list likely causes, do not suggest thermostat/filter/breaker/drain/shutoff/panel/roof/equipment checks, and do not say you will think through next possibilities.",
+      "Use create_customer_request once name, callback number, request summary, urgency, address or service area, and preferred timing are known.",
     ].join(" ");
   }
 
@@ -1934,6 +1970,18 @@ function hasAsapTimingCue(normalized: string) {
   return /\b(as soon as possible|asap|earliest available|soonest|first available|next available)\b/.test(normalized);
 }
 
+function isNonRestaurantServiceProblemRequest(context: RestaurantVoiceContext, normalized: string) {
+  const profile = getRuntimeBusinessProfile(context);
+  if (profile.isRestaurant) return false;
+  const currentMatcher = verticalScopeMatchers[profile.businessType];
+  const matchesCurrentScope = currentMatcher?.patterns.some((pattern) => pattern.test(normalized)) ?? false;
+  const describesProblem =
+    /\b(issue|problem|trouble|not working|won'?t work|broken|failed|stopped|not cooling|not heating|no heat|no ac|no a c|weak airflow|strange noise|making noise|leak(?:ing)?|leaky|clog(?:ged)?|backed up|burst|sparking|burning smell|outage|damage|not keeping up|needs? help|come out|send someone|service call|repair)\b/.test(
+      normalized,
+    );
+  return matchesCurrentScope && describesProblem;
+}
+
 function isCallerIdentityQuestion(normalized: string) {
   return (
     /^(who is this|who am i speaking with|who am i talking to|what company is this|what business is this)$/.test(
@@ -1962,6 +2010,7 @@ const verticalScopeMatchers = {
     label: "heating or cooling service",
     patterns: [
       /\bair conditioning\b/,
+      /\bair conditioner\b/,
       /\bac\b/,
       /\ba c\b/,
       /\bboiler\b/,
@@ -1971,6 +2020,9 @@ const verticalScopeMatchers = {
       /\bfurnace\b/,
       /\bheat pump\b/,
       /\bno heat\b/,
+      /\bnot cooling\b/,
+      /\bnot heating\b/,
+      /\bweak airflow\b/,
       /\bthermostat\b/,
     ],
   },
@@ -2892,6 +2944,7 @@ function classifyOpenAIRealtimeCall(session: OpenAIRealtimeSidebandSession): {
     .map((turn) => turn.text)
     .join(" ")
     .toLowerCase();
+  const normalizedCallerText = normalizeRealtimeCallerText(callerText);
   const hasCallerTranscript = Boolean(callerText.trim()) || session.quality.callerTranscriptCount > 0;
   const shortGreetingOnlyCall =
     !hasCallerTranscript &&
@@ -2912,6 +2965,7 @@ function classifyOpenAIRealtimeCall(session: OpenAIRealtimeSidebandSession): {
     (toolKinds.has("service_appointment") ||
       toolKinds.has("quote") ||
       toolKinds.has("lead") ||
+      isNonRestaurantServiceProblemRequest(session.context, normalizedCallerText) ||
       /\b(appointment|schedule|book|booking|service call|inspection|estimate|quote|come out|send someone|asap|as soon as possible|earliest available|soonest|first available)\b/.test(
         callerText,
       ));
@@ -2936,12 +2990,15 @@ function classifyOpenAIRealtimeCall(session: OpenAIRealtimeSidebandSession): {
   const followUpToolUsed =
     session.staffFollowUpRequired ||
     toolNames.has("create_customer_request");
+  const unhandledServiceRequest = hasServiceRequestIntent && !followUpToolUsed && !toolNames.has("send_business_link");
   const outcome = shortGreetingOnlyCall
     ? "audio_unavailable"
     : needsReview
     ? "escalated"
     : toolNames.has("create_customer_request")
       ? "message_taken"
+    : unhandledServiceRequest
+      ? "unknown"
     : session.reservationConfirmed
       ? "reservation_booked"
     : session.staffFollowUpRequired && toolNames.has("create_reservation_request")
@@ -2953,10 +3010,10 @@ function classifyOpenAIRealtimeCall(session: OpenAIRealtimeSidebandSession): {
         : "resolved";
 
   return {
-    confidence: hasCallerTranscript ? (needsReview ? 72 : 88) : 20,
+    confidence: hasCallerTranscript ? (needsReview || unhandledServiceRequest ? 72 : 88) : 20,
     intent,
     outcome,
-    status: needsReview || !hasCallerTranscript ? "needs_review" : followUpToolUsed ? "new" : "resolved",
+    status: needsReview || unhandledServiceRequest || !hasCallerTranscript ? "needs_review" : followUpToolUsed ? "new" : "resolved",
   };
 }
 

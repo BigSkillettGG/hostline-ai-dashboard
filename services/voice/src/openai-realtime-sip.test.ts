@@ -204,6 +204,9 @@ describe("OpenAI Realtime SIP", () => {
     expect(payload.instructions).toContain("service catalog");
     expect(payload.instructions).toContain("Service-request operating mode");
     expect(payload.instructions).toContain("use create_customer_request");
+    expect(payload.instructions).toContain("Service-problem boundary");
+    expect(payload.instructions).toContain("your job is to create a strong lead for staff");
+    expect(payload.instructions).toContain("Do not walk callers through troubleshooting");
     expect(payload.instructions).toContain("text a copy of the request details");
     expect(payload.instructions).toContain("Do not call it a confirmation unless a real appointment is confirmed");
     expect(payload.instructions).toContain("Universal intake style");
@@ -1287,6 +1290,93 @@ describe("OpenAI Realtime SIP", () => {
     });
   });
 
+  it("marks uncaptured non-restaurant service problems for review instead of resolved", async () => {
+    const socket = createFakeRealtimeSocket();
+    const completedCalls: unknown[] = [];
+    const hvacContext: RestaurantVoiceContext = {
+      ...demoRestaurantContext,
+      businessType: "hvac",
+      menuItems: [],
+      restaurantName: "Summit Air",
+    };
+    const service = createOpenAIRealtimeSipService(
+      baseEnv,
+      {
+        async getContext() {
+          return hvacContext;
+        },
+      },
+      {
+        callStore: {
+          async addTranscriptTurn() {},
+          async attachCallRecording() {},
+          async completeCall(input) {
+            completedCalls.push(input);
+          },
+          async createCustomerRequest() {
+            return {};
+          },
+          async createStaffReviewOrder() {
+            return {};
+          },
+          async createStaffReviewReservation() {
+            return {};
+          },
+          async createStaffTask() {
+            return {};
+          },
+          async startCall() {
+            return {};
+          },
+          async startRealtimeCall() {
+            return { callId: "call_uuid" };
+          },
+        },
+        fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+        websocketFactory: () => socket as never,
+      },
+    );
+
+    await service.handleIncomingWebhook({
+      headers: {},
+      rawBody: JSON.stringify({
+        data: {
+          call_id: "rtc_uncaptured_hvac_problem",
+          sip_headers: [{ name: "From", value: "sip:+14155550123@twilio.com" }],
+        },
+        type: "realtime.call.incoming",
+      }),
+    });
+
+    socket.emit("open");
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "agent_greeting",
+        transcript: "Thank you for calling Summit Air. How can I help you?",
+        type: "response.output_audio_transcript.done",
+      })),
+    );
+    socket.emit("message", Buffer.from(JSON.stringify({ type: "response.audio.done" })));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "caller_ac_problem",
+        transcript: "Yeah, our air conditioner is not cooling.",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    socket.emit("close", 1006, Buffer.from(""));
+    await flushAsyncWork();
+
+    expect(completedCalls[0]).toMatchObject({
+      confidence: 72,
+      intent: "reservation",
+      outcome: "unknown",
+      status: "needs_review",
+    });
+  });
+
   it("creates one gated response for a valid caller turn after the greeting completes", async () => {
     const socket = createFakeRealtimeSocket();
     const transcriptTurns: unknown[] = [];
@@ -1691,7 +1781,83 @@ describe("OpenAI Realtime SIP", () => {
 
     const responses = socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"));
     expect(JSON.stringify(responses.at(-1))).not.toContain("outside the usual scope");
-    expect(JSON.stringify(responses.at(-1))).toContain("ask only for the missing details");
+    expect(JSON.stringify(responses.at(-1))).toContain("qualified lead, not a troubleshooting session");
+    expect(JSON.stringify(responses.at(-1))).toContain("Ask one short intake question at a time");
+  });
+
+  it("keeps service-problem calls focused on lead capture instead of troubleshooting", async () => {
+    const socket = createFakeRealtimeSocket();
+    const hvacContext: RestaurantVoiceContext = {
+      ...demoRestaurantContext,
+      businessType: "hvac",
+      menuItems: [],
+      restaurantName: "Summit Air",
+    };
+    const service = createOpenAIRealtimeSipService(
+      baseEnv,
+      {
+        async getContext() {
+          return hvacContext;
+        },
+      },
+      {
+        callStore: {
+          async addTranscriptTurn() {},
+          async attachCallRecording() {},
+          async completeCall() {},
+          async createCustomerRequest() {
+            return {};
+          },
+          async createStaffReviewOrder() {
+            return {};
+          },
+          async createStaffReviewReservation() {
+            return {};
+          },
+          async createStaffTask() {
+            return {};
+          },
+          async startCall() {
+            return {};
+          },
+          async startRealtimeCall() {
+            return { callId: "call_uuid" };
+          },
+        },
+        fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+        websocketFactory: () => socket as never,
+      },
+    );
+
+    await service.handleIncomingWebhook({
+      headers: {},
+      rawBody: JSON.stringify({
+        data: {
+          call_id: "rtc_hvac_not_cooling",
+          sip_headers: [{ name: "From", value: "sip:+14155550123@twilio.com" }],
+        },
+        type: "realtime.call.incoming",
+      }),
+    });
+
+    socket.emit("open");
+    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "caller_hvac_problem",
+        transcript: "Yeah, it's not cooling.",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    await flushAsyncWork();
+
+    const responses = socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"));
+    const instructions = JSON.stringify(responses.at(-1));
+    expect(instructions).toContain("qualified lead, not a troubleshooting session");
+    expect(instructions).toContain("Do not diagnose");
+    expect(instructions).toContain("create_customer_request");
+    expect(instructions).not.toContain("outside the usual scope");
   });
 
   it("answers a connection check after the greeting without restarting the greeting", async () => {
