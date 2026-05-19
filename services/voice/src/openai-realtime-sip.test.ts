@@ -2983,6 +2983,104 @@ describe("OpenAI Realtime SIP", () => {
     expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))).toHaveLength(1);
   });
 
+  it("rejects business self-introduction echo while preserving real identity questions", async () => {
+    const socket = createFakeRealtimeSocket();
+    const transcriptTurns: unknown[] = [];
+    const summitContext: RestaurantVoiceContext = {
+      ...demoRestaurantContext,
+      businessType: "hvac",
+      restaurantName: "Summit Air",
+    };
+    const service = createOpenAIRealtimeSipService(
+      baseEnv,
+      {
+        async getContext() {
+          return summitContext;
+        },
+      },
+      {
+        callStore: {
+          async addTranscriptTurn(input) {
+            transcriptTurns.push(input);
+          },
+          async attachCallRecording() {},
+          async completeCall() {},
+          async createCustomerRequest() {
+            return {};
+          },
+          async createStaffReviewOrder() {
+            return {};
+          },
+          async createStaffReviewReservation() {
+            return {};
+          },
+          async createStaffTask() {
+            return {};
+          },
+          async startCall() {
+            return {};
+          },
+          async startRealtimeCall() {
+            return { callId: "call_uuid" };
+          },
+        },
+        fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+        websocketFactory: () => socket as never,
+      },
+    );
+
+    await service.handleIncomingWebhook({
+      headers: {},
+      rawBody: JSON.stringify({
+        data: {
+          call_id: "rtc_business_identity_echo",
+          sip_headers: [{ name: "From", value: "sip:+14155550123@twilio.com" }],
+        },
+        type: "realtime.call.incoming",
+      }),
+    });
+
+    socket.emit("open");
+    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "caller_identity_question",
+        transcript: "Is this Summit Air?",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    await Promise.resolve();
+
+    const responseCreatesBeforeEcho = socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))
+      .length;
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "business_name_echo",
+        transcript: "Hello, this is Summit Air.",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    await Promise.resolve();
+
+    expect(transcriptTurns).toEqual([
+      expect.objectContaining({
+        speaker: "caller",
+        text: "Is this Summit Air?",
+      }),
+    ]);
+    expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "conversation.item.delete"))).toEqual([
+      expect.objectContaining({
+        item_id: "business_name_echo",
+        type: "conversation.item.delete",
+      }),
+    ]);
+    expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))).toHaveLength(
+      responseCreatesBeforeEcho,
+    );
+  });
+
   it("treats repeated hello as a real reconnect attempt after a glitch", async () => {
     const socket = createFakeRealtimeSocket();
     const transcriptTurns: unknown[] = [];

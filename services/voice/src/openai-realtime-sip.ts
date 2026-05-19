@@ -2133,6 +2133,9 @@ function shouldAcceptRealtimeCallerTranscript(
   if (isLikelyOpeningGreetingEcho(session, normalized)) return { accept: false, reason: "opening_greeting_echo" };
   if (!session.openingGreetingCompleted) return { accept: false, reason: "opening_greeting_locked" };
   if (isLikelyOpenAIRealtimeAgentEcho(session, normalized)) return { accept: false, reason: "agent_echo" };
+  if (isLikelyBusinessSelfIdentificationEcho(session, normalized)) {
+    return { accept: false, reason: "business_identity_echo" };
+  }
   if (isLikelyBackgroundMediaFragment(normalized)) return { accept: false, reason: "background_media" };
   if (isLikelyOpeningBackchannelEcho(session, normalized)) return { accept: false, reason: "opening_backchannel_echo" };
   if (isLikelyStrayPostDetailFragment(session, normalized)) return { accept: false, reason: "stray_post_detail_fragment" };
@@ -2378,6 +2381,32 @@ function isLikelyOpenAIRealtimeAgentEcho(session: OpenAIRealtimeSidebandSession,
     (Boolean(businessName) && normalized.includes(businessName) && normalized.includes("how can i help")) ||
     isLikelyRecentAgentTranscriptEcho(session, normalized)
   );
+}
+
+function isLikelyBusinessSelfIdentificationEcho(session: OpenAIRealtimeSidebandSession, normalized: string) {
+  if (isCallerIdentityQuestion(normalized)) return false;
+  if (Date.now() - session.startedAt > 45000) return false;
+
+  return getBusinessNameEchoVariants(session.context.restaurantName).some((businessName) => {
+    const businessPattern = escapeRegExp(businessName).replace(/\s+/g, "\\s+");
+    return new RegExp(
+      `^(?:hello|hi|hey)?\\s*(?:this\\s+is|this\\s+is\\s+the|you\\s+have\\s+reached|you've\\s+reached)\\s+${businessPattern}$`,
+    ).test(normalized);
+  });
+}
+
+function getBusinessNameEchoVariants(businessName: string) {
+  const candidates = [
+    businessName,
+    toSpokenRestaurantName(businessName),
+    businessName.replace(/&/g, " and "),
+    toSpokenRestaurantName(businessName).replace(/\band\b/gi, " "),
+  ];
+  return [...new Set(candidates.map((candidate) => normalizeRealtimeCallerText(candidate)).filter(Boolean))];
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function isLikelyGreetingEchoText(normalized: string) {
