@@ -19,6 +19,7 @@ const baseEnv = {
   LIVEKIT_ROOM_PREFIX: "harbor-call-",
   LIVEKIT_ROUTE_ON_TWILIO_VOICE: false,
   LIVEKIT_SIP_ENDPOINT: "abc123.sip.livekit.cloud",
+  LIVEKIT_TWILIO_WEBHOOK_ENABLED: false,
   LIVEKIT_URL: "wss://signalhost.livekit.cloud",
   OPENAI_API_KEY: "sk-test",
   PUBLIC_HTTP_BASE_URL: "https://voice.signalhost.ai",
@@ -63,13 +64,10 @@ describe("LiveKit Harbor handoff", () => {
       callSid: "CA11111111111111111111111111111111",
       dialedPhone: "(781) 694-6083",
       env: baseEnv,
-      fallbackActionUrl: "https://voice.signalhost.ai/twilio/livekit-fallback?locationId=222",
       locationId: HARBOR_PLUMBING_DEMO_LOCATION_ID,
     });
 
     expect(twiml).toContain("<Dial record=\"record-from-answer-dual\"");
-    expect(twiml).toContain("action=\"https://voice.signalhost.ai/twilio/livekit-fallback?locationId=222\"");
-    expect(twiml).toContain("method=\"POST\"");
     expect(twiml).toContain("timeout=\"12\"");
     expect(twiml).toContain("recordingStatusCallback=\"https://voice.signalhost.ai/twilio/recording-status?");
     expect(twiml).toContain("externalCallSid=CA11111111111111111111111111111111");
@@ -77,6 +75,8 @@ describe("LiveKit Harbor handoff", () => {
     expect(twiml).toContain("recordingStatusCallbackEvent=\"completed absent\"");
     expect(twiml).toContain("<Sip username=\"bridge-user\" password=\"bridge-pass\">");
     expect(twiml).toContain("sip:+17816946083@abc123.sip.livekit.cloud;transport=tcp");
+    expect(twiml).toContain("SignalHost could not connect this LiveKit test line");
+    expect(twiml).not.toContain("/twilio/livekit-fallback");
     expect(twiml).not.toContain("ConversationRelay");
   });
 

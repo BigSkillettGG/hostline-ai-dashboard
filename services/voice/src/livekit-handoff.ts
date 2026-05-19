@@ -20,6 +20,7 @@ type LiveKitHandoffEnv = Pick<
   | "LIVEKIT_ROOM_PREFIX"
   | "LIVEKIT_ROUTE_ON_TWILIO_VOICE"
   | "LIVEKIT_SIP_ENDPOINT"
+  | "LIVEKIT_TWILIO_WEBHOOK_ENABLED"
   | "LIVEKIT_URL"
   | "OPENAI_API_KEY"
   | "PUBLIC_HTTP_BASE_URL"
@@ -49,6 +50,7 @@ export interface LiveKitPilotConfig {
   routeOnTwilioVoice: boolean;
   sipEndpoint?: string;
   sipUri?: string;
+  twilioWebhookEnabled: boolean;
   twilioVoiceWebhookUrl?: string;
 }
 
@@ -56,7 +58,6 @@ export interface LiveKitTwiMLInput {
   callSid?: string;
   dialedPhone?: string;
   env: LiveKitHandoffEnv;
-  fallbackActionUrl?: string;
   locationId?: string;
 }
 
@@ -68,7 +69,8 @@ export function buildLiveKitPilotConfig(env: LiveKitHandoffEnv, requestedLocatio
   const roomPrefix = env.LIVEKIT_ROOM_PREFIX?.trim() || DEFAULT_LIVEKIT_ROOM_PREFIX;
   const krispEnabled = env.LIVEKIT_KRISP_ENABLED !== false;
   const phoneNumber = normalizePhoneNumber(env.LIVEKIT_PHONE_NUMBER);
-  const twilioVoiceWebhookUrl = env.PUBLIC_HTTP_BASE_URL
+  const twilioWebhookEnabled = Boolean(env.LIVEKIT_TWILIO_WEBHOOK_ENABLED);
+  const twilioVoiceWebhookUrl = twilioWebhookEnabled && env.PUBLIC_HTTP_BASE_URL
     ? appendQuery(`${env.PUBLIC_HTTP_BASE_URL.replace(/\/$/, "")}/twilio/livekit-voice`, { locationId })
     : undefined;
 
@@ -116,6 +118,13 @@ export function buildLiveKitPilotConfig(env: LiveKitHandoffEnv, requestedLocatio
       required: true,
     },
     {
+      detail: "Off by default so pilot-only LiveKit experiments cannot accidentally take over real demo numbers.",
+      id: "livekit_direct_twilio_webhook",
+      label: "Direct LiveKit Twilio webhook",
+      ready: twilioWebhookEnabled,
+      required: false,
+    },
+    {
       detail: "Optional fallback number used when Twilio does not include the dialed phone number in webhook params.",
       id: "livekit_phone_number",
       label: "Pilot phone number",
@@ -148,6 +157,7 @@ export function buildLiveKitPilotConfig(env: LiveKitHandoffEnv, requestedLocatio
     routeOnTwilioVoice: Boolean(env.LIVEKIT_ROUTE_ON_TWILIO_VOICE && enabledForLocation),
     sipEndpoint,
     sipUri: sipEndpoint ? `sip:${sipEndpoint}` : undefined,
+    twilioWebhookEnabled,
     twilioVoiceWebhookUrl,
   };
 }
@@ -156,7 +166,6 @@ export function buildLiveKitTwiML({
   callSid,
   dialedPhone,
   env,
-  fallbackActionUrl,
   locationId,
 }: LiveKitTwiMLInput): string | undefined {
   const config = buildLiveKitPilotConfig(env, locationId);
@@ -175,23 +184,27 @@ export function buildLiveKitTwiML({
   const dialAttributes = recordingCallbackUrl
     ? [
       ` record="record-from-answer-dual"`,
+      ` timeout="12"`,
       ` recordingStatusCallback="${escapeXmlAttribute(recordingCallbackUrl)}"`,
       ` recordingStatusCallbackMethod="POST"`,
       ` recordingStatusCallbackEvent="completed absent"`,
     ].join("")
-    : "";
-  const actionAttributes = fallbackActionUrl
-    ? ` action="${escapeXmlAttribute(fallbackActionUrl)}" method="POST" timeout="12"`
-    : "";
+    : ` timeout="12"`;
 
   return [
     `<?xml version="1.0" encoding="UTF-8"?>`,
     `<Response>`,
-    `  <Dial${dialAttributes}${actionAttributes}>`,
+    `  <Dial${dialAttributes}>`,
     `    <Sip username="${escapeXmlAttribute(env.LIVEKIT_INBOUND_AUTH_USERNAME)}" password="${escapeXmlAttribute(env.LIVEKIT_INBOUND_AUTH_PASSWORD)}">sip:${escapeXmlText(phoneNumber)}@${escapeXmlText(sipEndpoint)};transport=tcp</Sip>`,
     `  </Dial>`,
+    `  <Say>SignalHost could not connect this LiveKit test line. Please switch this number back to the OpenAI Realtime SIP route.</Say>`,
+    `  <Hangup/>`,
     `</Response>`,
   ].join("\n");
+}
+
+export function isLiveKitTwilioWebhookEnabled(env: LiveKitHandoffEnv) {
+  return Boolean(env.LIVEKIT_TWILIO_WEBHOOK_ENABLED);
 }
 
 export function isLiveKitPilotLocation(env: LiveKitHandoffEnv, locationId?: string) {

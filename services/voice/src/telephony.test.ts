@@ -133,4 +133,50 @@ describe("Twilio telephony helpers", () => {
     expect(String(fetchMock.mock.calls[2]?.[0])).toContain("/IncomingPhoneNumbers/PN456.json");
     expect(fetchMock.mock.calls[2]?.[1]?.method).toBe("DELETE");
   });
+
+  it("repairs an existing Twilio number back to the configured OpenAI SIP trunk", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        capabilities: { sms: true, voice: true },
+        phone_number: "+17816946083",
+        sid: "PN6083",
+        status: "in-use",
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        sid: "PN6083",
+        trunk_sid: "TK123",
+      }), { status: 201 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        capabilities: { sms: true, voice: true },
+        phone_number: "+17816946083",
+        sid: "PN6083",
+        status: "in-use",
+      }), { status: 200 }));
+    const service = createTelephonyService({
+      PUBLIC_HTTP_BASE_URL: "https://voice.signalhost.test",
+      TWILIO_ACCOUNT_SID: "AC123",
+      TWILIO_AUTH_TOKEN: "secret",
+      TWILIO_API_BASE_URL: "https://api.twilio.com",
+      TWILIO_DEFAULT_COUNTRY: "US",
+      TWILIO_SIP_TRUNK_SID: "TK123",
+      TWILIO_TRUNKING_API_BASE_URL: "https://trunking.twilio.com",
+    } as never);
+
+    await expect(service.repairOpenAIRealtimeSipRouting({
+      locationId: "22222222-2222-4222-8222-222222222222",
+      providerSid: "PN6083",
+    })).resolves.toMatchObject({
+      phoneNumber: "+17816946083",
+      providerSid: "PN6083",
+      routingMode: "openai_realtime_sip",
+      voiceWebhookUrl: "https://voice.signalhost.test/openai/realtime/webhook?locationId=22222222-2222-4222-8222-222222222222",
+    });
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/IncomingPhoneNumbers/PN6083.json");
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("POST");
+    expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain("VoiceUrl=");
+    expect(String(fetchMock.mock.calls[1]?.[0])).toBe("https://trunking.twilio.com/v1/Trunks/TK123/PhoneNumbers");
+    expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toBe("PhoneNumberSid=PN6083");
+    expect(fetchMock.mock.calls[2]?.[1]?.method ?? "GET").toBe("GET");
+  });
 });

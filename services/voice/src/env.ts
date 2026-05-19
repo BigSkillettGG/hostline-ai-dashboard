@@ -57,6 +57,10 @@ const envSchema = z.object({
     .transform((value) => value === "true")
     .optional(),
   LIVEKIT_SIP_ENDPOINT: z.string().optional(),
+  LIVEKIT_TWILIO_WEBHOOK_ENABLED: z
+    .enum(["true", "false"])
+    .transform((value) => value === "true")
+    .optional(),
   LIVEKIT_URL: z.string().url().optional(),
   OWNER_REPORT_WEBHOOK_URL: z.string().url().optional(),
   OWNER_EMAIL_INBOUND_ADDRESS: z.string().optional(),

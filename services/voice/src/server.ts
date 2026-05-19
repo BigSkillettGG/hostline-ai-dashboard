@@ -20,6 +20,7 @@ import {
   buildLiveKitPilotConfig,
   buildLiveKitTwiML,
   HARBOR_PLUMBING_DEMO_LOCATION_ID,
+  isLiveKitTwilioWebhookEnabled,
   shouldRouteTwilioVoiceToLiveKit,
 } from "./livekit-handoff";
 import {
@@ -205,6 +206,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       liveKitConfigured: Boolean(currentEnv.LIVEKIT_URL && currentEnv.LIVEKIT_API_KEY && currentEnv.LIVEKIT_API_SECRET),
       liveKitHarborPilotConfigured: liveKitHarborPilot.ready,
       liveKitHarborPilotRoutingEnabled: liveKitHarborPilot.routeOnTwilioVoice,
+      liveKitTwilioWebhookEnabled: liveKitHarborPilot.twilioWebhookEnabled,
       openAIRealtimeSipConfigured: openAIRealtimeSipService.configured,
       ownerReportDeliveryConfigured: ownerReportService.deliveryConfigured,
       ownerReportsConfigured: ownerReportService.configured,
@@ -587,7 +589,6 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
     const twiml = buildLiveKitTwiML({
       dialedPhone: url.searchParams.get("dialedPhone") ?? undefined,
       env: currentEnv,
-      fallbackActionUrl: buildLiveKitFallbackActionUrl(currentEnv, locationId),
       locationId: locationId ?? undefined,
     });
     if (!twiml) {
@@ -823,6 +824,50 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
     return;
   }
 
+  if (req.method === "POST" && url.pathname === "/telephony/repair-openai-sip-routing") {
+    if (!(await allowRateLimitedRequest(req, res, "number-repair-openai-sip", 20, currentEnv))) return;
+
+    try {
+      const body = parseJsonRequestBody(await readLimitedRequestBody(req, ADMIN_BODY_LIMIT_BYTES)) as {
+        forwardingMode?: string;
+        locationId?: string;
+        makePrimary?: boolean;
+        phoneNumber?: string;
+        providerSid?: string;
+        restaurantMainLine?: string;
+      };
+      const locationId = body.locationId ?? currentEnv.SUPABASE_DEMO_LOCATION_ID;
+
+      const authorization = await authorizeVoiceAdminRequest({
+        currentEnv,
+        locationId,
+        req,
+      });
+      if (!authorization.authorized) {
+        sendJson(res, authorization.status, { error: authorization.reason ?? "Unauthorized" });
+        return;
+      }
+
+      const repaired = await telephonyService.repairOpenAIRealtimeSipRouting({
+        locationId,
+        phoneNumber: normalizeAttachedPhoneNumber(body.phoneNumber),
+        providerSid: body.providerSid,
+      });
+
+      await phoneNumberStore.saveProvisionedNumber({
+        forwardingMode: body.forwardingMode ?? "forward_unanswered",
+        locationId,
+        makePrimary: body.makePrimary,
+        phoneNumber: repaired.phoneNumber,
+        restaurantMainLine: body.restaurantMainLine,
+      }, repaired);
+      sendJson(res, 200, { phoneNumber: repaired });
+    } catch (error) {
+      sendCaughtError(res, error, "Twilio number SIP repair failed");
+    }
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/telephony/release-number") {
     if (!(await allowRateLimitedRequest(req, res, "number-release", 20, currentEnv))) return;
 
@@ -917,6 +962,20 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       const callSid = firstNonEmpty(params.CallSid, params.callSid);
       const callerPhone = firstNonEmpty(params.From, params.from);
       const dialedPhone = firstNonEmpty(params.To, params.to);
+      if (!isLiveKitTwilioWebhookEnabled(currentEnv)) {
+        console.warn("[voice-service] rejected direct LiveKit Twilio webhook because pilot endpoint is quarantined", {
+          callSid,
+          callerPhone,
+          dialedPhone,
+          locationId,
+        });
+        sendXml(
+          res,
+          503,
+          buildUnavailableTwiML("SignalHost LiveKit test routing is disabled. Please switch this number back to the OpenAI Realtime SIP route."),
+        );
+        return;
+      }
       console.info("[voice-service] LiveKit pilot webhook received", {
         callSid,
         callerPhone,
@@ -928,7 +987,6 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
         callSid,
         dialedPhone,
         env: currentEnv,
-        fallbackActionUrl: buildLiveKitFallbackActionUrl(currentEnv, locationId),
         locationId,
       });
       if (!twiml) {
@@ -962,58 +1020,6 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
     return;
   }
 
-  if (req.method === "POST" && url.pathname === "/twilio/livekit-fallback") {
-    try {
-      const rawBody = await readLimitedRequestBody(req, TWILIO_BODY_LIMIT_BYTES);
-      const params = Object.fromEntries(new URLSearchParams(rawBody));
-
-      if (!isValidTwilioWebhook(req, currentEnv, params)) {
-        console.warn("[voice-service] rejected unsigned LiveKit fallback webhook", {
-          callSid: firstNonEmpty(params.CallSid, params.callSid),
-          from: firstNonEmpty(params.From, params.from),
-          to: firstNonEmpty(params.To, params.to),
-        });
-        sendText(res, 401, "Invalid Twilio signature");
-        return;
-      }
-
-      const locationId =
-        params.locationId ??
-        url.searchParams.get("locationId") ??
-        HARBOR_PLUMBING_DEMO_LOCATION_ID;
-      const callSid = firstNonEmpty(params.CallSid, params.callSid);
-      const callerPhone = firstNonEmpty(params.From, params.from);
-      const dialedPhone = firstNonEmpty(params.To, params.to);
-      const dialCallStatus = firstNonEmpty(params.DialCallStatus, params.dialCallStatus);
-      const dialSipResponseCode = firstNonEmpty(params.DialSipResponseCode, params.dialSipResponseCode);
-
-      console.warn("[voice-service] LiveKit pilot dial fallback triggered", {
-        callSid,
-        callerPhone,
-        dialedPhone,
-        dialCallStatus,
-        dialSipResponseCode,
-        locationId,
-      });
-
-      if (!currentEnv.PUBLIC_WS_BASE_URL) {
-        sendXml(res, 200, buildUnavailableTwiML("SignalHost could not connect the LiveKit pilot, and the backup voice path is not configured."));
-        return;
-      }
-
-      const twiml = await buildConversationRelayFallbackTwiML(currentEnv, params, locationId);
-      sendXml(res, 200, twiml);
-    } catch (error) {
-      if (error instanceof HttpRequestError) {
-        sendText(res, error.statusCode, error.message);
-      } else {
-        console.error("[voice-service] LiveKit fallback webhook failed", error);
-        sendXml(res, 200, buildUnavailableTwiML("SignalHost could not connect the LiveKit pilot. Please try again shortly."));
-      }
-    }
-    return;
-  }
-
   if (req.method === "POST" && url.pathname === "/twilio/voice") {
     try {
       const rawBody = await readLimitedRequestBody(req, TWILIO_BODY_LIMIT_BYTES);
@@ -1034,7 +1040,6 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
           callSid: firstNonEmpty(params.CallSid, params.callSid),
           dialedPhone: firstNonEmpty(params.To, params.to),
           env: currentEnv,
-          fallbackActionUrl: buildLiveKitFallbackActionUrl(currentEnv, locationId),
           locationId,
         });
         if (!twiml) {
@@ -1595,39 +1600,6 @@ function withOptionalQueryParams(url: string | undefined, params: Record<string,
   return nextUrl;
 }
 
-function buildLiveKitFallbackActionUrl(currentEnv: VoiceServiceEnv, locationId: string) {
-  if (!currentEnv.PUBLIC_HTTP_BASE_URL) return undefined;
-  return withQueryParam(`${currentEnv.PUBLIC_HTTP_BASE_URL.replace(/\/$/, "")}/twilio/livekit-fallback`, "locationId", locationId);
-}
-
-async function buildConversationRelayFallbackTwiML(
-  currentEnv: VoiceServiceEnv,
-  params: Record<string, string>,
-  locationId: string,
-) {
-  const restaurantContext = await restaurantContextStore.getContext(locationId);
-  const liveCallConfig = buildLiveCallConfig(currentEnv, locationId);
-  const ttsVoice = resolveConversationRelayTtsVoice(currentEnv, restaurantContext);
-  const callSessionKey = getStableCallSessionKey(params);
-  const actionUrl = liveCallConfig.actionUrl && callSessionKey
-    ? withQueryParam(liveCallConfig.actionUrl, "callSessionKey", callSessionKey)
-    : liveCallConfig.actionUrl;
-
-  return buildConversationRelayTwiML({
-    actionUrl,
-    customParameters: {
-      ...buildRelayCustomParameters(params, locationId, callSessionKey),
-      liveKitFallback: "true",
-    },
-    language: currentEnv.TWILIO_LANGUAGE,
-    speechTimeoutMs: currentEnv.TWILIO_SPEECH_TIMEOUT_MS,
-    transcriptionProvider: currentEnv.TWILIO_TRANSCRIPTION_PROVIDER,
-    ttsProvider: currentEnv.TWILIO_TTS_PROVIDER,
-    ttsVoice,
-    websocketUrl: liveCallConfig.conversationRelayUrl ?? `${currentEnv.PUBLIC_WS_BASE_URL}/twilio/conversation-relay`,
-  });
-}
-
 function buildRelayCustomParameters(
   params: Record<string, string>,
   locationId: string,
@@ -1748,7 +1720,8 @@ async function buildCallDebugPack({
     currentEnv,
     `transcript_turns?call_id=eq.${encodeURIComponent(call.id)}&select=speaker,text,offset_seconds,created_at&order=created_at.asc`,
   );
-  const observations = buildCallDebugObservations(call, transcriptTurns);
+  const callPath = resolveCallDebugPath(call);
+  const observations = buildCallDebugObservations(call, transcriptTurns, callPath);
   const audioDiagnostic = includeAudio
     ? await runOpenAIAudioDiagnostic({
       currentEnv,
@@ -1762,6 +1735,7 @@ async function buildCallDebugPack({
   return {
     audioDiagnostic,
     call,
+    callPath,
     observations,
     transcriptTurns,
   };
@@ -1778,7 +1752,7 @@ async function supabaseServiceRequest<T>(currentEnv: VoiceServiceEnv, path: stri
   return (text ? JSON.parse(text) : []) as T;
 }
 
-function buildCallDebugObservations(call: CallDebugRow, transcriptTurns: TranscriptDebugRow[]) {
+function buildCallDebugObservations(call: CallDebugRow, transcriptTurns: TranscriptDebugRow[], callPath: string) {
   const summary = call.summary ?? "";
   const speechStartCount = numberFromSummary(summary, /speech starts (\d+)/i);
   const speechStopCount = numberFromSummary(summary, /speech stops (\d+)/i);
@@ -1792,6 +1766,13 @@ function buildCallDebugObservations(call: CallDebugRow, transcriptTurns: Transcr
       ? `Realtime detected ${speechStartCount} speech starts but only ${callerTurnCount} caller transcript turns; false speech starts or echo may have interrupted audio.`
       : undefined,
     ignoredNoise ? `Ignored likely background transcript: ${ignoredNoise}` : undefined,
+    `Call path: ${callPath}.`,
+    callPath === "livekit_agent"
+      ? "This call hit the experimental LiveKit agent path, not the primary OpenAI Realtime SIP path."
+      : undefined,
+    callPath === "twilio_conversation_relay"
+      ? "This call hit the legacy Twilio ConversationRelay path, not the primary OpenAI Realtime SIP path."
+      : undefined,
     greetingMs !== undefined ? `Greeting began after ${greetingMs}ms.` : undefined,
     firstResponseMs !== undefined ? `First post-caller response began ${firstResponseMs}ms after caller speech stopped.` : undefined,
     !call.recording_url ? "No recording URL is attached to this call." : undefined,
@@ -1807,6 +1788,24 @@ function buildCallDebugObservations(call: CallDebugRow, transcriptTurns: Transcr
     speechStartCount,
     speechStopCount,
   };
+}
+
+function resolveCallDebugPath(call: CallDebugRow) {
+  const payload = isRecord(call.twilio_payload) ? call.twilio_payload : {};
+  const provider = stringValue(payload.provider) ?? stringValue(payload.realtimeAcceptProvider);
+  if (provider) return provider;
+  if (call.external_call_sid?.startsWith("harbor-call-")) return "livekit_agent";
+  if (call.summary?.includes("Realtime quality:")) return "openai_realtime_sip";
+  if (call.external_call_sid?.startsWith("CA")) return "twilio_conversation_relay";
+  return "unknown";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
 function numberFromSummary(summary: string, pattern: RegExp) {

@@ -7,10 +7,12 @@ This pilot keeps OpenAI as the brain and puts LiveKit in the phone audio path fo
 - `GET /livekit/pilot-config?locationId=22222222-2222-4222-8222-222222222222`
   returns Harbor setup status, the LiveKit inbound trunk JSON, and the dispatch rule JSON.
 - `POST /twilio/livekit-voice?locationId=22222222-2222-4222-8222-222222222222`
-  returns TwiML that bridges Twilio Voice into LiveKit SIP.
+  returns TwiML that bridges Twilio Voice into LiveKit SIP only when `LIVEKIT_TWILIO_WEBHOOK_ENABLED=true`.
 - `POST /twilio/voice`
   can route only pilot locations to LiveKit when `LIVEKIT_ROUTE_ON_TWILIO_VOICE=true`.
-- `/health` includes `liveKitHarborPilotConfigured` and `liveKitHarborPilotRoutingEnabled`.
+- `POST /telephony/repair-openai-sip-routing`
+  reattaches an existing Twilio number to the OpenAI Realtime SIP trunk and updates SignalHost's phone number record.
+- `/health` includes `liveKitHarborPilotConfigured`, `liveKitHarborPilotRoutingEnabled`, and `liveKitTwilioWebhookEnabled`.
 - `services/livekit-agent/src/agent.ts`
   runs the LiveKit worker named `signalhost-harbor`. It joins the LiveKit room, applies telephony background voice cancellation, uses OpenAI Realtime for conversation, and reuses SignalHost business context/tools for Harbor.
 
@@ -52,6 +54,7 @@ LIVEKIT_AGENT_INPUT_NOISE_CANCELLATION=true
 LIVEKIT_ROOM_PREFIX=harbor-call-
 LIVEKIT_PILOT_LOCATION_IDS=22222222-2222-4222-8222-222222222222
 LIVEKIT_KRISP_ENABLED=true
+LIVEKIT_TWILIO_WEBHOOK_ENABLED=false
 OPENAI_API_KEY=...
 SUPABASE_URL=...
 SUPABASE_SECRET_KEY=...
@@ -64,11 +67,19 @@ Set this on the voice service only. Leave it off until the LiveKit trunk, dispat
 LIVEKIT_ROUTE_ON_TWILIO_VOICE=false
 ```
 
-Turn it on only when Harbor should route through LiveKit:
+Turn it on only when Harbor should route through LiveKit from the normal `/twilio/voice` webhook:
 
 ```bash
 LIVEKIT_ROUTE_ON_TWILIO_VOICE=true
 ```
+
+The dedicated `/twilio/livekit-voice` webhook is quarantined by default. Turn this on only during a deliberate LiveKit test window:
+
+```bash
+LIVEKIT_TWILIO_WEBHOOK_ENABLED=true
+```
+
+Do not leave both LiveKit switches on for normal demo calls.
 
 ## LiveKit setup
 
@@ -94,12 +105,25 @@ If a caller produces repeated audio bursts that cannot become a clean final tran
 
 ## Twilio setup
 
-For the Harbor test number, use either:
+For normal Harbor demo calls, use the OpenAI Realtime SIP trunk route. If a number was accidentally pointed at the LiveKit webhook, repair it with:
+
+```bash
+POST https://hostline-voice.onrender.com/telephony/repair-openai-sip-routing
+Authorization: Bearer <platform admin Supabase token>
+Content-Type: application/json
+
+{
+  "locationId": "22222222-2222-4222-8222-222222222222",
+  "phoneNumber": "+17816946083"
+}
+```
+
+For a deliberate LiveKit test window only, use either:
 
 - Voice webhook: `https://hostline-voice.onrender.com/twilio/livekit-voice?locationId=22222222-2222-4222-8222-222222222222`
 - Or the normal webhook with `LIVEKIT_ROUTE_ON_TWILIO_VOICE=true`: `https://hostline-voice.onrender.com/twilio/voice?locationId=22222222-2222-4222-8222-222222222222`
 
-The dedicated LiveKit webhook is safer for the first test because it affects only Harbor.
+The dedicated LiveKit webhook affects only Harbor, but it must also have `LIVEKIT_TWILIO_WEBHOOK_ENABLED=true`. LiveKit TwiML no longer falls back to Twilio ConversationRelay; if LiveKit fails to connect, it fails loudly instead of putting callers into the old lower-quality voice path.
 
 ## Why this is different from the current path
 

@@ -23,6 +23,12 @@ export interface ReleasePhoneNumberInput {
   providerSid: string;
 }
 
+export interface RepairOpenAIRealtimeSipRoutingInput {
+  locationId?: string;
+  phoneNumber?: string;
+  providerSid?: string;
+}
+
 export interface ProvisionedPhoneNumber {
   capabilities: Record<string, boolean>;
   phoneNumber: string;
@@ -48,6 +54,7 @@ export interface TelephonyService {
   }): Promise<AvailableTwilioNumber[]>;
   provisionPhoneNumber(input: ProvisionPhoneNumberInput): Promise<ProvisionedPhoneNumber>;
   releasePhoneNumber(input: ReleasePhoneNumberInput): Promise<ReleasedPhoneNumber>;
+  repairOpenAIRealtimeSipRouting(input: RepairOpenAIRealtimeSipRoutingInput): Promise<ProvisionedPhoneNumber>;
 }
 
 interface TwilioAvailableNumberResponse {
@@ -112,6 +119,10 @@ class NotConfiguredTelephonyService implements TelephonyService {
   }
 
   async releasePhoneNumber(): Promise<ReleasedPhoneNumber> {
+    throw new Error("Twilio provisioning is not configured.");
+  }
+
+  async repairOpenAIRealtimeSipRouting(): Promise<ProvisionedPhoneNumber> {
     throw new Error("Twilio provisioning is not configured.");
   }
 }
@@ -248,6 +259,31 @@ class TwilioTelephonyService implements TelephonyService {
     return { providerSid, status: "released" };
   }
 
+  async repairOpenAIRealtimeSipRouting(input: RepairOpenAIRealtimeSipRoutingInput): Promise<ProvisionedPhoneNumber> {
+    if (!this.sipTrunkSid) {
+      throw new Error("TWILIO_SIP_TRUNK_SID is required to repair a number back to OpenAI Realtime SIP.");
+    }
+
+    const providerSid = input.providerSid?.trim() || await this.lookupIncomingPhoneNumberSid(input.phoneNumber);
+    if (!providerSid) {
+      throw new Error("providerSid or a Twilio-owned phoneNumber is required to repair SIP routing.");
+    }
+
+    await this.clearIncomingPhoneNumberVoiceWebhook(providerSid);
+    await this.attachNumberToSipTrunk(providerSid);
+    const number = await this.getIncomingPhoneNumber(providerSid);
+    const phoneNumber = number.phone_number ?? input.phoneNumber ?? "";
+
+    return {
+      capabilities: number.capabilities ?? {},
+      phoneNumber,
+      providerSid,
+      routingMode: "openai_realtime_sip",
+      status: number.status ?? "active",
+      voiceWebhookUrl: buildOpenAIRealtimeLiveCallConfig(this.env, input.locationId).webhookUrl,
+    };
+  }
+
   private async twilioRequest<T>(path: string, init?: { body?: URLSearchParams; method?: "DELETE" | "GET" | "POST" }) {
     const response = await fetch(`${this.baseUrl}${path}`, {
       body: init?.body,
@@ -270,15 +306,46 @@ class TwilioTelephonyService implements TelephonyService {
 
   private async attachNumberToSipTrunk(phoneNumberSid: string) {
     if (!this.sipTrunkSid) return;
-    await this.twilioTrunkingRequest(
-      `/v1/Trunks/${encodeURIComponent(this.sipTrunkSid)}/PhoneNumbers`,
+    try {
+      await this.twilioTrunkingRequest(
+        `/v1/Trunks/${encodeURIComponent(this.sipTrunkSid)}/PhoneNumbers`,
+        {
+          body: new URLSearchParams({
+            PhoneNumberSid: phoneNumberSid,
+          }),
+          method: "POST",
+        },
+      );
+    } catch (error) {
+      if (error instanceof Error && /409|already/i.test(error.message)) return;
+      throw error;
+    }
+  }
+
+  private async clearIncomingPhoneNumberVoiceWebhook(phoneNumberSid: string) {
+    await this.twilioRequest<TwilioIncomingPhoneNumberResponse>(
+      `/2010-04-01/Accounts/${encodeURIComponent(this.accountSid)}/IncomingPhoneNumbers/${encodeURIComponent(phoneNumberSid)}.json`,
       {
         body: new URLSearchParams({
-          PhoneNumberSid: phoneNumberSid,
+          VoiceFallbackUrl: "",
+          VoiceMethod: "POST",
+          VoiceUrl: "",
         }),
         method: "POST",
       },
     );
+  }
+
+  private async getIncomingPhoneNumber(phoneNumberSid: string) {
+    return await this.twilioRequest<TwilioIncomingPhoneNumberResponse>(
+      `/2010-04-01/Accounts/${encodeURIComponent(this.accountSid)}/IncomingPhoneNumbers/${encodeURIComponent(phoneNumberSid)}.json`,
+    );
+  }
+
+  private async lookupIncomingPhoneNumberSid(phoneNumber?: string) {
+    const normalizedPhoneNumber = phoneNumber?.trim();
+    if (!normalizedPhoneNumber) return undefined;
+    return (await this.findIncomingPhoneNumber({ phoneNumber: normalizedPhoneNumber }))?.providerSid;
   }
 
   private async twilioTrunkingRequest<T>(path: string, init?: { body?: URLSearchParams; method?: "DELETE" | "GET" | "POST" }) {
