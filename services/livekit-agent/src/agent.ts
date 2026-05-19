@@ -441,13 +441,19 @@ function closeAfterCallerDone(session: voice.AgentSession<LiveKitAgentUserData>,
     lastCallerText: userData.lastCallerText,
     locationId: userData.locationId,
   });
-  const closeHandle = session.generateReply({
+  void userData.callStore.addTranscriptTurn({
+    callId: userData.callRecordId,
+    speaker: "agent",
+    text: closingLine,
+  }).catch((error) => {
+    console.warn("[livekit-agent] deterministic close transcript persistence failed", {
+      callRecordId: userData.callRecordId,
+      error: formatErrorForLog(error),
+    });
+  });
+  const closeHandle = session.say(closingLine, {
     allowInterruptions: false,
-    instructions: [
-      "The caller just said they are done after you asked whether they needed anything else.",
-      `Say exactly this closing line and nothing else: "${closingLine}"`,
-      "Do not ask another question.",
-    ].join(" "),
+    addToChatCtx: true,
   });
   void closeHandle.waitForPlayout().then(
     () => {

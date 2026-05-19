@@ -939,6 +939,27 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
         return;
       }
 
+      if (callSid) {
+        void callRecordingService.startCallRecording({
+          externalCallSid: callSid,
+          locationId,
+        }).then((result) => {
+          if (result.started) {
+            console.info("[voice-service] LiveKit Twilio call recording started", {
+              callSid,
+              locationId,
+              recordingSid: result.recordingSid,
+            });
+          }
+        }).catch((error) => {
+          console.warn("[voice-service] LiveKit Twilio call recording start failed", {
+            callSid,
+            error,
+            locationId,
+          });
+        });
+      }
+
       console.info("[voice-service] LiveKit pilot TwiML issued", {
         callSid,
         dialedPhone,
