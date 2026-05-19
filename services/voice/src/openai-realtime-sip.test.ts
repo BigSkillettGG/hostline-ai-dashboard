@@ -200,6 +200,8 @@ describe("OpenAI Realtime SIP", () => {
     expect(payload.instructions).toContain("service catalog");
     expect(payload.instructions).toContain("Service-request operating mode");
     expect(payload.instructions).toContain("use create_customer_request");
+    expect(payload.instructions).toContain("text a copy of the request details");
+    expect(payload.instructions).toContain("Do not call it a confirmation unless a real appointment is confirmed");
     expect(payload.instructions).toContain("Universal intake style");
     expect(payload.instructions).toContain("ask one short question at a time");
     expect(payload.instructions).toContain("Do not infer urgency");
@@ -1454,6 +1456,103 @@ describe("OpenAI Realtime SIP", () => {
         expect.arrayContaining([
           expect.objectContaining({ speaker: "caller", text: "Five Old Barn Road." }),
           expect.objectContaining({ speaker: "caller", text: "In Duxbury, Massachusetts." }),
+        ]),
+      );
+      expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("waits for scheduling date fragments before starting the next response", async () => {
+    vi.useFakeTimers();
+    try {
+      const socket = createFakeRealtimeSocket();
+      const transcriptTurns: unknown[] = [];
+      const service = createOpenAIRealtimeSipService(
+        {
+          ...baseEnv,
+          OPENAI_REALTIME_DETAIL_CAPTURE_RESPONSE_DELAY_MS: 1300,
+          OPENAI_REALTIME_MANUAL_RESPONSE_DELAY_MS: 650,
+        },
+        {
+          async getContext() {
+            return demoRestaurantContext;
+          },
+        },
+        {
+          callStore: {
+            async addTranscriptTurn(input) {
+              transcriptTurns.push(input);
+            },
+            async attachCallRecording() {},
+            async completeCall() {},
+            async createCustomerRequest() {
+              return {};
+            },
+            async createStaffReviewOrder() {
+              return {};
+            },
+            async createStaffReviewReservation() {
+              return {};
+            },
+            async createStaffTask() {
+              return {};
+            },
+            async startCall() {
+              return {};
+            },
+            async startRealtimeCall() {
+              return { callId: "call_uuid" };
+            },
+          },
+          fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+          websocketFactory: () => socket as never,
+        },
+      );
+
+      await service.handleIncomingWebhook({
+        headers: {},
+        rawBody: JSON.stringify({
+          data: {
+            call_id: "rtc_scheduling_fragments",
+            sip_headers: [{ name: "From", value: "sip:+14155550123@twilio.com" }],
+          },
+          type: "realtime.call.incoming",
+        }),
+      });
+
+      socket.emit("open");
+      socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+      socket.emit(
+        "message",
+        Buffer.from(JSON.stringify({
+          item_id: "caller_schedule_1",
+          transcript: "Could you come next Friday?",
+          type: "conversation.item.input_audio_transcription.completed",
+        })),
+      );
+      await Promise.resolve();
+
+      expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(700);
+      socket.emit(
+        "message",
+        Buffer.from(JSON.stringify({
+          item_id: "caller_schedule_2",
+          transcript: "At 11 AM.",
+          type: "conversation.item.input_audio_transcription.completed",
+        })),
+      );
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(649);
+      expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))).toHaveLength(1);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(transcriptTurns).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ speaker: "caller", text: "Could you come next Friday?" }),
+          expect.objectContaining({ speaker: "caller", text: "At 11 AM." }),
         ]),
       );
       expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))).toHaveLength(2);
@@ -2865,6 +2964,19 @@ describe("OpenAI Realtime SIP", () => {
       closingLine: "Thanks for calling Olive and Ember. Goodbye.",
       ok: true,
     });
+
+    expect(
+      finishOpenAIRealtimeCall({
+        rawArguments: {
+          closing_line: "Great! Have a wonderful day, and enjoy your time at Olive and Ember.",
+          reason: "caller_done",
+        },
+      }),
+    ).toMatchObject({
+      action: "finish_call",
+      closingLine: "Thanks for calling. Goodbye.",
+      ok: true,
+    });
   });
 
   it("does not finish the call when the latest caller turn is not a goodbye", () => {
@@ -3030,7 +3142,25 @@ describe("OpenAI Realtime SIP", () => {
 
     expect(result).toMatchObject({
       ok: true,
-      message: "Text confirmation sent.",
+      message: "Text sent.",
+      phoneNumber: "+14155550123",
+      sentToLastFour: "0123",
+    });
+  });
+
+  it("labels service request texts as summaries instead of confirmations", async () => {
+    const result = await sendOpenAIRealtimeGuestConfirmation({
+      callerPhone: "+14155550123",
+      context: demoRestaurantContext,
+      rawArguments: {
+        kind: "service_appointment",
+        message: "Your service request was received.",
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      message: "Text request summary sent.",
       phoneNumber: "+14155550123",
       sentToLastFour: "0123",
     });
@@ -3142,6 +3272,8 @@ describe("OpenAI Realtime SIP", () => {
     });
 
     expect(result).toMatchObject({
+      message:
+        "Customer request saved for staff follow-up. Do not call this a confirmed appointment; tell the caller staff will confirm timing shortly.",
       ok: true,
       requestId: "request_uuid",
       requestType: "service_appointment",

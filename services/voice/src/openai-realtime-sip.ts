@@ -748,10 +748,10 @@ export function buildOpenAIRealtimeInstructions(
       : "If the caller asks a direct price, hourly-rate, fee, trip-charge, estimate, or cost question, answer the policy first from context. If exact pricing is not available, say pricing depends on the job and staff can confirm. Only then ask whether they want staff follow-up; do not skip straight to collecting contact info.",
     "After answering any normal question or completing any task, ask a short loop-closing question such as 'Can I help you with anything else?' unless the caller has already clearly said goodbye.",
     "Never end the call immediately after answering a question. The call should only close after the caller indicates they are done.",
-    "After saving a reservation, sending a confirmation text, sending a link, or taking an order request, do not call finish_call right away. Give the confirmation, then ask a brief anything-else question unless the caller already said they are done.",
+    "After saving a reservation, sending a text, sending a link, or taking an order request, do not call finish_call right away. Give the result, then ask a brief anything-else question unless the caller already said they are done.",
     "If the caller says no, no thanks, that's all, that's it, I'm good, or similar after your anything-else question, call finish_call with a short closing line like 'Thanks for calling. Goodbye.' Do not ask another question.",
     "Do not call finish_call until the caller clearly indicates they are done or says goodbye.",
-    "When finish_call returns ok, say only the closing line, then stop speaking. The call will end.",
+    "When finish_call returns ok, say only the closing line, then stop speaking. The call will end. Keep the closing short and do not repeat the business name in the goodbye.",
     "If the caller says yes after your anything-else question, say 'Of course, what else can I help with?' and continue.",
     businessLinksContext,
     "There is no live staff transfer in this pilot. Never say you are connecting, transferring, or placing the caller on hold for staff.",
@@ -778,14 +778,16 @@ export function buildOpenAIRealtimeInstructions(
       : "For unusual services, substitutions, and out-of-scope requests, use the business policy. If uncertain, collect the details for staff confirmation. Never guarantee availability, price, timing, or safety unless the context explicitly confirms it.",
     profile.isRestaurant
       ? "For reservations and pickup orders, once the request is captured, naturally offer to text a confirmation. Example: 'Would you like me to text that confirmation to the number ending 1234?'"
-      : `For ${profile.appointmentNoun}, quote, intake, and callback requests, once the request or link is captured, naturally offer to text a confirmation or helpful link. Example: 'Would you like me to text that to the number ending 1234?'`,
+      : `For ${profile.appointmentNoun}, quote, intake, and callback requests, once the request or link is captured, naturally offer to text a copy of the request details or a helpful link. Do not call it a confirmation unless a real ${profile.appointmentNoun} is confirmed. Example: 'Would you like me to text a copy of that request to the number ending 1234?'`,
     "Only send a text after the caller agrees or asks for it. Use the send_guest_confirmation tool for reservation, order, or helpful follow-up texts.",
     "When the caller asks for a configured link, use send_business_link after they ask for it or agree to receive it by text.",
     profile.isRestaurant
       ? "For generic leads, service appointments, quote requests, or requests outside the restaurant-specific tools, use create_customer_request after collecting the name, callback number, and request summary."
       : `For leads, ${profile.appointmentNoun}s, quote requests, and anything outside the specialized tools, use create_customer_request after collecting the name, callback number, request summary, urgency, and key details.`,
     "When collecting a name, address, phone number, email, spelling, or other detail, let the caller finish the full detail before responding. If they spell a name, capture the spelled last name and do not treat it as background noise.",
-    "If the send_guest_confirmation tool succeeds, tell the caller the text is sent. Do not mention backend setup, SMS providers, or placeholder mode.",
+    profile.isRestaurant
+      ? "If the send_guest_confirmation tool succeeds, tell the caller the text is sent. Do not mention backend setup, SMS providers, or placeholder mode."
+      : "If the send_guest_confirmation tool succeeds, tell the caller the text is sent. For service requests, say it is a copy of the request or useful link, not a confirmed appointment. If the caller asks what is being confirmed, explain that staff still needs to confirm timing.",
     "Close naturally only after the caller is done. Use finish_call, say a short goodbye, and do not ask another question after goodbye.",
   ].join("\n");
 }
@@ -1822,6 +1824,10 @@ function resolveOpenAIRealtimeManualResponseDelayForTurn(session: OpenAIRealtime
   if (isLikelyShortCallerConfirmation(normalized)) {
     return Math.min(350, session.manualResponseDelayMs);
   }
+  const schedulingDelayMs = getMinimumSchedulingCaptureDelayMs(session, normalized);
+  if (schedulingDelayMs) {
+    return Math.max(session.manualResponseDelayMs, session.manualDetailResponseDelayMs, schedulingDelayMs);
+  }
   if (isAnsweringDetailCaptureQuestion(session, normalized)) {
     return Math.max(
       session.manualResponseDelayMs,
@@ -1830,6 +1836,21 @@ function resolveOpenAIRealtimeManualResponseDelayForTurn(session: OpenAIRealtime
     );
   }
   return session.manualResponseDelayMs;
+}
+
+function getMinimumSchedulingCaptureDelayMs(session: OpenAIRealtimeSidebandSession, normalized: string) {
+  if (!normalized) return 0;
+  const lastAgentTurn = session.transcript.filter((turn) => turn.role === "agent").at(-1)?.text ?? "";
+  const lastAgent = normalizeRealtimeCallerText(lastAgentTurn);
+  if (
+    isLikelySchedulingDateFragment(normalized) &&
+    !hasSpecificSchedulingTime(normalized) &&
+    (isSchedulingCapturePrompt(lastAgent) || hasSchedulingRequestCue(normalized))
+  ) {
+    return 1800;
+  }
+  if (isSchedulingCapturePrompt(lastAgent) && isLikelyShortSchedulingFragment(normalized)) return 1400;
+  return 0;
 }
 
 function getMinimumDetailCaptureDelayMs(session: OpenAIRealtimeSidebandSession, normalized: string) {
@@ -1851,12 +1872,45 @@ function isAnsweringDetailCaptureQuestion(session: OpenAIRealtimeSidebandSession
     /\b(name|full name|first name|last name|who should|who is this|who am i speaking|spell|spelling|callback|phone|number|email|address|where do you need|where you need|service address|come out|send someone|best number|email address)\b/.test(
       lastAgent,
     ) ||
+    isSchedulingCapturePrompt(lastAgent) ||
     isLikelyAddressFragment(normalized) ||
     /\b(at|dot|com|net|org|gmail|yahoo|outlook|icloud|hotmail|dash|underscore)\b/.test(
       normalized,
     ) ||
     isSpelledFragment(normalized)
   );
+}
+
+function isSchedulingCapturePrompt(lastAgent: string) {
+  return /\b(when|what day|which day|what date|preferred date|preferred time|what time|date and time|day and time|schedule|book|appointment|reservation|come out|send someone|available|availability|how soon)\b/.test(
+    lastAgent,
+  );
+}
+
+function isLikelySchedulingDateFragment(normalized: string) {
+  return /\b(today|tonight|tomorrow|this week|next week|this weekend|next weekend|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next monday|next tuesday|next wednesday|next thursday|next friday|next saturday|next sunday|this monday|this tuesday|this wednesday|this thursday|this friday|this saturday|this sunday)\b/.test(
+    normalized,
+  );
+}
+
+function hasSchedulingRequestCue(normalized: string) {
+  return /\b(come|come out|send someone|schedule|book|booking|reservation|appointment|available|availability|can you do|could you do|any chance|service call|quote|estimate)\b/.test(
+    normalized,
+  );
+}
+
+function isLikelyShortSchedulingFragment(normalized: string) {
+  return (
+    normalized.split(/\s+/).filter(Boolean).length <= 6 &&
+    (isLikelySchedulingDateFragment(normalized) ||
+      hasSpecificSchedulingTime(normalized) ||
+      /\b(asap|as soon as possible|morning|afternoon|evening|lunchtime|lunch|dinner|breakfast)\b/.test(normalized))
+  );
+}
+
+function hasSpecificSchedulingTime(normalized: string) {
+  return /\b(?:at\s+)?\d{1,2}(?::\d{2})?\s*(?:a\s*m|p\s*m|am|pm)?\b/.test(normalized) ||
+    /\b(noon|midnight|morning|afternoon|evening|lunchtime|lunch|dinner|breakfast)\b/.test(normalized);
 }
 
 function isAddressCapturePrompt(lastAgent: string) {
@@ -3044,9 +3098,16 @@ export async function sendOpenAIRealtimeGuestConfirmation({
       }
     }
 
+    const successMessage =
+      kind === "reservation" || kind === "order"
+        ? "Text confirmation sent."
+        : kind === "appointment" || kind === "service_appointment" || kind === "quote" || kind === "lead" || kind === "callback"
+          ? "Text request summary sent."
+          : "Text sent.";
+
     return {
       ok: true,
-      message: "Text confirmation sent.",
+      message: successMessage,
       phoneNumber,
       sentToLastFour: phoneNumber.slice(-4),
     };
@@ -3177,7 +3238,10 @@ export async function createOpenAIRealtimeCustomerRequest({
 
     return {
       ok: true,
-      message: "Customer request saved. Tell the caller staff will follow up shortly.",
+      message:
+        requestType === "service_appointment"
+          ? "Customer request saved for staff follow-up. Do not call this a confirmed appointment; tell the caller staff will confirm timing shortly."
+          : "Customer request saved. Tell the caller staff will follow up shortly.",
       requestId: result?.requestId,
       requestType,
       status: "customer_request_saved",
@@ -3726,6 +3790,9 @@ function sanitizeClosingLine(value: string) {
   if (!normalized) return "Thanks for calling. Goodbye.";
   const withoutQuestion = normalized.replace(/\?+$/g, ".");
   const words = withoutQuestion.split(/\s+/).slice(0, 12).join(" ");
+  if (withoutQuestion.split(/\s+/).length > 12 || /\b(and|or|but|with|at|for|to|of)$/i.test(words)) {
+    return "Thanks for calling. Goodbye.";
+  }
   return /[.!]$/.test(words) ? words : `${words}.`;
 }
 
