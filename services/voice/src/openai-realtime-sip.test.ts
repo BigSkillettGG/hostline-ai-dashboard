@@ -132,6 +132,8 @@ describe("OpenAI Realtime SIP", () => {
     expect(payload.instructions).toContain("Universal intake style");
     expect(payload.instructions).toContain("ask one short question at a time");
     expect(payload.instructions).toContain("Do not infer urgency");
+    expect(payload.instructions).toContain("Incomplete speech guardrail");
+    expect(payload.instructions).toContain("do not infer the missing words");
     expect(payload.instructions).toContain("create_reservation_request");
     expect(payload.instructions).toContain("Noisy-room behavior");
     expect(payload.instructions).toContain("Echo guardrail");
@@ -194,6 +196,8 @@ describe("OpenAI Realtime SIP", () => {
     expect(payload.instructions).toContain("ask one short question at a time");
     expect(payload.instructions).toContain("Do not infer urgency");
     expect(payload.instructions).toContain("ambiguous or partial answer");
+    expect(payload.instructions).toContain("I have a leak in my...");
+    expect(payload.instructions).toContain("instead of assuming kitchen");
     expect(payload.instructions).not.toContain("Plumbing urgency guardrail");
     expect(payload.instructions).not.toContain("HVAC urgency guardrail");
     expect(payload.instructions).not.toContain("Electrical urgency guardrail");

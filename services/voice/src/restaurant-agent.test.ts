@@ -55,6 +55,8 @@ describe("restaurant fallback replies", () => {
   it("coaches the model for noisy calls and rude callers", () => {
     const instructions = buildRestaurantInstructions(demoRestaurantContext);
     expect(instructions).toContain("noisy phone audio");
+    expect(instructions).toContain("Incomplete speech guardrail");
+    expect(instructions).toContain("do not infer the missing words");
     expect(instructions).toContain("If a caller is rude");
     expect(instructions).toContain("Do not repeat the opening greeting");
     expect(instructions).toContain("Anything else I can help you with?");
