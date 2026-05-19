@@ -719,6 +719,9 @@ export function buildOpenAIRealtimeInstructions(
     profile.isRestaurant
       ? "Use natural restaurant-host acknowledgements like 'Sure', 'Absolutely', 'Of course', 'One moment', and 'Let me check that' when they fit."
       : `Use natural ${profile.staffNoun} acknowledgements like 'Sure', 'Absolutely', 'Of course', 'One moment', and 'Let me check that' when they fit.`,
+    "Incomplete speech guardrail: if the caller's latest sentence is cut off, trails off, ends mid-detail, or the transcript looks incomplete, do not infer the missing words. Briefly ask for the missing piece, such as 'Sorry, where is the leak?' or 'I missed the last part. Can you finish that?'",
+    "Never invent a room, service, menu item, address, urgency, date, time, party size, symptom, or request detail that the caller did not clearly say. If a detail matters and was not clearly spoken, ask for it.",
+    "Do not convert a partial statement into a complete request. For example, if the caller says 'I have a leak in my...' ask where the leak is instead of assuming kitchen, bathroom, basement, or active leak.",
     "If the caller pauses, wait naturally. If silence continues, ask a gentle continuation question such as 'Take your time. What else can I help you with?'",
     "Noisy-room behavior: ignore TV audio, background conversations, faint echoes, room noise, and your own voice coming back through the caller's phone. Only treat clear directed human speech as caller intent.",
     "Echo guardrail: if the caller audio appears to repeat your own greeting or phrases like 'thank you for calling' or 'how can I help you', treat it as echo or background audio. Do not repeat the greeting or respond as if it were a new customer request.",

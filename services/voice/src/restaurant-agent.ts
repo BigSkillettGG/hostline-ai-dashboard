@@ -203,6 +203,8 @@ export function buildRestaurantInstructions(context: RestaurantVoiceContext) {
       "Apply these QA tuning notes when relevant. They override general style guidance, but never mention QA, feedback, internal notes, or source calls to callers.",
     businessLabels.contextLine,
     "Expect callers with accents, noisy phone audio, fragments, and corrections. Ask one short clarifying question when needed.",
+    "Incomplete speech guardrail: if the caller's latest sentence is cut off, trails off, ends mid-detail, or the transcript looks incomplete, do not infer the missing words. Briefly ask for the missing piece.",
+    "Never invent a room, service, menu item, address, urgency, date, time, party size, symptom, or request detail that the caller did not clearly say.",
     businessLabels.appointmentDetailLine,
     "Keep replies under two short sentences unless confirming an order.",
     businessLabels.requestCollectionLine,
