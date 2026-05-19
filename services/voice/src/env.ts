@@ -16,6 +16,7 @@ const envSchema = z.object({
   SUPABASE_SECRET_KEY: z.string().optional(),
   SUPABASE_DEMO_LOCATION_ID: z.string().uuid().optional(),
   DASHBOARD_PUBLIC_URL: z.string().url().optional(),
+  GOOGLE_MAPS_API_KEY: z.string().optional(),
   STRIPE_CANCEL_URL: z.string().url().optional(),
   STRIPE_PORTAL_RETURN_URL: z.string().url().optional(),
   STRIPE_SECRET_KEY: z.string().optional(),
@@ -225,6 +226,13 @@ export function getVoiceServiceReadiness(env: VoiceServiceEnv): VoiceServiceRead
       label: "OpenAI Realtime SIP",
       ready: Boolean(env.OPENAI_API_KEY && env.PUBLIC_HTTP_BASE_URL),
       required: true,
+    },
+    {
+      detail: "Normalizes caller service addresses through Google Places before saving requests and confirmations.",
+      id: "address_validation",
+      label: "Google address validation",
+      ready: Boolean(env.GOOGLE_MAPS_API_KEY),
+      required: false,
     },
     {
       detail: "Optional Harbor Plumbing pilot path that bridges Twilio into LiveKit SIP with Krisp noise cancellation and an OpenAI-powered LiveKit agent.",

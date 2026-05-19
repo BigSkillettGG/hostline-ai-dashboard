@@ -25,6 +25,7 @@ import {
   finishOpenAIRealtimeCall,
   lookupBusinessContext,
   lookupRestaurantContext,
+  normalizeOpenAIRealtimeCustomerAddress,
   requestOpenAIRealtimeStaffCallback,
   resolveOpenAIRealtimeAcceptProvider,
   resolveOpenAIRealtimeGreetingDelayMs,
@@ -137,6 +138,8 @@ describe("OpenAI Realtime SIP", () => {
     expect(payload.instructions).toContain("For direct menu availability or orderability questions");
     expect(payload.instructions).toContain("Universal intake style");
     expect(payload.instructions).toContain("ask one short question at a time");
+    expect(payload.instructions).toContain("Address capture");
+    expect(payload.instructions).toContain("normalize_customer_address");
     expect(payload.instructions).toContain("Do not infer urgency");
     expect(payload.instructions).toContain("Incomplete speech guardrail");
     expect(payload.instructions).toContain("do not infer the missing words");
@@ -148,6 +151,7 @@ describe("OpenAI Realtime SIP", () => {
     expect(payload.tools[0].name).toBe("lookup_restaurant_context");
     expect(payload.tools.map((tool) => tool.name)).toContain("send_guest_confirmation");
     expect(payload.tools.map((tool) => tool.name)).toContain("send_business_link");
+    expect(payload.tools.map((tool) => tool.name)).toContain("normalize_customer_address");
     expect(payload.tools.map((tool) => tool.name)).toContain("create_customer_request");
     expect(payload.tools.map((tool) => tool.name)).toContain("create_reservation_request");
     expect(payload.tools.map((tool) => tool.name)).toContain("request_staff_callback");
@@ -3241,6 +3245,12 @@ describe("OpenAI Realtime SIP", () => {
       rawArguments: {
         caller_name: "Sam",
         details: { issue: "water heater leaking", service_area: "Newton" },
+        formatted_address: "5 Old Barn Rd, Duxbury, MA 02332, USA",
+        address_latitude: 42.031,
+        address_longitude: -70.68,
+        address_status: "validated",
+        google_maps_uri: "https://maps.google.com/?cid=123",
+        google_place_id: "place_123",
         request_type: "service appointment",
         summary: "Sam needs help with a leaking water heater in Newton.",
         urgency: "high",
@@ -3284,7 +3294,34 @@ describe("OpenAI Realtime SIP", () => {
       customerPhone: "+14155550123",
       priority: "high",
       requestType: "service_appointment",
+      details: expect.objectContaining({
+        addressLatitude: 42.031,
+        addressLongitude: -70.68,
+        addressStatus: "validated",
+        formattedAddress: "5 Old Barn Rd, Duxbury, MA 02332, USA",
+        googleMapsUri: "https://maps.google.com/?cid=123",
+        googlePlaceId: "place_123",
+        issue: "water heater leaking",
+        serviceAddress: "5 Old Barn Rd, Duxbury, MA 02332, USA",
+      }),
     });
+  });
+
+  it("normalizes caller addresses before saving request details", async () => {
+    const result = await normalizeOpenAIRealtimeCustomerAddress({
+      context: demoRestaurantContext,
+      env: baseEnv,
+      rawArguments: {
+        raw_address: "5 Old Barn Road, Duxbury, Massachusetts",
+        unit_or_access: "Suite 4",
+      },
+    });
+
+    expect(result).toMatchObject({
+      formattedAddress: "5 Old Barn Road Suite 4, Duxbury, Massachusetts",
+      status: "likely_complete_unverified",
+    });
+    expect(result.callerGuidance).toContain("read back exactly");
   });
 
   it("creates staff-confirmed reservation requests from realtime tool calls", async () => {

@@ -17,6 +17,7 @@ import {
   type BusinessLink,
   type CustomerRequestKind,
 } from "../../../src/domain/business-links";
+import { normalizeCustomerAddress } from "./address-normalization-service";
 
 export interface WebChatTurn {
   at?: string;
@@ -95,6 +96,7 @@ export function createWebChatService(
           callId: chatLog.callId,
           callStore: options.callStore,
           context,
+          env,
           input,
           toolCall,
         }),
@@ -162,6 +164,27 @@ function buildWebChatTools(context: RestaurantVoiceContext): RestaurantResponseT
       type: "function",
     },
     {
+      description: "Validate, geolocate, and format a visitor-provided service/customer address before saving a follow-up request.",
+      name: "normalize_customer_address",
+      parameters: {
+        additionalProperties: false,
+        properties: {
+          raw_address: {
+            description: "The address or address fragment exactly as the visitor typed it.",
+            type: "string",
+          },
+          unit_or_access: {
+            description: "Apartment, suite, unit, floor, gate code, business name, or access note if provided.",
+            type: "string",
+          },
+        },
+        required: ["raw_address"],
+        type: "object",
+      },
+      strict: false,
+      type: "function",
+    },
+    {
       description: "Create a staff follow-up request for a website visitor.",
       name: "create_customer_request",
       parameters: {
@@ -183,6 +206,30 @@ function buildWebChatTools(context: RestaurantVoiceContext): RestaurantResponseT
             additionalProperties: true,
             description: "Useful structured details about the request.",
             type: "object",
+          },
+          formatted_address: {
+            description: "Google-formatted or visitor-confirmed service/customer address.",
+            type: "string",
+          },
+          address_latitude: {
+            description: "Latitude from address validation, if available.",
+            type: "number",
+          },
+          address_longitude: {
+            description: "Longitude from address validation, if available.",
+            type: "number",
+          },
+          address_status: {
+            description: "Address validation status returned by normalize_customer_address.",
+            type: "string",
+          },
+          google_maps_uri: {
+            description: "Google Maps URI returned by address validation, if available.",
+            type: "string",
+          },
+          google_place_id: {
+            description: "Google place ID returned by address validation, if available.",
+            type: "string",
           },
           request_type: {
             enum: [
@@ -222,6 +269,7 @@ async function handleWebChatToolCall({
   callId,
   callStore,
   context,
+  env,
   input,
   toolCall,
 }: {
@@ -229,6 +277,7 @@ async function handleWebChatToolCall({
   callId?: string;
   callStore?: CallStore;
   context: RestaurantVoiceContext;
+  env: VoiceServiceEnv;
   input: WebChatMessageInput;
   toolCall: RestaurantToolCall;
 }) {
@@ -238,6 +287,15 @@ async function handleWebChatToolCall({
 
   if (toolCall.name === "create_customer_request") {
     return handleCustomerRequestTool({ actions, callId, callStore, input, toolCall });
+  }
+
+  if (toolCall.name === "normalize_customer_address") {
+    return normalizeCustomerAddress({
+      context,
+      env,
+      rawAddress: stringArgument(toolCall.arguments.raw_address),
+      unitOrAccess: stringArgument(toolCall.arguments.unit_or_access),
+    });
   }
 
   return {
@@ -313,6 +371,7 @@ async function handleCustomerRequestTool({
     customerPhone,
     details: {
       ...(objectArgument(toolCall.arguments.details) ?? {}),
+      ...buildAddressDetails(toolCall.arguments),
       channel: "web_chat",
       customerEmail,
       visitorId: input.visitorId,
@@ -518,6 +577,7 @@ function buildWebChatChannelInstructions(context: RestaurantVoiceContext) {
       : `Business chat focus: answer ${profile.offeringNoun}, service-area, ${profile.appointmentNoun}, quote, safety, payment, policy, and staff-follow-up questions from the configured context.`,
     "For links, use get_business_link and place the URL directly in the chat reply. Do not say you texted the link.",
     "If a visitor wants staff follow-up, collect their name plus best phone or email, then use create_customer_request.",
+    "When a visitor gives a service, job, delivery, or customer address, use normalize_customer_address before saving the request. If it needs more detail, ask only for the missing part. If it returns a readBack, confirm the formatted address before saving it.",
     profile.isRestaurant
       ? "For orders, reservations, quotes, and appointments, use a configured link when the business has one; otherwise collect details for staff follow-up."
       : `For ${profile.appointmentNoun}s, quotes, service requests, and callbacks, use a configured link when the business has one; otherwise collect the details ${profile.staffNoun} need for follow-up.`,
@@ -550,6 +610,31 @@ function stringArgument(value: unknown) {
 
 function objectArgument(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+}
+
+function buildAddressDetails(args: Record<string, unknown>) {
+  const details: Record<string, string | number> = {};
+  const address = stringArgument(args.formatted_address);
+  if (address) {
+    details.serviceAddress = address;
+    details.formattedAddress = address;
+  }
+  const latitude = coordinateArgument(args.address_latitude);
+  const longitude = coordinateArgument(args.address_longitude);
+  if (latitude !== undefined) details.addressLatitude = latitude;
+  if (longitude !== undefined) details.addressLongitude = longitude;
+  const status = stringArgument(args.address_status);
+  if (status) details.addressStatus = status;
+  const googleMapsUri = stringArgument(args.google_maps_uri);
+  if (googleMapsUri) details.googleMapsUri = googleMapsUri;
+  const googlePlaceId = stringArgument(args.google_place_id);
+  if (googlePlaceId) details.googlePlaceId = googlePlaceId;
+  return details;
+}
+
+function coordinateArgument(value: unknown) {
+  const numeric = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(numeric) ? numeric : undefined;
 }
 
 function normalizePriority(value: unknown, requestType: CustomerRequestKind): StaffTaskPriority {

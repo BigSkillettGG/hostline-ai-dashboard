@@ -25,6 +25,7 @@ import { classifyRealtimeToolError } from "./openai-realtime-tool-errors";
 import { buildOpenAIRealtimeTools, buildOpenAIRealtimeTranscriptionPrompt } from "./openai-realtime-tools";
 import type { TrustedContact } from "../../../src/domain/trusted-contacts";
 import { resolveSignalHostOpenAIVoice } from "../../../src/domain/voice-selection";
+import { normalizeCustomerAddress } from "./address-normalization-service";
 
 const OPENAI_REALTIME_DEFAULT_MODEL = "gpt-realtime";
 const OPENAI_REALTIME_DEFAULT_FEMALE_VOICE = "marin";
@@ -37,6 +38,7 @@ export type OpenAIRealtimeAcceptProvider = "custom" | "agents_sdk";
 
 type OpenAIRealtimeEnv = Pick<
   VoiceServiceEnv,
+  | "GOOGLE_MAPS_API_KEY"
   | "OPENAI_API_KEY"
   | "OPENAI_MODEL"
   | "OPENAI_PROJECT_ID"
@@ -767,6 +769,7 @@ export function buildOpenAIRealtimeInstructions(
       ? "When reservation date, time, party size, and guest name are known, use create_reservation_request to save the request. If the tool says provider_confirmed, tell the caller the reservation is confirmed. If the tool says staff confirmation is needed, tell the caller it is requested and staff will confirm."
       : `When customer name, callback number, request summary, urgency, and useful details are known, use create_customer_request with service_appointment, quote, lead, callback, or complaint. Tell the caller ${profile.staffNoun} will follow up; do not promise a confirmed ${profile.appointmentNoun} unless the context explicitly says it is confirmed.`,
     universalIntakeContext,
+    "Address capture: whenever the caller gives a service, job, delivery, or customer address, use normalize_customer_address before saving the request or sending a confirmation. If it returns needs_more_detail, ask only for the missing part, not the whole address again. If it returns a readBack, say that read-back and ask if it is right before saving. Do not invent apartment, suite, unit, gate code, or access details; ask for those only if the caller mentions them or the address clearly needs them.",
     profile.isRestaurant
       ? "Reservation name guardrail: do not treat 'no', 'none', 'that's all', 'I'm good', goodbye phrases, or refusal phrases as a guest name. If the caller declines or skips the name, ask once for a real name or offer to have staff use caller ID for follow-up; do not save a fake name."
       : "Name guardrail: do not treat 'no', 'none', 'that's all', 'I'm good', goodbye phrases, or refusal phrases as a customer name.",
@@ -1295,6 +1298,7 @@ function startSidebandSocket({
         callerPhone,
         callRecordId: session.callRecordId,
         context,
+        env,
         guestConfirmationService,
         locationId,
         ownerCommandRuntime,
@@ -2472,6 +2476,7 @@ async function handleOpenAIRealtimeToolCalls({
   callerPhone,
   callRecordId,
   context,
+  env,
   guestConfirmationService,
   locationId,
   ownerCommandRuntime,
@@ -2486,6 +2491,7 @@ async function handleOpenAIRealtimeToolCalls({
   callerPhone?: string;
   callRecordId?: string;
   context: RestaurantVoiceContext;
+  env: OpenAIRealtimeEnv;
   guestConfirmationService?: GuestConfirmationService;
   locationId?: string;
   ownerCommandRuntime?: OwnerCommandRuntime;
@@ -2505,6 +2511,7 @@ async function handleOpenAIRealtimeToolCalls({
         callerPhone,
         callRecordId,
         context,
+        env,
         guestConfirmationService,
         locationId,
         ownerCommandRuntime,
@@ -2593,6 +2600,7 @@ async function handleOpenAIRealtimeToolCall({
   callerPhone,
   callRecordId,
   context,
+  env,
   guestConfirmationService,
   locationId,
   ownerCommandRuntime,
@@ -2606,6 +2614,7 @@ async function handleOpenAIRealtimeToolCall({
   callerPhone?: string;
   callRecordId?: string;
   context: RestaurantVoiceContext;
+  env: OpenAIRealtimeEnv;
   guestConfirmationService?: GuestConfirmationService;
   locationId?: string;
   ownerCommandRuntime?: OwnerCommandRuntime;
@@ -2650,6 +2659,14 @@ async function handleOpenAIRealtimeToolCall({
       context,
       guestConfirmationService,
       locationId,
+      rawArguments: toolCall.arguments,
+    });
+  }
+
+  if (toolCall.name === "normalize_customer_address") {
+    return normalizeOpenAIRealtimeCustomerAddress({
+      context,
+      env,
       rawArguments: toolCall.arguments,
     });
   }
@@ -3080,7 +3097,11 @@ export async function sendOpenAIRealtimeGuestConfirmation({
         });
       }
     } else {
-      const message = stringValue(rawArguments.message) ?? "Your request was received.";
+      const address = stringValue(rawArguments.formatted_address) ?? stringValue(rawArguments.service_address);
+      const baseMessage = stringValue(rawArguments.message) ?? "Your request was received.";
+      const message = address && !baseMessage.toLowerCase().includes(address.toLowerCase())
+        ? `${baseMessage} Address: ${address}.`
+        : baseMessage;
       if (guestConfirmationService) {
         await guestConfirmationService.sendTextMessage({
           callId: callRecordId,
@@ -3190,6 +3211,23 @@ export async function sendOpenAIRealtimeBusinessLink({
   }
 }
 
+export async function normalizeOpenAIRealtimeCustomerAddress({
+  context,
+  env,
+  rawArguments,
+}: {
+  context: RestaurantVoiceContext;
+  env: OpenAIRealtimeEnv;
+  rawArguments: Record<string, unknown>;
+}) {
+  return normalizeCustomerAddress({
+    context,
+    env,
+    rawAddress: stringValue(rawArguments.raw_address),
+    unitOrAccess: stringValue(rawArguments.unit_or_access),
+  });
+}
+
 export async function createOpenAIRealtimeCustomerRequest({
   callRecordId,
   callerPhone,
@@ -3225,11 +3263,15 @@ export async function createOpenAIRealtimeCustomerRequest({
   }
 
   try {
+    const details = mergeCustomerRequestDetails(
+      normalizeCustomerRequestDetails(rawArguments.details),
+      buildCustomerRequestAddressDetails(rawArguments),
+    );
     const result = await callStore?.createCustomerRequest({
       callId: callRecordId,
       customerName: stringValue(rawArguments.caller_name),
       customerPhone,
-      details: normalizeCustomerRequestDetails(rawArguments.details),
+      details,
       locationId,
       priority: normalizeCustomerRequestPriority(rawArguments.urgency, requestType),
       requestType,
@@ -3598,6 +3640,37 @@ function normalizeCustomerRequestDetails(value: unknown) {
   return Object.keys(details).length ? details : undefined;
 }
 
+function buildCustomerRequestAddressDetails(rawArguments: Record<string, unknown>) {
+  const details: Record<string, string | number> = {};
+  const serviceAddress = stringValue(rawArguments.formatted_address) ?? stringValue(rawArguments.service_address);
+  if (serviceAddress) {
+    details.serviceAddress = serviceAddress;
+    details.formattedAddress = serviceAddress;
+  }
+  const latitude = coordinateValue(rawArguments.address_latitude);
+  const longitude = coordinateValue(rawArguments.address_longitude);
+  if (latitude !== undefined) details.addressLatitude = latitude;
+  if (longitude !== undefined) details.addressLongitude = longitude;
+  const status = stringValue(rawArguments.address_status);
+  if (status) details.addressStatus = status;
+  const googleMapsUri = stringValue(rawArguments.google_maps_uri);
+  if (googleMapsUri) details.googleMapsUri = googleMapsUri;
+  const googlePlaceId = stringValue(rawArguments.google_place_id);
+  if (googlePlaceId) details.googlePlaceId = googlePlaceId;
+  return Object.keys(details).length ? details : undefined;
+}
+
+function mergeCustomerRequestDetails(
+  base?: Record<string, string | number | boolean>,
+  address?: Record<string, string | number>,
+) {
+  if (!base && !address) return undefined;
+  return {
+    ...(base ?? {}),
+    ...(address ?? {}),
+  };
+}
+
 function normalizeStaffCallbackSeverity(value: unknown, kind: StaffAlertKind) {
   const severity = stringValue(value)?.toLowerCase();
   if (severity === "high" || kind === "complaint" || kind === "delivery_failure") return "high";
@@ -3727,6 +3800,11 @@ function parseOrderItems(value: unknown): CapturedOrderItem[] {
 function numberValue(value: unknown) {
   const numeric = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
   return Number.isFinite(numeric) && numeric > 0 ? Math.round(numeric) : undefined;
+}
+
+function coordinateValue(value: unknown) {
+  const numeric = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(numeric) ? numeric : undefined;
 }
 
 function textMatchesTopic(text: string, topic: string) {

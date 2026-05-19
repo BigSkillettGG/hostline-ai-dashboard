@@ -79,7 +79,9 @@ describe("web chat service", () => {
     const firstBody = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
     expect(firstBody.instructions).toContain("Channel: website chat");
     expect(firstBody.instructions).toContain("Order online");
+    expect(firstBody.instructions).toContain("normalize_customer_address");
     expect(firstBody.tools.map((tool: { name: string }) => tool.name)).toContain("get_business_link");
+    expect(firstBody.tools.map((tool: { name: string }) => tool.name)).toContain("normalize_customer_address");
   });
 
   it("creates a customer request when staff follow-up is needed", async () => {
@@ -108,6 +110,12 @@ describe("web chat service", () => {
                   details: {
                     issue: "leaking sink",
                   },
+                  formatted_address: "5 Old Barn Rd, Duxbury, MA 02332, USA",
+                  address_latitude: 42.031,
+                  address_longitude: -70.68,
+                  address_status: "validated",
+                  google_maps_uri: "https://maps.google.com/?cid=123",
+                  google_place_id: "place_123",
                   request_type: "service appointment",
                   summary: "Sam wants help with a leaking sink.",
                   urgency: "high",
@@ -156,6 +164,16 @@ describe("web chat service", () => {
         priority: "high",
         requestType: "service_appointment",
         summary: "Sam wants help with a leaking sink.",
+        details: expect.objectContaining({
+          addressLatitude: 42.031,
+          addressLongitude: -70.68,
+          addressStatus: "validated",
+          formattedAddress: "5 Old Barn Rd, Duxbury, MA 02332, USA",
+          googleMapsUri: "https://maps.google.com/?cid=123",
+          googlePlaceId: "place_123",
+          issue: "leaking sink",
+          serviceAddress: "5 Old Barn Rd, Duxbury, MA 02332, USA",
+        }),
       }),
     ]);
   });

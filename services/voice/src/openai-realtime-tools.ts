@@ -59,6 +59,10 @@ export function buildOpenAIRealtimeTools(
             description: "Short helpful message for note texts. Do not include sensitive information.",
             type: "string",
           },
+          formatted_address: {
+            description: "Validated or caller-confirmed service/customer address to include in a request summary text.",
+            type: "string",
+          },
           order_items: {
             description: "Pickup order items when sending an order confirmation.",
             items: {
@@ -123,6 +127,27 @@ export function buildOpenAIRealtimeTools(
     },
     {
       description:
+        "Validate, geolocate, and format a caller-provided service, job, delivery, or customer address before saving a request or sending a confirmation. Use this whenever the caller gives an address.",
+      name: "normalize_customer_address",
+      parameters: {
+        additionalProperties: false,
+        properties: {
+          raw_address: {
+            description: "The address or address fragment exactly as the caller gave it, including city/state if provided.",
+            type: "string",
+          },
+          unit_or_access: {
+            description: "Apartment, suite, unit, floor, gate code, business name, or access note if the caller provided one.",
+            type: "string",
+          },
+        },
+        required: ["raw_address"],
+        type: "object",
+      },
+      type: "function",
+    },
+    {
+      description:
         "Create a generic staff-facing customer request for leads, service appointments, quotes, order requests, reservation requests, callbacks, or other business workflows not handled by a specialized tool.",
       name: "create_customer_request",
       parameters: {
@@ -140,6 +165,31 @@ export function buildOpenAIRealtimeTools(
             additionalProperties: true,
             description: "Short structured details such as requested date, service area, issue, budget, or notes.",
             type: "object",
+          },
+          formatted_address: {
+            description: "Google-formatted or read-back-confirmed service/customer address.",
+            type: "string",
+          },
+          address_latitude: {
+            description: "Latitude from address validation, if available.",
+            type: "number",
+          },
+          address_longitude: {
+            description: "Longitude from address validation, if available.",
+            type: "number",
+          },
+          address_status: {
+            description: "Address validation status returned by normalize_customer_address.",
+            enum: ["validated", "likely_complete_unverified", "needs_more_detail", "not_found", "validation_unavailable"],
+            type: "string",
+          },
+          google_maps_uri: {
+            description: "Google Maps URI returned by address validation, if available.",
+            type: "string",
+          },
+          google_place_id: {
+            description: "Google place ID returned by address validation, if available.",
+            type: "string",
           },
           request_type: {
             description: "The category of request.",

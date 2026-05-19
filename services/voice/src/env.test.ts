@@ -66,6 +66,10 @@ describe("voice service readiness", () => {
     });
 
     expect(readiness.productionReady).toBe(true);
+    expect(readiness.checks.find((check) => check.id === "address_validation")).toMatchObject({
+      required: false,
+      ready: false,
+    });
   });
 
   it("flags wildcard CORS as not production-ready", () => {
