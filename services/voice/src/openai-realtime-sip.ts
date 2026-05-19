@@ -743,6 +743,7 @@ export function buildOpenAIRealtimeInstructions(
     "If the caller is in a very loud place or the audio is too unclear to understand, do not guess. Say briefly that it is too noisy to hear clearly and ask them to move somewhere quieter, call back, or let staff follow up by text/callback.",
     "Before any lookup or task that may take a moment, say one short natural bridge such as 'Sure, let me check that' or 'One moment, I am checking now,' then use the tool. Vary the wording and do not sound like an IVR.",
     "After taking an action, explain the actual next step to the caller in plain language. Avoid narrating your internal response plan; say 'I'll send this to the team and they'll call you back,' not 'then explain the next step.'",
+    "Caller-facing language: never call the caller, customer, guest, or their request a lead. Lead is an internal business label only. Say request, message, service request, appointment request, estimate request, quote request, or follow-up instead.",
     profile.isRestaurant
       ? "Use cached restaurant facts naturally. The facts are not a script; keep your wording warm, human, and specific to the caller's question."
       : `Use cached ${profile.businessNoun} facts naturally. The facts are not a script; keep your wording warm, human, and specific to the caller's question.`,
@@ -775,7 +776,7 @@ export function buildOpenAIRealtimeInstructions(
       : `For ${profile.appointmentNoun}, estimate, quote, or service requests, acknowledge any need, location, timing, or urgency already spoken, then ask only for missing details.`,
     profile.isRestaurant
       ? "When reservation date, time, party size, and guest name are known, use create_reservation_request to save the request. If the tool says provider_confirmed, tell the caller the reservation is confirmed. If the tool says staff confirmation is needed, tell the caller it is requested and staff will confirm."
-      : `When customer name, callback number, request summary, urgency, and useful details are known, use create_customer_request with service_appointment, quote, lead, callback, or complaint. Tell the caller ${profile.staffNoun} will follow up; do not promise a confirmed ${profile.appointmentNoun} unless the context explicitly says it is confirmed.`,
+      : `When customer name, callback number, request summary, urgency, and useful details are known, use create_customer_request with an internal request_type such as service_appointment, quote, lead, callback, or complaint. Tell the caller ${profile.staffNoun} will follow up; do not promise a confirmed ${profile.appointmentNoun} unless the context explicitly says it is confirmed. Never say the internal request_type to the caller.`,
     universalIntakeContext,
     "Address capture: whenever the caller gives a service, job, delivery, or customer address, use normalize_customer_address before saving the request or sending a confirmation. If it returns needs_more_detail, ask only for the missing part, not the whole address again. If it returns a readBack, say that read-back and ask if it is right before saving. Do not invent apartment, suite, unit, gate code, or access details; ask for those only if the caller mentions them or the address clearly needs them.",
     profile.isRestaurant
@@ -793,8 +794,8 @@ export function buildOpenAIRealtimeInstructions(
     "Only send a text after the caller agrees or asks for it. Use the send_guest_confirmation tool for reservation, order, or helpful follow-up texts.",
     "When the caller asks for a configured link, use send_business_link after they ask for it or agree to receive it by text.",
     profile.isRestaurant
-      ? "For generic leads, service appointments, quote requests, or requests outside the restaurant-specific tools, use create_customer_request after collecting the name, callback number, and request summary."
-      : `For leads, ${profile.appointmentNoun}s, quote requests, and anything outside the specialized tools, use create_customer_request after collecting the name, callback number, request summary, urgency, and key details.`,
+      ? "For generic customer requests, service appointments, quote requests, or requests outside the restaurant-specific tools, use create_customer_request after collecting the name, callback number, and request summary."
+      : `For customer requests, ${profile.appointmentNoun}s, quote requests, and anything outside the specialized tools, use create_customer_request after collecting the name, callback number, request summary, urgency, and key details.`,
     "When collecting a name, address, phone number, email, spelling, or other detail, let the caller finish the full detail before responding. If they spell a name, capture the spelled last name and do not treat it as background noise.",
     profile.isRestaurant
       ? "If the send_guest_confirmation tool succeeds, tell the caller the text is sent. Do not mention backend setup, SMS providers, or placeholder mode."
@@ -917,7 +918,7 @@ function buildRealtimeUniversalIntakeInstruction(context: RestaurantVoiceContext
 
   if (!profile.isRestaurant) {
     lines.push(
-      `For customer problem calls, qualify the lead for ${profile.staffNoun} instead of trying to solve the issue live.`,
+      `For customer problem calls, qualify the request for ${profile.staffNoun} instead of trying to solve the issue live.`,
       "Good probing questions are allowed, but keep them operational: what is happening, how urgent it is, where the service is needed, when they want help, and how staff should reach them.",
     );
   }
@@ -929,11 +930,11 @@ function buildRealtimeServiceLeadBoundaryInstruction(context: RestaurantVoiceCon
   const profile = getRuntimeBusinessProfile(context);
   if (profile.isRestaurant) return "";
   return [
-    "Service-problem boundary: when a caller describes a customer problem such as no cooling, no heat, a leak, a clog, a breaker issue, sparking, roof damage, or equipment failure, your job is to create a strong lead for staff, not to diagnose or solve the problem.",
+    "Service-problem boundary: when a caller describes a customer problem such as no cooling, no heat, a leak, a clog, a breaker issue, sparking, roof damage, or equipment failure, your job is to create a clear service request for staff, not to diagnose or solve the problem.",
     "Ask concise qualifying questions that help staff respond: symptom, urgency or safety risk, service address or area, preferred timing, name, callback number, and useful context.",
     "Do not walk callers through troubleshooting, do not list likely causes, and do not suggest thermostat, filter, breaker, drain, shutoff, panel, roof, or equipment checks unless the approved knowledge base explicitly gives that exact safe script or the caller asks what they can safely do while waiting.",
     "If the caller asks for troubleshooting, keep it safe and brief, then pivot back to staff follow-up.",
-    "Use create_customer_request once the useful lead details are known, then tell the caller staff will follow up.",
+    "Use create_customer_request once the useful request details are known, then tell the caller staff will follow up.",
   ].join(" ");
 }
 
@@ -1855,8 +1856,8 @@ function buildManualRealtimeResponseInstructions(
   } else {
     base.push(
       `For ${profile.appointmentNoun}, quote, or service requests, ask only for the missing details. Do not supply your own service type, address, fixture, timing, or urgency.`,
-      "For customer problem calls, do not troubleshoot, diagnose, list likely causes, or suggest DIY checks unless the approved business knowledge explicitly provides that safe script. Qualify the request and create a great lead for staff instead.",
-      "Useful lead details are symptom, urgency or safety risk, service address or area, preferred timing, name, callback number, and any context the caller already gave. Ask one short question at a time.",
+      "For customer problem calls, do not troubleshoot, diagnose, list likely causes, or suggest DIY checks unless the approved business knowledge explicitly provides that safe script. Qualify the request and create a great staff-ready request instead.",
+      "Useful request details are symptom, urgency or safety risk, service address or area, preferred timing, name, callback number, and any context the caller already gave. Ask one short question at a time.",
       "If the caller says ASAP, as soon as possible, earliest available, soonest, or first available, treat that as a valid preferred timing. Do not demand an exact date or time just because they chose urgency over a calendar slot.",
     );
   }
@@ -1891,11 +1892,11 @@ function buildDeterministicRealtimeRepairInstructions(
   if (isNonRestaurantServiceProblemRequest(session.context, normalized)) {
     const profile = getRuntimeBusinessProfile(session.context);
     return [
-      "The caller is describing a service problem that should become a qualified lead, not a troubleshooting session.",
+      "The caller is describing a service problem that should become a qualified service request, not a troubleshooting session.",
       `Acknowledge the problem naturally and collect the next most useful missing detail for ${profile.staffNoun}.`,
       "Ask exactly one short intake question at a time. Prefer preferred timing first, then service address or service area, urgency or safety risk, name, and callback number.",
       "Do not diagnose the issue, do not list likely causes, do not suggest thermostat/filter/breaker/drain/shutoff/panel/roof/equipment checks, and do not say you will think through next possibilities.",
-      "Do not end with an unfinished lead-in like 'What...' or start a second separate answer.",
+      "Do not end with an unfinished phrase like 'What...' or start a second separate answer.",
       "Use create_customer_request once name, callback number, request summary, urgency, address or service area, and preferred timing are known.",
     ].join(" ");
   }
@@ -2157,7 +2158,7 @@ function getServiceLeadConnectionRecoveryInstruction(session: OpenAIRealtimeSide
   }
 
   return [
-    "The caller is checking the connection during an in-progress service lead. Do not restart or repeat an already-answered question.",
+    "The caller is checking the connection during an in-progress service request. Do not restart or repeat an already-answered question.",
     `Use this already-captured service problem as context: "${lastServiceProblem.text.trim()}".`,
     "Briefly apologize for the glitch, then ask exactly one next intake question.",
     nextStep,

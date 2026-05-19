@@ -147,6 +147,7 @@ describe("OpenAI Realtime SIP", () => {
     expect(payload.instructions).toContain("Noisy-room behavior");
     expect(payload.instructions).toContain("Echo guardrail");
     expect(payload.instructions).toContain("explain the actual next step");
+    expect(payload.instructions).toContain("never call the caller, customer, guest, or their request a lead");
     expect(payload.instructions).toContain("Can I help you with anything else?");
     expect(payload.instructions).toContain("finish_call");
     expect(payload.tools[0].name).toBe("lookup_restaurant_context");
@@ -206,7 +207,7 @@ describe("OpenAI Realtime SIP", () => {
     expect(payload.instructions).toContain("Service-request operating mode");
     expect(payload.instructions).toContain("use create_customer_request");
     expect(payload.instructions).toContain("Service-problem boundary");
-    expect(payload.instructions).toContain("your job is to create a strong lead for staff");
+    expect(payload.instructions).toContain("your job is to create a clear service request for staff");
     expect(payload.instructions).toContain("Do not walk callers through troubleshooting");
     expect(payload.instructions).toContain("text a copy of the request details");
     expect(payload.instructions).toContain("Do not call it a confirmation unless a real appointment is confirmed");
@@ -1891,7 +1892,7 @@ describe("OpenAI Realtime SIP", () => {
 
     const responses = socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"));
     expect(JSON.stringify(responses.at(-1))).not.toContain("outside the usual scope");
-    expect(JSON.stringify(responses.at(-1))).toContain("qualified lead, not a troubleshooting session");
+    expect(JSON.stringify(responses.at(-1))).toContain("qualified service request, not a troubleshooting session");
     expect(JSON.stringify(responses.at(-1))).toContain("Ask exactly one short intake question at a time");
   });
 
@@ -1964,10 +1965,10 @@ describe("OpenAI Realtime SIP", () => {
 
     const responses = socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"));
     const instructions = JSON.stringify(responses.at(-1));
-    expect(instructions).toContain("qualified lead, not a troubleshooting session");
+    expect(instructions).toContain("qualified service request, not a troubleshooting session");
     expect(instructions).toContain("Do not diagnose");
     expect(instructions).toContain("Ask exactly one short intake question");
-    expect(instructions).toContain("Do not end with an unfinished lead-in");
+    expect(instructions).toContain("Do not end with an unfinished phrase");
     expect(instructions).toContain("create_customer_request");
     expect(instructions).not.toContain("outside the usual scope");
   });
@@ -2238,7 +2239,7 @@ describe("OpenAI Realtime SIP", () => {
 
     const responses = socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"));
     const instructions = JSON.stringify(responses.at(-1));
-    expect(instructions).toContain("in-progress service lead");
+    expect(instructions).toContain("in-progress service request");
     expect(instructions).toContain("air conditioning unit");
     expect(instructions).toContain("Ask what day or time they would prefer");
     expect(instructions).toContain("Do not ask what the appointment is for again");
