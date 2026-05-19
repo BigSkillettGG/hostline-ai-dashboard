@@ -4432,7 +4432,7 @@ describe("OpenAI Realtime SIP", () => {
     });
   });
 
-  it("closes the realtime socket after the finish-call goodbye response completes", async () => {
+  it("waits for final goodbye audio before closing the realtime socket", async () => {
     vi.useFakeTimers();
     try {
       const socket = createFakeRealtimeSocket();
@@ -4490,6 +4490,80 @@ describe("OpenAI Realtime SIP", () => {
         })),
       );
       await vi.advanceTimersByTimeAsync(300);
+      expect(socket.closeCalls).toHaveLength(0);
+
+      socket.emit("message", Buffer.from(JSON.stringify({ type: "response.audio.done" })));
+      await vi.advanceTimersByTimeAsync(699);
+      expect(socket.closeCalls).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(socket.closeCalls[0]).toMatchObject({
+        code: 1000,
+        reason: "SignalHost call completed.",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("uses a conservative close fallback if the final goodbye audio event is missing", async () => {
+    vi.useFakeTimers();
+    try {
+      const socket = createFakeRealtimeSocket();
+      const service = createOpenAIRealtimeSipService(
+        baseEnv,
+        {
+          async getContext() {
+            return demoRestaurantContext;
+          },
+        },
+        {
+          fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+          websocketFactory: () => socket as never,
+        },
+      );
+
+      await service.handleIncomingWebhook({
+        headers: {},
+        rawBody: JSON.stringify({
+          data: {
+            call_id: "rtc_finish_fallback",
+            sip_headers: [{ name: "From", value: "sip:+17813072672@twilio.com" }],
+          },
+          type: "realtime.call.incoming",
+        }),
+      });
+
+      socket.emit("open");
+      socket.emit(
+        "message",
+        Buffer.from(JSON.stringify({
+          response: {
+            output: [
+              {
+                arguments: "{\"reason\":\"caller_done\",\"closing_line\":\"Thanks for calling. Goodbye.\"}",
+                call_id: "call_finish_fallback",
+                name: "finish_call",
+                type: "function_call",
+              },
+            ],
+          },
+          type: "response.done",
+        })),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+
+      socket.emit(
+        "message",
+        Buffer.from(JSON.stringify({
+          response: { output: [] },
+          type: "response.done",
+        })),
+      );
+      await vi.advanceTimersByTimeAsync(2300);
+      expect(socket.closeCalls).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(100);
 
       expect(socket.closeCalls[0]).toMatchObject({
         code: 1000,

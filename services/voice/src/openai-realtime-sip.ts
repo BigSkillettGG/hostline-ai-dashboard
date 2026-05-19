@@ -1606,7 +1606,17 @@ function handleOpenAIRealtimeResponseDone({
   });
 
   if (session.finishRequested) {
-    scheduleOpenAIRealtimeFinishedClose({ callId, session, socket });
+    scheduleOpenAIRealtimeFinishedClose({
+      callId,
+      delayMs: getOpenAIRealtimeFinishedCloseDelayMs({
+        session,
+        source: source ?? "response.done",
+      }),
+      replaceExisting: shouldReplaceOpenAIRealtimeFinishedCloseTimer(source),
+      session,
+      socket,
+      source: source ?? "response.done",
+    });
     return;
   }
 
@@ -1709,7 +1719,7 @@ function scheduleOpenAIRealtimeResponseCompletionFallback({
   transcript: string;
 }) {
   clearOpenAIRealtimeResponseCompletionFallbackTimer(session);
-  if (!session.quality.activeResponseStartedAt || session.finishRequested) return;
+  if (!session.quality.activeResponseStartedAt) return;
   // Text transcript completion can arrive before PSTN audio finishes playing.
   // Never use it to complete the opening greeting, because that re-enables
   // caller handling while speakerphone/handset echo may still be coming back.
@@ -1718,7 +1728,7 @@ function scheduleOpenAIRealtimeResponseCompletionFallback({
   const delayMs = estimateOpenAIRealtimeResponseCompletionFallbackMs(transcript);
   session.responseAudioCompleteFallbackTimer = setTimeout(() => {
     delete session.responseAudioCompleteFallbackTimer;
-    if (!session.quality.activeResponseStartedAt || session.finishRequested) return;
+    if (!session.quality.activeResponseStartedAt) return;
     handleOpenAIRealtimeResponseDone({
       callId,
       session,
@@ -2845,14 +2855,28 @@ function markRealtimeToolCalls(session: OpenAIRealtimeSidebandSession, toolCalls
 
 function scheduleOpenAIRealtimeFinishedClose({
   callId,
+  delayMs,
+  replaceExisting = false,
   session,
   socket,
+  source,
 }: {
   callId: string;
+  delayMs: number;
+  replaceExisting?: boolean;
   session: OpenAIRealtimeSidebandSession;
   socket: RealtimeSocket;
+  source: string;
 }) {
-  if (session.finishCloseTimer) return;
+  if (session.finishCloseTimer) {
+    if (!replaceExisting) return;
+    clearOpenAIRealtimeFinishedClose(session);
+  }
+  console.info("[openai-realtime] scheduling completed call close after goodbye", {
+    callId,
+    delayMs,
+    source,
+  });
   session.finishCloseTimer = setTimeout(() => {
     console.info("[openai-realtime] closing completed call after goodbye", { callId });
     try {
@@ -2860,7 +2884,37 @@ function scheduleOpenAIRealtimeFinishedClose({
     } catch (error) {
       console.warn("[openai-realtime] completed call close failed", { callId, error });
     }
-  }, 250);
+  }, delayMs);
+  session.finishCloseTimer.unref?.();
+}
+
+function shouldReplaceOpenAIRealtimeFinishedCloseTimer(source?: string) {
+  return source === "response.audio.done" ||
+    source === "output_audio_buffer.stopped" ||
+    source === "response.output_audio_transcript.done_fallback";
+}
+
+function getOpenAIRealtimeFinishedCloseDelayMs({
+  session,
+  source,
+}: {
+  session: OpenAIRealtimeSidebandSession;
+  source: string;
+}) {
+  if (shouldReplaceOpenAIRealtimeFinishedCloseTimer(source)) return 700;
+  return estimateOpenAIRealtimeFinishedCloseFallbackMs(getLastOpenAIRealtimeAgentTranscript(session));
+}
+
+function estimateOpenAIRealtimeFinishedCloseFallbackMs(transcript: string) {
+  return Math.min(5200, Math.max(2400, estimateOpenAIRealtimeResponseCompletionFallbackMs(transcript) + 1200));
+}
+
+function getLastOpenAIRealtimeAgentTranscript(session: OpenAIRealtimeSidebandSession) {
+  for (let index = session.transcript.length - 1; index >= 0; index -= 1) {
+    const turn = session.transcript[index];
+    if (turn.role === "agent" && turn.text.trim()) return turn.text;
+  }
+  return "";
 }
 
 function clearOpenAIRealtimeFinishedClose(session: OpenAIRealtimeSidebandSession) {
