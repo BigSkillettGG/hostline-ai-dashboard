@@ -587,6 +587,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
     const twiml = buildLiveKitTwiML({
       dialedPhone: url.searchParams.get("dialedPhone") ?? undefined,
       env: currentEnv,
+      fallbackActionUrl: buildLiveKitFallbackActionUrl(currentEnv, locationId),
       locationId: locationId ?? undefined,
     });
     if (!twiml) {
@@ -927,6 +928,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
         callSid,
         dialedPhone,
         env: currentEnv,
+        fallbackActionUrl: buildLiveKitFallbackActionUrl(currentEnv, locationId),
         locationId,
       });
       if (!twiml) {
@@ -960,6 +962,58 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
     return;
   }
 
+  if (req.method === "POST" && url.pathname === "/twilio/livekit-fallback") {
+    try {
+      const rawBody = await readLimitedRequestBody(req, TWILIO_BODY_LIMIT_BYTES);
+      const params = Object.fromEntries(new URLSearchParams(rawBody));
+
+      if (!isValidTwilioWebhook(req, currentEnv, params)) {
+        console.warn("[voice-service] rejected unsigned LiveKit fallback webhook", {
+          callSid: firstNonEmpty(params.CallSid, params.callSid),
+          from: firstNonEmpty(params.From, params.from),
+          to: firstNonEmpty(params.To, params.to),
+        });
+        sendText(res, 401, "Invalid Twilio signature");
+        return;
+      }
+
+      const locationId =
+        params.locationId ??
+        url.searchParams.get("locationId") ??
+        HARBOR_PLUMBING_DEMO_LOCATION_ID;
+      const callSid = firstNonEmpty(params.CallSid, params.callSid);
+      const callerPhone = firstNonEmpty(params.From, params.from);
+      const dialedPhone = firstNonEmpty(params.To, params.to);
+      const dialCallStatus = firstNonEmpty(params.DialCallStatus, params.dialCallStatus);
+      const dialSipResponseCode = firstNonEmpty(params.DialSipResponseCode, params.dialSipResponseCode);
+
+      console.warn("[voice-service] LiveKit pilot dial fallback triggered", {
+        callSid,
+        callerPhone,
+        dialedPhone,
+        dialCallStatus,
+        dialSipResponseCode,
+        locationId,
+      });
+
+      if (!currentEnv.PUBLIC_WS_BASE_URL) {
+        sendXml(res, 200, buildUnavailableTwiML("SignalHost could not connect the LiveKit pilot, and the backup voice path is not configured."));
+        return;
+      }
+
+      const twiml = await buildConversationRelayFallbackTwiML(currentEnv, params, locationId);
+      sendXml(res, 200, twiml);
+    } catch (error) {
+      if (error instanceof HttpRequestError) {
+        sendText(res, error.statusCode, error.message);
+      } else {
+        console.error("[voice-service] LiveKit fallback webhook failed", error);
+        sendXml(res, 200, buildUnavailableTwiML("SignalHost could not connect the LiveKit pilot. Please try again shortly."));
+      }
+    }
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/twilio/voice") {
     try {
       const rawBody = await readLimitedRequestBody(req, TWILIO_BODY_LIMIT_BYTES);
@@ -980,6 +1034,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
           callSid: firstNonEmpty(params.CallSid, params.callSid),
           dialedPhone: firstNonEmpty(params.To, params.to),
           env: currentEnv,
+          fallbackActionUrl: buildLiveKitFallbackActionUrl(currentEnv, locationId),
           locationId,
         });
         if (!twiml) {
@@ -1538,6 +1593,39 @@ function withOptionalQueryParams(url: string | undefined, params: Record<string,
     if (value) nextUrl = withQueryParam(nextUrl, key, value);
   }
   return nextUrl;
+}
+
+function buildLiveKitFallbackActionUrl(currentEnv: VoiceServiceEnv, locationId: string) {
+  if (!currentEnv.PUBLIC_HTTP_BASE_URL) return undefined;
+  return withQueryParam(`${currentEnv.PUBLIC_HTTP_BASE_URL.replace(/\/$/, "")}/twilio/livekit-fallback`, "locationId", locationId);
+}
+
+async function buildConversationRelayFallbackTwiML(
+  currentEnv: VoiceServiceEnv,
+  params: Record<string, string>,
+  locationId: string,
+) {
+  const restaurantContext = await restaurantContextStore.getContext(locationId);
+  const liveCallConfig = buildLiveCallConfig(currentEnv, locationId);
+  const ttsVoice = resolveConversationRelayTtsVoice(currentEnv, restaurantContext);
+  const callSessionKey = getStableCallSessionKey(params);
+  const actionUrl = liveCallConfig.actionUrl && callSessionKey
+    ? withQueryParam(liveCallConfig.actionUrl, "callSessionKey", callSessionKey)
+    : liveCallConfig.actionUrl;
+
+  return buildConversationRelayTwiML({
+    actionUrl,
+    customParameters: {
+      ...buildRelayCustomParameters(params, locationId, callSessionKey),
+      liveKitFallback: "true",
+    },
+    language: currentEnv.TWILIO_LANGUAGE,
+    speechTimeoutMs: currentEnv.TWILIO_SPEECH_TIMEOUT_MS,
+    transcriptionProvider: currentEnv.TWILIO_TRANSCRIPTION_PROVIDER,
+    ttsProvider: currentEnv.TWILIO_TTS_PROVIDER,
+    ttsVoice,
+    websocketUrl: liveCallConfig.conversationRelayUrl ?? `${currentEnv.PUBLIC_WS_BASE_URL}/twilio/conversation-relay`,
+  });
 }
 
 function buildRelayCustomParameters(

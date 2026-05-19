@@ -56,6 +56,7 @@ export interface LiveKitTwiMLInput {
   callSid?: string;
   dialedPhone?: string;
   env: LiveKitHandoffEnv;
+  fallbackActionUrl?: string;
   locationId?: string;
 }
 
@@ -155,6 +156,7 @@ export function buildLiveKitTwiML({
   callSid,
   dialedPhone,
   env,
+  fallbackActionUrl,
   locationId,
 }: LiveKitTwiMLInput): string | undefined {
   const config = buildLiveKitPilotConfig(env, locationId);
@@ -178,11 +180,14 @@ export function buildLiveKitTwiML({
       ` recordingStatusCallbackEvent="completed absent"`,
     ].join("")
     : "";
+  const actionAttributes = fallbackActionUrl
+    ? ` action="${escapeXmlAttribute(fallbackActionUrl)}" method="POST" timeout="12"`
+    : "";
 
   return [
     `<?xml version="1.0" encoding="UTF-8"?>`,
     `<Response>`,
-    `  <Dial${dialAttributes}>`,
+    `  <Dial${dialAttributes}${actionAttributes}>`,
     `    <Sip username="${escapeXmlAttribute(env.LIVEKIT_INBOUND_AUTH_USERNAME)}" password="${escapeXmlAttribute(env.LIVEKIT_INBOUND_AUTH_PASSWORD)}">sip:${escapeXmlText(phoneNumber)}@${escapeXmlText(sipEndpoint)};transport=tcp</Sip>`,
     `  </Dial>`,
     `</Response>`,
