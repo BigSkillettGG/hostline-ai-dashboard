@@ -55,7 +55,7 @@ const baseEnv = {
   OPENAI_REALTIME_SERVER_VAD_PREFIX_PADDING_MS: 150,
   OPENAI_REALTIME_SERVER_VAD_SILENCE_MS: 900,
   OPENAI_REALTIME_SERVER_VAD_THRESHOLD: 0.88,
-  OPENAI_REALTIME_TURN_DETECTION_MODE: "server_vad",
+  OPENAI_REALTIME_TURN_DETECTION_MODE: "semantic_vad",
   OPENAI_REALTIME_TURN_EAGERNESS: "low",
   PUBLIC_HTTP_BASE_URL: "https://voice.signalhost.ai/",
   SUPABASE_DEMO_LOCATION_ID: "00000000-0000-0000-0000-000000000001",
@@ -81,9 +81,10 @@ describe("OpenAI Realtime SIP", () => {
       sipUri: "sip:proj_123@sip.api.openai.com;transport=tls",
       speed: 1.02,
       turnDetection: {
-        silence_duration_ms: 900,
-        threshold: 0.88,
-        type: "server_vad",
+        create_response: false,
+        eagerness: "low",
+        interrupt_response: false,
+        type: "semantic_vad",
       },
       voice: "marin",
       webhookSecretConfigured: false,
@@ -91,7 +92,7 @@ describe("OpenAI Realtime SIP", () => {
     });
   });
 
-  it("configures server VAD, restaurant instructions, and realtime tools", () => {
+  it("configures semantic VAD, restaurant instructions, and realtime tools", () => {
     const payload = buildOpenAIRealtimeAcceptPayload({
       context: demoRestaurantContext,
       env: baseEnv,
@@ -105,13 +106,14 @@ describe("OpenAI Realtime SIP", () => {
     });
     expect(payload.audio.input.turn_detection).toMatchObject({
       create_response: false,
+      eagerness: "low",
       interrupt_response: false,
-      prefix_padding_ms: 150,
-      silence_duration_ms: 900,
-      threshold: 0.88,
-      type: "server_vad",
+      type: "semantic_vad",
     });
     expect(payload.audio.input.turn_detection).not.toHaveProperty("idle_timeout_ms");
+    expect(payload.audio.input.turn_detection).not.toHaveProperty("threshold");
+    expect(payload.audio.input.turn_detection).not.toHaveProperty("prefix_padding_ms");
+    expect(payload.audio.input.turn_detection).not.toHaveProperty("silence_duration_ms");
     expect(payload.audio.input.noise_reduction).toMatchObject({ type: "far_field" });
     expect(payload.audio.output.voice).toBe("marin");
     expect(payload.audio.output.speed).toBe(1.02);
@@ -2235,7 +2237,7 @@ describe("OpenAI Realtime SIP", () => {
     expect(resolveOpenAIRealtimeSpeed({ ...baseEnv, OPENAI_REALTIME_SPEED: "fast" })).toBe(1.02);
   });
 
-  it("uses server VAD speakerphone-safe turn detection by default", () => {
+  it("uses OpenAI semantic VAD with SignalHost response gating by default", () => {
     expect(resolveOpenAIRealtimeNoiseReduction(baseEnv)).toBe("far_field");
     expect(resolveOpenAIRealtimeInterruptResponse(baseEnv)).toBe(false);
     expect(resolveOpenAIRealtimeManualResponseGating(baseEnv)).toBe(true);
@@ -2245,14 +2247,30 @@ describe("OpenAI Realtime SIP", () => {
     expect(resolveOpenAIRealtimeIdleTimeoutMs(baseEnv)).toBe(15000);
     expect(resolveOpenAIRealtimeTurnDetection(baseEnv)).toMatchObject({
       create_response: false,
+      eagerness: "low",
       interrupt_response: false,
-      threshold: 0.88,
-      type: "server_vad",
+      type: "semantic_vad",
     });
+    expect(resolveOpenAIRealtimeTurnDetection(baseEnv)).not.toHaveProperty("threshold");
     expect(resolveOpenAIRealtimeTurnDetection(baseEnv)).not.toHaveProperty("idle_timeout_ms");
     expect(resolveOpenAIRealtimeTurnDetection({ ...baseEnv, OPENAI_REALTIME_MANUAL_RESPONSE_GATING: false })).toMatchObject({
       create_response: true,
+      eagerness: "low",
+      type: "semantic_vad",
+    });
+    expect(
+      resolveOpenAIRealtimeTurnDetection({
+        ...baseEnv,
+        OPENAI_REALTIME_MANUAL_RESPONSE_GATING: false,
+        OPENAI_REALTIME_TURN_DETECTION_MODE: "server_vad",
+      }),
+    ).toMatchObject({
+      create_response: true,
       idle_timeout_ms: 15000,
+      prefix_padding_ms: 150,
+      silence_duration_ms: 900,
+      threshold: 0.88,
+      type: "server_vad",
     });
     expect(
       buildOpenAIRealtimeAcceptPayload({
@@ -2455,8 +2473,9 @@ describe("OpenAI Realtime SIP", () => {
     expect(acceptedPayload.instructions).toContain("Summit Air");
     expect(acceptedPayload.audio.input.turn_detection).toMatchObject({
       create_response: false,
+      eagerness: "low",
       interrupt_response: false,
-      type: "server_vad",
+      type: "semantic_vad",
     });
     expect(acceptedPayload.audio.input.turn_detection).not.toHaveProperty("threshold");
     expect(acceptedPayload.audio.input.turn_detection).not.toHaveProperty("prefix_padding_ms");

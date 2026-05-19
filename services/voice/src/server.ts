@@ -183,6 +183,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
   if (req.method === "GET" && url.pathname === "/health") {
     const readiness = getVoiceServiceReadiness(currentEnv);
     const liveKitHarborPilot = buildLiveKitPilotConfig(currentEnv, HARBOR_PLUMBING_DEMO_LOCATION_ID);
+    const openAIRealtimeConfig = openAIRealtimeSipService.getLiveCallConfig(currentEnv.SUPABASE_DEMO_LOCATION_ID);
     sendJson(res, 200, {
       ok: true,
       service: "signalhost-voice",
@@ -208,6 +209,14 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       liveKitHarborPilotRoutingEnabled: liveKitHarborPilot.routeOnTwilioVoice,
       liveKitTwilioWebhookEnabled: liveKitHarborPilot.twilioWebhookEnabled,
       openAIRealtimeSipConfigured: openAIRealtimeSipService.configured,
+      openAIRealtimeConfig: {
+        acceptProvider: openAIRealtimeConfig.acceptProvider,
+        model: openAIRealtimeConfig.model,
+        noiseReduction: openAIRealtimeConfig.noiseReduction,
+        speed: openAIRealtimeConfig.speed,
+        turnDetection: openAIRealtimeConfig.turnDetection,
+        voice: openAIRealtimeConfig.voice,
+      },
       ownerReportDeliveryConfigured: ownerReportService.deliveryConfigured,
       ownerReportsConfigured: ownerReportService.configured,
       ownerEmailCommandsConfigured: ownerEmailCommandService.configured,
