@@ -105,6 +105,7 @@ const TENANT_BOOTSTRAP_BODY_LIMIT_BYTES = 64 * 1024;
 const TWILIO_BODY_LIMIT_BYTES = 16 * 1024;
 const WEB_CHAT_BODY_LIMIT_BYTES = 16 * 1024;
 const RATE_LIMIT_WINDOW_MS = 60_000;
+const LIVEKIT_RECORDING_START_DELAYS_MS = [3_500, 8_500];
 const server = createServer((req, res) => {
   const startedAt = Date.now();
   const path = new URL(req.url ?? "/", "http://localhost").pathname;
@@ -939,27 +940,6 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
         return;
       }
 
-      if (callSid) {
-        void callRecordingService.startCallRecording({
-          externalCallSid: callSid,
-          locationId,
-        }).then((result) => {
-          if (result.started) {
-            console.info("[voice-service] LiveKit Twilio call recording started", {
-              callSid,
-              locationId,
-              recordingSid: result.recordingSid,
-            });
-          }
-        }).catch((error) => {
-          console.warn("[voice-service] LiveKit Twilio call recording start failed", {
-            callSid,
-            error,
-            locationId,
-          });
-        });
-      }
-
       console.info("[voice-service] LiveKit pilot TwiML issued", {
         callSid,
         dialedPhone,
@@ -968,6 +948,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
         twimlLength: twiml.length,
       });
       sendXml(res, 200, twiml);
+      scheduleLiveKitCallRecordingStart({ callSid, locationId });
     } catch (error) {
       if (error instanceof HttpRequestError) {
         sendText(res, error.statusCode, error.message);
@@ -1582,6 +1563,44 @@ function firstNonEmpty(...values: Array<string | undefined | null>) {
 
 function summarizeSipTarget(twiml: string) {
   return twiml.match(/<Sip\b[^>]*>(.*?)<\/Sip>/s)?.[1]?.trim();
+}
+
+function scheduleLiveKitCallRecordingStart({ callSid, locationId }: { callSid?: string; locationId: string }) {
+  if (!callSid || !callRecordingService.configured) return;
+  LIVEKIT_RECORDING_START_DELAYS_MS.forEach((delayMs, index) => {
+    const timer = setTimeout(() => {
+      void callRecordingService.startCallRecording({
+        externalCallSid: callSid,
+        locationId,
+      }).then((result) => {
+        if (result.started) {
+          console.info("[voice-service] LiveKit Twilio call recording started", {
+            attempt: index + 1,
+            callSid,
+            delayMs,
+            locationId,
+            recordingSid: result.recordingSid,
+          });
+        } else if (!result.skipped) {
+          console.warn("[voice-service] LiveKit Twilio call recording did not start", {
+            attempt: index + 1,
+            callSid,
+            delayMs,
+            locationId,
+          });
+        }
+      }).catch((error) => {
+        console.warn("[voice-service] LiveKit Twilio call recording start failed", {
+          attempt: index + 1,
+          callSid,
+          delayMs,
+          error,
+          locationId,
+        });
+      });
+    }, delayMs);
+    timer.unref?.();
+  });
 }
 
 interface CallDebugRow {
