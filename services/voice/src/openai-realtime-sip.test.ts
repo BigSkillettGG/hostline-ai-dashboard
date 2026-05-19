@@ -1774,6 +1774,90 @@ describe("OpenAI Realtime SIP", () => {
     expect(JSON.stringify(responses.at(-1))).not.toContain("Thank you for calling");
   });
 
+  it("keeps the last question when a caller says the audio cut out mid-call", async () => {
+    const socket = createFakeRealtimeSocket();
+    const service = createOpenAIRealtimeSipService(
+      baseEnv,
+      {
+        async getContext() {
+          return demoRestaurantContext;
+        },
+      },
+      {
+        callStore: {
+          async addTranscriptTurn() {},
+          async attachCallRecording() {},
+          async completeCall() {},
+          async createCustomerRequest() {
+            return {};
+          },
+          async createStaffReviewOrder() {
+            return {};
+          },
+          async createStaffReviewReservation() {
+            return {};
+          },
+          async createStaffTask() {
+            return {};
+          },
+          async startCall() {
+            return {};
+          },
+          async startRealtimeCall() {
+            return { callId: "call_uuid" };
+          },
+        },
+        fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+        websocketFactory: () => socket as never,
+      },
+    );
+
+    await service.handleIncomingWebhook({
+      headers: {},
+      rawBody: JSON.stringify({
+        data: {
+          call_id: "rtc_mid_call_connection_check",
+          sip_headers: [{ name: "From", value: "sip:+14155550123@twilio.com" }],
+        },
+        type: "realtime.call.incoming",
+      }),
+    });
+
+    socket.emit("open");
+    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "caller_initial",
+        transcript: "I want to schedule an AC inspection.",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "agent_time_question",
+        transcript: "What day and time window works best?",
+        type: "response.output_audio_transcript.done",
+      })),
+    );
+    socket.emit("message", Buffer.from(JSON.stringify({ type: "response.done" })));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "caller_connection_check",
+        transcript: "We lost touch. I don't know what you want.",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    await flushAsyncWork();
+
+    const responses = socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"));
+    expect(JSON.stringify(responses.at(-1))).toContain("What day and time window works best?");
+    expect(JSON.stringify(responses.at(-1))).toContain("Do not restart the call");
+    expect(JSON.stringify(responses.at(-1))).not.toContain("Thank you for calling");
+  });
+
   it("answers who-is-this questions with the business identity", async () => {
     const socket = createFakeRealtimeSocket();
     const service = createOpenAIRealtimeSipService(
@@ -2638,7 +2722,7 @@ describe("OpenAI Realtime SIP", () => {
     expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "output_audio_buffer.clear"))).toHaveLength(1);
   });
 
-  it("accepts city and state fragments during a premature active response", async () => {
+  it("queues city and state fragments during a premature active response without cutting itself off", async () => {
     const socket = createFakeRealtimeSocket();
     const transcriptTurns: unknown[] = [];
     const service = createOpenAIRealtimeSipService(
@@ -2723,8 +2807,8 @@ describe("OpenAI Realtime SIP", () => {
         expect.objectContaining({ speaker: "caller", text: "In Duxbury, Massachusetts." }),
       ]),
     );
-    expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.cancel"))).toHaveLength(1);
-    expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "output_audio_buffer.clear"))).toHaveLength(1);
+    expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.cancel"))).toHaveLength(0);
+    expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "output_audio_buffer.clear"))).toHaveLength(0);
   });
 
   it("waits for spelled name fragments before thanking the caller", async () => {

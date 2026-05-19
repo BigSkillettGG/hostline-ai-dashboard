@@ -1821,6 +1821,7 @@ function buildManualRealtimeResponseInstructions(
   } else {
     base.push(
       `For ${profile.appointmentNoun}, quote, or service requests, ask only for the missing details. Do not supply your own service type, address, fixture, timing, or urgency.`,
+      "If the caller says ASAP, as soon as possible, earliest available, soonest, or first available, treat that as a valid preferred timing. Do not demand an exact date or time just because they chose urgency over a calendar slot.",
     );
   }
 
@@ -1847,6 +1848,17 @@ function buildDeterministicRealtimeRepairInstructions(
     return [
       'The caller is checking the connection right after the opening greeting. Say exactly and only: "I\'m here. How can I help you?"',
       "Do not restart the greeting, do not say hi or hello, and do not add any other words.",
+    ].join(" ");
+  }
+
+  if (isMidCallConnectionCheck(normalized)) {
+    const lastAgentQuestion = getLastAgentQuestionBeforeLatest(session);
+    return [
+      "The caller is checking the connection or says the audio cut out during an existing conversation.",
+      lastAgentQuestion
+        ? `Briefly apologize and repeat this last question in plain language: "${lastAgentQuestion}".`
+        : "Briefly apologize and continue from the current conversation context.",
+      "Do not restart the call, do not ask how you can help from scratch, and do not ignore the request already in progress.",
     ].join(" ");
   }
 
@@ -1887,8 +1899,21 @@ function buildDeterministicRealtimeRepairInstructions(
 function isOpeningConnectionCheck(session: OpenAIRealtimeSidebandSession, normalized: string) {
   const callerTurnCount = session.transcript.filter((turn) => turn.role === "caller").length;
   if (callerTurnCount > 1) return false;
+  return isPlainConnectionCheck(normalized);
+}
+
+function isPlainConnectionCheck(normalized: string) {
   return /^(hello|hello there|hi|hey|are you there|you there|can you hear me|is anyone there|anyone there|are you still there)$/.test(
     normalized,
+  );
+}
+
+function isMidCallConnectionCheck(normalized: string) {
+  return (
+    isPlainConnectionCheck(normalized) ||
+    /\b(we lost touch|lost touch|i lost you|you cut out|you cut off|you stopped|didn'?t hear|did not hear|i can'?t hear you|i cannot hear you|are we still connected)\b/.test(
+      normalized,
+    )
   );
 }
 
@@ -2018,6 +2043,20 @@ function getLastClearCallerRequestBeforeLatest(session: OpenAIRealtimeSidebandSe
     return turn.text;
   }
 
+  return undefined;
+}
+
+function getLastAgentQuestionBeforeLatest(session: OpenAIRealtimeSidebandSession) {
+  const agentTurns = session.transcript.filter((turn) => turn.role === "agent");
+  for (const turn of agentTurns.slice().reverse()) {
+    const text = turn.text.trim();
+    if (!text || !/[?]$/.test(text)) continue;
+    const normalized = normalizeRealtimeCallerText(text);
+    if (!normalized || /\b(can i help you with anything else|what else can i help|how can i help)\b/.test(normalized)) {
+      continue;
+    }
+    return text;
+  }
   return undefined;
 }
 
@@ -2215,19 +2254,19 @@ function shouldCancelActiveResponseForCallerTurn(
     return isLikelyCallerCorrectionOrRepair(normalized) || hasStrongCallerIntent(normalized);
   }
 
-  if (
-    reason === "caller_repair" ||
-    reason === "caller_clarification" ||
-    reason === "answer_to_agent_question" ||
-    reason === "detail_capture" ||
-    reason === "strong_intent" ||
-    reason === "configured_offering" ||
-    reason === "directed_speech"
-  ) {
+  if (reason === "caller_repair" || reason === "caller_clarification") {
     return true;
   }
 
+  if (hasExplicitRealtimeBargeInCue(normalized)) return true;
+
   return false;
+}
+
+function hasExplicitRealtimeBargeInCue(normalized: string) {
+  return /\b(wait|hold on|hang on|actually|no i said|that's not|that is not|i didn'?t answer|i didn'?t even answer|i didn t answer|i didn t even answer|i did not answer|i did not even answer|i wasn'?t done|i wasn t done|i was not done|let me finish|you cut me off|you talked over me|stop)\b/.test(
+    normalized,
+  );
 }
 
 function resolveOpenAIRealtimeManualResponseDelayForTurn(session: OpenAIRealtimeSidebandSession, text?: string) {
@@ -2492,7 +2531,7 @@ function hasLikelyDirectedCallerSpeech(normalized: string) {
 }
 
 function isLikelyCallerCorrectionOrRepair(normalized: string) {
-  return /\b(wait|hold on|hang on|one second|just a second|let me finish|i'?m not done|i was not done|i wasn'?t done|i didn'?t answer|i did not answer|i didn'?t say|i did not say|that'?s not what i said|that is not what i said|no i said|no that'?s|actually|you cut me off|you interrupted|stop talking|listen|go back|start over|what are you talking about)\b/.test(
+  return /\b(wait|hold on|hang on|one second|just a second|let me finish|i'?m not done|i was not done|i wasn'?t done|i wasn t done|i didn'?t answer|i didn'?t even answer|i didn t answer|i didn t even answer|i did not answer|i did not even answer|i didn'?t say|i didn t say|i did not say|that'?s not what i said|that s not what i said|that is not what i said|no i said|no that'?s|no that s|actually|you cut me off|you interrupted|stop talking|listen|go back|start over|what are you talking about)\b/.test(
     normalized,
   );
 }
@@ -2813,6 +2852,7 @@ function classifyOpenAIRealtimeCall(session: OpenAIRealtimeSidebandSession): {
   outcome: string;
   status: "new" | "reviewed" | "needs_review" | "resolved";
 } {
+  const profile = getRuntimeBusinessProfile(session.context);
   if (session.ownerContact) {
     return {
       confidence: session.transcript.length ? 90 : 30,
@@ -2834,17 +2874,26 @@ function classifyOpenAIRealtimeCall(session: OpenAIRealtimeSidebandSession): {
     getRealtimeSessionOffsetSeconds(session) <= 12;
   const toolNames = new Set(session.toolEvents.map((event) => event.name));
   const toolKinds = new Set(session.toolEvents.map((event) => event.kind).filter(Boolean));
-  const hasOrderIntent =
-    toolKinds.has("order") ||
-    /\b(place|make|put in|start|take)\s+(an?\s+)?(pickup\s+|takeout\s+|to\s+go\s+)?order\b/.test(callerText) ||
-    /\b(can|could|may)\s+i\s+(order|get|have)\b/.test(callerText) ||
-    /\b(i('|’)d like|i would like|let me get|can i get|i'll have|we'll have)\b/.test(callerText);
+  const hasRestaurantOrderIntent =
+    profile.isRestaurant &&
+    (toolKinds.has("order") ||
+      /\b(place|make|put in|start|take)\s+(an?\s+)?(pickup\s+|takeout\s+|to\s+go\s+)?order\b/.test(callerText) ||
+      /\b(can|could|may)\s+i\s+(order|get|have)\b/.test(callerText) ||
+      /\b(i('|’)d like|i would like|let me get|can i get|i'll have|we'll have)\b/.test(callerText));
   const hasReservationIntent =
     toolKinds.has("reservation") || /\b(reservation|reserve|book|table for|party of)\b/.test(callerText);
+  const hasServiceRequestIntent =
+    !profile.isRestaurant &&
+    (toolKinds.has("service_appointment") ||
+      toolKinds.has("quote") ||
+      toolKinds.has("lead") ||
+      /\b(appointment|schedule|book|booking|service call|inspection|estimate|quote|come out|send someone|asap|as soon as possible|earliest available|soonest|first available)\b/.test(
+        callerText,
+      ));
   const hasHoursIntent = /\b(hour|hours|open|close|closing|tonight|today|tomorrow)\b/.test(callerText);
-  const intent = hasReservationIntent
+  const intent = hasReservationIntent || hasServiceRequestIntent
     ? "reservation"
-    : hasOrderIntent
+    : hasRestaurantOrderIntent
       ? "order"
       : hasHoursIntent
         ? "hours"
@@ -4047,12 +4096,12 @@ export function resolveOpenAIRealtimeTurnEagerness(env: OpenAIRealtimeEnv) {
 
 export function resolveOpenAIRealtimeServerVadThreshold(env: OpenAIRealtimeEnv) {
   const threshold = env.OPENAI_REALTIME_SERVER_VAD_THRESHOLD;
-  return Number.isFinite(threshold) ? Math.min(0.95, Math.max(0.05, threshold)) : 0.88;
+  return Number.isFinite(threshold) ? Math.min(0.98, Math.max(0.05, threshold)) : 0.93;
 }
 
 export function resolveOpenAIRealtimeServerVadSilenceMs(env: OpenAIRealtimeEnv) {
   const silenceMs = env.OPENAI_REALTIME_SERVER_VAD_SILENCE_MS;
-  return Number.isFinite(silenceMs) ? Math.min(2000, Math.max(200, Math.round(silenceMs))) : 900;
+  return Number.isFinite(silenceMs) ? Math.min(2200, Math.max(200, Math.round(silenceMs))) : 1100;
 }
 
 export function resolveOpenAIRealtimeServerVadPrefixPaddingMs(env: OpenAIRealtimeEnv) {
