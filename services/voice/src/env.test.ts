@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getVoiceServiceReadiness, type VoiceServiceEnv } from "./env";
+import { getVoiceServiceReadiness, loadEnv, type VoiceServiceEnv } from "./env";
 
 const baseEnv: VoiceServiceEnv = {
   ELEVENLABS_MODEL_ID: "eleven_flash_v2_5",
@@ -35,6 +35,32 @@ const baseEnv: VoiceServiceEnv = {
 };
 
 describe("voice service readiness", () => {
+  it("uses hardened OpenAI Realtime server VAD defaults", () => {
+    const original = {
+      OPENAI_REALTIME_SERVER_VAD_SILENCE_MS: process.env.OPENAI_REALTIME_SERVER_VAD_SILENCE_MS,
+      OPENAI_REALTIME_SERVER_VAD_THRESHOLD: process.env.OPENAI_REALTIME_SERVER_VAD_THRESHOLD,
+      OPENAI_REALTIME_TURN_DETECTION_MODE: process.env.OPENAI_REALTIME_TURN_DETECTION_MODE,
+    };
+    delete process.env.OPENAI_REALTIME_SERVER_VAD_SILENCE_MS;
+    delete process.env.OPENAI_REALTIME_SERVER_VAD_THRESHOLD;
+    delete process.env.OPENAI_REALTIME_TURN_DETECTION_MODE;
+
+    try {
+      const env = loadEnv();
+      expect(env.OPENAI_REALTIME_TURN_DETECTION_MODE).toBe("semantic_vad");
+      expect(env.OPENAI_REALTIME_SERVER_VAD_THRESHOLD).toBe(0.93);
+      expect(env.OPENAI_REALTIME_SERVER_VAD_SILENCE_MS).toBe(1100);
+    } finally {
+      for (const [key, value] of Object.entries(original)) {
+        if (value === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = value;
+        }
+      }
+    }
+  });
+
   it("requires production secrets and public URLs", () => {
     const readiness = getVoiceServiceReadiness(baseEnv);
 

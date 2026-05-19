@@ -1844,6 +1844,14 @@ function buildDeterministicRealtimeRepairInstructions(
     ].join(" ");
   }
 
+  if (isNonRestaurantAsapTimingRepair(session.context, normalized)) {
+    return [
+      "The caller already gave a valid timing preference: as soon as possible, earliest available, soonest, or first available.",
+      "Treat that as enough timing detail for a service request. Do not ask again for a specific date or time.",
+      "Acknowledge it naturally, then continue with only the next missing detail or submit the request if the intake is complete.",
+    ].join(" ");
+  }
+
   if (isOpeningConnectionCheck(session, normalized)) {
     return [
       'The caller is checking the connection right after the opening greeting. Say exactly and only: "I\'m here. How can I help you?"',
@@ -1915,6 +1923,15 @@ function isMidCallConnectionCheck(normalized: string) {
       normalized,
     )
   );
+}
+
+function isNonRestaurantAsapTimingRepair(context: RestaurantVoiceContext, normalized: string) {
+  if (getRuntimeBusinessProfile(context).isRestaurant) return false;
+  return /\b(i already said|already said|i said|as i said|like i said)\b/.test(normalized) && hasAsapTimingCue(normalized);
+}
+
+function hasAsapTimingCue(normalized: string) {
+  return /\b(as soon as possible|asap|earliest available|soonest|first available|next available)\b/.test(normalized);
 }
 
 function isCallerIdentityQuestion(normalized: string) {
@@ -2050,14 +2067,22 @@ function getLastAgentQuestionBeforeLatest(session: OpenAIRealtimeSidebandSession
   const agentTurns = session.transcript.filter((turn) => turn.role === "agent");
   for (const turn of agentTurns.slice().reverse()) {
     const text = turn.text.trim();
-    if (!text || !/[?]$/.test(text)) continue;
     const normalized = normalizeRealtimeCallerText(text);
+    if (!text || !isRecoverableAgentQuestionPrompt(normalized, text)) continue;
     if (!normalized || /\b(can i help you with anything else|what else can i help|how can i help)\b/.test(normalized)) {
       continue;
     }
     return text;
   }
   return undefined;
+}
+
+function isRecoverableAgentQuestionPrompt(normalized: string, original: string) {
+  if (!normalized) return false;
+  if (/[?]$/.test(original.trim())) return true;
+  return /^(what|when|where|who|which|how many|how much|can you|could you|would you|do you|does that|is that)\b/.test(
+    normalized,
+  );
 }
 
 function getIncompleteCallbackPhoneRepair(

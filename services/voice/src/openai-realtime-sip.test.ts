@@ -1837,7 +1837,7 @@ describe("OpenAI Realtime SIP", () => {
       "message",
       Buffer.from(JSON.stringify({
         item_id: "agent_time_question",
-        transcript: "What day and time window works best?",
+        transcript: "What day and time window",
         type: "response.output_audio_transcript.done",
       })),
     );
@@ -1853,9 +1853,96 @@ describe("OpenAI Realtime SIP", () => {
     await flushAsyncWork();
 
     const responses = socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"));
-    expect(JSON.stringify(responses.at(-1))).toContain("What day and time window works best?");
+    expect(JSON.stringify(responses.at(-1))).toContain("What day and time window");
     expect(JSON.stringify(responses.at(-1))).toContain("Do not restart the call");
     expect(JSON.stringify(responses.at(-1))).not.toContain("Thank you for calling");
+  });
+
+  it("accepts ASAP as enough timing detail for service businesses", async () => {
+    const socket = createFakeRealtimeSocket();
+    const service = createOpenAIRealtimeSipService(
+      baseEnv,
+      {
+        async getContext() {
+          return {
+            ...demoRestaurantContext,
+            businessType: "hvac",
+            restaurantName: "Summit Air",
+          };
+        },
+      },
+      {
+        callStore: {
+          async addTranscriptTurn() {},
+          async attachCallRecording() {},
+          async completeCall() {},
+          async createCustomerRequest() {
+            return {};
+          },
+          async createStaffReviewOrder() {
+            return {};
+          },
+          async createStaffReviewReservation() {
+            return {};
+          },
+          async createStaffTask() {
+            return {};
+          },
+          async startCall() {
+            return {};
+          },
+          async startRealtimeCall() {
+            return { callId: "call_uuid" };
+          },
+        },
+        fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+        websocketFactory: () => socket as never,
+      },
+    );
+
+    await service.handleIncomingWebhook({
+      headers: {},
+      rawBody: JSON.stringify({
+        data: {
+          call_id: "rtc_service_asap",
+          sip_headers: [{ name: "From", value: "sip:+14155550123@twilio.com" }],
+        },
+        type: "realtime.call.incoming",
+      }),
+    });
+
+    socket.emit("open");
+    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "caller_initial",
+        transcript: "I want to schedule an AC inspection as soon as possible.",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "agent_time_question",
+        transcript: "What specific day and time works for you?",
+        type: "response.output_audio_transcript.done",
+      })),
+    );
+    socket.emit("message", Buffer.from(JSON.stringify({ type: "response.done" })));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "caller_asap_repair",
+        transcript: "I already said as soon as possible.",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    await flushAsyncWork();
+
+    const responses = socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"));
+    expect(JSON.stringify(responses.at(-1))).toContain("already gave a valid timing preference");
+    expect(JSON.stringify(responses.at(-1))).toContain("Do not ask again for a specific date or time");
   });
 
   it("answers who-is-this questions with the business identity", async () => {
