@@ -1727,6 +1727,7 @@ function shouldAcceptRealtimeCallerTranscript(
   if (isOpenAIRealtimeTranscriptionPromptLeak(normalized)) return { accept: false, reason: "prompt_leak" };
   if (isLikelyOpenAIRealtimeAgentEcho(session, normalized)) return { accept: false, reason: "agent_echo" };
   if (isLikelyBackgroundMediaFragment(normalized)) return { accept: false, reason: "background_media" };
+  if (isLikelyOpeningBackchannelEcho(session, normalized)) return { accept: false, reason: "opening_backchannel_echo" };
 
   const wordCount = normalized.split(/\s+/).filter(Boolean).length;
   const activeResponse = Boolean(session.quality.activeResponseStartedAt);
@@ -2004,6 +2005,20 @@ function isLikelyBackgroundMediaFragment(normalized: string) {
 function isLikelyShortCallerConfirmation(normalized: string) {
   return /^(yes|yeah|yep|sure|please|no|nope|no thank you|no thanks|that's all|that is all|thanks|thank you|goodbye|bye|hello|hi|hello hello|hi hi|hello are you there|hi are you there)$/.test(
     normalized,
+  );
+}
+
+function isLikelyOpeningBackchannelEcho(session: OpenAIRealtimeSidebandSession, normalized: string) {
+  if (!/^(thanks?|thank you|okay|ok|yeah|yep|sure|uh huh|mhm|mm hmm)$/.test(normalized)) return false;
+  if (session.transcript.some((turn) => turn.role === "caller")) return false;
+  if (Date.now() - session.startedAt > 15000) return false;
+
+  const lastAgent = normalizeRealtimeCallerText(session.transcript.filter((turn) => turn.role === "agent").at(-1)?.text ?? "");
+  return (
+    !session.openingGreetingCompleted ||
+    Boolean(session.quality.activeResponseStartedAt) ||
+    lastAgent.includes("thank you for calling") ||
+    lastAgent.includes("how can i help")
   );
 }
 
