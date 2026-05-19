@@ -14,7 +14,7 @@ This pilot lets us test OpenAI's phone-native realtime stack without removing th
 Keep all existing Render variables. Add these optional pilot variables:
 
 ```text
-OPENAI_REALTIME_MODEL=gpt-realtime
+OPENAI_REALTIME_MODEL=gpt-realtime-2
 OPENAI_REALTIME_FEMALE_VOICE=marin
 OPENAI_REALTIME_MALE_VOICE=cedar
 OPENAI_REALTIME_NOISE_REDUCTION=far_field

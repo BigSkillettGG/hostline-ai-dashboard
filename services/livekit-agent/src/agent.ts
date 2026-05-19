@@ -131,7 +131,7 @@ export default defineAgent({
           language: "en",
           model: "gpt-4o-mini-transcribe",
         },
-        model: env.OPENAI_REALTIME_MODEL?.trim() || "gpt-realtime",
+        model: env.OPENAI_REALTIME_MODEL?.trim() || "gpt-realtime-2",
         speed: resolveLiveKitRealtimeSpeed(env),
         turnDetection: resolveLiveKitModelTurnDetection(env),
         voice: resolveLiveKitOpenAIVoice(env, context),

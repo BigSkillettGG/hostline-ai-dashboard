@@ -76,7 +76,7 @@ describe("OpenAI Realtime SIP", () => {
     );
 
     expect(config).toMatchObject({
-      model: "gpt-realtime",
+      model: "gpt-realtime-2",
       noiseReduction: "far_field",
       projectIdConfigured: true,
       ready: true,
@@ -102,7 +102,7 @@ describe("OpenAI Realtime SIP", () => {
     });
 
     expect(payload).toMatchObject({
-      model: "gpt-realtime",
+      model: "gpt-realtime-2",
       output_modalities: ["audio"],
       tool_choice: "auto",
       type: "realtime",
@@ -264,7 +264,7 @@ describe("OpenAI Realtime SIP", () => {
   });
 
   it("preflights the realtime model and restaurant context before SIP testing", async () => {
-    const fetchMock = async () => new Response(JSON.stringify({ id: "gpt-realtime" }), { status: 200 });
+    const fetchMock = async () => new Response(JSON.stringify({ id: "gpt-realtime-2" }), { status: 200 });
     const preflight = await buildOpenAIRealtimePreflight({
       env: {
         ...baseEnv,

@@ -27,7 +27,7 @@ import type { TrustedContact } from "../../../src/domain/trusted-contacts";
 import { resolveSignalHostOpenAIVoice } from "../../../src/domain/voice-selection";
 import { normalizeCustomerAddress } from "./address-normalization-service";
 
-const OPENAI_REALTIME_DEFAULT_MODEL = "gpt-realtime";
+const OPENAI_REALTIME_DEFAULT_MODEL = "gpt-realtime-2";
 const OPENAI_REALTIME_DEFAULT_FEMALE_VOICE = "marin";
 const OPENAI_REALTIME_DEFAULT_MALE_VOICE = "cedar";
 const OPENAI_REALTIME_ACCEPT_URL = "https://api.openai.com/v1/realtime/calls";

@@ -37,7 +37,7 @@ describe("OpenAI Agents Realtime SIP spike", () => {
     });
 
     expect(sdkPayload).toMatchObject({
-      model: "gpt-realtime",
+      model: "gpt-realtime-2",
       output_modalities: ["audio"],
       tool_choice: "auto",
       type: "realtime",
