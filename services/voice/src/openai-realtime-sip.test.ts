@@ -2798,6 +2798,207 @@ describe("OpenAI Realtime SIP", () => {
     expect(latestResponse).not.toContain("what name and callback number should they use");
   });
 
+  it("clarifies off-menu restaurant order items before accepting them aloud", async () => {
+    const socket = createFakeRealtimeSocket();
+    const service = createOpenAIRealtimeSipService(
+      baseEnv,
+      {
+        async getContext() {
+          return demoRestaurantContext;
+        },
+      },
+      {
+        callStore: {
+          async addTranscriptTurn() {},
+          async attachCallRecording() {},
+          async completeCall() {},
+          async createCustomerRequest() {
+            return {};
+          },
+          async createStaffReviewOrder() {
+            return {};
+          },
+          async createStaffReviewReservation() {
+            return {};
+          },
+          async createStaffTask() {
+            return {};
+          },
+          async startCall() {
+            return {};
+          },
+          async startRealtimeCall() {
+            return { callId: "call_uuid" };
+          },
+        },
+        fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+        websocketFactory: () => socket as never,
+      },
+    );
+
+    await service.handleIncomingWebhook({
+      headers: {},
+      rawBody: JSON.stringify({
+        data: {
+          call_id: "rtc_restaurant_off_menu_spoken_guard",
+          sip_headers: [{ name: "From", value: "sip:+16034899218@twilio.com" }],
+        },
+        type: "realtime.call.incoming",
+      }),
+    });
+
+    socket.emit("open");
+    socket.emit("message", Buffer.from(JSON.stringify({ type: "response.created" })));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "agent_greeting",
+        transcript: "Thank you for calling Olive and Ember. How can I help you?",
+        type: "response.output_audio_transcript.done",
+      })),
+    );
+    socket.emit("message", Buffer.from(JSON.stringify({ type: "response.audio.done" })));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "caller_off_menu_order",
+        transcript: "I'd like to order a pepperoni pizza, a large one, and a Caesar salad.",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    await flushAsyncWork();
+
+    const responses = socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"));
+    const latestResponse = JSON.stringify(responses.at(-1));
+    expect(latestResponse).toContain("off-menu restaurant pickup-order clarification");
+    expect(latestResponse).toContain("pepperoni pizza");
+    expect(latestResponse).toContain("Margherita Pizza");
+    expect(latestResponse).toContain("Diavola Pizza");
+    expect(latestResponse).toContain("Funghi Pizza");
+    expect(latestResponse).toContain("Do not say 'got it'");
+    expect(latestResponse).toContain("Do not ask for name, callback number");
+    expect(latestResponse).not.toContain("create_customer_request");
+  });
+
+  it("recovers from cut-off during an off-menu restaurant order without saving it", async () => {
+    const socket = createFakeRealtimeSocket();
+    const service = createOpenAIRealtimeSipService(
+      baseEnv,
+      {
+        async getContext() {
+          return demoRestaurantContext;
+        },
+      },
+      {
+        callStore: {
+          async addTranscriptTurn() {},
+          async attachCallRecording() {},
+          async completeCall() {},
+          async createCustomerRequest() {
+            return {};
+          },
+          async createStaffReviewOrder() {
+            return {};
+          },
+          async createStaffReviewReservation() {
+            return {};
+          },
+          async createStaffTask() {
+            return {};
+          },
+          async startCall() {
+            return {};
+          },
+          async startRealtimeCall() {
+            return { callId: "call_uuid" };
+          },
+        },
+        fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+        websocketFactory: () => socket as never,
+      },
+    );
+
+    await service.handleIncomingWebhook({
+      headers: {},
+      rawBody: JSON.stringify({
+        data: {
+          call_id: "rtc_restaurant_off_menu_cutoff",
+          sip_headers: [{ name: "From", value: "sip:+16034899218@twilio.com" }],
+        },
+        type: "realtime.call.incoming",
+      }),
+    });
+
+    socket.emit("open");
+    socket.emit("message", Buffer.from(JSON.stringify({ type: "response.created" })));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "agent_greeting",
+        transcript: "Thank you for calling Olive and Ember. How can I help you?",
+        type: "response.output_audio_transcript.done",
+      })),
+    );
+    socket.emit("message", Buffer.from(JSON.stringify({ type: "response.audio.done" })));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "caller_order_start",
+        transcript: "I'd like to place a pickup order.",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "agent_order_prompt",
+        transcript: "Sure, what would you like to order?",
+        type: "response.output_audio_transcript.done",
+      })),
+    );
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "caller_off_menu_order",
+        transcript: "I'd like one pepperoni pizza and one Caesar salad. The name is Tim and my phone number is 603-489-9218.",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    await flushAsyncWork();
+    socket.emit("message", Buffer.from(JSON.stringify({ response: { id: "resp_off_menu_cutout" }, type: "response.created" })));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "agent_cutout",
+        transcript: "I'll set up a staff callback request so they can confirm and place that take",
+        type: "response.output_audio_transcript.done",
+      })),
+    );
+    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.audio.done" })));
+    await new Promise((resolve) => setTimeout(resolve, 575));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "caller_interruption_repair",
+        transcript: "You got interrupted. You didn't finish what you were saying. What were you saying?",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    await flushAsyncWork();
+
+    const responses = socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"));
+    const latestResponse = JSON.stringify(responses.at(-1));
+    expect(latestResponse).toContain("audio appears to have cut out");
+    expect(latestResponse).toContain("Known pickup name: Tim.");
+    expect(latestResponse).toContain("Known callback number: 603-489-9218.");
+    expect(latestResponse).toContain("off-menu restaurant pickup-order clarification");
+    expect(latestResponse).toContain("pepperoni pizza");
+    expect(latestResponse).toContain("Do not say the order is placed");
+    expect(latestResponse).toContain("Do not ask for name, callback number");
+    expect(latestResponse).not.toContain("use create_customer_request with request_type order");
+  });
+
   it("accepts short restaurant intents instead of filtering them as background noise", async () => {
     const socket = createFakeRealtimeSocket();
     const transcriptTurns: unknown[] = [];

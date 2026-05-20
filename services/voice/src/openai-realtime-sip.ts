@@ -2141,6 +2141,9 @@ function buildDeterministicRealtimeRepairInstructions(
     ].join(" ");
   }
 
+  const offMenuOrder = getRestaurantOffMenuOrderInstruction(session, latest);
+  if (offMenuOrder) return offMenuOrder;
+
   if (isRestaurantPickupOrderStartWithoutItems(session.context, normalized)) {
     return [
       "The caller wants to start a pickup or to-go order, but has not given the food items yet.",
@@ -2241,7 +2244,7 @@ function isPlainConnectionCheck(normalized: string) {
 function isMidCallConnectionCheck(normalized: string) {
   return (
     isPlainConnectionCheck(normalized) ||
-    /\b(we lost touch|lost touch|i lost you|you cut out|you cut off|you stopped|didn'?t hear|did not hear|did you not hear|didn'?t catch|did not catch|i can'?t hear you|i cannot hear you|are we still connected)\b/.test(
+    /\b(we lost touch|lost touch|i lost you|you cut out|you cut off|you stopped|you got interrupted|you were interrupted|you didn'?t finish|you did not finish|what were you saying|what was that|didn'?t hear|did not hear|did you not hear|didn'?t catch|did not catch|i can'?t hear you|i cannot hear you|are we still connected)\b/.test(
       normalized,
     )
   );
@@ -2271,6 +2274,56 @@ function containsKnownMenuItemOrAlias(context: RestaurantVoiceContext, normalize
       .filter((candidate) => candidate.length >= 3);
     return candidates.some((candidate) => normalized.includes(candidate));
   });
+}
+
+function getRestaurantOffMenuOrderInstruction(
+  session: OpenAIRealtimeSidebandSession,
+  latest?: string,
+) {
+  const profile = getRuntimeBusinessProfile(session.context);
+  if (!profile.isRestaurant || !latest?.trim()) return null;
+
+  const normalized = normalizeRealtimeCallerText(latest);
+  if (!/\b(order|get|have|want|like|need|pickup|pick up|takeout|take out|to go)\b/.test(normalized)) return null;
+
+  const unknownItems = findUnknownRestaurantOrderItems(session.context, latest);
+  if (!unknownItems.length) return null;
+
+  const alternatives = formatOrderItemAlternatives(session.context, unknownItems);
+  return buildRestaurantOffMenuOrderInstruction({
+    alternatives,
+    context: session.context,
+    mode: "latest_request",
+    unknownItems,
+  });
+}
+
+function buildRestaurantOffMenuOrderInstruction({
+  alternatives,
+  context,
+  mode,
+  unknownItems,
+}: {
+  alternatives: string[];
+  context: RestaurantVoiceContext;
+  mode: "latest_request" | "connection_recovery";
+  unknownItems: string[];
+}) {
+  const unknownText = unknownItems.join(", ");
+  const alternativesText = alternatives.length ? alternatives.join(", ") : "";
+  const apology = mode === "connection_recovery" ? "Briefly apologize for the audio cutting out, then " : "";
+
+  return [
+    `${apology}handle this as an off-menu restaurant pickup-order clarification before collecting more details.`,
+    `The requested item${unknownItems.length === 1 ? "" : "s"} "${unknownText}" ${unknownItems.length === 1 ? "is" : "are"} not confirmed in the configured menu for ${context.restaurantName}.`,
+    "Do not say 'got it' for the off-menu item. Do not repeat it as accepted. Do not say the order is placed, saved, submitted, or ready.",
+    "Do not ask for name, callback number, pickup time, payment, or confirmation text until the menu item choice is resolved.",
+    alternatives.length
+      ? `Tell the caller that you do not see ${unknownText} on the menu, then offer these close menu options: ${alternativesText}.`
+      : `Tell the caller that you do not see ${unknownText} on the menu and staff would need to confirm it.`,
+    "If other requested items are configured menu items, you may say those are fine, but the off-menu item needs a choice or staff confirmation.",
+    "Ask one simple next question: whether they want one of the listed menu items instead, or whether they want you to send the off-menu request to staff to confirm.",
+  ].join(" ");
 }
 
 function isNonRestaurantAsapTimingRepair(context: RestaurantVoiceContext, normalized: string) {
@@ -2451,6 +2504,21 @@ function getRestaurantOrderConnectionRecoveryInstruction(session: OpenAIRealtime
     knownName && `Known pickup name: ${knownName}.`,
     knownPhone && `Known callback number: ${knownPhone}.`,
   ].filter(Boolean);
+  const unknownItems = findUnknownRestaurantOrderItems(session.context, priorCallerTurns.join(" "));
+  if (unknownItems.length) {
+    return [
+      "The caller is checking the connection during an in-progress pickup order because your audio appears to have cut out.",
+      "Do not replay an old pickup-name or callback-number question if the prior transcript already contains that detail.",
+      `Use these prior caller details as the source of truth: "${priorDetails}".`,
+      ...knownFacts,
+      buildRestaurantOffMenuOrderInstruction({
+        alternatives: formatOrderItemAlternatives(session.context, unknownItems),
+        context: session.context,
+        mode: "connection_recovery",
+        unknownItems,
+      }),
+    ].join(" ");
+  }
 
   return [
     "The caller is checking the connection during an in-progress pickup order because your audio appears to have cut out.",

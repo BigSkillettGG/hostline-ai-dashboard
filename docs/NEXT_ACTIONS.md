@@ -8,16 +8,16 @@ The user requested a persistent memory system because repeated context compactio
 
 Current slice:
 
-- Hardening only: baseline lock, audit script, debug visibility, and regression tests.
-- No live voice behavior changes.
-- No routing changes.
-- Deploy only if the user wants the debug metadata endpoint changes live.
+- Narrow restaurant off-menu spoken-response guard.
+- No model, VAD, voice, greeting, routing, provider, timing, or recording changes.
+- Deploy the voice service before asking the user to retest the pepperoni-pizza scenario.
 
 ## Current Voice Situation
 
-The latest analyzed Olive & Ember calls hit the correct OpenAI Realtime SIP path but still have two open issues:
+The latest analyzed Olive & Ember calls hit the correct OpenAI Realtime SIP path. The off-menu restaurant spoken-response issue has a code fix pending live deploy.
 
-- Off-menu restaurant items can still be spoken too confidently before a tool call occurs.
+Current open issue:
+
 - Long/important agent responses can still be partially audible to the caller even when the database transcript contains the full text.
 
 Most recent off-menu retest:
@@ -29,6 +29,13 @@ Most recent off-menu retest:
 - The agent shifted toward staff confirmation later, but first acknowledged "large pepperoni pizza" too confidently.
 - The staff-confirmation sentence audibly cut off around "take", and the agent did not recover when the caller asked what it had been saying.
 
+Fix implemented:
+
+- Deterministic Realtime repair instructions now detect off-menu restaurant pickup-order items before spoken response.
+- If an item is not on the configured menu, SignalHost must clarify and offer alternatives or staff confirmation before asking for name/phone.
+- "You got interrupted / you didn't finish / what were you saying" now routes through the same off-menu clarification recovery when relevant.
+- No model, VAD, voice, greeting, routing, provider, timing, or recording changes were made.
+
 Older opening-timing issue:
 
 - Full greeting appears in transcript.
@@ -37,7 +44,7 @@ Older opening-timing issue:
 - Agent did not respond until around `13.5s`.
 - End of call had broken overlap.
 
-Do not fix these until the user explicitly approves a proposed approach.
+Do not make additional voice fixes until the user reports the next test call or explicitly asks for a new change.
 
 Likely next technical discussions:
 

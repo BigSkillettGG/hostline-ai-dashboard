@@ -421,3 +421,48 @@ Next action:
 
 - Propose a narrow forward-only fix that reinforces off-menu handling in the restaurant prompt/tool instructions without changing voice model, VAD, greeting, routing, provider, or timing.
 - Separately consider a narrow recovery fix for "you got interrupted / what were you saying" so the agent repeats the last incomplete sentence instead of going silent.
+
+## 2026-05-20 13:15 ET - Olive & Ember Off-Menu Spoken Guard Patch
+
+Business:
+
+- Olive & Ember
+
+Call id driving the fix:
+
+- `c5dd4f91-607e-4236-a5f3-ad9313b047c9`
+
+What happened:
+
+- Caller asked for a large pepperoni pizza and a Caesar salad.
+- Pepperoni pizza was not on the configured Olive & Ember menu.
+- The model answered too confidently in plain speech before any tool call: "Got it, a large pepperoni pizza..."
+- Because no tool was used, the previous backend `create_customer_request` off-menu guard did not get a chance to fire.
+- When the caller said the agent got interrupted and asked what it was saying, the recovery did not reliably restate a safe next step.
+
+Diagnosis:
+
+- Backend persistence validation was necessary but insufficient.
+- The Realtime per-turn repair instructions also need to detect off-menu restaurant order items before generating spoken output.
+
+Change made:
+
+- Added a restaurant off-menu spoken-response guard inside deterministic Realtime repair instructions.
+- If a restaurant pickup order mentions an item not found in the configured menu, SignalHost must not say "got it" for that item, must not ask for name/phone yet, and must offer close menu alternatives or staff confirmation first.
+- Expanded mid-call recovery detection for phrases like "you got interrupted," "you didn't finish," and "what were you saying."
+- If an off-menu order was already in progress and audio cut out, recovery now apologizes briefly and returns to the off-menu clarification instead of saving or accepting the order.
+- No changes were made to model, voice, greeting, VAD, threshold, noise reduction, routing, provider, timing, or call recording.
+
+Verification:
+
+- `node node_modules\vitest\vitest.mjs run services\voice\src\openai-realtime-sip.test.ts`
+- `node scripts\build-voice.mjs`
+
+Regression risk:
+
+- Low. The new guard is scoped to restaurant contexts where a caller appears to be placing a pickup/takeout order and the menu validator finds a category-style item that does not match configured menu items.
+
+Next action:
+
+- After deploy, test Olive & Ember with: "I'd like a large pepperoni pizza and a Caesar salad."
+- Expected behavior: SignalHost should say it does not see pepperoni pizza on the menu, offer configured pizza alternatives or staff confirmation, and only collect name/callback after the item choice is resolved.
