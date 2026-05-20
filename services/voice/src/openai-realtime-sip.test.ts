@@ -5251,6 +5251,106 @@ describe("OpenAI Realtime SIP", () => {
     });
   });
 
+  it("blocks off-menu restaurant pickup orders before saving staff requests", async () => {
+    const requests: unknown[] = [];
+    const result = await createOpenAIRealtimeCustomerRequest({
+      callRecordId: "call_uuid",
+      callerPhone: "+14155550123",
+      context: demoRestaurantContext,
+      locationId: "location_uuid",
+      rawArguments: {
+        caller_name: "Tim",
+        details: { order_type: "pickup" },
+        request_type: "order",
+        summary: "Pickup order for one pepperoni pizza and one Caesar salad.",
+        urgency: "normal",
+      },
+      callStore: {
+        async addTranscriptTurn() {},
+        async attachCallRecording() {},
+        async completeCall() {},
+        async createCustomerRequest(input) {
+          requests.push(input);
+          return { requestId: "request_uuid", taskId: "task_uuid" };
+        },
+        async createStaffReviewOrder() {
+          return {};
+        },
+        async createStaffReviewReservation() {
+          return {};
+        },
+        async createStaffTask() {
+          return {};
+        },
+        async startCall() {
+          return {};
+        },
+        async startRealtimeCall() {
+          return {};
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      error: "unknown_order_items",
+      ok: false,
+      status: "needs_menu_confirmation",
+      unknownItems: ["pepperoni pizza"],
+    });
+    expect(String(result.message)).toContain("Do not save this as a pickup order yet");
+    expect(result.alternatives).toEqual(expect.arrayContaining(["Margherita Pizza", "Diavola Pizza", "Funghi Pizza"]));
+    expect(requests).toHaveLength(0);
+  });
+
+  it("allows restaurant pickup orders with configured menu items and modifiers", async () => {
+    const requests: unknown[] = [];
+    const result = await createOpenAIRealtimeCustomerRequest({
+      callRecordId: "call_uuid",
+      callerPhone: "+14155550123",
+      context: demoRestaurantContext,
+      locationId: "location_uuid",
+      rawArguments: {
+        caller_name: "Tim",
+        details: { order_type: "pickup" },
+        request_type: "order",
+        summary: "Pickup order for one gluten-free Margherita pizza and one Caesar salad.",
+        urgency: "normal",
+      },
+      callStore: {
+        async addTranscriptTurn() {},
+        async attachCallRecording() {},
+        async completeCall() {},
+        async createCustomerRequest(input) {
+          requests.push(input);
+          return { requestId: "request_uuid", taskId: "task_uuid" };
+        },
+        async createStaffReviewOrder() {
+          return {};
+        },
+        async createStaffReviewReservation() {
+          return {};
+        },
+        async createStaffTask() {
+          return {};
+        },
+        async startCall() {
+          return {};
+        },
+        async startRealtimeCall() {
+          return {};
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      requestId: "request_uuid",
+      requestType: "order",
+      status: "customer_request_saved",
+    });
+    expect(requests).toHaveLength(1);
+  });
+
   it("creates generic customer requests for cross-industry workflows", async () => {
     const requests: unknown[] = [];
     const result = await createOpenAIRealtimeCustomerRequest({

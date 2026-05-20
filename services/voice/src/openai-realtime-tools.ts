@@ -147,8 +147,9 @@ export function buildOpenAIRealtimeTools(
       type: "function",
     },
     {
-      description:
-        "Create a generic staff-facing customer request for leads, service appointments, quotes, order requests, reservation requests, callbacks, or other business workflows not handled by a specialized tool.",
+      description: profile.isRestaurant
+        ? "Create a generic staff-facing customer request for service appointments, quotes, order requests, reservation requests, callbacks, or other workflows not handled by a specialized tool. For pickup orders, use this only after the requested items are verified against the configured menu. For off-menu, unavailable, or uncertain items, use request_staff_callback instead of saving an order."
+        : "Create a generic staff-facing customer request for service appointments, quotes, order requests, reservation requests, callbacks, or other business workflows not handled by a specialized tool.",
       name: "create_customer_request",
       parameters: {
         additionalProperties: false,

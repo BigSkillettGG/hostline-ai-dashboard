@@ -320,3 +320,46 @@ Regression risk:
 Next action:
 
 - Deploy and place the same speakerphone pickup-order test. Listen for whether long confirmations finish audibly before the caller can be accepted again.
+
+## 2026-05-20 11:45 ET - Olive & Ember Off-Menu Order Guard
+
+Business:
+
+- Olive & Ember
+
+Call id:
+
+- `cb3c7d25-c33b-49f9-90a8-4841dc927da7`
+
+Recording/debug files:
+
+- `tmp/pepperoni-review/latest-debug.json`
+- `tmp/pepperoni-review/latest-call.mp3`
+
+What happened:
+
+- Caller asked for a pickup order with one pepperoni pizza and one Caesar salad.
+- Pepperoni pizza is not a configured Olive & Ember menu item.
+- SignalHost treated the requested items as accepted and saved a staff-review order request.
+
+Diagnosis:
+
+- The call used the correct `openai_realtime_sip` path.
+- The menu/substitution knowledge was present in the runtime context, but the generic `create_customer_request` tool trusted the model's order summary.
+- The backend did not block off-menu restaurant items from being silently saved as normal pickup orders.
+
+Change made:
+
+- Added a restaurant order validation guard inside `create_customer_request`.
+- Off-menu pickup items now return `unknown_order_items` with listed menu alternatives instead of saving the request.
+- Updated the realtime tool description so the model should use staff confirmation for off-menu or uncertain order items.
+- Did not change voice model, VAD, greeting, routing, provider, timing, or audio settings.
+
+Verification:
+
+- `node node_modules\vitest\vitest.mjs run services\voice\src\openai-realtime-sip.test.ts`
+- `node scripts\build-voice.mjs`
+
+Regression risk:
+
+- Low. The guard only applies to restaurant `request_type: order` calls with configured menu items. Non-restaurant requests and normal staff requests are untouched.

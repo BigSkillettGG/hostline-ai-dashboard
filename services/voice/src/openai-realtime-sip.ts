@@ -4471,6 +4471,9 @@ export async function createOpenAIRealtimeCustomerRequest({
     };
   }
 
+  const menuValidation = validateRestaurantOrderRequestAgainstMenu(context, requestType, rawArguments);
+  if (menuValidation) return menuValidation;
+
   try {
     const details = mergeCustomerRequestDetails(
       normalizeCustomerRequestDetails(rawArguments.details),
@@ -4506,6 +4509,188 @@ export async function createOpenAIRealtimeCustomerRequest({
       requestType,
     };
   }
+}
+
+function validateRestaurantOrderRequestAgainstMenu(
+  context: RestaurantVoiceContext,
+  requestType: CustomerRequestKind,
+  rawArguments: Record<string, unknown>,
+) {
+  const profile = getRuntimeBusinessProfile(context);
+  if (!profile.isRestaurant || requestType !== "order" || !context.menuItems.length) return null;
+
+  const requestText = collectOrderRequestText(rawArguments);
+  if (!requestText) return null;
+
+  const unknownItems = findUnknownRestaurantOrderItems(context, requestText);
+  if (!unknownItems.length) return null;
+
+  const alternatives = formatOrderItemAlternatives(context, unknownItems);
+  return {
+    ok: false,
+    alternatives,
+    error: "unknown_order_items",
+    message: [
+      `Do not save this as a pickup order yet. The requested item${unknownItems.length === 1 ? "" : "s"} ${unknownItems.join(", ")} ${unknownItems.length === 1 ? "is" : "are"} not confirmed in the configured menu.`,
+      alternatives.length
+        ? `Tell the caller the listed alternatives are ${alternatives.join(", ")}.`
+        : "Tell the caller staff needs to confirm that item before accepting it.",
+      "Ask whether they want one of the listed menu items instead, or offer to send the off-menu request to staff for confirmation. Do not say the order is placed or accepted.",
+    ].join(" "),
+    status: "needs_menu_confirmation",
+    unknownItems,
+  };
+}
+
+function collectOrderRequestText(rawArguments: Record<string, unknown>) {
+  return stringifyOrderRequestValue(rawArguments)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function stringifyOrderRequestValue(value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (typeof value === "number" || typeof value === "boolean") return [String(value)];
+  if (Array.isArray(value)) return value.flatMap((item) => stringifyOrderRequestValue(item));
+  if (!value || typeof value !== "object") return [];
+  return Object.values(value as Record<string, unknown>).flatMap((item) => stringifyOrderRequestValue(item));
+}
+
+function findUnknownRestaurantOrderItems(context: RestaurantVoiceContext, requestText: string) {
+  const candidates = extractRestaurantOrderItemCandidates(context, requestText);
+  return candidates.filter((candidate) => !restaurantOrderCandidateMatchesMenu(candidate, context));
+}
+
+function extractRestaurantOrderItemCandidates(context: RestaurantVoiceContext, requestText: string) {
+  const normalized = normalizeOrderValidationText(requestText);
+  if (!normalized) return [];
+
+  const categoryTokens = buildRestaurantOrderCategoryTokens(context);
+  const words = normalized.split(/\s+/).filter(Boolean);
+  const candidates = new Set<string>();
+
+  words.forEach((word, index) => {
+    if (!categoryTokens.has(word)) return;
+    const phrase = extractRestaurantOrderCandidatePhrase(words, index);
+    if (phrase && shouldValidateRestaurantOrderCandidate(phrase)) {
+      candidates.add(phrase);
+    }
+  });
+
+  return Array.from(candidates);
+}
+
+function buildRestaurantOrderCategoryTokens(context: RestaurantVoiceContext) {
+  const tokens = new Set([
+    "affogato",
+    "appetizer",
+    "branzino",
+    "burrata",
+    "dessert",
+    "lasagna",
+    "meatball",
+    "meatballs",
+    "pancake",
+    "pancakes",
+    "pasta",
+    "pizza",
+    "risotto",
+    "salad",
+    "spritz",
+    "tiramisu",
+    "water",
+    "wine",
+  ]);
+
+  context.menuItems
+    .flatMap((item) => [item.name, ...(item.aliases ?? [])])
+    .map(normalizeOrderValidationText)
+    .forEach((term) => {
+      const parts = term.split(/\s+/).filter(Boolean);
+      const last = parts.at(-1);
+      if (last && last.length > 2) tokens.add(last);
+    });
+
+  return tokens;
+}
+
+function extractRestaurantOrderCandidatePhrase(words: string[], categoryIndex: number) {
+  const phraseWords: string[] = [words[categoryIndex]];
+  for (let index = categoryIndex - 1; index >= Math.max(0, categoryIndex - 4); index -= 1) {
+    const word = words[index];
+    if (isRestaurantOrderCandidateBoundary(word)) break;
+    phraseWords.unshift(word);
+  }
+  return phraseWords.join(" ").trim();
+}
+
+function isRestaurantOrderCandidateBoundary(word: string) {
+  return /^(a|an|one|two|three|four|five|six|seven|eight|nine|ten|\d+|and|plus|with|for|order|orders|ordering|pickup|takeout|take|out|to|go|request|requested|please)$/.test(word);
+}
+
+function shouldValidateRestaurantOrderCandidate(candidate: string) {
+  if (!candidate) return true;
+  return candidate.split(/\s+/).length <= 5;
+}
+
+function restaurantOrderCandidateMatchesMenu(candidate: string, context: RestaurantVoiceContext) {
+  if (!candidate) return false;
+  const allTerms = context.menuItems
+    .flatMap((item) => [item.name, ...(item.aliases ?? [])])
+    .map(normalizeOrderValidationText)
+    .filter(Boolean);
+  if (allTerms.includes(candidate)) return true;
+
+  if (candidate.split(/\s+/).length === 1) {
+    return allTerms.filter((term) => term.split(/\s+/).includes(candidate)).length === 1;
+  }
+
+  return context.menuItems.some((item) => {
+    const itemTerms = [item.name, ...(item.aliases ?? [])].map(normalizeOrderValidationText).filter(Boolean);
+    return itemTerms.some((term) => {
+      if (term === candidate) return true;
+      if (term.includes(candidate)) return true;
+      if (!candidate.includes(term)) return false;
+      return extraRestaurantOrderWordsAreAllowed(candidate, term, item.modifiers ?? []);
+    });
+  });
+}
+
+function extraRestaurantOrderWordsAreAllowed(candidate: string, matchedMenuTerm: string, modifiers: string[]) {
+  const matchedWords = new Set(matchedMenuTerm.split(/\s+/).filter(Boolean));
+  const extraWords = candidate.split(/\s+/).filter((word) => !matchedWords.has(word));
+  if (!extraWords.length) return true;
+
+  const neutralWords = new Set(["classic", "normal", "plain", "regular", "standard"]);
+  const modifierWords = new Set(
+    modifiers
+      .map(normalizeOrderValidationText)
+      .flatMap((modifier) => modifier.split(/\s+/).filter(Boolean)),
+  );
+  return extraWords.every((word) => neutralWords.has(word) || modifierWords.has(word));
+}
+
+function formatOrderItemAlternatives(context: RestaurantVoiceContext, unknownItems: string[]) {
+  const alternatives = new Set<string>();
+  for (const unknownItem of unknownItems) {
+    const words = new Set(unknownItem.split(/\s+/).filter((word) => word.length > 2));
+    for (const item of context.menuItems) {
+      const terms = [item.name, ...(item.aliases ?? [])].map(normalizeOrderValidationText);
+      if (terms.some((term) => [...words].some((word) => term.split(/\s+/).includes(word)))) {
+        alternatives.add(item.name);
+      }
+    }
+  }
+  return Array.from(alternatives).slice(0, 5);
+}
+
+function normalizeOrderValidationText(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export async function requestOpenAIRealtimeStaffCallback({
