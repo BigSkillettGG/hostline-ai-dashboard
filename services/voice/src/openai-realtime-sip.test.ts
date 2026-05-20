@@ -1329,6 +1329,150 @@ describe("OpenAI Realtime SIP", () => {
     );
   });
 
+  it("keeps turn detection disabled while regular agent audio plays on speakerphone", async () => {
+    vi.useFakeTimers();
+    try {
+      const socket = createFakeRealtimeSocket();
+      const service = createOpenAIRealtimeSipService(
+        baseEnv,
+        {
+          async getContext() {
+            return demoRestaurantContext;
+          },
+        },
+        {
+          fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+          websocketFactory: () => socket as never,
+        },
+      );
+
+      await service.handleIncomingWebhook({
+        headers: {},
+        rawBody: JSON.stringify({
+          data: {
+            call_id: "rtc_regular_response_vad_lock",
+            sip_headers: [{ name: "From", value: "sip:+14155550123@twilio.com" }],
+          },
+          type: "realtime.call.incoming",
+        }),
+      });
+
+      socket.emit("open");
+      socket.emit("message", Buffer.from(JSON.stringify({ response: { id: "resp_greeting" }, type: "response.created" })));
+      socket.emit(
+        "message",
+        Buffer.from(JSON.stringify({
+          item_id: "agent_greeting",
+          transcript: "Thank you for calling Olive and Ember. How can I help you?",
+          type: "response.output_audio_transcript.done",
+        })),
+      );
+      socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.audio.done" })));
+
+      socket.emit(
+        "message",
+        Buffer.from(JSON.stringify({
+          item_id: "caller_order",
+          transcript: "I want to place a takeout order.",
+          type: "conversation.item.input_audio_transcription.completed",
+        })),
+      );
+      await Promise.resolve();
+      socket.emit("message", Buffer.from(JSON.stringify({ response: { id: "resp_order_prompt" }, type: "response.created" })));
+
+      const turnDetectionUpdates = () =>
+        socket.sentEvents.filter(
+          (event) =>
+            isRealtimeEventType(event, "session.update") &&
+            Object.prototype.hasOwnProperty.call(
+              (event as { session?: { audio?: { input?: Record<string, unknown> } } }).session?.audio?.input ?? {},
+              "turn_detection",
+            ),
+        );
+
+      expect(turnDetectionUpdates().at(-1)).toMatchObject({
+        session: {
+          audio: {
+            input: {
+              turn_detection: null,
+            },
+          },
+        },
+      });
+
+      socket.emit(
+        "message",
+        Buffer.from(JSON.stringify({
+          item_id: "agent_order_prompt",
+          transcript: "Sure, what would you like?",
+          type: "response.output_audio_transcript.done",
+        })),
+      );
+      socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+      expect(turnDetectionUpdates().at(-1)).toMatchObject({
+        session: {
+          audio: {
+            input: {
+              turn_detection: null,
+            },
+          },
+        },
+      });
+
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(turnDetectionUpdates().at(-1)).toMatchObject({
+        session: {
+          audio: {
+            input: {
+              turn_detection: null,
+            },
+          },
+        },
+      });
+
+      socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.audio.done" })));
+      await vi.advanceTimersByTimeAsync(300);
+      expect(turnDetectionUpdates().at(-1)).toMatchObject({
+        session: {
+          audio: {
+            input: {
+              turn_detection: null,
+            },
+          },
+        },
+      });
+
+      await vi.advanceTimersByTimeAsync(249);
+      expect(turnDetectionUpdates().at(-1)).toMatchObject({
+        session: {
+          audio: {
+            input: {
+              turn_detection: null,
+            },
+          },
+        },
+      });
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(turnDetectionUpdates().at(-1)).toMatchObject({
+        session: {
+          audio: {
+            input: {
+              turn_detection: expect.objectContaining({
+                create_response: false,
+                eagerness: "low",
+                interrupt_response: false,
+                type: "semantic_vad",
+              }),
+            },
+          },
+        },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("marks short greeting-only SIP calls for review instead of resolved", async () => {
     const socket = createFakeRealtimeSocket();
     const completedCalls: unknown[] = [];
@@ -2511,6 +2655,7 @@ describe("OpenAI Realtime SIP", () => {
       })),
     );
     socket.emit("message", Buffer.from(JSON.stringify({ type: "response.audio.done" })));
+    await new Promise((resolve) => setTimeout(resolve, 575));
     socket.emit(
       "message",
       Buffer.from(JSON.stringify({
@@ -2528,6 +2673,123 @@ describe("OpenAI Realtime SIP", () => {
       },
     });
     expect(JSON.stringify(followUpResponses.at(-1))).not.toContain("Could you repeat the rest of the phone number?");
+  });
+
+  it("recovers restaurant order state after an audio cutout instead of replaying stale prompts", async () => {
+    const socket = createFakeRealtimeSocket();
+    const service = createOpenAIRealtimeSipService(
+      baseEnv,
+      {
+        async getContext() {
+          return demoRestaurantContext;
+        },
+      },
+      {
+        callStore: {
+          async addTranscriptTurn() {},
+          async attachCallRecording() {},
+          async completeCall() {},
+          async createCustomerRequest() {
+            return {};
+          },
+          async createStaffReviewOrder() {
+            return {};
+          },
+          async createStaffReviewReservation() {
+            return {};
+          },
+          async createStaffTask() {
+            return {};
+          },
+          async startCall() {
+            return {};
+          },
+          async startRealtimeCall() {
+            return { callId: "call_uuid" };
+          },
+        },
+        fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+        websocketFactory: () => socket as never,
+      },
+    );
+
+    await service.handleIncomingWebhook({
+      headers: {},
+      rawBody: JSON.stringify({
+        data: {
+          call_id: "rtc_restaurant_order_cutout",
+          sip_headers: [{ name: "From", value: "sip:+16034899218@twilio.com" }],
+        },
+        type: "realtime.call.incoming",
+      }),
+    });
+
+    socket.emit("open");
+    socket.emit("message", Buffer.from(JSON.stringify({ type: "response.created" })));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "agent_greeting",
+        transcript: "Thank you for calling Olive and Ember. How can I help you?",
+        type: "response.output_audio_transcript.done",
+      })),
+    );
+    socket.emit("message", Buffer.from(JSON.stringify({ type: "response.audio.done" })));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "caller_order_start",
+        transcript: "I was calling to place an order for takeout.",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "agent_order_prompt",
+        transcript: "Okay, what items would you like, and what name and callback number should they use?",
+        type: "response.output_audio_transcript.done",
+      })),
+    );
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "caller_order_details",
+        transcript:
+          "I'd like one Diavola pizza, one order of meatballs, tiramisu, and a Caesar salad. The name is Schneider and my phone number is 603-489-9218.",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    await flushAsyncWork();
+    socket.emit("message", Buffer.from(JSON.stringify({ response: { id: "resp_order_cutout" }, type: "response.created" })));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "agent_cutout",
+        transcript: "Thanks, I have the name Schneider and the callback number 603",
+        type: "response.output_audio_transcript.done",
+      })),
+    );
+    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.audio.done" })));
+    await new Promise((resolve) => setTimeout(resolve, 575));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "caller_connection_check",
+        transcript: "Hello?",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    await flushAsyncWork();
+
+    const responses = socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"));
+    const latestResponse = JSON.stringify(responses.at(-1));
+    expect(latestResponse).toContain("in-progress pickup order");
+    expect(latestResponse).toContain("Known pickup name: Schneider.");
+    expect(latestResponse).toContain("Known callback number: 603-489-9218.");
+    expect(latestResponse).toContain("Do not replay an old pickup-name or callback-number question");
+    expect(latestResponse).not.toContain("what name and callback number should they use");
   });
 
   it("accepts short restaurant intents instead of filtering them as background noise", async () => {
@@ -4166,7 +4428,7 @@ describe("OpenAI Realtime SIP", () => {
     expect(resolveOpenAIRealtimeNoiseReduction(baseEnv)).toBe("far_field");
     expect(resolveOpenAIRealtimeInterruptResponse(baseEnv)).toBe(false);
     expect(resolveOpenAIRealtimeManualResponseGating(baseEnv)).toBe(true);
-    expect(resolveOpenAIRealtimeServerVadThreshold(baseEnv)).toBe(0.88);
+    expect(resolveOpenAIRealtimeServerVadThreshold(baseEnv)).toBe(0.97);
     expect(resolveOpenAIRealtimeServerVadSilenceMs(baseEnv)).toBe(900);
     expect(resolveOpenAIRealtimeServerVadPrefixPaddingMs(baseEnv)).toBe(150);
     expect(resolveOpenAIRealtimeIdleTimeoutMs(baseEnv)).toBe(15000);
@@ -4194,7 +4456,7 @@ describe("OpenAI Realtime SIP", () => {
       idle_timeout_ms: 15000,
       prefix_padding_ms: 150,
       silence_duration_ms: 900,
-      threshold: 0.88,
+      threshold: 0.97,
       type: "server_vad",
     });
     expect(

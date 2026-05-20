@@ -105,7 +105,7 @@ const envSchema = z.object({
   OPENAI_REALTIME_AGENTS_SDK_LOCATION_IDS: z.string().optional(),
   OPENAI_REALTIME_SPEED: z.string().optional(),
   OPENAI_REALTIME_TURN_DETECTION_MODE: z.enum(["semantic_vad", "server_vad"]).default("server_vad"),
-  OPENAI_REALTIME_SERVER_VAD_THRESHOLD: z.coerce.number().min(0.05).max(0.98).default(0.93),
+  OPENAI_REALTIME_SERVER_VAD_THRESHOLD: z.coerce.number().min(0.05).max(0.98).default(0.98),
   OPENAI_REALTIME_SERVER_VAD_SILENCE_MS: z.coerce.number().int().min(200).max(2200).default(1100),
   OPENAI_REALTIME_SERVER_VAD_PREFIX_PADDING_MS: z.coerce.number().int().min(0).max(1000).default(150),
   OPENAI_REALTIME_IDLE_TIMEOUT_MS: z.coerce.number().int().min(5000).max(30000).default(12000),

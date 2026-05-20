@@ -33,6 +33,8 @@ const OPENAI_REALTIME_DEFAULT_MALE_VOICE = "cedar";
 const OPENAI_REALTIME_ACCEPT_URL = "https://api.openai.com/v1/realtime/calls";
 const OPENAI_REALTIME_WEBSOCKET_URL = "wss://api.openai.com/v1/realtime";
 const HARBOR_PLUMBING_DEMO_LOCATION_ID = "22222222-2222-4222-8222-222222222222";
+const OPENAI_REALTIME_MIN_SPEAKERPHONE_VAD_THRESHOLD = 0.97;
+const OPENAI_REALTIME_POST_RESPONSE_LISTEN_GUARD_MS = 550;
 
 export type OpenAIRealtimeAcceptProvider = "custom" | "agents_sdk";
 
@@ -225,6 +227,8 @@ interface OpenAIRealtimeSidebandSession {
   reservationCreatedId?: string;
   reservationConfirmed?: boolean;
   responseAudioCompleteFallbackTimer?: ReturnType<typeof setTimeout>;
+  responseTurnDetectionDisabled?: boolean;
+  responseTurnDetectionRestoreTimer?: ReturnType<typeof setTimeout>;
   staffCallbackRequested: boolean;
   staffFollowUpRequired: boolean;
   startedAt: number;
@@ -1316,6 +1320,9 @@ function startSidebandSocket({
     }
 
     recordOpenAIRealtimeQualityEvent(session, eventType, callId);
+    if (eventType === "response.created") {
+      disableOpenAIRealtimeTurnDetectionDuringResponse({ callId, session, socket });
+    }
 
     const transcriptTurn = extractOpenAIRealtimeTranscriptTurn(event);
     if (transcriptTurn) {
@@ -1384,6 +1391,7 @@ function startSidebandSocket({
     clearOpenAIRealtimeManualResponseTimer(session);
     clearOpenAIRealtimeResponseCompletionFallbackTimer(session);
     clearOpenAIRealtimeOpeningGreetingUnlockTimer(session);
+    clearOpenAIRealtimeResponseTurnDetectionRestoreTimer(session);
     void completeOpenAIRealtimeLoggedCall({
       callStore,
       callRecordingService,
@@ -1406,6 +1414,7 @@ function startSidebandSocket({
     clearOpenAIRealtimeManualResponseTimer(session);
     clearOpenAIRealtimeResponseCompletionFallbackTimer(session);
     clearOpenAIRealtimeOpeningGreetingUnlockTimer(session);
+    clearOpenAIRealtimeResponseTurnDetectionRestoreTimer(session);
     void completeOpenAIRealtimeLoggedCall({
       callStore,
       callRecordingService,
@@ -1492,6 +1501,7 @@ function recordOpenAIRealtimeQualityEvent(session: OpenAIRealtimeSidebandSession
     clearOpenAIRealtimeManualIdleTimer(session);
     delete session.manualResponseStartPending;
     delete session.activeResponseCancelRequested;
+    clearOpenAIRealtimeResponseTurnDetectionRestoreTimer(session);
     session.quality.responseCount += 1;
     session.quality.activeResponseStartedAt = now;
     if (session.quality.responseCount === 1) {
@@ -1505,16 +1515,6 @@ function recordOpenAIRealtimeQualityEvent(session: OpenAIRealtimeSidebandSession
       sinceLastSpeechStopMs: session.quality.lastSpeechStoppedAt ? now - session.quality.lastSpeechStoppedAt : undefined,
     });
     return;
-  }
-
-  if (eventType === "response.done") {
-    if (!session.openingGreetingCompleted) return;
-    delete session.manualResponseStartPending;
-    delete session.activeResponseCancelRequested;
-    if (session.quality.activeResponseStartedAt) {
-      session.quality.lastResponseDurationMs = now - session.quality.activeResponseStartedAt;
-    }
-    delete session.quality.activeResponseStartedAt;
   }
 }
 
@@ -1587,6 +1587,28 @@ function handleOpenAIRealtimeResponseDone({
     return;
   }
 
+  if (source === "response.done" && session.quality.activeResponseStartedAt) {
+    if (session.openingGreetingCompleted) {
+      const lastAgentTranscript = session.transcript.filter((turn) => turn.role === "agent").at(-1)?.text ?? "";
+      scheduleOpenAIRealtimeResponseCompletionFallback({
+        callId,
+        session,
+        socket,
+        transcript: lastAgentTranscript,
+      });
+    }
+    console.info("[openai-realtime] response generation done; waiting for audio playout before listening", {
+      callId,
+      source,
+    });
+    return;
+  }
+
+  if (shouldGuardOpenAIRealtimePostResponseListening(session, source)) {
+    scheduleOpenAIRealtimePostResponseListenGuard({ callId, session, socket, source });
+    return;
+  }
+
   clearOpenAIRealtimeResponseCompletionFallbackTimer(session);
   if (session.quality.activeResponseStartedAt) {
     session.quality.lastResponseDurationMs = Date.now() - session.quality.activeResponseStartedAt;
@@ -1599,6 +1621,8 @@ function handleOpenAIRealtimeResponseDone({
     session.openingGreetingCompleted = true;
     clearOpenAIRealtimeOpeningGreetingUnlockTimer(session);
     restoreOpenAIRealtimeTurnDetectionAfterOpening({ callId, session, socket, source });
+  } else {
+    restoreOpenAIRealtimeTurnDetectionAfterResponse({ callId, session, socket, source });
   }
 
   console.info("[openai-realtime] response completed", {
@@ -1633,6 +1657,49 @@ function handleOpenAIRealtimeResponseDone({
   }
 
   scheduleOpenAIRealtimeManualIdlePrompt({ callId, session, socket });
+}
+
+function shouldGuardOpenAIRealtimePostResponseListening(session: OpenAIRealtimeSidebandSession, source?: string) {
+  if (!session.responseTurnDetectionDisabled) return false;
+  if (!session.openingGreetingCompleted) return false;
+  if (source?.endsWith("_listen_guard")) return false;
+  return source === "response.audio.done" || source === "output_audio_buffer.stopped";
+}
+
+function scheduleOpenAIRealtimePostResponseListenGuard({
+  callId,
+  session,
+  socket,
+  source,
+}: {
+  callId: string;
+  session: OpenAIRealtimeSidebandSession;
+  socket: RealtimeSocket;
+  source?: string;
+}) {
+  clearOpenAIRealtimeResponseCompletionFallbackTimer(session);
+  clearOpenAIRealtimeResponseTurnDetectionRestoreTimer(session);
+  session.responseTurnDetectionRestoreTimer = setTimeout(() => {
+    delete session.responseTurnDetectionRestoreTimer;
+    handleOpenAIRealtimeResponseDone({
+      callId,
+      session,
+      socket,
+      source: `${source ?? "response.audio.done"}_listen_guard`,
+    });
+  }, OPENAI_REALTIME_POST_RESPONSE_LISTEN_GUARD_MS);
+  session.responseTurnDetectionRestoreTimer.unref?.();
+  console.info("[openai-realtime] holding input VAD briefly after agent audio", {
+    callId,
+    delayMs: OPENAI_REALTIME_POST_RESPONSE_LISTEN_GUARD_MS,
+    source,
+  });
+}
+
+function clearOpenAIRealtimeResponseTurnDetectionRestoreTimer(session: OpenAIRealtimeSidebandSession) {
+  if (!session.responseTurnDetectionRestoreTimer) return;
+  clearTimeout(session.responseTurnDetectionRestoreTimer);
+  delete session.responseTurnDetectionRestoreTimer;
 }
 
 function scheduleOpenAIRealtimeOpeningGreetingUnlockFallback({
@@ -1679,6 +1746,32 @@ function estimateOpenAIRealtimeOpeningGreetingUnlockFallbackMs(transcript: strin
   return Math.min(4500, estimateOpenAIRealtimeResponseCompletionFallbackMs(transcript) + 900);
 }
 
+function disableOpenAIRealtimeTurnDetectionDuringResponse({
+  callId,
+  session,
+  socket,
+}: {
+  callId: string;
+  session: OpenAIRealtimeSidebandSession;
+  socket: RealtimeSocket;
+}) {
+  if (!session.openingGreetingCompleted) return;
+  if (session.responseTurnDetectionDisabled) return;
+  session.responseTurnDetectionDisabled = true;
+  sendRealtimeEvent(socket, {
+    session: {
+      audio: {
+        input: {
+          turn_detection: null,
+        },
+      },
+      type: "realtime",
+    },
+    type: "session.update",
+  });
+  console.info("[openai-realtime] disabled turn detection during agent response", { callId });
+}
+
 function restoreOpenAIRealtimeTurnDetectionAfterOpening({
   callId,
   session,
@@ -1704,6 +1797,36 @@ function restoreOpenAIRealtimeTurnDetectionAfterOpening({
     type: "session.update",
   });
   console.info("[openai-realtime] restored turn detection after opening greeting", {
+    callId,
+    source,
+  });
+}
+
+function restoreOpenAIRealtimeTurnDetectionAfterResponse({
+  callId,
+  session,
+  socket,
+  source,
+}: {
+  callId: string;
+  session: OpenAIRealtimeSidebandSession;
+  socket: RealtimeSocket;
+  source?: string;
+}) {
+  if (!session.responseTurnDetectionDisabled) return;
+  delete session.responseTurnDetectionDisabled;
+  sendRealtimeEvent(socket, {
+    session: {
+      audio: {
+        input: {
+          turn_detection: session.turnDetection,
+        },
+      },
+      type: "realtime",
+    },
+    type: "session.update",
+  });
+  console.info("[openai-realtime] restored turn detection after agent response", {
     callId,
     source,
   });
@@ -1918,6 +2041,9 @@ function buildDeterministicRealtimeRepairInstructions(
   }
 
   if (isMidCallConnectionCheck(normalized)) {
+    const restaurantOrderRecovery = getRestaurantOrderConnectionRecoveryInstruction(session);
+    if (restaurantOrderRecovery) return restaurantOrderRecovery;
+
     const serviceLeadRecovery = getServiceLeadConnectionRecoveryInstruction(session);
     if (serviceLeadRecovery) return serviceLeadRecovery;
 
@@ -2138,6 +2264,67 @@ function getLastClearCallerRequestBeforeLatest(session: OpenAIRealtimeSidebandSe
   }
 
   return undefined;
+}
+
+function getRestaurantOrderConnectionRecoveryInstruction(session: OpenAIRealtimeSidebandSession) {
+  const profile = getRuntimeBusinessProfile(session.context);
+  if (!profile.isRestaurant) return null;
+
+  const priorCallerTurns = session.transcript
+    .filter((turn) => turn.role === "caller")
+    .slice(0, -1)
+    .map((turn) => turn.text.trim())
+    .filter(Boolean);
+  if (!priorCallerTurns.length) return null;
+
+  const normalizedPrior = normalizeRealtimeCallerText(priorCallerTurns.join(" "));
+  const looksLikeOrder =
+    /\b(order|takeout|take out|pickup|pick up|to go)\b/.test(normalizedPrior) ||
+    session.context.menuItems.some((item) => normalizedPrior.includes(item.name.toLowerCase()));
+  if (!looksLikeOrder) return null;
+
+  const knownPhone = extractLatestFullPhoneNumber(priorCallerTurns);
+  const knownName = extractLikelyOrderName(priorCallerTurns);
+  const priorDetails = priorCallerTurns.join(" / ").slice(-800);
+  const knownFacts = [
+    knownName && `Known pickup name: ${knownName}.`,
+    knownPhone && `Known callback number: ${knownPhone}.`,
+  ].filter(Boolean);
+
+  return [
+    "The caller is checking the connection during an in-progress pickup order because your audio appears to have cut out.",
+    "Do not replay an old pickup-name or callback-number question if the prior transcript already contains that detail.",
+    `Use these prior caller details as the source of truth: "${priorDetails}".`,
+    ...knownFacts,
+    "Briefly apologize for the audio glitch, then continue from the captured order state.",
+    knownPhone && knownName
+      ? "If the order items are clear enough, confirm the order details and use create_customer_request with request_type order. If one item is unclear, ask only about that item."
+      : "Ask only for the one missing pickup detail, not the whole name/callback prompt again.",
+  ].join(" ");
+}
+
+function extractLatestFullPhoneNumber(texts: string[]) {
+  for (const text of texts.slice().reverse()) {
+    const match = text.match(/\b(?:\+?1[\s.-]*)?(?:\(?\d{3}\)?[\s.-]*)\d{3}[\s.-]*\d{4}\b/);
+    if (!match) continue;
+    const digits = match[0].replace(/\D/g, "");
+    const nationalDigits = digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
+    if (nationalDigits.length === 10) {
+      return `${nationalDigits.slice(0, 3)}-${nationalDigits.slice(3, 6)}-${nationalDigits.slice(6)}`;
+    }
+  }
+  return null;
+}
+
+function extractLikelyOrderName(texts: string[]) {
+  for (const text of texts.slice().reverse()) {
+    const match = text.match(/\b(?:(?:the|this|those|my)\s+name is|name is|under|it'?s|it is)\s+([a-z][a-z'-]{1,30})(?=[,.\s]|$)/i);
+    if (!match?.[1]) continue;
+    const value = match[1].toLowerCase();
+    if (/^(a|an|the|my|one|two|three|yeah|yes|no|good|order|callback|phone|number)$/.test(value)) continue;
+    return capitalize(value);
+  }
+  return null;
 }
 
 function getServiceLeadConnectionRecoveryInstruction(session: OpenAIRealtimeSidebandSession) {
@@ -2438,6 +2625,7 @@ function shouldAcceptRealtimeCallerTranscript(
   const directedSpeech = hasLikelyDirectedCallerSpeech(normalized);
   const shortConfirmation = isLikelyShortCallerConfirmation(normalized);
   const clarificationRequest = isCallerClarificationRequest(normalized);
+  const connectionCheck = isMidCallConnectionCheck(normalized);
   const answerToAgentQuestion = isLikelyAnswerToRecentAgentQuestion(session, normalized);
   const correctionOrRepair = isLikelyCallerCorrectionOrRepair(normalized);
   const detailAnswer = isAnsweringDetailCaptureQuestion(session, normalized);
@@ -2445,6 +2633,7 @@ function shouldAcceptRealtimeCallerTranscript(
   if (activeResponse) {
     if (correctionOrRepair) return { accept: true, reason: "caller_repair" };
     if (clarificationRequest) return { accept: true, reason: "caller_clarification" };
+    if (connectionCheck) return { accept: true, reason: "connection_check" };
     if (answerToAgentQuestion) return { accept: true, reason: "answer_to_agent_question" };
     if (detailAnswer) return { accept: true, reason: "detail_capture" };
     if (strongIntent) return { accept: true, reason: "strong_intent" };
@@ -2459,6 +2648,7 @@ function shouldAcceptRealtimeCallerTranscript(
   // a brittle keyword list. The hard rejects above still catch prompt leakage,
   // obvious agent echo, and common TV/radio fragments.
   if (clarificationRequest) return { accept: true, reason: "caller_clarification" };
+  if (connectionCheck) return { accept: true, reason: "connection_check" };
   if (wordCount >= 2) return { accept: true };
   if (clearIntent || configuredOfferingIntent || directedSpeech || shortConfirmation || answerToAgentQuestion) {
     return { accept: true };
@@ -2505,7 +2695,7 @@ function shouldCancelActiveResponseForCallerTurn(
     return isLikelyCallerCorrectionOrRepair(normalized) || hasStrongCallerIntent(normalized);
   }
 
-  if (reason === "caller_repair" || reason === "caller_clarification") {
+  if (reason === "caller_repair" || reason === "caller_clarification" || reason === "connection_check") {
     return true;
   }
 
@@ -4400,7 +4590,9 @@ export function resolveOpenAIRealtimeTurnEagerness(env: OpenAIRealtimeEnv) {
 
 export function resolveOpenAIRealtimeServerVadThreshold(env: OpenAIRealtimeEnv) {
   const threshold = env.OPENAI_REALTIME_SERVER_VAD_THRESHOLD;
-  return Number.isFinite(threshold) ? Math.min(0.98, Math.max(0.05, threshold)) : 0.93;
+  return Number.isFinite(threshold)
+    ? Math.min(0.98, Math.max(OPENAI_REALTIME_MIN_SPEAKERPHONE_VAD_THRESHOLD, threshold))
+    : 0.98;
 }
 
 export function resolveOpenAIRealtimeServerVadSilenceMs(env: OpenAIRealtimeEnv) {
