@@ -1873,6 +1873,15 @@ function buildDeterministicRealtimeRepairInstructions(
   const normalized = normalizeRealtimeCallerText(latest);
   if (!normalized) return null;
 
+  const completedCallbackPhone = getCompletedCallbackPhoneRepair(session, latest);
+  if (completedCallbackPhone) {
+    return [
+      `The caller just supplied the missing digits for the callback phone number. The completed callback number is ${completedCallbackPhone}.`,
+      "Acknowledge it naturally and use that full number as callback_phone.",
+      "Do not ask for the phone number again. Continue with only the next missing detail, or use create_customer_request if the request is otherwise complete.",
+    ].join(" ");
+  }
+
   const incompletePhone = getIncompleteCallbackPhoneRepair(session, latest, normalized);
   if (incompletePhone) {
     return [
@@ -2236,6 +2245,87 @@ function getIncompleteCallbackPhoneRepair(
   if (digitCount < 4 || digitCount >= 10) return null;
 
   return extractIncompletePhoneFragment(originalText) ?? "part of the number";
+}
+
+function getCompletedCallbackPhoneRepair(session: OpenAIRealtimeSidebandSession, originalText: string) {
+  const lastAgentText = session.transcript.filter((turn) => turn.role === "agent").at(-1)?.text ?? "";
+  const lastAgent = normalizeRealtimeCallerText(lastAgentText);
+  const askedForMissingDigits =
+    /\b(i only got|repeat the rest|rest of the phone number|missing digits|missing numbers|remaining digits|last four)\b/.test(
+      lastAgent,
+    );
+  if (!askedForMissingDigits) return null;
+
+  const suffixDigits = extractLikelyPhoneSuffixDigits(originalText);
+  if (!suffixDigits) return null;
+
+  const priorDigits = extractIncompletePhoneFragment(lastAgentText)?.replace(/\D/g, "") ??
+    findLatestIncompleteCallbackPhoneDigits(session);
+  if (!priorDigits || priorDigits.length >= 10) return null;
+
+  const combinedDigits = combineIncompletePhoneDigits(priorDigits, suffixDigits);
+  const nationalDigits = combinedDigits.length === 11 && combinedDigits.startsWith("1")
+    ? combinedDigits.slice(1)
+    : combinedDigits;
+  if (nationalDigits.length !== 10) return null;
+
+  return `${nationalDigits.slice(0, 3)}-${nationalDigits.slice(3, 6)}-${nationalDigits.slice(6)}`;
+}
+
+function combineIncompletePhoneDigits(priorDigits: string, suffixDigits: string) {
+  for (let overlap = Math.min(priorDigits.length, suffixDigits.length); overlap > 0; overlap -= 1) {
+    if (priorDigits.endsWith(suffixDigits.slice(0, overlap))) {
+      return `${priorDigits}${suffixDigits.slice(overlap)}`;
+    }
+  }
+  return `${priorDigits}${suffixDigits}`;
+}
+
+function findLatestIncompleteCallbackPhoneDigits(session: OpenAIRealtimeSidebandSession) {
+  for (const turn of session.transcript.slice().reverse()) {
+    if (turn.role !== "caller") continue;
+    const digits = extractIncompletePhoneFragment(turn.text)?.replace(/\D/g, "");
+    if (digits && digits.length >= 4 && digits.length < 10) return digits;
+  }
+  return null;
+}
+
+function extractLikelyPhoneSuffixDigits(text: string) {
+  const digitGroups = text.match(/\d+/g);
+  if (digitGroups?.length) {
+    const hasLeadingCount =
+      /\b(?:last|final|remaining|missing)\s+\d{1,2}\b/i.test(text) ||
+      /\b(?:last|final)\s+(?:two|three|four|five|six)\b/i.test(text);
+    let suffix = (hasLeadingCount ? digitGroups.slice(1) : digitGroups).join("");
+    if (suffix.length > 6) suffix = digitGroups.at(-1) ?? suffix;
+    return suffix.length >= 2 && suffix.length <= 6 ? suffix : null;
+  }
+
+  const wordDigits = extractSpokenDigitSequence(text);
+  return wordDigits.length >= 2 && wordDigits.length <= 6 ? wordDigits : null;
+}
+
+function extractSpokenDigitSequence(text: string) {
+  const normalized = text.toLowerCase();
+  const digitWords: Record<string, string> = {
+    oh: "0",
+    one: "1",
+    two: "2",
+    three: "3",
+    four: "4",
+    five: "5",
+    six: "6",
+    seven: "7",
+    eight: "8",
+    nine: "9",
+    zero: "0",
+  };
+  const digits = normalized
+    .split(/[^a-z]+/)
+    .map((word) => digitWords[word])
+    .filter((digit): digit is string => Boolean(digit));
+  const hasLeadingWordCount = /\b(?:last|final|remaining|missing)\s+(?:two|three|four|five|six)\b/.test(normalized);
+  return (hasLeadingWordCount && digits.length > 1 ? digits.slice(1) : digits).join("");
 }
 
 function extractIncompletePhoneFragment(text: string) {

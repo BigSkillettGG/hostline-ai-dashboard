@@ -2487,7 +2487,7 @@ describe("OpenAI Realtime SIP", () => {
       "message",
       Buffer.from(JSON.stringify({
         item_id: "caller_partial_phone",
-        transcript: "My name is Kim Schneider, and my callback number is 603-489-92.",
+        transcript: "My name is Kim Schneider, and my callback number is 603-489-921.",
         type: "conversation.item.input_audio_transcription.completed",
       })),
     );
@@ -2496,10 +2496,38 @@ describe("OpenAI Realtime SIP", () => {
     const responses = socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"));
     expect(responses.at(-1)).toMatchObject({
       response: {
-        instructions: expect.stringContaining("I only got 603-489-92. Could you repeat the rest of the phone number?"),
+        instructions: expect.stringContaining("I only got 603-489-921. Could you repeat the rest of the phone number?"),
       },
     });
     expect(JSON.stringify(responses.at(-1))).not.toContain("Customer request saved");
+
+    socket.emit("message", Buffer.from(JSON.stringify({ type: "response.created" })));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "agent_missing_phone_prompt",
+        transcript: "I only got 603-489-921. Could you repeat the rest of the phone number?",
+        type: "response.output_audio_transcript.done",
+      })),
+    );
+    socket.emit("message", Buffer.from(JSON.stringify({ type: "response.audio.done" })));
+    socket.emit(
+      "message",
+      Buffer.from(JSON.stringify({
+        item_id: "caller_phone_suffix",
+        transcript: "It's, yeah, the end is 9218.",
+        type: "conversation.item.input_audio_transcription.completed",
+      })),
+    );
+    await flushAsyncWork();
+
+    const followUpResponses = socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"));
+    expect(followUpResponses.at(-1)).toMatchObject({
+      response: {
+        instructions: expect.stringContaining("The completed callback number is 603-489-9218."),
+      },
+    });
+    expect(JSON.stringify(followUpResponses.at(-1))).not.toContain("Could you repeat the rest of the phone number?");
   });
 
   it("accepts short restaurant intents instead of filtering them as background noise", async () => {
