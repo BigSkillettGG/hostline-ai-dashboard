@@ -22,6 +22,7 @@ import {
   extractOpenAIRealtimeSipCallId,
   extractOpenAIRealtimeTranscriptTurn,
   extractOpenAIRealtimeToolCalls,
+  estimateOpenAIRealtimeResponseCompletionFallbackMs,
   findTrustedOwnerCaller,
   finishOpenAIRealtimeCall,
   lookupBusinessContext,
@@ -4462,6 +4463,21 @@ describe("OpenAI Realtime SIP", () => {
     expect(resolveOpenAIRealtimeGreetingDelayMs({ ...baseEnv, OPENAI_REALTIME_GREETING_DELAY_MS: -1 })).toBe(0);
   });
 
+  it("uses a conservative transcript fallback so phone audio can finish playing", () => {
+    expect(estimateOpenAIRealtimeResponseCompletionFallbackMs("")).toBe(1800);
+    expect(estimateOpenAIRealtimeResponseCompletionFallbackMs("What would you like to order?")).toBe(2460);
+    expect(
+      estimateOpenAIRealtimeResponseCompletionFallbackMs(
+        "I’ve got your pickup request saved for one Caesar salad and one order of meatballs under Schneider.",
+      ),
+    ).toBeGreaterThanOrEqual(5000);
+    expect(
+      estimateOpenAIRealtimeResponseCompletionFallbackMs(
+        "Thanks. I’ve saved your pickup order request for one Caesar salad and one order of meatballs under Schneider, and payment will be at pickup. Staff will follow up shortly. Would you like a text confirmation to the number ending 9218?",
+      ),
+    ).toBe(10000);
+  });
+
   it("uses OpenAI semantic VAD with SignalHost response gating by default", () => {
     expect(resolveOpenAIRealtimeNoiseReduction(baseEnv)).toBe("far_field");
     expect(resolveOpenAIRealtimeInterruptResponse(baseEnv)).toBe(false);
@@ -5065,9 +5081,9 @@ describe("OpenAI Realtime SIP", () => {
           type: "response.done",
         })),
       );
-      await vi.advanceTimersByTimeAsync(2300);
+      await vi.advanceTimersByTimeAsync(2900);
       expect(socket.closeCalls).toHaveLength(0);
-      await vi.advanceTimersByTimeAsync(100);
+      await vi.advanceTimersByTimeAsync(200);
 
       expect(socket.closeCalls[0]).toMatchObject({
         code: 1000,

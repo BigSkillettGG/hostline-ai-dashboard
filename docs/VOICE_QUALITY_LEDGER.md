@@ -267,3 +267,56 @@ Verification:
 Regression risk:
 
 - Low-to-moderate. The recovery adds one extra early check-in after a clean greeting when no caller request is captured, but it is canceled by speech-start and real transcript events.
+
+## 2026-05-20 11:15 ET - Olive & Ember Speakerphone Playout Fallback Patch
+
+Business:
+
+- Olive & Ember
+
+Call id:
+
+- `f3cc1dfb-5b33-4645-9bbf-2f1338c9cd46`
+
+Recording/debug files:
+
+- `tmp/latest-olive-review/debug.json`
+- `tmp/latest-olive-review/latest-call.mp3`
+- `tmp/latest-olive-review/latest-call.wav`
+- `tmp/latest-olive-review/local-audio-levels.json`
+
+Environment:
+
+- Caller used speakerphone.
+
+What happened:
+
+- Greeting played correctly.
+- The order flow worked until the long order confirmation.
+- The database transcript included "Would you like a text confirmation to the number ending 9218?"
+- The actual recording cut off earlier at "Would you like a text confirmation to the number..."
+- The repair response later cut off again after "one Caesar salad and one-".
+
+Diagnosis:
+
+- This was not solved by raising VAD. The live call was already at `server_vad` threshold `0.98`, and the local silence/RMS analysis showed low-level silence around the failures.
+- The more likely fault was transcript-based response completion firing too early. The old fallback capped completion at 3 seconds after transcript completion, which can restore listening while PSTN audio is still playing.
+
+Change made:
+
+- Made `estimateOpenAIRealtimeResponseCompletionFallbackMs` use a conservative speech-duration estimate instead of a hard 3-second cap.
+- Added a quality summary line whenever speech starts during an active response, even if it happens fewer than three times.
+- Did not change model, VAD mode, threshold, greeting, routing, tools, prompts, or provider.
+
+Verification:
+
+- `node node_modules\vitest\vitest.mjs run services\voice\src\openai-realtime-sip.test.ts`
+- `node scripts\build-voice.mjs`
+
+Regression risk:
+
+- Low-to-moderate. If OpenAI/Twilio does not emit an audio-done event for a longer response, SignalHost may wait slightly longer before listening again. This is intentional and safer than cutting itself off on speakerphone echo.
+
+Next action:
+
+- Deploy and place the same speakerphone pickup-order test. Listen for whether long confirmations finish audibly before the caller can be accepted again.

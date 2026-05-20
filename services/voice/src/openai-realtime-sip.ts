@@ -35,6 +35,10 @@ const OPENAI_REALTIME_WEBSOCKET_URL = "wss://api.openai.com/v1/realtime";
 const HARBOR_PLUMBING_DEMO_LOCATION_ID = "22222222-2222-4222-8222-222222222222";
 const OPENAI_REALTIME_MIN_SPEAKERPHONE_VAD_THRESHOLD = 0.97;
 const OPENAI_REALTIME_POST_RESPONSE_LISTEN_GUARD_MS = 550;
+const OPENAI_REALTIME_TRANSCRIPT_FALLBACK_MIN_MS = 1800;
+const OPENAI_REALTIME_TRANSCRIPT_FALLBACK_MAX_MS = 10000;
+const OPENAI_REALTIME_TRANSCRIPT_FALLBACK_MS_PER_WORD = 260;
+const OPENAI_REALTIME_TRANSCRIPT_FALLBACK_BUFFER_MS = 900;
 
 export type OpenAIRealtimeAcceptProvider = "custom" | "agents_sdk";
 
@@ -1980,10 +1984,16 @@ function clearOpenAIRealtimeResponseCompletionFallbackTimer(session: OpenAIRealt
   delete session.responseAudioCompleteFallbackTimer;
 }
 
-function estimateOpenAIRealtimeResponseCompletionFallbackMs(transcript: string) {
+export function estimateOpenAIRealtimeResponseCompletionFallbackMs(transcript: string) {
   const wordCount = transcript.trim().split(/\s+/).filter(Boolean).length;
-  if (!wordCount) return 900;
-  return Math.min(3000, Math.max(900, wordCount * 170 + 350));
+  if (!wordCount) return OPENAI_REALTIME_TRANSCRIPT_FALLBACK_MIN_MS;
+  return Math.min(
+    OPENAI_REALTIME_TRANSCRIPT_FALLBACK_MAX_MS,
+    Math.max(
+      OPENAI_REALTIME_TRANSCRIPT_FALLBACK_MIN_MS,
+      wordCount * OPENAI_REALTIME_TRANSCRIPT_FALLBACK_MS_PER_WORD + OPENAI_REALTIME_TRANSCRIPT_FALLBACK_BUFFER_MS,
+    ),
+  );
 }
 
 function requestOpenAIRealtimeManualResponse({
@@ -3635,6 +3645,9 @@ function buildRealtimeQualitySummary(session: OpenAIRealtimeSidebandSession) {
     `Call quality: speech starts ${session.quality.speechStartCount}, speech stops ${session.quality.speechStopCount}, caller turns ${session.quality.callerTranscriptCount}, agent turns ${session.quality.agentTranscriptCount}.`,
     session.quality.firstGreetingResponseMs !== undefined ? `Greeting response started after ${session.quality.firstGreetingResponseMs}ms.` : "",
     session.quality.firstModelResponseMs !== undefined ? `First post-caller response started after ${session.quality.firstModelResponseMs}ms from speech stop.` : "",
+    session.quality.speechStartedDuringResponseCount > 0
+      ? `Speech started during active response ${session.quality.speechStartedDuringResponseCount} time(s).`
+      : "",
     avgToolLatency !== undefined ? `Average tool latency ${avgToolLatency}ms.` : "",
     flags.length ? `Quality flags: ${flags.join(", ")}.` : "",
   ]
