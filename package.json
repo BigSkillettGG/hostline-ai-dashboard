@@ -12,6 +12,7 @@
     "build:dev": "vite build --mode development",
     "build:livekit-agent": "node scripts/build-livekit-agent.mjs",
     "build:voice": "node scripts/build-voice.mjs",
+    "audit:voice": "node scripts/audit-voice-config.mjs",
     "check:voice": "node scripts/check-voice-deployment.mjs",
     "check:demos": "node scripts/check-demo-verticals.mjs",
     "lint": "eslint .",

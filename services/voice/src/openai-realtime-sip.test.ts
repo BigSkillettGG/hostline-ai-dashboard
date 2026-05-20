@@ -5,6 +5,7 @@ import {
   buildOpenAIRealtimeAcceptPayload,
   buildOpenAIRealtimeInstructions,
   buildOpenAIRealtimeLiveCallConfig,
+  buildOpenAIRealtimeRuntimeSnapshot,
   buildOwnerOpeningGreeting,
   buildOwnerRealtimeInstructions,
   buildOpeningGreetingInstructions,
@@ -77,7 +78,11 @@ describe("OpenAI Realtime SIP", () => {
 
     expect(config).toMatchObject({
       model: "gpt-realtime-2",
+      manualDetailCaptureResponseDelayMs: 0,
+      manualResponseDelayMs: 0,
+      manualResponseGating: true,
       noiseReduction: "far_field",
+      postResponseListenGuardMs: 550,
       projectIdConfigured: true,
       ready: true,
       recordingStatusCallbackUrl: "https://voice.signalhost.ai/twilio/recording-status",
@@ -4134,8 +4139,13 @@ describe("OpenAI Realtime SIP", () => {
       await vi.advanceTimersByTimeAsync(18000);
 
       const responseCreates = socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"));
-      expect(responseCreates).toHaveLength(2);
+      expect(responseCreates).toHaveLength(3);
       expect(responseCreates[1]).toMatchObject({
+        response: expect.objectContaining({
+          instructions: expect.stringContaining("I may have missed that"),
+        }),
+      });
+      expect(responseCreates[2]).toMatchObject({
         response: expect.objectContaining({
           instructions: expect.stringContaining("I'm still here"),
         }),
@@ -4180,10 +4190,11 @@ describe("OpenAI Realtime SIP", () => {
       await vi.advanceTimersByTimeAsync(18000);
 
       const responseCreates = socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"));
-      expect(responseCreates).toHaveLength(3);
-      expect(JSON.stringify(responseCreates[1])).toContain("I'm still here");
+      expect(responseCreates).toHaveLength(4);
+      expect(JSON.stringify(responseCreates[1])).toContain("I may have missed that");
       expect(JSON.stringify(responseCreates[2])).toContain("I'm still here");
-      expect(JSON.stringify(responseCreates[2])).not.toContain("Goodbye");
+      expect(JSON.stringify(responseCreates[3])).toContain("I'm still here");
+      expect(JSON.stringify(responseCreates[3])).not.toContain("Goodbye");
     } finally {
       vi.useRealTimers();
     }
@@ -4219,7 +4230,7 @@ describe("OpenAI Realtime SIP", () => {
 
       socket.emit("open");
       socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
-      await vi.advanceTimersByTimeAsync(14000);
+      await vi.advanceTimersByTimeAsync(3000);
       socket.emit("message", Buffer.from(JSON.stringify({ type: "input_audio_buffer.speech_started" })));
       await vi.advanceTimersByTimeAsync(3000);
       expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))).toHaveLength(1);
@@ -4411,6 +4422,33 @@ describe("OpenAI Realtime SIP", () => {
     expect(instructions).toContain("do not add your name");
   });
 
+  it("keeps golden caller-facing contracts across restaurant and service verticals", () => {
+    const contexts: RestaurantVoiceContext[] = [
+      demoRestaurantContext,
+      {
+        ...demoRestaurantContext,
+        businessType: "plumbing",
+        restaurantName: "Harbor Plumbing",
+      },
+      {
+        ...demoRestaurantContext,
+        businessType: "hvac",
+        restaurantName: "Summit Air",
+      },
+    ];
+
+    for (const context of contexts) {
+      const instructions = buildOpenAIRealtimeInstructions(context);
+
+      expect(instructions).toContain(`Thank you for calling ${context.restaurantName.replace("&", "and")}. How can I help you?`);
+      expect(instructions).toContain(`if the caller asks whether they reached ${context.restaurantName}`);
+      expect(instructions).toContain("Never answer no");
+      expect(instructions).toContain("never call the caller, customer, guest, or their request a lead");
+      expect(instructions).toContain("Never restart the opening greeting");
+      expect(instructions).toContain("Do not call finish_call until");
+    }
+  });
+
   it("clamps realtime playback speed to a safe phone range", () => {
     expect(resolveOpenAIRealtimeSpeed({ ...baseEnv, OPENAI_REALTIME_SPEED: "1.08" })).toBe(1.08);
     expect(resolveOpenAIRealtimeSpeed({ ...baseEnv, OPENAI_REALTIME_SPEED: "2" })).toBe(1.12);
@@ -4498,6 +4536,71 @@ describe("OpenAI Realtime SIP", () => {
         },
       }),
     ).toBe("+14155550124");
+  });
+
+  it("freezes the default realtime baseline when no tuning env vars are present", () => {
+    const env = {
+      OPENAI_API_KEY: "sk-test",
+      PUBLIC_HTTP_BASE_URL: "https://voice.signalhost.ai",
+    };
+    const config = buildOpenAIRealtimeLiveCallConfig(env as any);
+
+    expect(config).toMatchObject({
+      acceptProvider: "custom",
+      greetingDelayMs: 900,
+      manualDetailCaptureResponseDelayMs: 1300,
+      manualResponseDelayMs: 650,
+      manualResponseGating: true,
+      model: "gpt-realtime-2",
+      noiseReduction: "far_field",
+      postResponseListenGuardMs: 550,
+      ready: true,
+      speed: 1.02,
+      turnDetection: {
+        create_response: false,
+        interrupt_response: false,
+        prefix_padding_ms: 150,
+        silence_duration_ms: 1100,
+        threshold: 0.98,
+        type: "server_vad",
+      },
+      voice: "marin",
+    });
+  });
+
+  it("captures a runtime config snapshot for future call debugging", () => {
+    const snapshot = buildOpenAIRealtimeRuntimeSnapshot({
+      acceptProvider: "custom",
+      context: {
+        ...demoRestaurantContext,
+        hostName: "Maya",
+        restaurantName: "Harbor Plumbing",
+        voiceProfileId: "maya",
+      },
+      env: {
+        ...baseEnv,
+        OPENAI_REALTIME_MAYA_VOICE: "shimmer",
+      },
+      locationId: "plumbing_location",
+    });
+
+    expect(snapshot).toMatchObject({
+      acceptProvider: "custom",
+      greetingDelayMs: 0,
+      manualResponseGating: true,
+      model: "gpt-realtime-2",
+      noiseReduction: "far_field",
+      postResponseListenGuardMs: 550,
+      provider: "openai_realtime_sip",
+      speed: 1.02,
+      turnDetection: {
+        create_response: false,
+        eagerness: "low",
+        interrupt_response: false,
+        type: "semantic_vad",
+      },
+      voice: "shimmer",
+    });
   });
 
   it("extracts the called Twilio number from SIP destination headers", () => {

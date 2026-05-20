@@ -158,9 +158,15 @@ export interface LiveCallConfig {
 }
 
 export interface OpenAIRealtimeLiveCallConfig {
+  acceptProvider?: "custom" | "agents_sdk";
   callRecordingConfigured?: boolean;
+  greetingDelayMs?: number;
+  manualDetailCaptureResponseDelayMs?: number;
+  manualResponseDelayMs?: number;
+  manualResponseGating?: boolean;
   model: string;
   noiseReduction?: "near_field" | "far_field";
+  postResponseListenGuardMs?: number;
   projectIdConfigured: boolean;
   ready: boolean;
   sipUri?: string;

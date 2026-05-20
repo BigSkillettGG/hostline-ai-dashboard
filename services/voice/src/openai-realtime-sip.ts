@@ -106,8 +106,12 @@ interface RealtimeSocket {
 export interface OpenAIRealtimeLiveCallConfig {
   acceptProvider: OpenAIRealtimeAcceptProvider;
   greetingDelayMs: number;
+  manualDetailCaptureResponseDelayMs: number;
+  manualResponseDelayMs: number;
+  manualResponseGating: boolean;
   model: string;
   noiseReduction: "near_field" | "far_field";
+  postResponseListenGuardMs: number;
   projectIdConfigured: boolean;
   ready: boolean;
   sipUri?: string;
@@ -118,6 +122,22 @@ export interface OpenAIRealtimeLiveCallConfig {
   webhookUrl?: string;
   callRecordingConfigured: boolean;
   recordingStatusCallbackUrl?: string;
+}
+
+export interface OpenAIRealtimeRuntimeSnapshot {
+  acceptProvider: OpenAIRealtimeAcceptProvider;
+  callRecordingConfigured: boolean;
+  greetingDelayMs: number;
+  manualDetailCaptureResponseDelayMs: number;
+  manualResponseDelayMs: number;
+  manualResponseGating: boolean;
+  model: string;
+  noiseReduction: "near_field" | "far_field";
+  postResponseListenGuardMs: number;
+  provider: "openai_realtime_sip";
+  speed: number;
+  turnDetection: OpenAIRealtimeAcceptPayload["audio"]["input"]["turn_detection"];
+  voice: string;
 }
 
 export interface OpenAIRealtimeWebhookResult {
@@ -215,6 +235,8 @@ interface OpenAIRealtimeSidebandSession {
   manualResponseStartPending?: boolean;
   manualResponseTimer?: ReturnType<typeof setTimeout>;
   ownerContact?: TrustedContact;
+  openingFirstListenPrompted?: boolean;
+  openingFirstListenTimer?: ReturnType<typeof setTimeout>;
   openingGreetingCompleted: boolean;
   openingGreetingUnlockTimer?: ReturnType<typeof setTimeout>;
   openingTurnDetectionDisabled?: boolean;
@@ -381,6 +403,12 @@ export function createOpenAIRealtimeSipService(
       const externalCallId = twilioCallSid ?? callId;
       const externalSessionId = extractOpenAIRealtimeSipCallId(event) ?? callId;
       const acceptProvider = resolveOpenAIRealtimeAcceptProvider(env, resolvedLocationId);
+      const runtimeConfig = buildOpenAIRealtimeRuntimeSnapshot({
+        acceptProvider,
+        context,
+        env,
+        locationId: resolvedLocationId,
+      });
       let callRecordId: string | undefined;
       try {
         const result = await callStore?.startRealtimeCall({
@@ -395,6 +423,7 @@ export function createOpenAIRealtimeSipService(
             ownerContactType: ownerContact?.contactType,
             ownerMode: Boolean(ownerContact),
             realtimeAcceptProvider: acceptProvider,
+            runtimeConfig,
             sipHeaders: event.data?.sip_headers ?? [],
             webhookEventId: event.id,
           },
@@ -587,8 +616,12 @@ export function buildOpenAIRealtimeLiveCallConfig(env: OpenAIRealtimeEnv, locati
         env.PUBLIC_HTTP_BASE_URL,
     ),
     greetingDelayMs: resolveOpenAIRealtimeGreetingDelayMs(env),
+    manualDetailCaptureResponseDelayMs: resolveOpenAIRealtimeDetailCaptureResponseDelayMs(env),
+    manualResponseDelayMs: resolveOpenAIRealtimeManualResponseDelayMs(env),
+    manualResponseGating: resolveOpenAIRealtimeManualResponseGating(env),
     model,
     noiseReduction: resolveOpenAIRealtimeNoiseReduction(env),
+    postResponseListenGuardMs: OPENAI_REALTIME_POST_RESPONSE_LISTEN_GUARD_MS,
     projectIdConfigured: Boolean(env.OPENAI_PROJECT_ID),
     ready: Boolean(env.OPENAI_API_KEY && webhookUrl),
     recordingStatusCallbackUrl: env.PUBLIC_HTTP_BASE_URL
@@ -600,6 +633,35 @@ export function buildOpenAIRealtimeLiveCallConfig(env: OpenAIRealtimeEnv, locati
     voice,
     webhookSecretConfigured: Boolean(env.OPENAI_WEBHOOK_SECRET),
     webhookUrl,
+  };
+}
+
+export function buildOpenAIRealtimeRuntimeSnapshot({
+  acceptProvider,
+  context,
+  env,
+  locationId,
+}: {
+  acceptProvider?: OpenAIRealtimeAcceptProvider;
+  context?: RestaurantVoiceContext;
+  env: OpenAIRealtimeEnv;
+  locationId?: string;
+}): OpenAIRealtimeRuntimeSnapshot {
+  const config = buildOpenAIRealtimeLiveCallConfig(env, locationId);
+  return {
+    acceptProvider: acceptProvider ?? config.acceptProvider,
+    callRecordingConfigured: config.callRecordingConfigured,
+    greetingDelayMs: config.greetingDelayMs,
+    manualDetailCaptureResponseDelayMs: config.manualDetailCaptureResponseDelayMs,
+    manualResponseDelayMs: config.manualResponseDelayMs,
+    manualResponseGating: config.manualResponseGating,
+    model: config.model,
+    noiseReduction: config.noiseReduction,
+    postResponseListenGuardMs: config.postResponseListenGuardMs,
+    provider: "openai_realtime_sip",
+    speed: config.speed,
+    turnDetection: config.turnDetection,
+    voice: context ? resolveOpenAIRealtimeVoice(env, context) : config.voice,
   };
 }
 
@@ -1389,6 +1451,7 @@ function startSidebandSocket({
     clearOpenAIRealtimeFinishedClose(session);
     clearOpenAIRealtimeManualIdleTimer(session);
     clearOpenAIRealtimeManualResponseTimer(session);
+    clearOpenAIRealtimeOpeningFirstListenTimer(session);
     clearOpenAIRealtimeResponseCompletionFallbackTimer(session);
     clearOpenAIRealtimeOpeningGreetingUnlockTimer(session);
     clearOpenAIRealtimeResponseTurnDetectionRestoreTimer(session);
@@ -1412,6 +1475,7 @@ function startSidebandSocket({
     clearOpenAIRealtimeFinishedClose(session);
     clearOpenAIRealtimeManualIdleTimer(session);
     clearOpenAIRealtimeManualResponseTimer(session);
+    clearOpenAIRealtimeOpeningFirstListenTimer(session);
     clearOpenAIRealtimeResponseCompletionFallbackTimer(session);
     clearOpenAIRealtimeOpeningGreetingUnlockTimer(session);
     clearOpenAIRealtimeResponseTurnDetectionRestoreTimer(session);
@@ -1480,6 +1544,7 @@ function recordOpenAIRealtimeQualityEvent(session: OpenAIRealtimeSidebandSession
   const now = Date.now();
   if (eventType === "input_audio_buffer.speech_started") {
     clearOpenAIRealtimeManualIdleTimer(session);
+    clearOpenAIRealtimeOpeningFirstListenTimer(session);
     session.quality.speechStartCount += 1;
     if (session.quality.activeResponseStartedAt) {
       session.quality.speechStartedDuringResponseCount += 1;
@@ -1546,6 +1611,7 @@ function handleOpenAIRealtimeTranscriptTurn({
       });
       return;
     }
+    clearOpenAIRealtimeOpeningFirstListenTimer(session);
     maybeCancelOpenAIRealtimeActiveResponseForCallerTurn({
       callId,
       reason: decision.reason,
@@ -1560,6 +1626,10 @@ function handleOpenAIRealtimeTranscriptTurn({
     session,
     turn,
   });
+
+  if (turn.role === "caller") {
+    clearOpenAIRealtimeOpeningFirstListenTimer(session);
+  }
 
   if (turn.role === "caller" && session.manualResponseGating) {
     clearOpenAIRealtimeManualIdleTimer(session);
@@ -1621,6 +1691,7 @@ function handleOpenAIRealtimeResponseDone({
     session.openingGreetingCompleted = true;
     clearOpenAIRealtimeOpeningGreetingUnlockTimer(session);
     restoreOpenAIRealtimeTurnDetectionAfterOpening({ callId, session, socket, source });
+    scheduleOpenAIRealtimeOpeningFirstListenPrompt({ callId, session, socket });
   } else {
     restoreOpenAIRealtimeTurnDetectionAfterResponse({ callId, session, socket, source });
   }
@@ -1738,6 +1809,45 @@ function clearOpenAIRealtimeOpeningGreetingUnlockTimer(session: OpenAIRealtimeSi
   if (!session.openingGreetingUnlockTimer) return;
   clearTimeout(session.openingGreetingUnlockTimer);
   delete session.openingGreetingUnlockTimer;
+}
+
+function scheduleOpenAIRealtimeOpeningFirstListenPrompt({
+  callId,
+  session,
+  socket,
+}: {
+  callId: string;
+  session: OpenAIRealtimeSidebandSession;
+  socket: RealtimeSocket;
+}) {
+  clearOpenAIRealtimeOpeningFirstListenTimer(session);
+  if (session.ownerContact || session.openingFirstListenPrompted || session.finishRequested) return;
+
+  session.openingFirstListenTimer = setTimeout(() => {
+    delete session.openingFirstListenTimer;
+    if (session.finishRequested || session.quality.activeResponseStartedAt || session.pendingManualResponse) return;
+    const acceptedCallerTurns = session.transcript.filter((turn) => turn.role === "caller").length;
+    if (acceptedCallerTurns > 0) return;
+
+    session.openingFirstListenPrompted = true;
+    console.info("[openai-realtime] creating first-listen recovery prompt after opening greeting", {
+      callId,
+    });
+    sendRealtimeEvent(socket, {
+      response: {
+        instructions:
+          'The caller has not made a clear request after the opening greeting. Do not restart the greeting. Say exactly and only: "I may have missed that. What can I help you with?"',
+      },
+      type: "response.create",
+    });
+  }, 5200);
+  session.openingFirstListenTimer.unref?.();
+}
+
+function clearOpenAIRealtimeOpeningFirstListenTimer(session: OpenAIRealtimeSidebandSession) {
+  if (!session.openingFirstListenTimer) return;
+  clearTimeout(session.openingFirstListenTimer);
+  delete session.openingFirstListenTimer;
 }
 
 function estimateOpenAIRealtimeOpeningGreetingUnlockFallbackMs(transcript: string) {
@@ -2021,6 +2131,14 @@ function buildDeterministicRealtimeRepairInstructions(
     ].join(" ");
   }
 
+  if (isRestaurantPickupOrderStartWithoutItems(session.context, normalized)) {
+    return [
+      "The caller wants to start a pickup or to-go order, but has not given the food items yet.",
+      "Acknowledge briefly and ask only what they would like to order.",
+      "Do not ask for their name, callback number, pickup time, payment, or confirmation text yet. Collect those later after the items are clear.",
+    ].join(" ");
+  }
+
   if (isNonRestaurantServiceProblemRequest(session.context, normalized)) {
     const profile = getRuntimeBusinessProfile(session.context);
     return [
@@ -2048,6 +2166,13 @@ function buildDeterministicRealtimeRepairInstructions(
     if (serviceLeadRecovery) return serviceLeadRecovery;
 
     const lastAgentQuestion = getLastAgentQuestionBeforeLatest(session);
+    if (isOpeningOrGenericHelpQuestion(lastAgentQuestion)) {
+      return [
+        "The caller says you missed their request or the audio cut out right after a generic help prompt.",
+        'Briefly apologize and say exactly and only: "Sorry, I missed that. What can I help you with?"',
+        "Do not say you only heard hello. Do not blame the caller. Do not restart the greeting.",
+      ].join(" ");
+    }
     return [
       "The caller is checking the connection or says the audio cut out during an existing conversation.",
       lastAgentQuestion
@@ -2106,10 +2231,36 @@ function isPlainConnectionCheck(normalized: string) {
 function isMidCallConnectionCheck(normalized: string) {
   return (
     isPlainConnectionCheck(normalized) ||
-    /\b(we lost touch|lost touch|i lost you|you cut out|you cut off|you stopped|didn'?t hear|did not hear|i can'?t hear you|i cannot hear you|are we still connected)\b/.test(
+    /\b(we lost touch|lost touch|i lost you|you cut out|you cut off|you stopped|didn'?t hear|did not hear|did you not hear|didn'?t catch|did not catch|i can'?t hear you|i cannot hear you|are we still connected)\b/.test(
       normalized,
     )
   );
+}
+
+function isOpeningOrGenericHelpQuestion(text?: string) {
+  if (!text) return false;
+  const normalized = normalizeRealtimeCallerText(text);
+  return /^(i'?m here\s*)?(how can i help you|how can i help|what can i help you with|what can i help with)\??$/.test(normalized);
+}
+
+function isRestaurantPickupOrderStartWithoutItems(context: RestaurantVoiceContext, normalized: string) {
+  if (!getRuntimeBusinessProfile(context).isRestaurant) return false;
+  if (!/\b(place|make|put in|start|take|do|order|want|like|need)\b/.test(normalized)) return false;
+  if (!/\b(order|pickup|pick up|takeout|take out|to go)\b/.test(normalized)) return false;
+  if (containsKnownMenuItemOrAlias(context, normalized)) return false;
+  if (/\b(one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+(pizza|pizzas|salad|salads|burger|burgers|sandwich|sandwiches|pasta|pastas|entree|entrees|appetizer|appetizers|drink|drinks|dessert|desserts)\b/.test(normalized)) {
+    return false;
+  }
+  return true;
+}
+
+function containsKnownMenuItemOrAlias(context: RestaurantVoiceContext, normalized: string) {
+  return context.menuItems.some((item) => {
+    const candidates = [item.name, ...(item.aliases ?? [])]
+      .map((candidate) => normalizeRealtimeCallerText(candidate))
+      .filter((candidate) => candidate.length >= 3);
+    return candidates.some((candidate) => normalized.includes(candidate));
+  });
 }
 
 function isNonRestaurantAsapTimingRepair(context: RestaurantVoiceContext, normalized: string) {

@@ -1731,7 +1731,8 @@ async function buildCallDebugPack({
     `transcript_turns?call_id=eq.${encodeURIComponent(call.id)}&select=speaker,text,offset_seconds,created_at&order=created_at.asc`,
   );
   const callPath = resolveCallDebugPath(call);
-  const observations = buildCallDebugObservations(call, transcriptTurns, callPath);
+  const runtimeConfig = resolveCallRuntimeConfig(call);
+  const observations = buildCallDebugObservations(call, transcriptTurns, callPath, runtimeConfig);
   const audioDiagnostic = includeAudio
     ? await runOpenAIAudioDiagnostic({
       currentEnv,
@@ -1747,6 +1748,7 @@ async function buildCallDebugPack({
     call,
     callPath,
     observations,
+    runtimeConfig,
     transcriptTurns,
   };
 }
@@ -1762,7 +1764,12 @@ async function supabaseServiceRequest<T>(currentEnv: VoiceServiceEnv, path: stri
   return (text ? JSON.parse(text) : []) as T;
 }
 
-function buildCallDebugObservations(call: CallDebugRow, transcriptTurns: TranscriptDebugRow[], callPath: string) {
+function buildCallDebugObservations(
+  call: CallDebugRow,
+  transcriptTurns: TranscriptDebugRow[],
+  callPath: string,
+  runtimeConfig?: Record<string, unknown>,
+) {
   const summary = call.summary ?? "";
   const speechStartCount = numberFromSummary(summary, /speech starts (\d+)/i);
   const speechStopCount = numberFromSummary(summary, /speech stops (\d+)/i);
@@ -1783,6 +1790,7 @@ function buildCallDebugObservations(call: CallDebugRow, transcriptTurns: Transcr
     callPath === "twilio_conversation_relay"
       ? "This call hit the legacy Twilio ConversationRelay path, not the primary OpenAI Realtime SIP path."
       : undefined,
+    runtimeConfig ? buildRuntimeConfigObservation(runtimeConfig) : undefined,
     greetingMs !== undefined ? `Greeting began after ${greetingMs}ms.` : undefined,
     firstResponseMs !== undefined ? `First post-caller response began ${firstResponseMs}ms after caller speech stopped.` : undefined,
     !call.recording_url ? "No recording URL is attached to this call." : undefined,
@@ -1798,6 +1806,30 @@ function buildCallDebugObservations(call: CallDebugRow, transcriptTurns: Transcr
     speechStartCount,
     speechStopCount,
   };
+}
+
+function buildRuntimeConfigObservation(runtimeConfig: Record<string, unknown>) {
+  const model = stringValue(runtimeConfig.model);
+  const voice = stringValue(runtimeConfig.voice);
+  const noiseReduction = stringValue(runtimeConfig.noiseReduction);
+  const turnDetection = isRecord(runtimeConfig.turnDetection)
+    ? stringValue(runtimeConfig.turnDetection.type)
+    : undefined;
+  const manualResponseGating = runtimeConfig.manualResponseGating === true ? "on" : runtimeConfig.manualResponseGating === false ? "off" : undefined;
+  const parts = [
+    model ? `model ${model}` : undefined,
+    voice ? `voice ${voice}` : undefined,
+    noiseReduction ? `noise ${noiseReduction}` : undefined,
+    turnDetection ? `turn ${turnDetection}` : undefined,
+    manualResponseGating ? `manual gating ${manualResponseGating}` : undefined,
+  ].filter((part): part is string => Boolean(part));
+  return parts.length ? `Runtime config: ${parts.join(", ")}.` : "Runtime config was captured for this call.";
+}
+
+function resolveCallRuntimeConfig(call: CallDebugRow) {
+  const payload = isRecord(call.twilio_payload) ? call.twilio_payload : {};
+  const runtimeConfig = payload.runtimeConfig;
+  return isRecord(runtimeConfig) ? runtimeConfig : undefined;
 }
 
 function resolveCallDebugPath(call: CallDebugRow) {
