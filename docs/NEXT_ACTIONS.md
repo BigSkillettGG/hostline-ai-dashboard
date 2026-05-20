@@ -15,7 +15,21 @@ Current slice:
 
 ## Current Voice Situation
 
-The latest analyzed Olive & Ember call hit the correct OpenAI Realtime SIP path but still had bad caller experience:
+The latest analyzed Olive & Ember calls hit the correct OpenAI Realtime SIP path but still have two open issues:
+
+- Off-menu restaurant items can still be spoken too confidently before a tool call occurs.
+- Long/important agent responses can still be partially audible to the caller even when the database transcript contains the full text.
+
+Most recent off-menu retest:
+
+- Call id `c5dd4f91-607e-4236-a5f3-ad9313b047c9`.
+- Caller requested large pepperoni pizza and Caesar salad.
+- Pepperoni pizza is not on the configured Olive & Ember menu.
+- The model did not use a tool, so the backend off-menu guard did not fire.
+- The agent shifted toward staff confirmation later, but first acknowledged "large pepperoni pizza" too confidently.
+- The staff-confirmation sentence audibly cut off around "take", and the agent did not recover when the caller asked what it had been saying.
+
+Older opening-timing issue:
 
 - Full greeting appears in transcript.
 - Audio diagnostic shows greeting audio from about `1.0s` to `3.9s`.
@@ -23,13 +37,15 @@ The latest analyzed Olive & Ember call hit the correct OpenAI Realtime SIP path 
 - Agent did not respond until around `13.5s`.
 - End of call had broken overlap.
 
-Do not fix this until the user explicitly approves a proposed approach.
+Do not fix these until the user explicitly approves a proposed approach.
 
-Likely next technical discussion:
+Likely next technical discussions:
 
 - How to make greeting playout/listening unlock more deterministic.
 - How to avoid false post-greeting dead air.
 - How to keep current speakerphone progress without loosening the system.
+- How to make off-menu restaurant handling happen before any spoken acknowledgment, not only inside persistence tools.
+- How to recover naturally when a caller says the agent was interrupted or cut off.
 
 ## High Priority Product Work Still Open
 

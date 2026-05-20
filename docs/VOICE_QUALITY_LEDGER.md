@@ -363,3 +363,61 @@ Verification:
 Regression risk:
 
 - Low. The guard only applies to restaurant `request_type: order` calls with configured menu items. Non-restaurant requests and normal staff requests are untouched.
+
+## 2026-05-20 12:03 ET - Olive & Ember Pepperoni Retest After Off-Menu Guard
+
+Business:
+
+- Olive & Ember
+
+Call id:
+
+- `c5dd4f91-607e-4236-a5f3-ad9313b047c9`
+
+Recording/debug files:
+
+- `tmp/latest-call-analysis/latest-debug.json`
+- `tmp/latest-call-analysis/latest-call.mp3`
+
+Path:
+
+- `openai_realtime_sip`
+- Runtime config showed `gpt-realtime-2`, OpenAI voice `marin`, `far_field` noise reduction, `server_vad` threshold `0.98`, manual response gating on.
+
+What happened:
+
+- Caller asked for a takeout order.
+- Caller requested a large pepperoni pizza and a Caesar salad.
+- Pepperoni pizza is not a configured Olive & Ember menu item.
+- Agent replied: "Got it, a large pepperoni pizza and one Caesar salad. For pickup, I still need your name and a callback number."
+- After the caller provided name and callback number, the agent shifted to staff-confirmation language: "I'll set up a staff callback request so they can confirm and place that take..."
+- The actual recording/audio diagnostic shows that sentence cut off at "take." The database transcript made it look more complete than the caller heard.
+- Caller then asked what the agent was saying, but there was no useful recovery before the call ended.
+
+What worked:
+
+- Greeting was complete in the audio diagnostic.
+- The call used the correct OpenAI Realtime SIP path.
+- The agent did not say the order was fully placed after collecting the phone number; it moved toward staff confirmation.
+
+What failed:
+
+- The agent still spoke as if "pepperoni pizza" was an accepted draft item before telling the caller it was off-menu.
+- The backend off-menu tool guard did not get a chance to fire because no tool call was used on this turn.
+- The caller-facing staff-confirmation response cut off audibly.
+- The agent did not recover when the caller said it was interrupted and asked what it had been saying.
+
+Diagnosis:
+
+- The previous backend guard is necessary but not sufficient. It prevents saving an off-menu restaurant order if the model calls `create_customer_request`, but it does not stop the model from generating a plain spoken response that acknowledges the off-menu item too confidently.
+- This needs a prompt/tooling-layer guard before or during the spoken response: when restaurant pickup text contains an unavailable menu item, the model should immediately say the item is not on the menu and offer close menu alternatives or staff confirmation.
+- The cut-off at the end looks like the recurring response playout/completion issue: the transcript can record more words than the caller actually hears.
+
+Change made:
+
+- None yet. This entry is analysis/memory only.
+
+Next action:
+
+- Propose a narrow forward-only fix that reinforces off-menu handling in the restaurant prompt/tool instructions without changing voice model, VAD, greeting, routing, provider, or timing.
+- Separately consider a narrow recovery fix for "you got interrupted / what were you saying" so the agent repeats the last incomplete sentence instead of going silent.
