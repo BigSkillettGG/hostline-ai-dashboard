@@ -46,8 +46,8 @@ VAPI_API_KEY=your_vapi_private_key
 VAPI_WEBHOOK_SECRET=make_up_a_long_random_secret
 VAPI_PILOT_ENABLED=true
 VAPI_PILOT_LOCATION_IDS=22222222-2222-4222-8222-222222222222
-VAPI_OPENAI_MODEL=gpt-4o-mini
-VAPI_OPENAI_VOICE_ID=nova
+VAPI_OPENAI_MODEL=gpt-realtime-2025-08-28
+VAPI_OPENAI_VOICE_ID=marin
 ```
 
 Optional:
@@ -109,6 +109,16 @@ Authorization: Bearer <VAPI_WEBHOOK_SECRET>
 ```
 
 7. Do not change the normal SignalHost demo numbers until the pilot earns it.
+
+## Model Choice
+
+For this pilot, use Vapi's OpenAI Realtime model slug:
+
+```text
+gpt-realtime-2025-08-28
+```
+
+This is the Vapi-supported OpenAI Realtime path. It is closer to SignalHost's direct OpenAI Realtime SIP experience than a normal STT + text model + TTS pipeline. Do not use `gpt-4o-mini` for the real comparison; it was only an early plumbing placeholder.
 
 ## Tool Bridge
 

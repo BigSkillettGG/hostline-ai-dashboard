@@ -8,8 +8,8 @@ import { buildVapiAssistantDraft, buildVapiPilotConfig, createVapiPilotService }
 const baseEnv = {
   PUBLIC_HTTP_BASE_URL: "https://voice.signalhost.ai",
   VAPI_API_KEY: "vapi_test",
-  VAPI_OPENAI_MODEL: "gpt-4o-mini",
-  VAPI_OPENAI_VOICE_ID: "nova",
+  VAPI_OPENAI_MODEL: "gpt-realtime-2025-08-28",
+  VAPI_OPENAI_VOICE_ID: "marin",
   VAPI_PILOT_ENABLED: true,
   VAPI_WEBHOOK_SECRET: "secret",
 } as Partial<VoiceServiceEnv> as VoiceServiceEnv;
@@ -49,16 +49,36 @@ describe("Vapi pilot", () => {
 
     expect(assistant.model).toMatchObject({
       provider: "openai",
-      model: "gpt-4o-mini",
+      model: "gpt-realtime-2025-08-28",
     });
     expect(JSON.stringify(assistant.model)).toContain("Never call a customer a lead");
     expect(JSON.stringify(assistant.model)).toContain("lookup_restaurant_context");
+    expect(assistant.model.tools).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: "function",
+        function: expect.objectContaining({
+          name: "lookup_restaurant_context",
+        }),
+      }),
+    ]));
+    expect(assistant).not.toHaveProperty("transcriber");
     expect(assistant.server).toMatchObject({
       headers: {
         Authorization: "Bearer secret",
       },
       url: "https://voice.signalhost.ai/vapi/webhook?locationId=loc_1",
     });
+  });
+
+  it("keeps Deepgram transcriber config only for non-realtime Vapi model tests", () => {
+    const env = { ...baseEnv, VAPI_OPENAI_MODEL: "gpt-4o-mini", VAPI_OPENAI_VOICE_ID: "nova" } as VoiceServiceEnv;
+    const assistant = buildVapiAssistantDraft({ context: demoRestaurantContext, env, locationId: "loc_1" });
+
+    expect(assistant.model).toMatchObject({
+      model: "gpt-4o-mini",
+      provider: "openai",
+    });
+    expect(assistant).toHaveProperty("transcriber");
   });
 
   it("keeps the pilot disabled unless VAPI_PILOT_ENABLED is explicitly true", () => {

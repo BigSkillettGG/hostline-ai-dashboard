@@ -68,8 +68,8 @@ console.log(JSON.stringify({
   renderEnvironmentVariables: {
     VAPI_API_KEY: "paste your Vapi private API key",
     VAPI_MAX_CALL_SECONDS: "600",
-    VAPI_OPENAI_MODEL: env.VAPI_OPENAI_MODEL || "gpt-4o-mini",
-    VAPI_OPENAI_VOICE_ID: env.VAPI_OPENAI_VOICE_ID || "nova",
+    VAPI_OPENAI_MODEL: env.VAPI_OPENAI_MODEL || "gpt-realtime-2025-08-28",
+    VAPI_OPENAI_VOICE_ID: env.VAPI_OPENAI_VOICE_ID || "marin",
     VAPI_PILOT_ENABLED: "true",
     VAPI_PILOT_LOCATION_IDS: target.locationId,
     VAPI_WEBHOOK_SECRET: webhookSecret,

@@ -10,8 +10,8 @@ import type { RestaurantContextStore } from "./restaurant-context-store";
 import { normalizeCustomerRequestKind, type CustomerRequestKind } from "../../../src/domain/business-links";
 
 const DEFAULT_VAPI_API_BASE_URL = "https://api.vapi.ai";
-const DEFAULT_VAPI_MODEL = "gpt-4o-mini";
-const DEFAULT_VAPI_VOICE_ID = "nova";
+const DEFAULT_VAPI_MODEL = "gpt-realtime-2025-08-28";
+const DEFAULT_VAPI_VOICE_ID = "marin";
 const DEFAULT_MAX_CALL_SECONDS = 600;
 const VAPI_WEBHOOK_BODY_LIMIT_SECONDS = 20;
 
@@ -113,7 +113,9 @@ export function buildVapiAssistantDraft({
   locationId?: string;
 }) {
   const profile = getRuntimeBusinessProfile(context);
-  const functions = buildVapiFunctions(buildOpenAIRealtimeTools(context));
+  const model = env.VAPI_OPENAI_MODEL ?? DEFAULT_VAPI_MODEL;
+  const isRealtimeModel = isVapiRealtimeModel(model);
+  const tools = buildVapiTools(buildOpenAIRealtimeTools(context));
   const serverUrl = buildVapiServerUrl(env, locationId);
   const serverHeaders = env.VAPI_WEBHOOK_SECRET
     ? {
@@ -128,7 +130,6 @@ export function buildVapiAssistantDraft({
     firstMessageMode: "assistant-speaks-first",
     maxDurationSeconds: parsePositiveInteger(env.VAPI_MAX_CALL_SECONDS) ?? DEFAULT_MAX_CALL_SECONDS,
     model: {
-      functions,
       maxTokens: 220,
       messages: [
         {
@@ -141,9 +142,10 @@ export function buildVapiAssistantDraft({
           role: "system",
         },
       ],
-      model: env.VAPI_OPENAI_MODEL ?? DEFAULT_VAPI_MODEL,
+      model,
       provider: "openai",
       temperature: 0.45,
+      tools,
     },
     name: compactAssistantName(`SignalHost ${context.restaurantName}`),
     server: serverUrl
@@ -163,17 +165,21 @@ export function buildVapiAssistantDraft({
       "user-interrupted",
     ],
     serverUrl,
-    transcriber: {
-      keytermsPrompt: [
-        context.restaurantName,
-        context.hostName,
-        profile.businessNoun,
-        ...context.menuHighlights.slice(0, 12),
-      ],
-      language: "en-US",
-      model: "nova-3",
-      provider: "deepgram",
-    },
+    ...(!isRealtimeModel
+      ? {
+          transcriber: {
+            keytermsPrompt: [
+              context.restaurantName,
+              context.hostName,
+              profile.businessNoun,
+              ...context.menuHighlights.slice(0, 12),
+            ],
+            language: "en-US",
+            model: "nova-3",
+            provider: "deepgram",
+          },
+        }
+      : {}),
     voicemailMessage: `Thanks for calling ${context.restaurantName}. Please call back or leave your name and number so the team can follow up.`,
     voice: {
       provider: "openai",
@@ -592,12 +598,19 @@ export class VapiPilotService {
   }
 }
 
-function buildVapiFunctions(tools: OpenAIRealtimeFunctionTool[]) {
+function buildVapiTools(tools: OpenAIRealtimeFunctionTool[]) {
   return tools.map((tool) => ({
-    description: tool.description,
-    name: tool.name,
-    parameters: tool.parameters,
+    function: {
+      description: tool.description,
+      name: tool.name,
+      parameters: tool.parameters,
+    },
+    type: "function",
   }));
+}
+
+function isVapiRealtimeModel(model: string) {
+  return /^gpt-(?:realtime|4o.*realtime)/i.test(model);
 }
 
 function buildVapiServerUrl(env: VoiceServiceEnv, locationId?: string) {
