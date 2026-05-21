@@ -525,3 +525,70 @@ Next action:
 
 - Deploy and test Olive & Ember first without speakerphone, then on quiet speakerphone.
 - Expected behavior: the caller hears the complete greeting before SignalHost listens or recovers.
+
+## 2026-05-21 11:25 ET - Olive & Ember Opening Deaf Window Patch
+
+Business:
+
+- Olive & Ember
+
+Call id driving the fix:
+
+- `5fe287f2-ca29-4b7d-9b4b-9712de9f511d`
+
+Path:
+
+- Direct OpenAI Realtime SIP
+- `gpt-realtime-2`
+
+Recording/debug files:
+
+- `tmp/latest-olive-analysis/latest-debug.json`
+
+What happened:
+
+- The caller heard the greeting.
+- The caller then said: "Yeah, hi, I want to place an order for takeout."
+- SignalHost did not respond to that request for several seconds.
+- SignalHost repeated the opening greeting.
+
+Database transcript:
+
+1. Agent: "Thank you for calling Olive and Ember. How can I help you?"
+2. Agent: "Thank you for calling Olive and Ember. How can I help you?"
+
+OpenAI audio diagnostic:
+
+- Agent greeting: about `1.0s` to `4.0s`.
+- Caller request: about `5.15s` to `7.25s`.
+- Repeated greeting: about `14.1s` to `17.05s`.
+- No caller transcript turn was saved.
+
+Diagnosis:
+
+- The previous opening playout lock fixed greeting interruption but overcorrected.
+- Input/listening stayed disabled too long after the greeting, so the first real caller request happened inside a deaf window.
+- Because no caller transcript was accepted, first-listen recovery treated the call as empty and repeated the greeting.
+- This was timing/state-machine behavior, not an LLM intelligence or knowledge-base issue.
+
+Change made:
+
+- Opening input still stays disabled during the greeting.
+- When OpenAI emits the real opening audio-complete event (`response.audio.done` or `output_audio_buffer.stopped`), SignalHost now waits only a short `700ms` post-audio playout guard before restoring listening.
+- The longer transcript-estimated fallback remains only for cases where the audio-complete event is missing.
+- Added a regression test that recreates the exact failure: greeting completes, caller asks for takeout, and SignalHost must accept the first caller turn instead of repeating the greeting.
+- No changes were made to model, voice, business knowledge, tools, provider, routing, or general VAD/noise settings.
+
+Verification:
+
+- `node node_modules\vitest\vitest.mjs run services\voice\src\openai-realtime-sip.test.ts --reporter=dot`
+- `node scripts\build-voice.mjs`
+
+Regression risk:
+
+- Low-to-moderate and scoped to the opening greeting. This intentionally shortens the post-greeting deaf window while keeping the opening protected from early echo.
+
+Next action:
+
+- Deploy and retest Olive & Ember.
+- Expected behavior: full greeting, then the first caller request after the greeting is heard and answered without repeating the greeting.

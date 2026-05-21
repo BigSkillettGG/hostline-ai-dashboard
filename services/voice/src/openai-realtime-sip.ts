@@ -40,6 +40,7 @@ const OPENAI_REALTIME_TRANSCRIPT_FALLBACK_MAX_MS = 10000;
 const OPENAI_REALTIME_TRANSCRIPT_FALLBACK_MS_PER_WORD = 260;
 const OPENAI_REALTIME_TRANSCRIPT_FALLBACK_BUFFER_MS = 900;
 const OPENAI_REALTIME_OPENING_FIRST_LISTEN_PROMPT_MS = 6500;
+const OPENAI_REALTIME_OPENING_POST_AUDIO_GUARD_MS = 700;
 const OPENAI_REALTIME_OPENING_RECENT_SPEECH_GUARD_MS = 1800;
 
 export type OpenAIRealtimeAcceptProvider = "custom" | "agents_sdk";
@@ -1717,8 +1718,17 @@ function handleOpenAIRealtimeResponseDone({
       });
     }
     session.openingGreetingCompleted = true;
+    if (isOpenAIRealtimeOpeningAudioDoneSource(source)) {
+      scheduleOpenAIRealtimeOpeningPostAudioGuard({
+        callId,
+        source,
+        session,
+        socket,
+      });
+      return;
+    }
     if (source !== "opening_greeting_audio_guard" && session.openingGreetingUnlockTimer) {
-      console.info("[openai-realtime] opening greeting audio done; keeping input locked for playout guard", {
+      console.info("[openai-realtime] opening greeting generated; keeping input locked until audio completion or fallback guard", {
         callId,
         source,
       });
@@ -1845,6 +1855,40 @@ function scheduleOpenAIRealtimeOpeningGreetingUnlockFallback({
     callId,
     delayMs,
   });
+}
+
+function scheduleOpenAIRealtimeOpeningPostAudioGuard({
+  callId,
+  session,
+  socket,
+  source,
+}: {
+  callId: string;
+  session: OpenAIRealtimeSidebandSession;
+  socket: RealtimeSocket;
+  source?: string;
+}) {
+  clearOpenAIRealtimeOpeningGreetingUnlockTimer(session);
+  session.openingGreetingUnlockTimer = setTimeout(() => {
+    delete session.openingGreetingUnlockTimer;
+    if (session.finishRequested) return;
+    unlockOpenAIRealtimeOpeningInput({
+      callId,
+      session,
+      socket,
+      source: `${source ?? "response.audio.done"}_opening_playout_guard`,
+    });
+  }, OPENAI_REALTIME_OPENING_POST_AUDIO_GUARD_MS);
+  session.openingGreetingUnlockTimer.unref?.();
+  console.info("[openai-realtime] opening greeting audio done; holding input briefly for playout guard", {
+    callId,
+    delayMs: OPENAI_REALTIME_OPENING_POST_AUDIO_GUARD_MS,
+    source,
+  });
+}
+
+function isOpenAIRealtimeOpeningAudioDoneSource(source?: string) {
+  return source === "response.audio.done" || source === "output_audio_buffer.stopped";
 }
 
 function unlockOpenAIRealtimeOpeningInput({

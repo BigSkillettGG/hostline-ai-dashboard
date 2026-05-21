@@ -8,7 +8,7 @@ The user requested a persistent memory system because repeated context compactio
 
 Current slice:
 
-- Opening greeting playout lock and first-listen recovery hardening.
+- Opening greeting post-audio listen-window hardening.
 - Keep direct OpenAI Realtime SIP with `gpt-realtime-2`.
 - Do not change LiveKit, ElevenLabs, ConversationRelay, routing, business knowledge, model, voice, or general VAD settings while validating this fix.
 - Deploy the voice service before asking the user to retest Olive & Ember.
@@ -17,22 +17,24 @@ Current slice:
 
 The latest analyzed Olive & Ember calls hit the correct OpenAI Realtime SIP path. The off-menu restaurant spoken-response issue has a code fix pending live deploy.
 
-Current open issue:
+Most recent analyzed issue:
 
-- Opening greeting could be partially audible or appear as dead air to the caller even when the database transcript contains the full greeting.
+- Call id `5fe287f2-ca29-4b7d-9b4b-9712de9f511d`: caller heard the greeting, then said "I want to place an order for takeout."
+- Database transcript showed only two agent greetings and no caller turn.
+- Audio diagnostic showed the caller's takeout request at about `5.15s` to `7.25s`; SignalHost repeated the greeting around `14.1s`.
 
-Most recent opening-greeting failures:
+Diagnosis:
 
-- Call id `97aefcb9-da0e-45a9-b921-84e4bc831010`: audio diagnostic captured the full Olive & Ember greeting, but the call closed quickly with no accepted caller turn.
-- Call id `dcba2d8d-d5d9-45d3-910e-924703e3ac4e`: database transcript showed the greeting, but audio diagnostic did not present a clean greeting to the caller; caller said the phone did not answer.
+- The prior opening lock overcorrected and left input disabled too long after audible greeting completion.
+- The first real caller request landed inside that deaf window.
+- First-listen recovery repeated the greeting because no caller transcript had been accepted.
 
 Fix implemented:
 
-- Opening turn detection remains disabled through greeting generation, audio completion, and a separate playout guard.
-- `response.done` and `response.audio.done` no longer reopen the microphone for the opening greeting by themselves.
-- First-listen recovery now repeats the exact greeting if no accepted caller turn exists.
-- Raw speech-start events pause first-listen recovery but do not cancel it unless a real caller transcript is accepted.
-- Caller complaints like "you didn't answer" trigger a brief apology and exact greeting repeat.
+- Opening turn detection remains disabled during greeting generation and audio playout.
+- When an opening audio-complete event arrives (`response.audio.done` or `output_audio_buffer.stopped`), SignalHost waits a short `700ms` guard and then restores listening.
+- The longer transcript-estimated guard remains only as a fallback if the audio-complete event is missing.
+- First-listen recovery still repeats the exact greeting only when no accepted caller turn arrives after listening is restored.
 - No model, voice, routing, provider, business knowledge, tools, or general VAD settings were changed.
 
 Older opening-timing issue:
@@ -43,7 +45,7 @@ Older opening-timing issue:
 - Agent did not respond until around `13.5s`.
 - End of call had broken overlap.
 
-Do not make additional voice fixes until the user reports the next test call or explicitly asks for a new change.
+After deploy, retest Olive & Ember with: "I want to place an order for takeout." Expected behavior: SignalHost hears that first request and does not repeat the greeting.
 
 Likely next technical discussions:
 

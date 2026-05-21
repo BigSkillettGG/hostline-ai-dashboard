@@ -145,12 +145,13 @@ For the first greeting:
 - Start the session with input turn detection set to `null`.
 - Send the exact greeting: `Thank you for calling {business name}. How can I help you?`
 - Do not restore caller listening on `response.done`.
-- Do not restore caller listening on `response.audio.done` alone.
-- Restore caller listening only after the opening playout guard has elapsed.
+- Do not restore caller listening on `response.audio.done` instantly.
+- Restore caller listening after the opening audio-complete event plus the short opening playout guard.
+- Keep the longer transcript-estimated guard only as a fallback if the audio-complete event is missing.
 - Do not let raw `input_audio_buffer.speech_started` cancel the first-listen recovery unless an accepted caller transcript arrives.
 
 Reason:
 
 - The database transcript can contain the full greeting before PSTN audio is safely heard by the caller.
 - Speakerphone or handset echo can trigger false speech-start events during the opening.
-- The safest first fix is a hard opening playout lock, not broad prompt rewrites or provider swaps.
+- The safest current fix is a hard opening playout lock during the greeting, followed by a short post-audio guard so the first real caller request is not missed.
