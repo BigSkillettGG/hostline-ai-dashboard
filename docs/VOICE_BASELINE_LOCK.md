@@ -36,6 +36,7 @@ The following settings are deliberately conservative because speakerphone echo a
 - `OPENAI_REALTIME_INTERRUPT_RESPONSE`: effectively disabled
 - Server VAD fallback threshold: clamps to the speakerphone-safe range `0.97` to `0.98`
 - Post-response listen guard: `550ms`
+- Opening greeting playout lock: turn detection stays disabled until after greeting audio completion plus the opening playout guard
 
 Do not lower the gating sensitivity or re-enable model-side interruption without a specific test plan and rollback.
 

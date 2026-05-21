@@ -8,9 +8,10 @@ The user requested a persistent memory system because repeated context compactio
 
 Current slice:
 
-- Narrow restaurant off-menu spoken-response guard.
-- No model, VAD, voice, greeting, routing, provider, timing, or recording changes.
-- Deploy the voice service before asking the user to retest the pepperoni-pizza scenario.
+- Opening greeting playout lock and first-listen recovery hardening.
+- Keep direct OpenAI Realtime SIP with `gpt-realtime-2`.
+- Do not change LiveKit, ElevenLabs, ConversationRelay, routing, business knowledge, model, voice, or general VAD settings while validating this fix.
+- Deploy the voice service before asking the user to retest Olive & Ember.
 
 ## Current Voice Situation
 
@@ -18,23 +19,21 @@ The latest analyzed Olive & Ember calls hit the correct OpenAI Realtime SIP path
 
 Current open issue:
 
-- Long/important agent responses can still be partially audible to the caller even when the database transcript contains the full text.
+- Opening greeting could be partially audible or appear as dead air to the caller even when the database transcript contains the full greeting.
 
-Most recent off-menu retest:
+Most recent opening-greeting failures:
 
-- Call id `c5dd4f91-607e-4236-a5f3-ad9313b047c9`.
-- Caller requested large pepperoni pizza and Caesar salad.
-- Pepperoni pizza is not on the configured Olive & Ember menu.
-- The model did not use a tool, so the backend off-menu guard did not fire.
-- The agent shifted toward staff confirmation later, but first acknowledged "large pepperoni pizza" too confidently.
-- The staff-confirmation sentence audibly cut off around "take", and the agent did not recover when the caller asked what it had been saying.
+- Call id `97aefcb9-da0e-45a9-b921-84e4bc831010`: audio diagnostic captured the full Olive & Ember greeting, but the call closed quickly with no accepted caller turn.
+- Call id `dcba2d8d-d5d9-45d3-910e-924703e3ac4e`: database transcript showed the greeting, but audio diagnostic did not present a clean greeting to the caller; caller said the phone did not answer.
 
 Fix implemented:
 
-- Deterministic Realtime repair instructions now detect off-menu restaurant pickup-order items before spoken response.
-- If an item is not on the configured menu, SignalHost must clarify and offer alternatives or staff confirmation before asking for name/phone.
-- "You got interrupted / you didn't finish / what were you saying" now routes through the same off-menu clarification recovery when relevant.
-- No model, VAD, voice, greeting, routing, provider, timing, or recording changes were made.
+- Opening turn detection remains disabled through greeting generation, audio completion, and a separate playout guard.
+- `response.done` and `response.audio.done` no longer reopen the microphone for the opening greeting by themselves.
+- First-listen recovery now repeats the exact greeting if no accepted caller turn exists.
+- Raw speech-start events pause first-listen recovery but do not cancel it unless a real caller transcript is accepted.
+- Caller complaints like "you didn't answer" trigger a brief apology and exact greeting repeat.
+- No model, voice, routing, provider, business knowledge, tools, or general VAD settings were changed.
 
 Older opening-timing issue:
 

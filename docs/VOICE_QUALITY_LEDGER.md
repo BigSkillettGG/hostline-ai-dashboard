@@ -466,3 +466,62 @@ Next action:
 
 - After deploy, test Olive & Ember with: "I'd like a large pepperoni pizza and a Caesar salad."
 - Expected behavior: SignalHost should say it does not see pepperoni pizza on the menu, offer configured pizza alternatives or staff confirmation, and only collect name/callback after the item choice is resolved.
+
+## 2026-05-20 17:20 ET - Opening Greeting Playout Lock Patch
+
+Business:
+
+- Olive & Ember
+
+Call ids driving the fix:
+
+- `97aefcb9-da0e-45a9-b921-84e4bc831010`
+- `dcba2d8d-d5d9-45d3-910e-924703e3ac4e`
+
+Path:
+
+- Direct OpenAI Realtime SIP
+- `gpt-realtime-2`
+
+What happened:
+
+- The database transcript could show the full greeting while the caller heard only part of it or did not hear it cleanly.
+- One call captured the full greeting in audio but still closed quickly with no accepted caller turn.
+- Another call showed the caller complaining that the phone had not answered, even though the database transcript contained the greeting.
+
+Diagnosis:
+
+- This is an opening playout/listening-lock defect, not a business-knowledge defect.
+- OpenAI Realtime can emit transcript/generation completion before PSTN caller-side audio is safely finished.
+- Re-enabling turn detection immediately on `response.done` or `response.audio.done` can let handset/speakerphone echo reopen the microphone while the greeting is still effectively in flight.
+- A raw `input_audio_buffer.speech_started` event is not enough to prove the caller made a meaningful request; accepted caller transcript is the safer signal.
+
+Research basis:
+
+- Official OpenAI Realtime VAD docs confirm VAD is controlled through `session.audio.input.turn_detection` and can be disabled by setting it to `null`.
+- Official OpenAI Realtime VAD docs confirm `semantic_vad` with low eagerness is the least interruptive conversational mode.
+- Official OpenAI Realtime SIP docs confirm the sideband WebSocket is the correct control plane after accepting a SIP call.
+
+Change made:
+
+- Opening turn detection now stays disabled through greeting generation, audio completion, and an additional opening playout guard.
+- `response.done` no longer restores listening for the opening greeting.
+- `response.audio.done` no longer restores listening for the opening greeting by itself; it marks the greeting complete and waits for the guard.
+- First-listen recovery waits longer and repeats the exact opening greeting if no accepted caller turn exists.
+- First-listen recovery is paused, not canceled, by raw speech-start/speech-stop events until a real caller transcript is accepted.
+- If a caller says they did not hear the greeting or that the phone did not answer, SignalHost apologizes briefly and repeats the exact greeting instead of arguing or explaining.
+
+Verification:
+
+- `node node_modules\vitest\vitest.mjs run services\voice\src\openai-realtime-sip.test.ts --reporter=dot`
+- `node scripts\build-voice.mjs`
+
+Regression risk:
+
+- Low-to-moderate. The opening may wait slightly longer before accepting the caller's first request, but this is intentionally safer than cutting off or interrupting the greeting.
+- The change is scoped to the opening greeting and first-listen recovery. It does not change model, voice, business knowledge, routing, tools, provider, or general VAD settings.
+
+Next action:
+
+- Deploy and test Olive & Ember first without speakerphone, then on quiet speakerphone.
+- Expected behavior: the caller hears the complete greeting before SignalHost listens or recovers.

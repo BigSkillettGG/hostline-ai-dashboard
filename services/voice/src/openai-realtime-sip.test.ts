@@ -1250,89 +1250,104 @@ describe("OpenAI Realtime SIP", () => {
     expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))).toHaveLength(2);
   });
 
-  it("disables realtime turn detection during the opening greeting and restores it after audio completion", async () => {
-    const socket = createFakeRealtimeSocket();
-    const service = createOpenAIRealtimeSipService(
-      baseEnv,
-      {
-        async getContext() {
-          return demoRestaurantContext;
-        },
-      },
-      {
-        fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
-        websocketFactory: () => socket as never,
-      },
-    );
-
-    await service.handleIncomingWebhook({
-      headers: {},
-      rawBody: JSON.stringify({
-        data: {
-          call_id: "rtc_greeting_turn_detection",
-          sip_headers: [{ name: "From", value: "sip:+14155550123@twilio.com" }],
-        },
-        type: "realtime.call.incoming",
-      }),
-    });
-
-    socket.emit("open");
-    expect(socket.sentEvents[0]).toMatchObject({
-      session: {
-        audio: {
-          input: {
-            turn_detection: null,
+  it("disables realtime turn detection during the opening greeting and restores it after the playout guard", async () => {
+    vi.useFakeTimers();
+    try {
+      const socket = createFakeRealtimeSocket();
+      const service = createOpenAIRealtimeSipService(
+        baseEnv,
+        {
+          async getContext() {
+            return demoRestaurantContext;
           },
         },
-      },
-      type: "session.update",
-    });
+        {
+          fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+          websocketFactory: () => socket as never,
+        },
+      );
 
-    socket.emit(
-      "message",
-      Buffer.from(JSON.stringify({
-        response: { id: "resp_greeting" },
-        type: "response.created",
-      })),
-    );
-    socket.emit(
-      "message",
-      Buffer.from(JSON.stringify({
-        item_id: "agent_greeting",
-        transcript: "Thank you for calling Olive and Ember. How can I help you?",
-        type: "response.output_audio_transcript.done",
-      })),
-    );
-    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
-    expect(
-      socket.sentEvents.filter(
-        (event) =>
-          isRealtimeEventType(event, "session.update") &&
-          (event as { session?: { audio?: { input?: { turn_detection?: unknown } } } }).session?.audio?.input
-            ?.turn_detection,
-      ),
-    ).toHaveLength(0);
-
-    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.audio.done" })));
-    expect(socket.sentEvents).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          session: expect.objectContaining({
-            audio: {
-              input: {
-                turn_detection: expect.objectContaining({
-                  create_response: false,
-                  eagerness: "low",
-                  interrupt_response: false,
-                  type: "semantic_vad",
-                }),
-              },
-            },
-          }),
-          type: "session.update",
+      await service.handleIncomingWebhook({
+        headers: {},
+        rawBody: JSON.stringify({
+          data: {
+            call_id: "rtc_greeting_turn_detection",
+            sip_headers: [{ name: "From", value: "sip:+14155550123@twilio.com" }],
+          },
+          type: "realtime.call.incoming",
         }),
-      ]),
-    );
+      });
+
+      socket.emit("open");
+      expect(socket.sentEvents[0]).toMatchObject({
+        session: {
+          audio: {
+            input: {
+              turn_detection: null,
+            },
+          },
+        },
+        type: "session.update",
+      });
+
+      socket.emit(
+        "message",
+        Buffer.from(JSON.stringify({
+          response: { id: "resp_greeting" },
+          type: "response.created",
+        })),
+      );
+      socket.emit(
+        "message",
+        Buffer.from(JSON.stringify({
+          item_id: "agent_greeting",
+          transcript: "Thank you for calling Olive and Ember. How can I help you?",
+          type: "response.output_audio_transcript.done",
+        })),
+      );
+      socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+      expect(
+        socket.sentEvents.filter(
+          (event) =>
+            isRealtimeEventType(event, "session.update") &&
+            (event as { session?: { audio?: { input?: { turn_detection?: unknown } } } }).session?.audio?.input
+              ?.turn_detection,
+        ),
+      ).toHaveLength(0);
+
+      socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.audio.done" })));
+      expect(
+        socket.sentEvents.filter(
+          (event) =>
+            isRealtimeEventType(event, "session.update") &&
+            (event as { session?: { audio?: { input?: { turn_detection?: unknown } } } }).session?.audio?.input
+              ?.turn_detection,
+        ),
+      ).toHaveLength(0);
+
+      await vi.advanceTimersByTimeAsync(6500);
+      expect(socket.sentEvents).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            session: expect.objectContaining({
+              audio: {
+                input: {
+                  turn_detection: expect.objectContaining({
+                    create_response: false,
+                    eagerness: "low",
+                    interrupt_response: false,
+                    type: "semantic_vad",
+                  }),
+                },
+              },
+            }),
+            type: "session.update",
+          }),
+        ]),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("keeps turn detection disabled while regular agent audio plays on speakerphone", async () => {
@@ -1691,13 +1706,7 @@ describe("OpenAI Realtime SIP", () => {
     });
 
     socket.emit("open");
-    socket.emit(
-      "message",
-      Buffer.from(JSON.stringify({
-        response: { output: [] },
-        type: "response.done",
-      })),
-    );
+    completeOpeningGreetingForTest(socket);
     socket.emit(
       "message",
       Buffer.from(JSON.stringify({
@@ -1771,7 +1780,7 @@ describe("OpenAI Realtime SIP", () => {
     });
 
     socket.emit("open");
-    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+    completeOpeningGreetingForTest(socket);
     socket.emit(
       "message",
       Buffer.from(JSON.stringify({
@@ -1858,7 +1867,7 @@ describe("OpenAI Realtime SIP", () => {
     });
 
     socket.emit("open");
-    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+    completeOpeningGreetingForTest(socket);
     socket.emit(
       "message",
       Buffer.from(JSON.stringify({
@@ -1952,7 +1961,7 @@ describe("OpenAI Realtime SIP", () => {
     });
 
     socket.emit("open");
-    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+    completeOpeningGreetingForTest(socket);
     socket.emit(
       "message",
       Buffer.from(JSON.stringify({
@@ -2029,7 +2038,7 @@ describe("OpenAI Realtime SIP", () => {
     });
 
     socket.emit("open");
-    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+    completeOpeningGreetingForTest(socket);
     socket.emit(
       "message",
       Buffer.from(JSON.stringify({
@@ -2102,7 +2111,7 @@ describe("OpenAI Realtime SIP", () => {
     });
 
     socket.emit("open");
-    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+    completeOpeningGreetingForTest(socket);
     socket.emit(
       "message",
       Buffer.from(JSON.stringify({
@@ -2253,7 +2262,7 @@ describe("OpenAI Realtime SIP", () => {
     });
 
     socket.emit("open");
-    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+    completeOpeningGreetingForTest(socket);
     socket.emit(
       "message",
       Buffer.from(JSON.stringify({
@@ -2342,7 +2351,7 @@ describe("OpenAI Realtime SIP", () => {
     });
 
     socket.emit("open");
-    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+    completeOpeningGreetingForTest(socket);
     socket.emit(
       "message",
       Buffer.from(JSON.stringify({
@@ -2449,7 +2458,7 @@ describe("OpenAI Realtime SIP", () => {
     });
 
     socket.emit("open");
-    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+    completeOpeningGreetingForTest(socket);
     socket.emit(
       "message",
       Buffer.from(JSON.stringify({
@@ -3052,7 +3061,7 @@ describe("OpenAI Realtime SIP", () => {
     });
 
     socket.emit("open");
-    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+    completeOpeningGreetingForTest(socket);
     socket.emit(
       "message",
       Buffer.from(JSON.stringify({
@@ -3123,7 +3132,7 @@ describe("OpenAI Realtime SIP", () => {
     });
 
     socket.emit("open");
-    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+    completeOpeningGreetingForTest(socket);
     socket.emit(
       "message",
       Buffer.from(JSON.stringify({
@@ -3194,7 +3203,7 @@ describe("OpenAI Realtime SIP", () => {
     });
 
     socket.emit("open");
-    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+    completeOpeningGreetingForTest(socket);
     socket.emit(
       "message",
       Buffer.from(JSON.stringify({
@@ -3265,7 +3274,7 @@ describe("OpenAI Realtime SIP", () => {
     });
 
     socket.emit("open");
-    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+    completeOpeningGreetingForTest(socket);
     socket.emit(
       "message",
       Buffer.from(JSON.stringify({
@@ -3352,7 +3361,7 @@ describe("OpenAI Realtime SIP", () => {
       });
 
       socket.emit("open");
-      socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+      completeOpeningGreetingForTest(socket);
       socket.emit(
         "message",
         Buffer.from(JSON.stringify({
@@ -3459,7 +3468,7 @@ describe("OpenAI Realtime SIP", () => {
       });
 
       socket.emit("open");
-      socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+      completeOpeningGreetingForTest(socket);
       socket.emit(
         "message",
         Buffer.from(JSON.stringify({
@@ -3556,7 +3565,7 @@ describe("OpenAI Realtime SIP", () => {
       });
 
       socket.emit("open");
-      socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+      completeOpeningGreetingForTest(socket);
       socket.emit(
         "message",
         Buffer.from(JSON.stringify({
@@ -3654,7 +3663,7 @@ describe("OpenAI Realtime SIP", () => {
     });
 
     socket.emit("open");
-    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+    completeOpeningGreetingForTest(socket);
     socket.emit(
       "message",
       Buffer.from(JSON.stringify({
@@ -3746,7 +3755,7 @@ describe("OpenAI Realtime SIP", () => {
     });
 
     socket.emit("open");
-    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+    completeOpeningGreetingForTest(socket);
     socket.emit(
       "message",
       Buffer.from(JSON.stringify({
@@ -3841,7 +3850,7 @@ describe("OpenAI Realtime SIP", () => {
       });
 
       socket.emit("open");
-      socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+      completeOpeningGreetingForTest(socket);
       socket.emit(
         "message",
         Buffer.from(JSON.stringify({
@@ -3942,7 +3951,7 @@ describe("OpenAI Realtime SIP", () => {
     });
 
     socket.emit("open");
-    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+    completeOpeningGreetingForTest(socket);
     socket.emit(
       "message",
       Buffer.from(JSON.stringify({
@@ -4010,7 +4019,7 @@ describe("OpenAI Realtime SIP", () => {
     });
 
     socket.emit("open");
-    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+    completeOpeningGreetingForTest(socket);
     socket.emit(
       "message",
       Buffer.from(JSON.stringify({
@@ -4096,7 +4105,7 @@ describe("OpenAI Realtime SIP", () => {
     });
 
     socket.emit("open");
-    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+    completeOpeningGreetingForTest(socket);
     socket.emit(
       "message",
       Buffer.from(JSON.stringify({
@@ -4189,13 +4198,7 @@ describe("OpenAI Realtime SIP", () => {
     });
 
     socket.emit("open");
-    socket.emit(
-      "message",
-      Buffer.from(JSON.stringify({
-        response: { output: [] },
-        type: "response.done",
-      })),
-    );
+    completeOpeningGreetingForTest(socket);
     socket.emit(
       "message",
       Buffer.from(JSON.stringify({
@@ -4266,7 +4269,7 @@ describe("OpenAI Realtime SIP", () => {
     });
 
     socket.emit("open");
-    socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+    completeOpeningGreetingForTest(socket);
     socket.emit(
       "message",
       Buffer.from(JSON.stringify({
@@ -4331,20 +4334,16 @@ describe("OpenAI Realtime SIP", () => {
       });
 
       socket.emit("open");
-      socket.emit(
-        "message",
-        Buffer.from(JSON.stringify({
-          response: { output: [] },
-          type: "response.done",
-        })),
-      );
+      completeOpeningGreetingForTest(socket);
+      await vi.advanceTimersByTimeAsync(18000);
+      socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
       await vi.advanceTimersByTimeAsync(18000);
 
       const responseCreates = socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"));
       expect(responseCreates).toHaveLength(3);
       expect(responseCreates[1]).toMatchObject({
         response: expect.objectContaining({
-          instructions: expect.stringContaining("I may have missed that"),
+          instructions: expect.stringContaining("Thank you for calling Olive and Ember. How can I help you?"),
         }),
       });
       expect(responseCreates[2]).toMatchObject({
@@ -4386,17 +4385,16 @@ describe("OpenAI Realtime SIP", () => {
       });
 
       socket.emit("open");
-      socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+      completeOpeningGreetingForTest(socket);
       await vi.advanceTimersByTimeAsync(18000);
       socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
       await vi.advanceTimersByTimeAsync(18000);
 
       const responseCreates = socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"));
-      expect(responseCreates).toHaveLength(4);
-      expect(JSON.stringify(responseCreates[1])).toContain("I may have missed that");
+      expect(responseCreates).toHaveLength(3);
+      expect(JSON.stringify(responseCreates[1])).toContain("Thank you for calling Olive and Ember. How can I help you?");
       expect(JSON.stringify(responseCreates[2])).toContain("I'm still here");
-      expect(JSON.stringify(responseCreates[3])).toContain("I'm still here");
-      expect(JSON.stringify(responseCreates[3])).not.toContain("Goodbye");
+      expect(JSON.stringify(responseCreates[2])).not.toContain("Goodbye");
     } finally {
       vi.useRealTimers();
     }
@@ -4431,14 +4429,14 @@ describe("OpenAI Realtime SIP", () => {
       });
 
       socket.emit("open");
-      socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.done" })));
+      completeOpeningGreetingForTest(socket);
       await vi.advanceTimersByTimeAsync(3000);
       socket.emit("message", Buffer.from(JSON.stringify({ type: "input_audio_buffer.speech_started" })));
       await vi.advanceTimersByTimeAsync(3000);
       expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))).toHaveLength(1);
 
       socket.emit("message", Buffer.from(JSON.stringify({ type: "input_audio_buffer.speech_stopped" })));
-      await vi.advanceTimersByTimeAsync(15000);
+      await vi.advanceTimersByTimeAsync(6000);
       expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))).toHaveLength(2);
     } finally {
       vi.useRealTimers();
@@ -5256,6 +5254,7 @@ describe("OpenAI Realtime SIP", () => {
       });
 
       socket.emit("open");
+      completeOpeningGreetingForTest(socket);
       socket.emit(
         "message",
         Buffer.from(JSON.stringify({
@@ -5969,6 +5968,10 @@ function createFakeRealtimeSocket() {
 
 function isRealtimeEventType(event: unknown, type: string) {
   return Boolean(event && typeof event === "object" && (event as { type?: unknown }).type === type);
+}
+
+function completeOpeningGreetingForTest(socket: ReturnType<typeof createFakeRealtimeSocket>) {
+  socket.emit("message", Buffer.from(JSON.stringify({ response: { output: [] }, type: "response.audio.done" })));
 }
 
 async function flushAsyncWork() {

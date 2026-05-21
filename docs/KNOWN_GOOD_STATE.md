@@ -135,3 +135,22 @@ Do not say we cannot listen to calls. We can analyze the recording through the d
 The current high-risk area is speakerphone echo and greeting/listening timing.
 
 Do not make broad changes to business logic, vertical prompts, or owner flows while trying to fix speakerphone behavior. Keep audio-path fixes narrow and reversible.
+
+## Opening Greeting Lock
+
+The opening greeting is special. Do not treat it like a normal agent response.
+
+For the first greeting:
+
+- Start the session with input turn detection set to `null`.
+- Send the exact greeting: `Thank you for calling {business name}. How can I help you?`
+- Do not restore caller listening on `response.done`.
+- Do not restore caller listening on `response.audio.done` alone.
+- Restore caller listening only after the opening playout guard has elapsed.
+- Do not let raw `input_audio_buffer.speech_started` cancel the first-listen recovery unless an accepted caller transcript arrives.
+
+Reason:
+
+- The database transcript can contain the full greeting before PSTN audio is safely heard by the caller.
+- Speakerphone or handset echo can trigger false speech-start events during the opening.
+- The safest first fix is a hard opening playout lock, not broad prompt rewrites or provider swaps.

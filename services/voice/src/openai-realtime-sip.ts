@@ -39,6 +39,8 @@ const OPENAI_REALTIME_TRANSCRIPT_FALLBACK_MIN_MS = 1800;
 const OPENAI_REALTIME_TRANSCRIPT_FALLBACK_MAX_MS = 10000;
 const OPENAI_REALTIME_TRANSCRIPT_FALLBACK_MS_PER_WORD = 260;
 const OPENAI_REALTIME_TRANSCRIPT_FALLBACK_BUFFER_MS = 900;
+const OPENAI_REALTIME_OPENING_FIRST_LISTEN_PROMPT_MS = 6500;
+const OPENAI_REALTIME_OPENING_RECENT_SPEECH_GUARD_MS = 1800;
 
 export type OpenAIRealtimeAcceptProvider = "custom" | "agents_sdk";
 
@@ -205,9 +207,11 @@ interface RealtimeQualityMetrics {
   activeResponseStartedAt?: number;
   agentTranscriptCount: number;
   callerTranscriptCount: number;
+  callerSpeechActive?: boolean;
   firstGreetingResponseMs?: number;
   firstModelResponseMs?: number;
   lastResponseDurationMs?: number;
+  lastSpeechStartedAt?: number;
   lastSpeechStoppedAt?: number;
   responseCount: number;
   speechStartedDuringResponseCount: number;
@@ -242,6 +246,7 @@ interface OpenAIRealtimeSidebandSession {
   openingFirstListenPrompted?: boolean;
   openingFirstListenTimer?: ReturnType<typeof setTimeout>;
   openingGreetingCompleted: boolean;
+  openingGreetingTranscript?: string;
   openingGreetingUnlockTimer?: ReturnType<typeof setTimeout>;
   openingTurnDetectionDisabled?: boolean;
   openingTurnDetectionRestored?: boolean;
@@ -1401,6 +1406,7 @@ function startSidebandSocket({
       });
       if (transcriptTurn.role === "agent" && eventType === "response.output_audio_transcript.done") {
         if (!session.openingGreetingCompleted && session.quality.responseCount <= 1) {
+          session.openingGreetingTranscript = transcriptTurn.text;
           scheduleOpenAIRealtimeOpeningGreetingUnlockFallback({
             callId,
             session,
@@ -1548,7 +1554,8 @@ function recordOpenAIRealtimeQualityEvent(session: OpenAIRealtimeSidebandSession
   const now = Date.now();
   if (eventType === "input_audio_buffer.speech_started") {
     clearOpenAIRealtimeManualIdleTimer(session);
-    clearOpenAIRealtimeOpeningFirstListenTimer(session);
+    session.quality.callerSpeechActive = true;
+    session.quality.lastSpeechStartedAt = now;
     session.quality.speechStartCount += 1;
     if (session.quality.activeResponseStartedAt) {
       session.quality.speechStartedDuringResponseCount += 1;
@@ -1561,6 +1568,7 @@ function recordOpenAIRealtimeQualityEvent(session: OpenAIRealtimeSidebandSession
   }
 
   if (eventType === "input_audio_buffer.speech_stopped") {
+    session.quality.callerSpeechActive = false;
     session.quality.speechStopCount += 1;
     session.quality.lastSpeechStoppedAt = now;
     return;
@@ -1653,7 +1661,15 @@ function handleOpenAIRealtimeResponseDone({
   socket: RealtimeSocket;
   source?: string;
 }) {
-  if (!session.openingGreetingCompleted && source === "response.done" && session.openingGreetingUnlockTimer) {
+  if (!session.openingGreetingCompleted && source === "response.done") {
+    if (!session.openingGreetingUnlockTimer) {
+      scheduleOpenAIRealtimeOpeningGreetingUnlockFallback({
+        callId,
+        session,
+        socket,
+        transcript: session.openingGreetingTranscript || buildShortOpeningGreeting(session.context),
+      });
+    }
     console.info("[openai-realtime] opening greeting generated; waiting for audio playout before listening", {
       callId,
       source,
@@ -1692,10 +1708,23 @@ function handleOpenAIRealtimeResponseDone({
   delete session.activeResponseCancelRequested;
 
   if (!session.openingGreetingCompleted) {
+    if (source !== "opening_greeting_audio_guard" && !session.openingGreetingUnlockTimer) {
+      scheduleOpenAIRealtimeOpeningGreetingUnlockFallback({
+        callId,
+        session,
+        socket,
+        transcript: session.openingGreetingTranscript || buildShortOpeningGreeting(session.context),
+      });
+    }
     session.openingGreetingCompleted = true;
-    clearOpenAIRealtimeOpeningGreetingUnlockTimer(session);
-    restoreOpenAIRealtimeTurnDetectionAfterOpening({ callId, session, socket, source });
-    scheduleOpenAIRealtimeOpeningFirstListenPrompt({ callId, session, socket });
+    if (source !== "opening_greeting_audio_guard" && session.openingGreetingUnlockTimer) {
+      console.info("[openai-realtime] opening greeting audio done; keeping input locked for playout guard", {
+        callId,
+        source,
+      });
+      return;
+    }
+    unlockOpenAIRealtimeOpeningInput({ callId, session, socket, source });
   } else {
     restoreOpenAIRealtimeTurnDetectionAfterResponse({ callId, session, socket, source });
   }
@@ -1794,7 +1823,16 @@ function scheduleOpenAIRealtimeOpeningGreetingUnlockFallback({
   const delayMs = estimateOpenAIRealtimeOpeningGreetingUnlockFallbackMs(transcript);
   session.openingGreetingUnlockTimer = setTimeout(() => {
     delete session.openingGreetingUnlockTimer;
-    if (session.openingGreetingCompleted || session.finishRequested) return;
+    if (session.finishRequested) return;
+    if (session.openingGreetingCompleted) {
+      unlockOpenAIRealtimeOpeningInput({
+        callId,
+        session,
+        socket,
+        source: "opening_greeting_audio_guard",
+      });
+      return;
+    }
     handleOpenAIRealtimeResponseDone({
       callId,
       session,
@@ -1809,6 +1847,22 @@ function scheduleOpenAIRealtimeOpeningGreetingUnlockFallback({
   });
 }
 
+function unlockOpenAIRealtimeOpeningInput({
+  callId,
+  session,
+  socket,
+  source,
+}: {
+  callId: string;
+  session: OpenAIRealtimeSidebandSession;
+  socket: RealtimeSocket;
+  source?: string;
+}) {
+  clearOpenAIRealtimeOpeningGreetingUnlockTimer(session);
+  restoreOpenAIRealtimeTurnDetectionAfterOpening({ callId, session, socket, source });
+  scheduleOpenAIRealtimeOpeningFirstListenPrompt({ callId, session, socket });
+}
+
 function clearOpenAIRealtimeOpeningGreetingUnlockTimer(session: OpenAIRealtimeSidebandSession) {
   if (!session.openingGreetingUnlockTimer) return;
   clearTimeout(session.openingGreetingUnlockTimer);
@@ -1817,10 +1871,12 @@ function clearOpenAIRealtimeOpeningGreetingUnlockTimer(session: OpenAIRealtimeSi
 
 function scheduleOpenAIRealtimeOpeningFirstListenPrompt({
   callId,
+  delayMs = OPENAI_REALTIME_OPENING_FIRST_LISTEN_PROMPT_MS,
   session,
   socket,
 }: {
   callId: string;
+  delayMs?: number;
   session: OpenAIRealtimeSidebandSession;
   socket: RealtimeSocket;
 }) {
@@ -1832,19 +1888,40 @@ function scheduleOpenAIRealtimeOpeningFirstListenPrompt({
     if (session.finishRequested || session.quality.activeResponseStartedAt || session.pendingManualResponse) return;
     const acceptedCallerTurns = session.transcript.filter((turn) => turn.role === "caller").length;
     if (acceptedCallerTurns > 0) return;
+    if (session.quality.callerSpeechActive) {
+      scheduleOpenAIRealtimeOpeningFirstListenPrompt({
+        callId,
+        delayMs: OPENAI_REALTIME_OPENING_RECENT_SPEECH_GUARD_MS,
+        session,
+        socket,
+      });
+      return;
+    }
+    const now = Date.now();
+    const recentSpeechAt = Math.max(session.quality.lastSpeechStartedAt ?? 0, session.quality.lastSpeechStoppedAt ?? 0);
+    if (recentSpeechAt && now - recentSpeechAt < OPENAI_REALTIME_OPENING_RECENT_SPEECH_GUARD_MS) {
+      scheduleOpenAIRealtimeOpeningFirstListenPrompt({
+        callId,
+        delayMs: OPENAI_REALTIME_OPENING_RECENT_SPEECH_GUARD_MS,
+        session,
+        socket,
+      });
+      return;
+    }
 
     session.openingFirstListenPrompted = true;
     console.info("[openai-realtime] creating first-listen recovery prompt after opening greeting", {
       callId,
     });
+    const greeting = buildShortOpeningGreeting(session.context);
     sendRealtimeEvent(socket, {
       response: {
         instructions:
-          'The caller has not made a clear request after the opening greeting. Do not restart the greeting. Say exactly and only: "I may have missed that. What can I help you with?"',
+          `The caller has not made a clear request after the opening greeting. The first greeting may not have been audible to the caller. Repeat the exact opening greeting once and say nothing else: "${greeting}"`,
       },
       type: "response.create",
     });
-  }, 5200);
+  }, delayMs);
   session.openingFirstListenTimer.unref?.();
 }
 
@@ -1857,7 +1934,7 @@ function clearOpenAIRealtimeOpeningFirstListenTimer(session: OpenAIRealtimeSideb
 function estimateOpenAIRealtimeOpeningGreetingUnlockFallbackMs(transcript: string) {
   // The transcript event can arrive before PSTN playout catches up. Add a
   // conservative buffer so speakerphone echo cannot reopen the microphone early.
-  return Math.min(4500, estimateOpenAIRealtimeResponseCompletionFallbackMs(transcript) + 900);
+  return Math.min(6500, estimateOpenAIRealtimeResponseCompletionFallbackMs(transcript) + 1200);
 }
 
 function disableOpenAIRealtimeTurnDetectionDuringResponse({
@@ -2164,6 +2241,15 @@ function buildDeterministicRealtimeRepairInstructions(
     ].join(" ");
   }
 
+  if (isOpeningMissedGreetingComplaint(session, normalized)) {
+    const greeting = buildShortOpeningGreeting(session.context);
+    return [
+      "The caller is frustrated because they did not hear the opening greeting or thought the phone was not answered.",
+      `Briefly apologize, then repeat the exact opening greeting and say nothing else: "Sorry about that. ${greeting}"`,
+      "Do not argue, do not say you already answered, and do not explain the phone system.",
+    ].join(" ");
+  }
+
   if (isOpeningConnectionCheck(session, normalized)) {
     return [
       'The caller is checking the connection right after the opening greeting. Say exactly and only: "I\'m here. How can I help you?"',
@@ -2233,6 +2319,14 @@ function isOpeningConnectionCheck(session: OpenAIRealtimeSidebandSession, normal
   const callerTurnCount = session.transcript.filter((turn) => turn.role === "caller").length;
   if (callerTurnCount > 1) return false;
   return isPlainConnectionCheck(normalized);
+}
+
+function isOpeningMissedGreetingComplaint(session: OpenAIRealtimeSidebandSession, normalized: string) {
+  const callerTurnCount = session.transcript.filter((turn) => turn.role === "caller").length;
+  if (callerTurnCount > 1) return false;
+  return /\b(you didn'?t answer|you did not answer|you didn'?t even answer|you did not even answer|why didn'?t you answer|why did not you answer|didn'?t hear (you|anything|the greeting)|did not hear (you|anything|the greeting)|you never answered|no one answered)\b/.test(
+    normalized,
+  );
 }
 
 function isPlainConnectionCheck(normalized: string) {
