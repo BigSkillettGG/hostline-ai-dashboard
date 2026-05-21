@@ -94,8 +94,8 @@ Body:
 
 1. Create or choose one test phone number in Vapi.
 2. Use a new Vapi test number or import a spare Twilio number. Do not import the current SignalHost number for the first test.
-3. Leave the phone number assistant blank if Vapi offers that option, and set the phone number server URL to the SignalHost webhook URL. Vapi will ask SignalHost for the dynamic assistant on inbound calls.
-4. If you create a fixed assistant instead, set the assistant first message to:
+3. Create a fixed Vapi assistant for the test business and assign that assistant to the phone number.
+4. Set the assistant first message to:
 
 ```text
 Thank you for calling {business name}. How can I help you?
@@ -110,9 +110,11 @@ x-vapi-secret: <VAPI_WEBHOOK_SECRET>
 
 7. Do not change the normal SignalHost demo numbers until the pilot earns it.
 
-For inbound phone-number testing, the webhook returns a compact transient assistant quickly on
-`assistant-request`. Do not put the whole business knowledge base into the Vapi phone-number form;
-SignalHost sends the greeting, compact operating rules, and Vapi tool callbacks from the server.
+Note: Vapi can request a transient assistant from a server when a phone number has no
+`assistantId`, but the dashboard/free-number path can fail with a generic "set your
+assistant ID" error. For this pilot, prefer the fixed assistant path: assign a Vapi
+assistant to the phone number, then use the SignalHost server URL for call events,
+tool calls, recordings, and logs.
 
 ## Model Choice
 
