@@ -17,6 +17,26 @@ Vapi may help us compare a managed voice-agent orchestration layer against our d
 
 The pilot still uses SignalHost business context, SignalHost tools, SignalHost call logging, and SignalHost owner workflows.
 
+## First Test Business
+
+Use Harbor Plumbing for the first Vapi pilot.
+
+```text
+Business: Harbor Plumbing
+Location ID: 22222222-2222-4222-8222-222222222222
+Current SignalHost number: +1 781 694 6083
+Vapi webhook URL: https://hostline-voice.onrender.com/vapi/webhook?locationId=22222222-2222-4222-8222-222222222222
+Greeting: Thank you for calling Harbor Plumbing. How can I help you?
+```
+
+Use a new Vapi test number first. Do not move the current Harbor SignalHost number until the Vapi pilot clearly beats the direct OpenAI SIP path.
+
+Generate the exact setup values with:
+
+```powershell
+node scripts\setup-vapi-demo.mjs --business=harbor
+```
+
 ## Render Variables
 
 Add these to the existing `hostline-voice` Render service only when we are ready to test Vapi:
@@ -25,6 +45,7 @@ Add these to the existing `hostline-voice` Render service only when we are ready
 VAPI_API_KEY=your_vapi_private_key
 VAPI_WEBHOOK_SECRET=make_up_a_long_random_secret
 VAPI_PILOT_ENABLED=true
+VAPI_PILOT_LOCATION_IDS=22222222-2222-4222-8222-222222222222
 VAPI_OPENAI_MODEL=gpt-4o-mini
 VAPI_OPENAI_VOICE_ID=nova
 ```
@@ -72,21 +93,22 @@ Body:
 ## Vapi Dashboard Setup
 
 1. Create or choose one test phone number in Vapi.
-2. Create one assistant for one test business.
-3. Set the assistant first message to:
+2. Use a new Vapi test number or import a spare Twilio number. Do not import the current SignalHost number for the first test.
+3. Leave the phone number assistant blank if Vapi offers that option, and set the phone number server URL to the SignalHost webhook URL. Vapi will ask SignalHost for the dynamic assistant on inbound calls.
+4. If you create a fixed assistant instead, set the assistant first message to:
 
 ```text
 Thank you for calling {business name}. How can I help you?
 ```
 
-4. Set the assistant server URL to the SignalHost webhook URL above.
-5. If Vapi lets you send server headers, add:
+5. Set the assistant or phone number server URL to the SignalHost webhook URL above.
+6. If Vapi lets you send server headers, add:
 
 ```text
 Authorization: Bearer <VAPI_WEBHOOK_SECRET>
 ```
 
-6. Do not change the normal SignalHost demo numbers until the pilot earns it.
+7. Do not change the normal SignalHost demo numbers until the pilot earns it.
 
 ## Tool Bridge
 

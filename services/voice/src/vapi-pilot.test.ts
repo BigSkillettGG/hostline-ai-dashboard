@@ -10,6 +10,7 @@ const baseEnv = {
   VAPI_API_KEY: "vapi_test",
   VAPI_OPENAI_MODEL: "gpt-4o-mini",
   VAPI_OPENAI_VOICE_ID: "nova",
+  VAPI_PILOT_ENABLED: true,
   VAPI_WEBHOOK_SECRET: "secret",
 } as Partial<VoiceServiceEnv> as VoiceServiceEnv;
 
@@ -34,6 +35,7 @@ describe("Vapi pilot", () => {
     const config = buildVapiPilotConfig(baseEnv, demoRestaurantContext, "loc_1");
 
     expect(config.ready).toBe(true);
+    expect(config.allowedLocationIds).toEqual([]);
     expect(config.serverUrl).toBe("https://voice.signalhost.ai/vapi/webhook?locationId=loc_1");
     expect(config.assistantPreview).toMatchObject({
       firstMessage: "Thank you for calling Olive and Ember. How can I help you?",
@@ -57,6 +59,36 @@ describe("Vapi pilot", () => {
       },
       url: "https://voice.signalhost.ai/vapi/webhook?locationId=loc_1",
     });
+  });
+
+  it("keeps the pilot disabled unless VAPI_PILOT_ENABLED is explicitly true", () => {
+    const env = { ...baseEnv, VAPI_PILOT_ENABLED: false } as VoiceServiceEnv;
+    const config = buildVapiPilotConfig(env, demoRestaurantContext, "loc_1");
+
+    expect(config.enabled).toBe(false);
+    expect(config.ready).toBe(false);
+  });
+
+  it("rejects webhook calls for locations outside the allowlist", async () => {
+    const env = { ...baseEnv, VAPI_PILOT_LOCATION_IDS: "pilot_loc" } as VoiceServiceEnv;
+    const service = createVapiPilotService(env, { callStore, restaurantContextStore: contextStore });
+    const result = await service.handleWebhook({
+      headers: {
+        authorization: "Bearer secret",
+      },
+      rawBody: JSON.stringify({
+        message: {
+          call: { id: "vapi_call_not_allowed", customer: { number: "+15551234567" } },
+          metadata: { locationId: "other_loc" },
+          type: "assistant-request",
+        },
+      }),
+    });
+
+    expect(result.status).toBe(403);
+    expect(callStore.startRealtimeCall).not.toHaveBeenCalledWith(expect.objectContaining({
+      externalCallId: "vapi_call_not_allowed",
+    }));
   });
 
   it("returns a dynamic assistant for Vapi assistant-request events", async () => {

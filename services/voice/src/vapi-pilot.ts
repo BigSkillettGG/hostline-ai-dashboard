@@ -16,6 +16,7 @@ const DEFAULT_MAX_CALL_SECONDS = 600;
 const VAPI_WEBHOOK_BODY_LIMIT_SECONDS = 20;
 
 export interface VapiPilotConfig {
+  allowedLocationIds: string[];
   assistantId?: string;
   assistantPreview: Record<string, unknown>;
   configured: boolean;
@@ -78,22 +79,25 @@ export function buildVapiPilotConfig(
   locationId?: string,
 ): VapiPilotConfig {
   const serverUrl = buildVapiServerUrl(env, locationId);
+  const allowedLocationIds = parseLocationAllowList(env.VAPI_PILOT_LOCATION_IDS);
   const requiredEnv = [
     { key: "PUBLIC_HTTP_BASE_URL", ready: Boolean(env.PUBLIC_HTTP_BASE_URL) },
     { key: "VAPI_API_KEY", ready: Boolean(env.VAPI_API_KEY) },
+    { key: "VAPI_PILOT_ENABLED", ready: env.VAPI_PILOT_ENABLED === true },
   ];
-  const configured = requiredEnv.every((item) => item.ready);
-  const enabled = env.VAPI_PILOT_ENABLED === true || env.VAPI_PILOT_ENABLED === undefined;
+  const configured = requiredEnv.slice(0, 2).every((item) => item.ready);
+  const enabled = env.VAPI_PILOT_ENABLED === true;
   const assistantPreview = buildVapiAssistantDraft({ context, env, locationId });
 
   return {
+    allowedLocationIds,
     assistantId: env.VAPI_PILOT_ASSISTANT_ID,
     assistantPreview,
     configured,
     enabled,
     locationId,
     phoneNumberId: env.VAPI_PILOT_PHONE_NUMBER_ID,
-    ready: configured && enabled,
+    ready: configured && enabled && isVapiLocationAllowed(locationId, allowedLocationIds),
     requiredEnv,
     serverUrl,
   };
@@ -259,6 +263,11 @@ export class VapiPilotService {
     const type = stringValue(message.type);
     const call = message.call as VapiCallSnapshot | undefined;
     const resolvedLocationId = resolveLocationId(message, locationId);
+    const availability = this.getPilotAvailability(resolvedLocationId);
+    if (!availability.allowed) {
+      return { body: { error: availability.reason }, status: availability.status };
+    }
+
     const externalCallId = stringValue(call?.id) ?? stringValue(message.callId) ?? stringValue(message.id) ?? "vapi_unknown";
     const session = await this.getOrCreateSession({ call, externalCallId, locationId: resolvedLocationId, message });
 
@@ -296,6 +305,30 @@ export class VapiPilotService {
     if (!signature) return false;
     const digest = createHmac("sha256", this.env.VAPI_WEBHOOK_SECRET).update(rawBody).digest("hex");
     return safeEqual(signature.replace(/^sha256=/i, ""), digest);
+  }
+
+  private getPilotAvailability(locationId?: string) {
+    if (this.env.VAPI_PILOT_ENABLED !== true) {
+      return {
+        allowed: false,
+        reason: "Vapi pilot is disabled.",
+        status: 404,
+      };
+    }
+
+    const allowedLocationIds = parseLocationAllowList(this.env.VAPI_PILOT_LOCATION_IDS);
+    if (!isVapiLocationAllowed(locationId, allowedLocationIds)) {
+      return {
+        allowed: false,
+        reason: "Location is not enabled for the Vapi pilot.",
+        status: 403,
+      };
+    }
+
+    return {
+      allowed: true,
+      status: 200,
+    };
   }
 
   private async getOrCreateSession({
@@ -693,6 +726,17 @@ function compactAssistantName(name: string) {
 function parsePositiveInteger(value: unknown) {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function parseLocationAllowList(value: unknown) {
+  return String(value ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function isVapiLocationAllowed(locationId: string | undefined, allowedLocationIds: string[]) {
+  return allowedLocationIds.length === 0 || Boolean(locationId && allowedLocationIds.includes(locationId));
 }
 
 function numberValue(value: unknown) {
