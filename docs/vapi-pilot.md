@@ -105,10 +105,14 @@ Thank you for calling {business name}. How can I help you?
 6. If Vapi lets you send server headers, add:
 
 ```text
-Authorization: Bearer <VAPI_WEBHOOK_SECRET>
+x-vapi-secret: <VAPI_WEBHOOK_SECRET>
 ```
 
 7. Do not change the normal SignalHost demo numbers until the pilot earns it.
+
+For inbound phone-number testing, the webhook returns a compact transient assistant quickly on
+`assistant-request`. Do not put the whole business knowledge base into the Vapi phone-number form;
+SignalHost sends the greeting, compact operating rules, and Vapi tool callbacks from the server.
 
 ## Model Choice
 

@@ -107,21 +107,31 @@ export function buildVapiAssistantDraft({
   context,
   env,
   locationId,
+  transient = false,
 }: {
   context: RestaurantVoiceContext;
   env: VoiceServiceEnv;
   locationId?: string;
+  transient?: boolean;
 }) {
   const profile = getRuntimeBusinessProfile(context);
   const model = env.VAPI_OPENAI_MODEL ?? DEFAULT_VAPI_MODEL;
   const isRealtimeModel = isVapiRealtimeModel(model);
-  const tools = buildVapiTools(buildOpenAIRealtimeTools(context));
+  const tools = buildVapiTools(selectVapiTools(buildOpenAIRealtimeTools(context), transient));
   const serverUrl = buildVapiServerUrl(env, locationId);
   const serverHeaders = env.VAPI_WEBHOOK_SECRET
     ? {
-        Authorization: `Bearer ${env.VAPI_WEBHOOK_SECRET}`,
+        "x-vapi-secret": env.VAPI_WEBHOOK_SECRET,
       }
     : undefined;
+  const systemInstructions = transient
+    ? buildTransientVapiInstructions(context)
+    : [
+        buildRestaurantInstructions(context),
+        "Vapi pilot note: use the same SignalHost operating style as the primary OpenAI SIP path.",
+        "Never call a customer a lead. Internally you may classify opportunities, but speak as if they are a caller, customer, guest, or client.",
+        "If the caller asks whether they reached the business, answer yes and continue naturally.",
+      ].join("\n");
 
   return {
     backgroundSound: "off",
@@ -133,12 +143,7 @@ export function buildVapiAssistantDraft({
       maxTokens: 220,
       messages: [
         {
-          content: [
-            buildRestaurantInstructions(context),
-            "Vapi pilot note: use the same SignalHost operating style as the primary OpenAI SIP path.",
-            "Never call a customer a lead. Internally you may classify opportunities, but speak as if they are a caller, customer, guest, or client.",
-            "If the caller asks whether they reached the business, answer yes and continue naturally.",
-          ].join("\n"),
+          content: systemInstructions,
           role: "system",
         },
       ],
@@ -269,23 +274,33 @@ export class VapiPilotService {
     const type = stringValue(message.type);
     const call = message.call as VapiCallSnapshot | undefined;
     const resolvedLocationId = resolveLocationId(message, locationId);
+    const externalCallId = stringValue(call?.id) ?? stringValue(message.callId) ?? stringValue(message.id) ?? "vapi_unknown";
+    console.info("[voice-service] Vapi webhook received", {
+      externalCallId,
+      locationId: resolvedLocationId,
+      type,
+    });
     const availability = this.getPilotAvailability(resolvedLocationId);
     if (!availability.allowed) {
       return { body: { error: availability.reason }, status: availability.status };
     }
 
-    const externalCallId = stringValue(call?.id) ?? stringValue(message.callId) ?? stringValue(message.id) ?? "vapi_unknown";
-    const session = await this.getOrCreateSession({ call, externalCallId, locationId: resolvedLocationId, message });
-
     if (type === "assistant-request") {
       const context = await this.restaurantContextStore.getContext(resolvedLocationId);
       return {
         body: {
-          assistant: buildVapiAssistantDraft({ context, env: this.env, locationId: resolvedLocationId }),
+          assistant: buildVapiAssistantDraft({
+            context,
+            env: this.env,
+            locationId: resolvedLocationId,
+            transient: true,
+          }),
         },
         status: 200,
       };
     }
+
+    const session = await this.getOrCreateSession({ call, externalCallId, locationId: resolvedLocationId, message });
 
     if (type === "tool-calls" || type === "function-call") {
       const toolCalls = extractToolCalls(message);
@@ -607,6 +622,35 @@ function buildVapiTools(tools: OpenAIRealtimeFunctionTool[]) {
     },
     type: "function",
   }));
+}
+
+function selectVapiTools(tools: OpenAIRealtimeFunctionTool[], transient: boolean) {
+  if (!transient) return tools;
+  const transientToolNames = new Set([
+    "lookup_business_context",
+    "lookup_restaurant_context",
+    "create_customer_request",
+    "request_staff_callback",
+    "finish_call",
+  ]);
+  return tools.filter((tool) => transientToolNames.has(tool.name));
+}
+
+function buildTransientVapiInstructions(context: RestaurantVoiceContext) {
+  const profile = getRuntimeBusinessProfile(context);
+  return [
+    `You are the SignalHost front desk for ${context.restaurantName}.`,
+    `Business type: ${profile.businessNoun}. Caller type: ${profile.customerNoun}. Staff role: ${profile.staffNoun}.`,
+    `Always answer as ${context.restaurantName}. If asked whether this is the business, say yes and continue naturally.`,
+    `Opening greeting must be exactly: "${context.greeting}"`,
+    "Sound warm, confident, and human. Do not sound like an IVR.",
+    "Never call the caller a lead. Say request, service request, appointment request, message, guest, caller, or customer.",
+    "For unknown answers, urgent/safety issues, complaints, human requests, or anything staff must confirm, collect the caller name, callback number, and one clear summary, then use request_staff_callback or create_customer_request.",
+    "For facts, policies, services, hours, service area, menu, reservations, orders, payment, or business-specific details, use lookup_business_context before answering if you are not already sure.",
+    "Do not transfer, connect, or place callers on hold. There is no live staff transfer in this pilot.",
+    "After a simple answer, ask: Anything else I can help you with?",
+    "End the call only after the caller clearly says they are done or says goodbye.",
+  ].join("\n");
 }
 
 function isVapiRealtimeModel(model: string) {

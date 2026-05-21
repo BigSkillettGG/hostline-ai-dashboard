@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { VoiceServiceEnv } from "./env";
 import type { CallStore } from "./call-store";
 import { demoRestaurantContext } from "./restaurant-context";
@@ -31,6 +31,10 @@ const callStore: CallStore = {
 };
 
 describe("Vapi pilot", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("builds an isolated pilot config without changing the primary OpenAI SIP path", () => {
     const config = buildVapiPilotConfig(baseEnv, demoRestaurantContext, "loc_1");
 
@@ -64,7 +68,7 @@ describe("Vapi pilot", () => {
     expect(assistant).not.toHaveProperty("transcriber");
     expect(assistant.server).toMatchObject({
       headers: {
-        Authorization: "Bearer secret",
+        "x-vapi-secret": "secret",
       },
       url: "https://voice.signalhost.ai/vapi/webhook?locationId=loc_1",
     });
@@ -132,10 +136,8 @@ describe("Vapi pilot", () => {
         firstMessage: "Thank you for calling Olive and Ember. How can I help you?",
       },
     });
-    expect(callStore.startRealtimeCall).toHaveBeenCalledWith(expect.objectContaining({
-      externalCallId: "vapi_call_1",
-      provider: "vapi_pilot",
-    }));
+    expect(callStore.startRealtimeCall).not.toHaveBeenCalled();
+    expect(JSON.stringify(result.body).length).toBeLessThan(25000);
   });
 
   it("handles Vapi tool calls through the shared SignalHost call store", async () => {
