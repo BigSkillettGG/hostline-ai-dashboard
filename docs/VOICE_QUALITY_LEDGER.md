@@ -660,3 +660,76 @@ Next action:
 
 - Deploy and retest Olive & Ember with an off-menu item plus a valid item.
 - Expected behavior: SignalHost finishes the full off-menu clarification without cutting itself off, then continues the conversation.
+
+## 2026-05-21 12:04 ET - Olive & Ember Latency and Stale Input Buffer Patch
+
+Business:
+
+- Olive & Ember
+
+Call id driving the fix:
+
+- `58c11551-cb85-4b27-84c7-cf15acc70fba`
+
+Path:
+
+- Direct OpenAI Realtime SIP
+- `gpt-realtime-2`
+
+Recording/debug files:
+
+- `tmp/latest-voice-incident/debug-pack.json`
+- `tmp/latest-voice-incident/recent-calls.json`
+
+What happened:
+
+- The opening greeting was complete in the audio diagnostic.
+- The caller asked to place a takeout order.
+- SignalHost waited about `8.3s` before asking what the caller wanted.
+- The caller asked for a pepperoni pizza and a Caesar salad.
+- SignalHost waited about `4.1s` and began a correct off-menu response, but the spoken reply was truncated.
+
+What worked:
+
+- The call used the correct direct OpenAI Realtime SIP path.
+- The model was `gpt-realtime-2`.
+- The greeting did not repeat in this call.
+- The system recognized the request as an order flow.
+
+What failed:
+
+- Turn completion and manual response timing were too slow.
+- Old Render tuning values could still keep the live service on the slower `650ms` / `1300ms` delay profile.
+- Stale buffered input around agent speech could survive into the next listen window and contribute to self-interruption or confusion.
+
+Diagnosis:
+
+- This was a Realtime timing and input-buffer hygiene issue, not a vertical knowledge issue.
+- The VAD endpoint delay plus extra manual delay created caller-visible dead air.
+- The prior buffer clearing protected the moment before `response.create`, but stale input also needed clearing before the system restored listening.
+
+Change made:
+
+- Clear OpenAI Realtime `input_audio_buffer` before each post-opening `response.create`.
+- Clear OpenAI Realtime `input_audio_buffer` before restoring listening after the opening greeting.
+- Clear OpenAI Realtime `input_audio_buffer` before restoring listening after normal agent audio.
+- Tightened timing so stale deployed env values cannot keep the old slow profile:
+  - manual response delay default `300ms`, max `500ms`
+  - detail capture response delay default `850ms`, max `1000ms`
+  - server VAD silence default `600ms`, max `700ms`
+- No changes were made to model, voice, routing, provider, LiveKit, ElevenLabs, ConversationRelay, business knowledge, or tools.
+
+Verification:
+
+- `node node_modules\vitest\vitest.mjs run services\voice\src\openai-realtime-sip.test.ts --reporter=dot`
+- `node scripts\build-voice.mjs`
+
+Regression risk:
+
+- Low-to-moderate and scoped to Realtime timing. Faster turn completion can answer sooner, while detail-capture and scheduling paths still keep their separate fragment buffers.
+
+Next action:
+
+- Deploy the voice service.
+- Retest Olive & Ember on regular handset first, then speakerphone.
+- Expected behavior: shorter dead air after caller turns, no repeated greeting, and fewer self-interruptions from stale buffered echo.

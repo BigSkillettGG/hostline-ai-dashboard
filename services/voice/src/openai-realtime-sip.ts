@@ -1989,6 +1989,9 @@ function sendOpenAIRealtimeAgentResponse({
   socket: RealtimeSocket;
 }) {
   disableOpenAIRealtimeTurnDetectionDuringResponse({ callId, session, socket });
+  if (session.openingGreetingCompleted) {
+    clearOpenAIRealtimeInputAudioBuffer({ callId, reason: "before_agent_response", socket });
+  }
   sendRealtimeEvent(socket, response ? { response, type: "response.create" } : { type: "response.create" });
 }
 
@@ -2024,6 +2027,19 @@ function disableOpenAIRealtimeTurnDetectionDuringResponse({
   console.info("[openai-realtime] disabled turn detection during agent response", { callId });
 }
 
+function clearOpenAIRealtimeInputAudioBuffer({
+  callId,
+  reason,
+  socket,
+}: {
+  callId: string;
+  reason: string;
+  socket: RealtimeSocket;
+}) {
+  sendRealtimeEvent(socket, { type: "input_audio_buffer.clear" });
+  console.info("[openai-realtime] cleared input audio buffer", { callId, reason });
+}
+
 function restoreOpenAIRealtimeTurnDetectionAfterOpening({
   callId,
   session,
@@ -2037,6 +2053,7 @@ function restoreOpenAIRealtimeTurnDetectionAfterOpening({
 }) {
   if (!session.openingTurnDetectionDisabled || session.openingTurnDetectionRestored) return;
   session.openingTurnDetectionRestored = true;
+  clearOpenAIRealtimeInputAudioBuffer({ callId, reason: "before_opening_listen_restore", socket });
   sendRealtimeEvent(socket, {
     session: {
       audio: {
@@ -2067,6 +2084,7 @@ function restoreOpenAIRealtimeTurnDetectionAfterResponse({
 }) {
   if (!session.responseTurnDetectionDisabled) return;
   delete session.responseTurnDetectionDisabled;
+  clearOpenAIRealtimeInputAudioBuffer({ callId, reason: "before_agent_listen_restore", socket });
   sendRealtimeEvent(socket, {
     session: {
       audio: {
@@ -5119,13 +5137,13 @@ export function resolveOpenAIRealtimeManualResponseGating(env: OpenAIRealtimeEnv
 }
 
 export function resolveOpenAIRealtimeManualResponseDelayMs(env: OpenAIRealtimeEnv) {
-  const delayMs = env.OPENAI_REALTIME_MANUAL_RESPONSE_DELAY_MS ?? 650;
-  return Number.isFinite(delayMs) ? Math.min(2000, Math.max(0, Math.round(delayMs))) : 650;
+  const delayMs = env.OPENAI_REALTIME_MANUAL_RESPONSE_DELAY_MS ?? 300;
+  return Number.isFinite(delayMs) ? Math.min(500, Math.max(0, Math.round(delayMs))) : 300;
 }
 
 export function resolveOpenAIRealtimeDetailCaptureResponseDelayMs(env: OpenAIRealtimeEnv) {
-  const delayMs = env.OPENAI_REALTIME_DETAIL_CAPTURE_RESPONSE_DELAY_MS ?? 1300;
-  return Number.isFinite(delayMs) ? Math.min(2000, Math.max(0, Math.round(delayMs))) : 1300;
+  const delayMs = env.OPENAI_REALTIME_DETAIL_CAPTURE_RESPONSE_DELAY_MS ?? 850;
+  return Number.isFinite(delayMs) ? Math.min(1000, Math.max(0, Math.round(delayMs))) : 850;
 }
 
 export function resolveOpenAIRealtimeGreetingDelayMs(env: OpenAIRealtimeEnv) {
@@ -5173,7 +5191,7 @@ export function resolveOpenAIRealtimeServerVadThreshold(env: OpenAIRealtimeEnv) 
 
 export function resolveOpenAIRealtimeServerVadSilenceMs(env: OpenAIRealtimeEnv) {
   const silenceMs = env.OPENAI_REALTIME_SERVER_VAD_SILENCE_MS;
-  return Number.isFinite(silenceMs) ? Math.min(2200, Math.max(200, Math.round(silenceMs))) : 1100;
+  return Number.isFinite(silenceMs) ? Math.min(700, Math.max(350, Math.round(silenceMs))) : 600;
 }
 
 export function resolveOpenAIRealtimeServerVadPrefixPaddingMs(env: OpenAIRealtimeEnv) {

@@ -1339,6 +1339,13 @@ describe("OpenAI Realtime SIP", () => {
       expect(socket.sentEvents).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
+            type: "input_audio_buffer.clear",
+          }),
+        ]),
+      );
+      expect(socket.sentEvents).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
             session: expect.objectContaining({
               audio: {
                 input: {
@@ -1577,6 +1584,9 @@ describe("OpenAI Realtime SIP", () => {
       });
 
       await vi.advanceTimersByTimeAsync(1);
+      expect(socket.sentEvents.at(-2)).toMatchObject({
+        type: "input_audio_buffer.clear",
+      });
       expect(turnDetectionUpdates().at(-1)).toMatchObject({
         session: {
           audio: {
@@ -3596,7 +3606,7 @@ describe("OpenAI Realtime SIP", () => {
         })),
       );
       await Promise.resolve();
-      await vi.advanceTimersByTimeAsync(649);
+      await vi.advanceTimersByTimeAsync(499);
       expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))).toHaveLength(1);
 
       await vi.advanceTimersByTimeAsync(1);
@@ -4788,7 +4798,7 @@ describe("OpenAI Realtime SIP", () => {
     expect(resolveOpenAIRealtimeInterruptResponse(baseEnv)).toBe(false);
     expect(resolveOpenAIRealtimeManualResponseGating(baseEnv)).toBe(true);
     expect(resolveOpenAIRealtimeServerVadThreshold(baseEnv)).toBe(0.97);
-    expect(resolveOpenAIRealtimeServerVadSilenceMs(baseEnv)).toBe(900);
+    expect(resolveOpenAIRealtimeServerVadSilenceMs(baseEnv)).toBe(700);
     expect(resolveOpenAIRealtimeServerVadPrefixPaddingMs(baseEnv)).toBe(150);
     expect(resolveOpenAIRealtimeIdleTimeoutMs(baseEnv)).toBe(15000);
     expect(resolveOpenAIRealtimeTurnDetection(baseEnv)).toMatchObject({
@@ -4814,7 +4824,7 @@ describe("OpenAI Realtime SIP", () => {
       create_response: true,
       idle_timeout_ms: 15000,
       prefix_padding_ms: 150,
-      silence_duration_ms: 900,
+      silence_duration_ms: 700,
       threshold: 0.97,
       type: "server_vad",
     });
@@ -4869,8 +4879,8 @@ describe("OpenAI Realtime SIP", () => {
     expect(config).toMatchObject({
       acceptProvider: "custom",
       greetingDelayMs: 900,
-      manualDetailCaptureResponseDelayMs: 1300,
-      manualResponseDelayMs: 650,
+      manualDetailCaptureResponseDelayMs: 850,
+      manualResponseDelayMs: 300,
       manualResponseGating: true,
       model: "gpt-realtime-2",
       noiseReduction: "far_field",
@@ -4881,7 +4891,7 @@ describe("OpenAI Realtime SIP", () => {
         create_response: false,
         interrupt_response: false,
         prefix_padding_ms: 150,
-        silence_duration_ms: 1100,
+        silence_duration_ms: 600,
         threshold: 0.98,
         type: "server_vad",
       },
@@ -6086,8 +6096,11 @@ function expectInputLockedImmediatelyBeforeLatestResponseCreate(socket: ReturnTy
       break;
     }
   }
-  expect(latestResponseCreateIndex).toBeGreaterThan(0);
+  expect(latestResponseCreateIndex).toBeGreaterThan(1);
   expect(socket.sentEvents[latestResponseCreateIndex - 1]).toMatchObject({
+    type: "input_audio_buffer.clear",
+  });
+  expect(socket.sentEvents[latestResponseCreateIndex - 2]).toMatchObject({
     session: {
       audio: {
         input: {

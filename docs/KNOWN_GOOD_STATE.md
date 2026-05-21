@@ -69,6 +69,8 @@ Post-greeting agent replies should also protect themselves from echo:
 
 - Any normal post-opening agent speech must lock Realtime input before `response.create`.
 - Do not rely on `response.created` as the first moment to disable listening; that is only a backup.
+- Clear Realtime `input_audio_buffer` before each post-opening `response.create`.
+- Clear Realtime `input_audio_buffer` before restoring listening after greeting audio and normal agent audio.
 
 If a caller asks "Is this Harbor Plumbing?" the correct shape is:
 
@@ -154,6 +156,7 @@ For the first greeting:
 - Restore caller listening after the opening audio-complete event plus the short opening playout guard.
 - Keep the longer transcript-estimated guard only as a fallback if the audio-complete event is missing.
 - Do not let raw `input_audio_buffer.speech_started` cancel the first-listen recovery unless an accepted caller transcript arrives.
+- Keep generic response latency tight: manual response delay defaults to `300ms` and caps at `500ms`; server VAD silence defaults to `600ms` and caps at `700ms`.
 
 Reason:
 

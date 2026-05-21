@@ -31,14 +31,18 @@ The following settings are deliberately conservative because speakerphone echo a
 - `OPENAI_REALTIME_SPEED`: defaults to `1.02`
 - `OPENAI_REALTIME_GREETING_DELAY_MS`: defaults to `900`
 - `OPENAI_REALTIME_MANUAL_RESPONSE_GATING`: defaults to enabled
+- `OPENAI_REALTIME_MANUAL_RESPONSE_DELAY_MS`: defaults to `300` and caps at `500`
+- `OPENAI_REALTIME_DETAIL_CAPTURE_RESPONSE_DELAY_MS`: defaults to `850` and caps at `1000`
 - `OPENAI_REALTIME_TURN_DETECTION_MODE`: use `semantic_vad` in deployed testing when configured
 - `OPENAI_REALTIME_TURN_EAGERNESS`: defaults to `low`
 - `OPENAI_REALTIME_INTERRUPT_RESPONSE`: effectively disabled
 - Server VAD fallback threshold: clamps to the speakerphone-safe range `0.97` to `0.98`
+- Server VAD fallback silence: defaults to `600ms` and caps at `700ms`
 - Post-response listen guard: `550ms`
 - Opening greeting playout lock: turn detection stays disabled until after greeting audio completion plus a short `700ms` opening playout guard
 - Opening transcript fallback: use the longer transcript-estimated fallback only if the audio-complete event is missing
 - Post-opening agent response lock: manual replies, idle prompts, first-listen recovery, and tool follow-up replies must disable Realtime input turn detection before sending `response.create`; the `response.created` event is only a backup safety net
+- Stale input buffer cleanup: clear `input_audio_buffer` before each post-opening `response.create`, before restoring listening after the opening greeting, and before restoring listening after normal agent audio
 
 Do not lower the gating sensitivity or re-enable model-side interruption without a specific test plan and rollback.
 

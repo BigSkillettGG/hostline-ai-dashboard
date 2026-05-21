@@ -8,9 +8,9 @@ The user requested a persistent memory system because repeated context compactio
 
 Current slice:
 
-- Post-greeting agent-response input-lock hardening.
+- Realtime SIP latency and self-interruption hardening.
 - Keep direct OpenAI Realtime SIP with `gpt-realtime-2`.
-- Do not change LiveKit, ElevenLabs, ConversationRelay, routing, business knowledge, model, voice, or general VAD settings while validating this fix.
+- Do not change LiveKit, ElevenLabs, ConversationRelay, routing, business knowledge, model, or voice while validating this fix.
 - Deploy the voice service before asking the user to retest Olive & Ember.
 
 ## Current Voice Situation
@@ -19,23 +19,26 @@ The latest analyzed Olive & Ember calls hit the correct OpenAI Realtime SIP path
 
 Most recent analyzed issue:
 
-- Call id `38959f15-825a-47a4-80eb-772a5102291b`: caller heard the greeting, asked to order takeout, then asked for one large pepperoni pizza and one Caesar salad.
-- SignalHost asked what the caller wanted and then started the correct off-menu response.
-- Audio diagnostic showed the response cut out after "I don't see..." and the caller had to say "Hello?"
+- Call id `58c11551-cb85-4b27-84c7-cf15acc70fba`: caller heard the full Olive & Ember greeting, asked to place a takeout order, then asked for pepperoni pizza and Caesar salad.
+- The greeting was clean in the recording.
+- Response latency was too high: about `8.3s` after the first caller request and about `4.1s` after the item request.
+- The off-menu response began correctly but was truncated/incomplete.
 
 Diagnosis:
 
-- Opening greeting and first request capture are now working for this call.
-- The remaining failure was a post-greeting response race.
-- Normal agent replies were disabling turn detection only after OpenAI emitted `response.created`.
-- That is too late: after `response.create` is sent, speakerphone or handset echo can already race the response.
+- Opening greeting and first request capture are working for this call.
+- The remaining failures were stale input audio around agent replies plus overly slow response-delay caps.
+- Render may still have old env values set, so code defaults alone are not enough.
 
 Fix implemented:
 
-- Added a single helper that disables Realtime input turn detection before every post-opening agent `response.create`.
-- Routed manual replies, first-listen recovery, idle prompts, and tool follow-up replies through that helper.
-- Kept the `response.created` listener as a backup safety net.
-- No model, voice, routing, provider, business knowledge, tools, or general VAD settings were changed.
+- Clear OpenAI Realtime `input_audio_buffer` before every post-opening agent `response.create`.
+- Clear OpenAI Realtime `input_audio_buffer` before restoring listening after the opening greeting and after normal agent audio.
+- Tightened latency caps so stale Render values cannot keep calls on the old slow profile:
+  - manual response delay default `300ms`, cap `500ms`
+  - detail-capture delay default `850ms`, cap `1000ms`
+  - server VAD silence default `600ms`, cap `700ms`
+- No model, voice, routing, provider, business knowledge, or tools were changed.
 
 Recently fixed opening-timing issue:
 
@@ -45,7 +48,7 @@ Recently fixed opening-timing issue:
 - Agent did not respond until around `13.5s`.
 - End of call had broken overlap.
 
-After deploy, retest Olive & Ember with: "I want to place an order for takeout." Expected behavior: SignalHost hears that first request and does not repeat the greeting.
+After deploy, retest Olive & Ember with: "I want to place an order for takeout." Expected behavior: SignalHost hears the first request, answers faster, does not repeat the greeting, and does not truncate its own answer.
 
 Likely next technical discussions:
 
