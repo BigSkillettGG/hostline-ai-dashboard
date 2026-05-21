@@ -46,6 +46,7 @@ import { createResendInboundEmailService } from "./resend-inbound-email-service"
 import { createTenantProvisioningService, type TenantBootstrapInput } from "./tenant-provisioning";
 import { createTelephonyService } from "./telephony";
 import { releaseExpiredTrialNumbers } from "./trial-number-cleanup";
+import { createVapiPilotService } from "./vapi-pilot";
 import {
   buildSignalHostRecordingPlaybackUrl,
   buildTwilioRecordingMediaUrl,
@@ -94,6 +95,10 @@ const openAIRealtimeSipService = createOpenAIRealtimeSipService(env, restaurantC
   reservationPlatformService,
   staffNotificationService,
 });
+const vapiPilotService = createVapiPilotService(env, {
+  callStore,
+  restaurantContextStore,
+});
 const webChatService = createWebChatService(env, restaurantContextStore, { callStore });
 const ADMIN_BODY_LIMIT_BYTES = 16 * 1024;
 const BILLING_BODY_LIMIT_BYTES = 32 * 1024;
@@ -104,6 +109,7 @@ const PREVIEW_BODY_LIMIT_BYTES = 4 * 1024;
 const RESEND_INBOUND_BODY_LIMIT_BYTES = 128 * 1024;
 const TENANT_BOOTSTRAP_BODY_LIMIT_BYTES = 64 * 1024;
 const TWILIO_BODY_LIMIT_BYTES = 16 * 1024;
+const VAPI_WEBHOOK_BODY_LIMIT_BYTES = 128 * 1024;
 const WEB_CHAT_BODY_LIMIT_BYTES = 16 * 1024;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const LIVEKIT_RECORDING_START_DELAYS_MS = [3_500, 8_500];
@@ -209,6 +215,9 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       liveKitHarborPilotRoutingEnabled: liveKitHarborPilot.routeOnTwilioVoice,
       liveKitTwilioWebhookEnabled: liveKitHarborPilot.twilioWebhookEnabled,
       openAIRealtimeSipConfigured: openAIRealtimeSipService.configured,
+      vapiPilotConfigured: vapiPilotService.configured,
+      vapiPilotAssistantIdConfigured: Boolean(currentEnv.VAPI_PILOT_ASSISTANT_ID),
+      vapiPilotPhoneNumberIdConfigured: Boolean(currentEnv.VAPI_PILOT_PHONE_NUMBER_ID),
       openAIRealtimeConfig: {
         acceptProvider: openAIRealtimeConfig.acceptProvider,
         greetingDelayMs: openAIRealtimeConfig.greetingDelayMs,
@@ -523,6 +532,66 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
 
     const config = buildLiveKitPilotConfig(currentEnv, locationId ?? undefined);
     sendJson(res, config.ready ? 200 : 503, config);
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/vapi/pilot-config") {
+    const locationId = url.searchParams.get("locationId") ?? currentEnv.SUPABASE_DEMO_LOCATION_ID;
+    const authorization = await authorizeVoiceAdminRequest({ currentEnv, locationId, req });
+    if (!authorization.authorized) {
+      sendJson(res, authorization.status, { error: authorization.reason ?? "Unauthorized" });
+      return;
+    }
+
+    try {
+      const config = await vapiPilotService.getConfig(locationId ?? undefined);
+      sendJson(res, config.ready ? 200 : 503, config);
+    } catch (error) {
+      sendCaughtError(res, error, "Vapi pilot config failed");
+    }
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/vapi/sync-assistant") {
+    if (!(await allowRateLimitedRequest(req, res, "vapi-sync-assistant", 10, currentEnv))) return;
+
+    try {
+      const body = parseJsonRequestBody(await readLimitedRequestBody(req, ADMIN_BODY_LIMIT_BYTES)) as {
+        assistantId?: string;
+        locationId?: string;
+      };
+      const locationId = body.locationId ?? url.searchParams.get("locationId") ?? currentEnv.SUPABASE_DEMO_LOCATION_ID;
+      const authorization = await authorizeVoiceAdminRequest({ currentEnv, locationId, req });
+      if (!authorization.authorized) {
+        sendJson(res, authorization.status, { error: authorization.reason ?? "Unauthorized" });
+        return;
+      }
+
+      const result = await vapiPilotService.syncAssistant({
+        assistantId: body.assistantId,
+        locationId: locationId ?? undefined,
+      });
+      sendJson(res, 200, result);
+    } catch (error) {
+      sendCaughtError(res, error, "Vapi assistant sync failed");
+    }
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/vapi/webhook") {
+    if (!(await allowRateLimitedRequest(req, res, "vapi-webhook", 240, currentEnv))) return;
+
+    try {
+      const result = await vapiPilotService.handleWebhook({
+        headers: req.headers,
+        locationId: url.searchParams.get("locationId") ?? undefined,
+        rawBody: await readLimitedRequestBody(req, VAPI_WEBHOOK_BODY_LIMIT_BYTES),
+      });
+      sendJson(res, result.status, result.body);
+    } catch (error) {
+      console.error("[voice-service] Vapi webhook failed", error);
+      sendJson(res, 500, { error: "Vapi webhook failed" });
+    }
     return;
   }
 

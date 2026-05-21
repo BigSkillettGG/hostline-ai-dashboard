@@ -8,12 +8,20 @@ The user requested a persistent memory system because repeated context compactio
 
 Current slice:
 
-- Realtime SIP latency and self-interruption hardening.
-- Keep direct OpenAI Realtime SIP with `gpt-realtime-2`.
-- Do not change LiveKit, ElevenLabs, ConversationRelay, routing, business knowledge, model, or voice while validating this fix.
-- Deploy the voice service before asking the user to retest Olive & Ember.
+- Add a quarantined Vapi pilot so SignalHost can A/B test managed voice orchestration without moving current demo numbers.
+- Keep direct OpenAI Realtime SIP with `gpt-realtime-2` as the primary live path.
+- Do not change LiveKit, ElevenLabs, ConversationRelay, routing, business knowledge, model, or voice while adding Vapi pilot scaffolding.
 
 ## Current Voice Situation
+
+Vapi pilot scaffolding has been added as an experiment only:
+
+- Admin config endpoint: `/vapi/pilot-config`
+- Assistant sync endpoint: `/vapi/sync-assistant`
+- Server webhook endpoint: `/vapi/webhook`
+- Setup/runbook: `docs/vapi-pilot.md`
+- It reuses SignalHost business context, tools, and call logging.
+- It must not become default routing unless explicitly approved.
 
 The latest analyzed Olive & Ember calls hit the correct OpenAI Realtime SIP path. The current code fix is pending live deploy.
 

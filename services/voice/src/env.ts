@@ -85,6 +85,19 @@ const envSchema = z.object({
   TWILIO_CONVERSATION_RELAY_MAX_CALL_MS: z.coerce.number().int().positive().optional(),
   TWILIO_SPEECH_TIMEOUT_MS: z.coerce.number().int().positive().default(1800),
   TWILIO_LANGUAGE: z.string().default("en-US"),
+  VAPI_API_BASE_URL: z.string().url().optional(),
+  VAPI_API_KEY: z.string().optional(),
+  VAPI_MAX_CALL_SECONDS: z.coerce.number().int().positive().optional(),
+  VAPI_OPENAI_MODEL: z.string().optional(),
+  VAPI_OPENAI_VOICE_ID: z.string().optional(),
+  VAPI_PILOT_ASSISTANT_ID: z.string().optional(),
+  VAPI_PILOT_ENABLED: z
+    .enum(["true", "false"])
+    .transform((value) => value === "true")
+    .optional(),
+  VAPI_PILOT_LOCATION_IDS: z.string().optional(),
+  VAPI_PILOT_PHONE_NUMBER_ID: z.string().optional(),
+  VAPI_WEBHOOK_SECRET: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_AUDIO_DIAGNOSTIC_MODEL: z.string().optional(),
   OPENAI_MODEL: z.string().default("gpt-5-mini"),
@@ -247,6 +260,13 @@ export function getVoiceServiceReadiness(env: VoiceServiceEnv): VoiceServiceRead
           env.LIVEKIT_INBOUND_AUTH_PASSWORD &&
           env.OPENAI_API_KEY,
       ),
+      required: false,
+    },
+    {
+      detail: "Optional quarantined Vapi pilot for A/B testing managed voice orchestration against the primary OpenAI Realtime SIP path.",
+      id: "vapi_pilot",
+      label: "Vapi pilot",
+      ready: Boolean(env.VAPI_API_KEY && env.PUBLIC_HTTP_BASE_URL),
       required: false,
     },
     {

@@ -218,6 +218,7 @@ function summarizeVoiceConfig(result) {
 
 function classifyPhoneRoute(row) {
   const webhook = String(row.voice_webhook_url ?? "");
+  if (webhook.includes("/vapi/webhook")) return "vapi_pilot";
   if (webhook.includes("/twilio/livekit-voice")) return "livekit_agent";
   if (webhook.includes("/openai/realtime") || webhook.includes("/twilio/openai-realtime")) return "openai_realtime_sip_webhook";
   if (webhook.includes("/twilio/voice")) return "twilio_conversation_relay";

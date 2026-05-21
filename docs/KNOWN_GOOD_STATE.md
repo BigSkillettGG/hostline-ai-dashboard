@@ -44,10 +44,13 @@ Do not accidentally revert to these:
 - ElevenLabs for live calls.
 - Twilio ConversationRelay as the main experience.
 - LiveKit as default routing.
+- Vapi as default routing.
 - Odd/non-human voice names like Marin, Coral, Cedar, or Verse.
 - Rigid IVR-style flows that ignore the LLM's conversational ability.
 
 LiveKit may remain in code/docs as an experiment, but it is not the default unless the user explicitly restarts that pilot.
+
+Vapi may remain in code/docs as an experiment, but it is not the default unless the user explicitly starts a controlled A/B pilot.
 
 ## Greeting Contract
 

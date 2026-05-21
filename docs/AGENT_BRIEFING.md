@@ -49,6 +49,8 @@ Do not route production demo calls back to Twilio ConversationRelay unless the u
 
 Do not route calls through LiveKit by default. LiveKit was tested as an experimental Harbor Plumbing speakerphone path, but it added complexity, latency, worker memory issues, and dead-air failures. Treat LiveKit as quarantined/experimental unless the user explicitly reopens it.
 
+Vapi is now also a quarantined experiment, not the default. It has its own pilot docs and endpoints in `docs/vapi-pilot.md`, `/vapi/pilot-config`, `/vapi/sync-assistant`, and `/vapi/webhook`. Do not move existing SignalHost demo numbers to Vapi unless the user explicitly approves a controlled A/B test.
+
 ## Current Demo Businesses
 
 Canonical demo data is in `docs/demo-testing-runbook.md`.
@@ -133,6 +135,7 @@ Do not claim to have listened to audio unless you actually used the recording, a
 - Demo testing: `docs/demo-testing-runbook.md`
 - OpenAI Realtime: `docs/openai-realtime-pilot.md`
 - LiveKit experiment: `docs/livekit-harbor-pilot.md`
+- Vapi experiment: `docs/vapi-pilot.md`
 - First live call: `docs/first-live-call-setup.md`
 - Production deployment: `docs/deployment-production.md`
 - Owner assistant: `docs/owner-assistant.md`
