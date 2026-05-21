@@ -65,6 +65,11 @@ The greeting should:
 - Not say it is virtual by default.
 - Not be interrupted by echo or background noise.
 
+Post-greeting agent replies should also protect themselves from echo:
+
+- Any normal post-opening agent speech must lock Realtime input before `response.create`.
+- Do not rely on `response.created` as the first moment to disable listening; that is only a backup.
+
 If a caller asks "Is this Harbor Plumbing?" the correct shape is:
 
 ```text

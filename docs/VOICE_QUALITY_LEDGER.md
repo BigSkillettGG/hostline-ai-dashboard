@@ -592,3 +592,71 @@ Next action:
 
 - Deploy and retest Olive & Ember.
 - Expected behavior: full greeting, then the first caller request after the greeting is heard and answered without repeating the greeting.
+
+## 2026-05-21 11:55 ET - Olive & Ember Post-Greeting Response Self-Interruption Patch
+
+Business:
+
+- Olive & Ember
+
+Call id driving the fix:
+
+- `38959f15-825a-47a4-80eb-772a5102291b`
+
+Path:
+
+- Direct OpenAI Realtime SIP
+- `gpt-realtime-2`
+
+Recording/debug files:
+
+- `tmp/latest-olive-self-interrupt/target-debug.json`
+- `tmp/latest-olive-self-interrupt/target-transcript.json`
+- `tmp/latest-olive-self-interrupt/target-audio-diagnostic.json`
+
+What happened:
+
+- The opening greeting played correctly.
+- The caller asked to place a takeout order.
+- SignalHost asked what the caller wanted to order.
+- The caller asked for one large pepperoni pizza and one Caesar salad.
+- SignalHost started the correct off-menu response but audio cut out after "I don't see..."
+- The caller then had to say "Hello?"
+
+What worked:
+
+- The opening greeting was complete.
+- The first caller request after the greeting was accepted.
+- The model understood the off-menu issue and started the right response shape instead of placing a pepperoni pizza order.
+
+What failed:
+
+- The normal post-greeting agent reply was allowed to begin before input was locked.
+- Speakerphone or handset echo could race with the response and cut off the spoken output.
+
+Diagnosis:
+
+- The code was disabling turn detection in response to OpenAI's `response.created` event.
+- That is too late for speakerphone echo because the service has already sent `response.create` and the model/audio response may be starting.
+- This was a response state-machine race, not a restaurant knowledge-base failure.
+
+Change made:
+
+- Added a single helper for post-opening agent replies that disables Realtime input turn detection before sending `response.create`.
+- Routed manual replies, first-listen recovery, idle check-ins, and tool follow-up replies through that helper.
+- Kept the old `response.created` lock as a backup safety net.
+- Did not change model, voice, routing, business knowledge, LiveKit, ElevenLabs, ConversationRelay, or general VAD settings.
+
+Verification:
+
+- `node node_modules\vitest\vitest.mjs run services\voice\src\openai-realtime-sip.test.ts --reporter=dot`
+- `node scripts\build-voice.mjs`
+
+Regression risk:
+
+- Low and targeted. Agent replies may lock listening a few milliseconds earlier, which is the intended behavior. The existing post-response restore and listen guard still control when listening returns.
+
+Next action:
+
+- Deploy and retest Olive & Ember with an off-menu item plus a valid item.
+- Expected behavior: SignalHost finishes the full off-menu clarification without cutting itself off, then continues the conversation.

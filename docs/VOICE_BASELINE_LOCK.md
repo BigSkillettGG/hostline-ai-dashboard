@@ -38,6 +38,7 @@ The following settings are deliberately conservative because speakerphone echo a
 - Post-response listen guard: `550ms`
 - Opening greeting playout lock: turn detection stays disabled until after greeting audio completion plus a short `700ms` opening playout guard
 - Opening transcript fallback: use the longer transcript-estimated fallback only if the audio-complete event is missing
+- Post-opening agent response lock: manual replies, idle prompts, first-listen recovery, and tool follow-up replies must disable Realtime input turn detection before sending `response.create`; the `response.created` event is only a backup safety net
 
 Do not lower the gating sensitivity or re-enable model-side interruption without a specific test plan and rollback.
 

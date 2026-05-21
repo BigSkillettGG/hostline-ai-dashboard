@@ -8,36 +8,36 @@ The user requested a persistent memory system because repeated context compactio
 
 Current slice:
 
-- Opening greeting post-audio listen-window hardening.
+- Post-greeting agent-response input-lock hardening.
 - Keep direct OpenAI Realtime SIP with `gpt-realtime-2`.
 - Do not change LiveKit, ElevenLabs, ConversationRelay, routing, business knowledge, model, voice, or general VAD settings while validating this fix.
 - Deploy the voice service before asking the user to retest Olive & Ember.
 
 ## Current Voice Situation
 
-The latest analyzed Olive & Ember calls hit the correct OpenAI Realtime SIP path. The off-menu restaurant spoken-response issue has a code fix pending live deploy.
+The latest analyzed Olive & Ember calls hit the correct OpenAI Realtime SIP path. The current code fix is pending live deploy.
 
 Most recent analyzed issue:
 
-- Call id `5fe287f2-ca29-4b7d-9b4b-9712de9f511d`: caller heard the greeting, then said "I want to place an order for takeout."
-- Database transcript showed only two agent greetings and no caller turn.
-- Audio diagnostic showed the caller's takeout request at about `5.15s` to `7.25s`; SignalHost repeated the greeting around `14.1s`.
+- Call id `38959f15-825a-47a4-80eb-772a5102291b`: caller heard the greeting, asked to order takeout, then asked for one large pepperoni pizza and one Caesar salad.
+- SignalHost asked what the caller wanted and then started the correct off-menu response.
+- Audio diagnostic showed the response cut out after "I don't see..." and the caller had to say "Hello?"
 
 Diagnosis:
 
-- The prior opening lock overcorrected and left input disabled too long after audible greeting completion.
-- The first real caller request landed inside that deaf window.
-- First-listen recovery repeated the greeting because no caller transcript had been accepted.
+- Opening greeting and first request capture are now working for this call.
+- The remaining failure was a post-greeting response race.
+- Normal agent replies were disabling turn detection only after OpenAI emitted `response.created`.
+- That is too late: after `response.create` is sent, speakerphone or handset echo can already race the response.
 
 Fix implemented:
 
-- Opening turn detection remains disabled during greeting generation and audio playout.
-- When an opening audio-complete event arrives (`response.audio.done` or `output_audio_buffer.stopped`), SignalHost waits a short `700ms` guard and then restores listening.
-- The longer transcript-estimated guard remains only as a fallback if the audio-complete event is missing.
-- First-listen recovery still repeats the exact greeting only when no accepted caller turn arrives after listening is restored.
+- Added a single helper that disables Realtime input turn detection before every post-opening agent `response.create`.
+- Routed manual replies, first-listen recovery, idle prompts, and tool follow-up replies through that helper.
+- Kept the `response.created` listener as a backup safety net.
 - No model, voice, routing, provider, business knowledge, tools, or general VAD settings were changed.
 
-Older opening-timing issue:
+Recently fixed opening-timing issue:
 
 - Full greeting appears in transcript.
 - Audio diagnostic shows greeting audio from about `1.0s` to `3.9s`.
@@ -52,7 +52,6 @@ Likely next technical discussions:
 - How to make greeting playout/listening unlock more deterministic.
 - How to avoid false post-greeting dead air.
 - How to keep current speakerphone progress without loosening the system.
-- How to make off-menu restaurant handling happen before any spoken acknowledgment, not only inside persistence tools.
 - How to recover naturally when a caller says the agent was interrupted or cut off.
 
 ## High Priority Product Work Still Open

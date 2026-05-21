@@ -1500,6 +1500,7 @@ describe("OpenAI Realtime SIP", () => {
         })),
       );
       await Promise.resolve();
+
       socket.emit("message", Buffer.from(JSON.stringify({ response: { id: "resp_order_prompt" }, type: "response.created" })));
 
       const turnDetectionUpdates = () =>
@@ -1823,6 +1824,7 @@ describe("OpenAI Realtime SIP", () => {
       text: "Do you have any specials tonight?",
     });
     expect(socket.sentEvents.filter((event) => isRealtimeEventType(event, "response.create"))).toHaveLength(2);
+    expectInputLockedImmediatelyBeforeLatestResponseCreate(socket);
   });
 
   it("ignores tiny stray transcript fragments that arrive after a clear service request", async () => {
@@ -3075,6 +3077,9 @@ describe("OpenAI Realtime SIP", () => {
       })),
     );
     await flushAsyncWork();
+
+    expectInputLockedImmediatelyBeforeLatestResponseCreate(socket);
+
     socket.emit("message", Buffer.from(JSON.stringify({ response: { id: "resp_off_menu_cutout" }, type: "response.created" })));
     socket.emit(
       "message",
@@ -6071,6 +6076,27 @@ function createFakeRealtimeSocket() {
 
 function isRealtimeEventType(event: unknown, type: string) {
   return Boolean(event && typeof event === "object" && (event as { type?: unknown }).type === type);
+}
+
+function expectInputLockedImmediatelyBeforeLatestResponseCreate(socket: ReturnType<typeof createFakeRealtimeSocket>) {
+  let latestResponseCreateIndex = -1;
+  for (let index = socket.sentEvents.length - 1; index >= 0; index -= 1) {
+    if (isRealtimeEventType(socket.sentEvents[index], "response.create")) {
+      latestResponseCreateIndex = index;
+      break;
+    }
+  }
+  expect(latestResponseCreateIndex).toBeGreaterThan(0);
+  expect(socket.sentEvents[latestResponseCreateIndex - 1]).toMatchObject({
+    session: {
+      audio: {
+        input: {
+          turn_detection: null,
+        },
+      },
+    },
+    type: "session.update",
+  });
 }
 
 function completeOpeningGreetingForTest(socket: ReturnType<typeof createFakeRealtimeSocket>) {

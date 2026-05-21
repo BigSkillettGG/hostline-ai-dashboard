@@ -1958,12 +1958,14 @@ function scheduleOpenAIRealtimeOpeningFirstListenPrompt({
       callId,
     });
     const greeting = buildShortOpeningGreeting(session.context);
-    sendRealtimeEvent(socket, {
+    sendOpenAIRealtimeAgentResponse({
+      callId,
       response: {
         instructions:
           `The caller has not made a clear request after the opening greeting. The first greeting may not have been audible to the caller. Repeat the exact opening greeting once and say nothing else: "${greeting}"`,
       },
-      type: "response.create",
+      session,
+      socket,
     });
   }, delayMs);
   session.openingFirstListenTimer.unref?.();
@@ -1973,6 +1975,21 @@ function clearOpenAIRealtimeOpeningFirstListenTimer(session: OpenAIRealtimeSideb
   if (!session.openingFirstListenTimer) return;
   clearTimeout(session.openingFirstListenTimer);
   delete session.openingFirstListenTimer;
+}
+
+function sendOpenAIRealtimeAgentResponse({
+  callId,
+  response,
+  session,
+  socket,
+}: {
+  callId: string;
+  response?: Record<string, unknown>;
+  session: OpenAIRealtimeSidebandSession;
+  socket: RealtimeSocket;
+}) {
+  disableOpenAIRealtimeTurnDetectionDuringResponse({ callId, session, socket });
+  sendRealtimeEvent(socket, response ? { response, type: "response.create" } : { type: "response.create" });
 }
 
 function estimateOpenAIRealtimeOpeningGreetingUnlockFallbackMs(transcript: string) {
@@ -2184,11 +2201,13 @@ function sendOpenAIRealtimeManualResponse({
     callId,
     latestCallerText: latestCallerText?.slice(0, 100),
   });
-  sendRealtimeEvent(socket, {
+  sendOpenAIRealtimeAgentResponse({
+    callId,
     response: {
       instructions: buildManualRealtimeResponseInstructions(session, latestCallerText),
     },
-    type: "response.create",
+    session,
+    socket,
   });
 }
 
@@ -2924,13 +2943,15 @@ function scheduleOpenAIRealtimeManualIdlePrompt({
       promptCount: session.manualIdlePromptCount,
     });
     delete session.manualIdleTimer;
-    sendRealtimeEvent(socket, {
+    sendOpenAIRealtimeAgentResponse({
+      callId,
       response: {
         instructions: isFinalPrompt
           ? "The caller has not responded after several gentle check-ins. Do not answer or refer to any unclear background phrase. Do not restart the greeting. Say exactly and only: \"I still can't hear you, so I'll let you go for now. Please call back anytime. Thanks for calling. Goodbye.\""
           : "The caller may be silent, thinking, or checking the connection. Do not answer or refer to any unclear background phrase. Do not restart the greeting. Say exactly and only: \"I'm still here. Take your time. What else can I help with?\"",
       },
-      type: "response.create",
+      session,
+      socket,
     });
   }, session.manualIdleTimeoutMs);
 }
@@ -3954,7 +3975,7 @@ async function handleOpenAIRealtimeToolCalls({
       type: "conversation.item.create",
     });
   }
-  sendRealtimeEvent(socket, { type: "response.create" });
+  sendOpenAIRealtimeAgentResponse({ callId: session.callId, session, socket });
 }
 
 function recordOpenAIRealtimeToolResult(
