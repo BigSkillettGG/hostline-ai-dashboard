@@ -104,6 +104,28 @@ These are important but should not distract from the current voice stability iss
 - Address capture/geocoding with Google Places.
 - Integration/premium toolkit strategy.
 
+## Current Vapi Demo State
+
+As of 2026-05-22, the six primary demo businesses are on fixed Vapi assistants
+attached to their existing Vapi phone numbers. Do not rely on Vapi dynamic
+assistant-request routing for these demos unless intentionally retesting it.
+
+Current primary numbers:
+
+- Olive & Ember: `+1 781 523 0245`
+- Summit Air: `+1 781 523 0249`
+- Harbor Plumbing: `+1 781 523 0283`
+- RidgeLine Roofing: `+1 508 905 1359`
+- BrightWire Electric: `+1 978 384 2922`
+- Luna Studio: `+1 781 523 0279`
+
+Vapi fixed assistant sync works only after omitting custom `serverMessages`; let
+Vapi use its default server events for tool calls and end-of-call reports.
+
+Known cleanup: older Olive & Ember Vapi rows for `+1 781 523 0266` and
+`+1 781 523 0284` still appear in `phone_numbers` as active and are not the
+current primary test numbers.
+
 ## Call Testing Checklist
 
 When the user makes a test call:
