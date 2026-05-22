@@ -303,7 +303,6 @@ async function patchLocationPrimaryPhone(locationId, phoneNumber) {
   await supabaseRequest(`locations?id=eq.${encodeURIComponent(locationId)}`, token, {
     body: {
       ai_host_phone: phoneNumber,
-      updated_at: new Date().toISOString(),
     },
     headers: {
       Prefer: "return=minimal",
