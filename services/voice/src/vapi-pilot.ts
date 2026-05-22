@@ -172,7 +172,7 @@ export function buildVapiAssistantDraft({
         }
       : undefined,
     serverMessages: [
-      "assistant-request",
+      "assistant.started",
       "status-update",
       "transcript",
       "tool-calls",
