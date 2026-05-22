@@ -140,6 +140,14 @@ Create new free Vapi numbers, attach each number to the dynamic SignalHost serve
 npm run provision:vapi-demos -- --commit --create-phone-numbers --make-primary
 ```
 
+The script is intentionally idempotent for active Vapi demo numbers: if a demo location already has an active Vapi number in Supabase, it reuses and re-syncs that number instead of buying another one. To intentionally force a fresh number, add:
+
+```powershell
+npm run provision:vapi-demos -- --include=plumbing --commit --create-phone-numbers --make-primary --force-new-phone-number
+```
+
+If Vapi has no inventory in a preferred area code, the script tries the remaining preferred area codes for that demo, then any area codes Vapi suggests, then lets Vapi choose any available number.
+
 Provision only one vertical:
 
 ```powershell

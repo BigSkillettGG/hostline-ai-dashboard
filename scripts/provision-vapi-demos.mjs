@@ -48,6 +48,7 @@ const demoTargets = [
 const args = process.argv.slice(2);
 const commit = args.includes("--commit");
 const createPhoneNumbers = args.includes("--create-phone-numbers");
+const forceNewPhoneNumber = args.includes("--force-new-phone-number");
 const makePrimary = args.includes("--make-primary");
 const include = parseInclude(findArgValue("--include") ?? findArgValue("--business"));
 const areaCodeOverrides = parseMapping(findArgValue("--area-codes"));
@@ -81,6 +82,7 @@ for (const target of demoTargets) {
   if (include.size && !targetMatchesInclude(target, include)) continue;
 
   const areaCode = lookupMappedValue(areaCodeOverrides, target) ?? target.areaCodes[0];
+  const areaCodes = areaCodeCandidates(areaCodeOverrides, target);
   const assistantId = lookupMappedValue(assistantIds, target);
   const phoneNumberId = lookupMappedValue(existingPhoneNumberIds, target);
   const webhookUrl = `${voiceServiceUrl}/vapi/webhook?locationId=${encodeURIComponent(target.locationId)}`;
@@ -88,6 +90,7 @@ for (const target of demoTargets) {
   if (!commit) {
     results.push({
       areaCode,
+      areaCodes,
       business: target.business,
       createPhoneNumber: createPhoneNumbers,
       locationId: target.locationId,
@@ -113,14 +116,30 @@ for (const target of demoTargets) {
 
   let phoneResult;
   let vapiPhoneNumber;
+  let areaCodeUsed = null;
+  let attemptedAreaCodes = [];
+  let reusedExistingPhoneNumber = false;
   if (createPhoneNumbers || phoneNumberId) {
-    phoneResult = await voiceRequest("/vapi/sync-phone-number", token, {
-      assistantId: resolvedAssistantId,
-      locationId: target.locationId,
-      name: `SignalHost ${target.business}`,
-      numberDesiredAreaCode: createPhoneNumbers ? areaCode : undefined,
-      phoneNumberId,
+    const existingVapiPhoneNumber = phoneNumberId || !createPhoneNumbers || forceNewPhoneNumber
+      ? undefined
+      : await findExistingVapiPhoneNumber(target.locationId);
+    const resolvedPhoneNumberId = phoneNumberId ?? existingVapiPhoneNumber?.provider_sid;
+    reusedExistingPhoneNumber = Boolean(existingVapiPhoneNumber);
+    const syncResult = await syncPhoneNumberWithAreaCodeFallback({
+      areaCodes,
+      body: {
+        assistantId: resolvedAssistantId,
+        locationId: target.locationId,
+        name: `SignalHost ${target.business}`,
+        numberDesiredAreaCode: createPhoneNumbers ? areaCode : undefined,
+        phoneNumberId: resolvedPhoneNumberId,
+      },
+      createPhoneNumbers: createPhoneNumbers && !resolvedPhoneNumberId,
+      token,
     });
+    phoneResult = syncResult.phoneResult;
+    areaCodeUsed = syncResult.areaCodeUsed;
+    attemptedAreaCodes = syncResult.attemptedAreaCodes;
     vapiPhoneNumber = extractVapiPhoneNumber(phoneResult.response);
 
     if (vapiPhoneNumber?.phoneNumber && vapiPhoneNumber?.providerSid) {
@@ -137,12 +156,15 @@ for (const target of demoTargets) {
   }
 
   results.push({
+    areaCodeUsed,
+    attemptedAreaCodes,
     assistantId: resolvedAssistantId ?? null,
     business: target.business,
     locationId: target.locationId,
     makePrimary,
     phoneNumber: vapiPhoneNumber?.phoneNumber ?? null,
     phoneNumberId: vapiPhoneNumber?.providerSid ?? phoneNumberId ?? null,
+    reusedExistingPhoneNumber,
     status: vapiPhoneNumber ? "vapi_phone_synced" : syncAssistants ? "assistant_synced" : "no_changes_requested",
     webhookUrl,
   });
@@ -220,6 +242,11 @@ function lookupMappedValue(mapping, target) {
   return undefined;
 }
 
+function areaCodeCandidates(mapping, target) {
+  const override = lookupMappedValue(mapping, target);
+  return uniqueValues([override, ...target.areaCodes].filter(Boolean));
+}
+
 async function signIn(email, password) {
   const response = await fetch(`${supabaseUrl.replace(/\/$/, "")}/auth/v1/token?grant_type=password`, {
     body: JSON.stringify({ email, password }),
@@ -245,6 +272,63 @@ async function voiceRequest(path, token, body) {
   const text = await response.text();
   if (!response.ok) throw new Error(`Voice service ${path} failed: ${response.status} ${text}`);
   return text ? JSON.parse(text) : {};
+}
+
+async function findExistingVapiPhoneNumber(locationId) {
+  const rows = await supabaseRequest(
+    `phone_numbers?select=phone_number,provider_sid,status,updated_at&location_id=eq.${encodeURIComponent(locationId)}&provider=eq.vapi&status=eq.active&order=updated_at.desc&limit=1`,
+    token,
+  );
+  return Array.isArray(rows) ? rows[0] : undefined;
+}
+
+async function syncPhoneNumberWithAreaCodeFallback({ areaCodes, body, createPhoneNumbers, token }) {
+  if (!createPhoneNumbers || body.phoneNumberId) {
+    return {
+      areaCodeUsed: null,
+      attemptedAreaCodes: [],
+      phoneResult: await voiceRequest("/vapi/sync-phone-number", token, body),
+    };
+  }
+
+  const candidates = uniqueValues([...areaCodes, undefined]);
+  const attemptedAreaCodes = [];
+  const errors = [];
+
+  for (let index = 0; index < candidates.length; index += 1) {
+    const areaCode = candidates[index];
+    attemptedAreaCodes.push(areaCode ?? "any");
+
+    try {
+      const phoneResult = await voiceRequest("/vapi/sync-phone-number", token, {
+        ...body,
+        numberDesiredAreaCode: areaCode,
+      });
+      return {
+        areaCodeUsed: areaCode ?? null,
+        attemptedAreaCodes,
+        phoneResult,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      errors.push(message);
+      for (const suggestedAreaCode of parseSuggestedAreaCodes(message)) {
+        if (!candidates.includes(suggestedAreaCode)) candidates.push(suggestedAreaCode);
+      }
+    }
+  }
+
+  throw new Error(`Could not create Vapi number after area-code attempts ${attemptedAreaCodes.join(", ")}. Last error: ${errors.at(-1)}`);
+}
+
+function parseSuggestedAreaCodes(message) {
+  const match = message.match(/Try one of\s+([0-9,\s]+)/i);
+  if (!match) return [];
+  return uniqueValues(match[1].split(",").map((value) => value.trim()).filter(Boolean));
+}
+
+function uniqueValues(values) {
+  return [...new Set(values)];
 }
 
 async function supabaseRequest(path, token, { body, headers = {}, method = "GET" } = {}) {
