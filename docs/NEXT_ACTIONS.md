@@ -20,6 +20,7 @@ Status update:
 - The script now tries alternate area codes when Vapi has no number inventory in the preferred area code.
 - Latest Olive & Ember Vapi test showed the assistant was assigned correctly, but the synced assistant used stale direct-OpenAI-Realtime settings (`gpt-realtime-2025-08-28` + OpenAI voice `marin`) instead of the preferred Vapi baseline (`gpt-5.2-instant` + Vapi voice `Elliot`).
 - Code now guards Vapi assistant sync against that stale env leak: direct Realtime model names are mapped back to `gpt-5.2-instant`, and `VAPI_OPENAI_VOICE_ID` no longer overrides the Vapi voice unless `VAPI_VOICE_PROVIDER=openai` is explicitly set.
+- After deploying commit `8304db7`, Vapi assistant/phone sync succeeded for all six demo businesses and reused the existing primary Vapi numbers.
 
 Current Vapi demo numbers:
 
