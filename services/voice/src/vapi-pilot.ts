@@ -171,15 +171,6 @@ export function buildVapiAssistantDraft({
           url: serverUrl,
         }
       : undefined,
-    serverMessages: [
-      "assistant.started",
-      "status-update",
-      "transcript",
-      "tool-calls",
-      "end-of-call-report",
-      "hang",
-      "user-interrupted",
-    ],
     serverUrl,
     ...(!isRealtimeModel
       ? {

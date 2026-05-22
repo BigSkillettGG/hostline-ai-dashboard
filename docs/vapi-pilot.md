@@ -220,6 +220,13 @@ The pilot webhook currently supports these SignalHost tools:
 
 Unsupported tools return a safe result telling the assistant to route the issue to staff.
 
+## Server Events
+
+Do not set a custom `serverMessages` list when syncing fixed Vapi assistants unless
+we have retested it against the current Vapi API. Vapi's validation changed once and
+blocked assistant creation. The safer pilot baseline is to omit `serverMessages` and
+let Vapi send its default server events, including tool calls and end-of-call reports.
+
 ## A/B Test Plan
 
 Run the same script on both numbers:
