@@ -166,7 +166,7 @@ export function buildVapiAssistantDraft({
       ],
       model,
       provider: "openai",
-      temperature: 0.45,
+      temperature: 0.6,
       tools,
     },
     name: compactAssistantName(`SignalHost ${context.restaurantName}`),

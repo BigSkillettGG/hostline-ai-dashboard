@@ -135,6 +135,8 @@ Vapi voice/model baseline for demos:
   `VAPI_OPENAI_VOICE_ID=marin` overwrite this baseline during demo sync.
 - Do not send Deepgram `keytermsPrompt` in Vapi assistant sync; Vapi currently
   rejects that field for this assistant payload.
+- Vapi requires model temperature to be at least `0.6`; assistant sync must not
+  send lower values.
 
 Known cleanup: older Olive & Ember Vapi rows for `+1 781 523 0266` and
 `+1 781 523 0284` still appear in `phone_numbers` as active and are not the
