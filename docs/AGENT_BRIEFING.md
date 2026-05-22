@@ -66,6 +66,17 @@ Canonical demo data is in `docs/demo-testing-runbook.md`.
 
 All demo numbers should answer as themselves, using their own knowledge base and vertical context. If a number answers as Olive & Ember, routing/location resolution is broken.
 
+Current Vapi rollout demo numbers:
+
+| Vertical | Business | Vapi number |
+| --- | --- | --- |
+| Restaurants | Olive & Ember | `+1 781 523 0245` |
+| HVAC | Summit Air | `+1 781 523 0249` |
+| Plumbers | Harbor Plumbing | `+1 781 523 0283` |
+| Roofers | RidgeLine Roofing | `+1 508 905 1359` |
+| Electricians | BrightWire Electric | `+1 978 384 2922` |
+| Hair salons and barbershops | Luna Studio | `+1 781 523 0279` |
+
 ## Voice Behavior Requirements
 
 Greeting must be:

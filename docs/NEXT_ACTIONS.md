@@ -12,6 +12,29 @@ Current slice:
 - Keep the voice behavior untouched while adding automation.
 - Extend the same SignalHost/Vapi setup to all six demo vertical businesses once tested.
 
+Status update:
+
+- Vapi pilot location allow-list now includes all six demo businesses.
+- Vapi demo provisioning has been run successfully for all six demos.
+- `scripts/provision-vapi-demos.mjs` is now idempotent: it reuses an active Vapi number for a demo location instead of creating another one, unless `--force-new-phone-number` is explicitly passed.
+- The script now tries alternate area codes when Vapi has no number inventory in the preferred area code.
+
+Current Vapi demo numbers:
+
+| Business | Vapi number |
+| --- | --- |
+| Olive & Ember | `+1 781 523 0245` |
+| Summit Air | `+1 781 523 0249` |
+| Harbor Plumbing | `+1 781 523 0283` |
+| RidgeLine Roofing | `+1 508 905 1359` |
+| BrightWire Electric | `+1 978 384 2922` |
+| Luna Studio | `+1 781 523 0279` |
+
+Cleanup note:
+
+- Supabase also shows older extra Vapi rows for Olive & Ember: `+1 781 523 0266` and `+1 781 523 0284`.
+- They are not the current primary `ai_host_phone`, but they should be released/removed from Vapi later so they do not clutter the Vapi account.
+
 ## Current Voice Situation
 
 Vapi pilot scaffolding has been added and is now the preferred controlled demo-rollout path:
