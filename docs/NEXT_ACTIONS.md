@@ -21,7 +21,7 @@ Status update:
 - Latest Olive & Ember Vapi test showed the assistant was assigned correctly, but the synced assistant used stale direct-OpenAI-Realtime settings (`gpt-realtime-2025-08-28` + OpenAI voice `marin`) instead of the preferred Vapi baseline (`gpt-5.2-instant` + Vapi voice `Elliot`).
 - Code now guards Vapi assistant sync against that stale env leak: direct Realtime model names are mapped back to the Vapi API value `gpt-5.2-chat-latest` (shown in the Vapi dashboard as GPT 5.2 Instant), and `VAPI_OPENAI_VOICE_ID` no longer overrides the Vapi voice unless `VAPI_VOICE_PROVIDER=openai` is explicitly set.
 - After deploying commit `8304db7`, Vapi assistant/phone sync succeeded for all six demo businesses and reused the existing primary Vapi numbers.
-- A later sync bug created duplicate fixed assistants because the script reused existing Vapi phone numbers but did not reuse the assistant ID already attached to each phone number. The sync script now reads the stored/attached assistant ID first, and `npm run reconcile:vapi-demos` can inventory and delete unassigned duplicate demo assistants after the new voice service deploy is live.
+- A later sync bug created duplicate fixed assistants because the script reused existing Vapi phone numbers but did not reuse the assistant ID already attached to each phone number. This has been cleaned up: each primary demo number now has exactly one matching fixed Vapi assistant, and all six assistants were re-synced to the Vapi baseline.
 
 Current Vapi demo numbers:
 
@@ -144,11 +144,16 @@ Known cleanup: older Olive & Ember Vapi rows for `+1 781 523 0266` and
 `+1 781 523 0284` still appear in `phone_numbers` as active and are not the
 current primary test numbers.
 
-Known Vapi assistant cleanup:
+Vapi assistant cleanup status:
 
-- Use `npm run reconcile:vapi-demos` for a dry run after deploying the voice service that includes `/vapi/resources` and `/vapi/delete-assistant`.
-- Use `npm run reconcile:vapi-demos -- --commit` only after reviewing the dry run.
-- The cleanup rule is conservative: keep the assistant assigned to each real demo phone number, delete only unassigned duplicate assistants with the exact expected demo assistant name, and repair the stored Supabase `vapiAssistantId` when it differs from the phone-number assignment.
+- Completed after deploying the voice service with `/vapi/resources` and `/vapi/delete-assistant`.
+- Final reconciliation showed no duplicate demo assistants.
+- Each demo assistant is synced to the preferred baseline:
+  - Dashboard label: GPT 5.2 Instant
+  - Vapi API model value: `gpt-5.2-chat-latest`
+  - Model temperature: `0.6`
+  - Voice provider: `vapi`
+  - Voice ID: `Elliot`
 
 ## Call Testing Checklist
 

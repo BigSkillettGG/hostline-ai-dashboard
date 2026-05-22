@@ -860,3 +860,16 @@ Guardrails:
 - The canonical assistant is the one currently assigned to the real demo phone number.
 - Cleanup only deletes unassigned assistants whose name exactly matches `SignalHost {Business}`.
 - No voice behavior, prompt behavior, routing, phone numbers, or business knowledge changed.
+
+Result:
+
+- After deploy, duplicate cleanup was committed for all six demo businesses.
+- Deleted one unassigned duplicate assistant for each demo business.
+- Re-synced the six canonical assistants in place.
+- Final dry run confirmed no duplicate assistant IDs remain.
+- Final Vapi baseline for all six demo assistants:
+  - `model.provider`: `openai`
+  - `model.model`: `gpt-5.2-chat-latest` (Vapi dashboard label: GPT 5.2 Instant)
+  - `model.temperature`: `0.6`
+  - `voice.provider`: `vapi`
+  - `voice.voiceId`: `Elliot`
