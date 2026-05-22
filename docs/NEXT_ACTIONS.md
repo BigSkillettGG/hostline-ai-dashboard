@@ -126,11 +126,14 @@ Vapi use its default server events for tool calls and end-of-call reports.
 
 Vapi voice/model baseline for demos:
 
-- Model: `gpt-5.2-instant`
+- Dashboard label: GPT 5.2 Instant
+- Vapi API model value: `gpt-5.2-chat-latest`
 - Voice provider: `vapi`
 - Voice ID: `Elliot`
 - Do not let `OPENAI_REALTIME_MODEL`, `VAPI_OPENAI_MODEL=gpt-realtime-*`, or
   `VAPI_OPENAI_VOICE_ID=marin` overwrite this baseline during demo sync.
+- Do not send Deepgram `keytermsPrompt` in Vapi assistant sync; Vapi currently
+  rejects that field for this assistant payload.
 
 Known cleanup: older Olive & Ember Vapi rows for `+1 781 523 0266` and
 `+1 781 523 0284` still appear in `phone_numbers` as active and are not the

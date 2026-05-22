@@ -828,3 +828,12 @@ Next action:
 - Re-run Vapi assistant sync for all demo businesses so existing fixed
   assistants are updated to the protected baseline.
 - Retest Olive & Ember at `+1 781 523 0245`.
+
+Follow-up:
+
+- First sync attempt after deploy failed because Vapi's API rejects the
+  dashboard-style model value `gpt-5.2-instant` and the Deepgram
+  `keytermsPrompt` field.
+- Code now maps the GPT 5.2 Instant dashboard label to Vapi's accepted API
+  model value `gpt-5.2-chat-latest`.
+- Code now omits `keytermsPrompt` from the Vapi transcriber payload.

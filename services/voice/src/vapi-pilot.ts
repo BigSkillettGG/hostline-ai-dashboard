@@ -10,7 +10,12 @@ import type { RestaurantContextStore } from "./restaurant-context-store";
 import { normalizeCustomerRequestKind, type CustomerRequestKind } from "../../../src/domain/business-links";
 
 const DEFAULT_VAPI_API_BASE_URL = "https://api.vapi.ai";
-const DEFAULT_VAPI_MODEL = "gpt-5.2-instant";
+const DEFAULT_VAPI_MODEL = "gpt-5.2-chat-latest";
+const VAPI_MODEL_ALIASES = new Map([
+  ["gpt-5.2-instant", "gpt-5.2-chat-latest"],
+  ["gpt-5.1-instant", "gpt-5.1-chat-latest"],
+  ["gpt-5-instant", "gpt-5-chat-latest"],
+]);
 const DEFAULT_VAPI_OPENAI_VOICE_ID = "marin";
 const DEFAULT_VAPI_VOICE_ID = "Elliot";
 const DEFAULT_VAPI_VOICE_PROVIDER = "vapi";
@@ -176,12 +181,6 @@ export function buildVapiAssistantDraft({
     ...(!isRealtimeModel
       ? {
           transcriber: {
-            keytermsPrompt: [
-              context.restaurantName,
-              context.hostName,
-              profile.businessNoun,
-              ...context.menuHighlights.slice(0, 12),
-            ],
             language: "en-US",
             model: "nova-3",
             provider: "deepgram",
@@ -772,7 +771,7 @@ function resolveVapiModel(model?: string) {
   // baseline when syncing demo assistants.
   if (isVapiRealtimeModel(candidate)) return DEFAULT_VAPI_MODEL;
 
-  return candidate;
+  return VAPI_MODEL_ALIASES.get(candidate.toLowerCase()) ?? candidate;
 }
 
 function resolveVapiVoiceId(env: VoiceServiceEnv, voiceProvider: string) {

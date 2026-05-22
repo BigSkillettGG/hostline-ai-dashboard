@@ -53,7 +53,7 @@ describe("Vapi pilot", () => {
 
     expect(assistant.model).toMatchObject({
       provider: "openai",
-      model: "gpt-5.2-instant",
+      model: "gpt-5.2-chat-latest",
     });
     expect(assistant.voice).toMatchObject({
       provider: "vapi",
@@ -105,6 +105,16 @@ describe("Vapi pilot", () => {
     expect(assistant.voice).toMatchObject({
       provider: "openai",
       voiceId: "marin",
+    });
+  });
+
+  it("maps dashboard-style instant model labels to Vapi API model ids", () => {
+    const env = { ...baseEnv, VAPI_OPENAI_MODEL: "gpt-5.2-instant" } as VoiceServiceEnv;
+    const assistant = buildVapiAssistantDraft({ context: demoRestaurantContext, env, locationId: "loc_1" });
+
+    expect(assistant.model).toMatchObject({
+      model: "gpt-5.2-chat-latest",
+      provider: "openai",
     });
   });
 
