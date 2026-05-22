@@ -573,7 +573,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       });
       sendJson(res, 200, result);
     } catch (error) {
-      sendCaughtError(res, error, "Vapi assistant sync failed");
+      sendCaughtError(res, error, "Vapi assistant sync failed", { includeDetail: true });
     }
     return;
   }
@@ -605,7 +605,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       });
       sendJson(res, 200, result);
     } catch (error) {
-      sendCaughtError(res, error, "Vapi phone number sync failed");
+      sendCaughtError(res, error, "Vapi phone number sync failed", { includeDetail: true });
     }
     return;
   }
@@ -2169,14 +2169,30 @@ async function allowRateLimitedRequest(
   return false;
 }
 
-function sendCaughtError(res: ServerResponse, error: unknown, fallbackMessage: string) {
+function sendCaughtError(
+  res: ServerResponse,
+  error: unknown,
+  fallbackMessage: string,
+  options: { includeDetail?: boolean } = {},
+) {
   if (error instanceof HttpRequestError) {
     sendJson(res, error.statusCode, { error: error.message });
     return;
   }
 
   console.error("[voice-service] request failed", error);
-  sendJson(res, 500, { error: fallbackMessage });
+  sendJson(res, 500, {
+    detail: options.includeDetail ? redactErrorDetail(error) : undefined,
+    error: fallbackMessage,
+  });
+}
+
+function redactErrorDetail(error: unknown) {
+  const detail = error instanceof Error ? error.message : String(error);
+  return detail
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
+    .replace(/(x-vapi-secret["']?\s*[:=]\s*["']?)[^"',}\s]+/gi, "$1[redacted]")
+    .slice(0, 1200);
 }
 
 async function findFirstAvailablePhoneNumber(input: {
