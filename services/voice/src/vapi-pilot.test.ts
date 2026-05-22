@@ -216,6 +216,39 @@ describe("Vapi pilot", () => {
     });
   });
 
+  it("creates a Vapi phone number that requests its assistant dynamically from SignalHost", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      id: "pn_dynamic",
+      number: "+17815230283",
+    }), { status: 201 }));
+    const service = createVapiPilotService(baseEnv, {
+      callStore,
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      restaurantContextStore: contextStore,
+    });
+
+    const result = await service.syncPhoneNumber({
+      locationId: "loc_1",
+      name: "SignalHost Harbor Plumbing",
+      numberDesiredAreaCode: "781",
+    });
+
+    expect(result.status).toBe(201);
+    const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(requestBody).toEqual({
+      name: "SignalHost Harbor Plumbing",
+      numberDesiredAreaCode: "781",
+      provider: "vapi",
+      server: {
+        headers: {
+          "x-vapi-secret": "secret",
+        },
+        timeoutSeconds: 20,
+        url: "https://voice.signalhost.ai/vapi/webhook?locationId=loc_1",
+      },
+    });
+  });
+
   it("updates an existing Vapi phone number without changing its provider or area code", async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
       id: "pn_existing",
@@ -235,15 +268,16 @@ describe("Vapi pilot", () => {
     });
 
     expect(result.status).toBe(200);
+    const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
     expect(fetchMock).toHaveBeenCalledWith(
       "https://api.vapi.ai/phone-number/pn_existing",
       expect.objectContaining({
-        body: JSON.stringify({
-          assistantId: "asst_1",
-          name: "SignalHost Harbor Plumbing",
-        }),
         method: "PATCH",
       }),
     );
+    expect(requestBody).toEqual({
+      assistantId: "asst_1",
+      name: "SignalHost Harbor Plumbing",
+    });
   });
 });

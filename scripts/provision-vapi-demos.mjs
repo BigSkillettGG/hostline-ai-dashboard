@@ -52,6 +52,7 @@ const makePrimary = args.includes("--make-primary");
 const include = parseInclude(findArgValue("--include") ?? findArgValue("--business"));
 const areaCodeOverrides = parseMapping(findArgValue("--area-codes"));
 const assistantIds = parseMapping(findArgValue("--assistant-ids"));
+const syncAssistants = args.includes("--sync-assistants") || assistantIds.size > 0;
 const existingPhoneNumberIds = parseMapping(findArgValue("--phone-number-ids"));
 const env = { ...loadEnv(), ...process.env };
 const voiceServiceUrl = (findArgValue("--voice-service-url") ?? env.VOICE_SERVICE_URL ?? "https://hostline-voice.onrender.com").replace(/\/$/, "");
@@ -66,8 +67,8 @@ if (!supabaseUrl || !anonKey) {
 if (!adminEmail || !adminPassword) {
   throw new Error("Set SIGNALHOST_ADMIN_EMAIL and SIGNALHOST_ADMIN_PASSWORD before syncing Vapi demos.");
 }
-if (commit && !createPhoneNumbers && !existingPhoneNumberIds.size) {
-  console.warn("[provision-vapi-demos] Syncing assistants only. Add --create-phone-numbers or --phone-number-ids=vertical:id to attach Vapi numbers.");
+if (commit && !syncAssistants && !createPhoneNumbers && !existingPhoneNumberIds.size) {
+  console.warn("[provision-vapi-demos] Nothing to change. Add --create-phone-numbers, --phone-number-ids=vertical:id, or --sync-assistants.");
 }
 
 const token = await signIn(adminEmail, adminPassword);
@@ -98,13 +99,16 @@ for (const target of demoTargets) {
     continue;
   }
 
-  const assistantResult = await voiceRequest("/vapi/sync-assistant", token, {
-    assistantId,
-    locationId: target.locationId,
-  });
-  const resolvedAssistantId = assistantId ?? extractId(assistantResult.response);
-  if (!resolvedAssistantId) {
-    throw new Error(`Vapi assistant sync for ${target.business} did not return an assistant id.`);
+  let resolvedAssistantId = assistantId;
+  if (syncAssistants) {
+    const assistantResult = await voiceRequest("/vapi/sync-assistant", token, {
+      assistantId,
+      locationId: target.locationId,
+    });
+    resolvedAssistantId = assistantId ?? extractId(assistantResult.response);
+    if (!resolvedAssistantId) {
+      throw new Error(`Vapi assistant sync for ${target.business} did not return an assistant id.`);
+    }
   }
 
   let phoneResult;
@@ -133,13 +137,13 @@ for (const target of demoTargets) {
   }
 
   results.push({
-    assistantId: resolvedAssistantId,
+    assistantId: resolvedAssistantId ?? null,
     business: target.business,
     locationId: target.locationId,
     makePrimary,
     phoneNumber: vapiPhoneNumber?.phoneNumber ?? null,
     phoneNumberId: vapiPhoneNumber?.providerSid ?? phoneNumberId ?? null,
-    status: vapiPhoneNumber ? "vapi_phone_synced" : "assistant_synced",
+    status: vapiPhoneNumber ? "vapi_phone_synced" : syncAssistants ? "assistant_synced" : "no_changes_requested",
     webhookUrl,
   });
 }
@@ -149,6 +153,7 @@ console.log(JSON.stringify({
   createPhoneNumbers,
   makePrimary,
   results,
+  syncAssistants,
   voiceServiceUrl,
 }, null, 2));
 

@@ -272,8 +272,9 @@ export class VapiPilotService {
       throw new Error("VAPI_API_KEY is not configured.");
     }
     const resolvedAssistantId = assistantId?.trim() || this.env.VAPI_PILOT_ASSISTANT_ID?.trim();
-    if (!resolvedAssistantId) {
-      throw new Error("A Vapi assistantId is required before syncing a Vapi phone number.");
+    const serverUrl = buildVapiServerUrl(this.env, locationId);
+    if (!resolvedAssistantId && !serverUrl) {
+      throw new Error("A Vapi assistantId or PUBLIC_HTTP_BASE_URL is required before syncing a Vapi phone number.");
     }
 
     const context = await this.restaurantContextStore.getContext(locationId);
@@ -286,9 +287,11 @@ export class VapiPilotService {
     const body = buildVapiPhoneNumberDraft({
       assistantId: resolvedAssistantId,
       context,
+      env: this.env,
       existingPhoneNumberId: targetPhoneNumberId,
       name,
       numberDesiredAreaCode,
+      serverUrl,
     });
 
     const response = await this.fetchImpl(url, {
@@ -678,20 +681,33 @@ export class VapiPilotService {
 function buildVapiPhoneNumberDraft({
   assistantId,
   context,
+  env,
   existingPhoneNumberId,
   name,
   numberDesiredAreaCode,
+  serverUrl,
 }: {
-  assistantId: string;
+  assistantId?: string;
   context: RestaurantVoiceContext;
+  env: VoiceServiceEnv;
   existingPhoneNumberId?: string;
   name?: string;
   numberDesiredAreaCode?: string;
+  serverUrl?: string;
 }) {
   const body: Record<string, unknown> = {
-    assistantId,
     name: compactAssistantName(name ?? `SignalHost ${context.restaurantName}`),
   };
+
+  if (assistantId) {
+    body.assistantId = assistantId;
+  } else if (serverUrl) {
+    body.server = {
+      headers: buildVapiServerHeaders(env),
+      timeoutSeconds: VAPI_WEBHOOK_BODY_LIMIT_SECONDS,
+      url: serverUrl,
+    };
+  }
 
   if (!existingPhoneNumberId) {
     body.provider = "vapi";
@@ -701,6 +717,14 @@ function buildVapiPhoneNumberDraft({
   }
 
   return body;
+}
+
+function buildVapiServerHeaders(env: VoiceServiceEnv) {
+  return env.VAPI_WEBHOOK_SECRET
+    ? {
+        "x-vapi-secret": env.VAPI_WEBHOOK_SECRET,
+      }
+    : undefined;
 }
 
 function buildVapiTools(tools: OpenAIRealtimeFunctionTool[]) {

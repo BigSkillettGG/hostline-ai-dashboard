@@ -91,7 +91,8 @@ Body:
 }
 ```
 
-Phone-number sync endpoint, if we want SignalHost to create/update the Vapi phone number:
+Phone-number sync endpoint, if we want SignalHost to create/update the Vapi phone number.
+By default, numbers point to the SignalHost server URL so Vapi asks us for a fresh dynamic assistant on each call:
 
 ```text
 POST https://hostline-voice.onrender.com/vapi/sync-phone-number
@@ -102,7 +103,6 @@ Body for creating a new free Vapi number:
 ```json
 {
   "locationId": "<location_uuid>",
-  "assistantId": "<vapi_assistant_id>",
   "numberDesiredAreaCode": "781",
   "name": "SignalHost Harbor Plumbing"
 }
@@ -113,11 +113,12 @@ Body for attaching an existing Vapi phone number:
 ```json
 {
   "locationId": "<location_uuid>",
-  "assistantId": "<vapi_assistant_id>",
   "phoneNumberId": "<vapi_phone_number_id>",
   "name": "SignalHost Harbor Plumbing"
 }
 ```
+
+Only include `assistantId` when intentionally attaching a permanent Vapi assistant. The preferred demo path is no `assistantId`, because SignalHost returns the business-specific assistant dynamically from `/vapi/webhook`.
 
 ## Automated Demo Provisioning
 
@@ -127,13 +128,13 @@ Dry run all demo businesses:
 npm run provision:vapi-demos
 ```
 
-Create/sync Vapi assistants only:
+Create/sync Vapi assistants only, if intentionally testing permanent assistants:
 
 ```powershell
-npm run provision:vapi-demos -- --commit
+npm run provision:vapi-demos -- --commit --sync-assistants
 ```
 
-Create new free Vapi numbers, attach the synced assistants, persist the numbers to Supabase, and make them the primary AI numbers for each demo location:
+Create new free Vapi numbers, attach each number to the dynamic SignalHost server URL, persist the numbers to Supabase, and make them the primary AI numbers for each demo location:
 
 ```powershell
 npm run provision:vapi-demos -- --commit --create-phone-numbers --make-primary
