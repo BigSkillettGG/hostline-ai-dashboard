@@ -18,6 +18,8 @@ Status update:
 - Vapi demo provisioning has been run successfully for all six demos.
 - `scripts/provision-vapi-demos.mjs` is now idempotent: it reuses an active Vapi number for a demo location instead of creating another one, unless `--force-new-phone-number` is explicitly passed.
 - The script now tries alternate area codes when Vapi has no number inventory in the preferred area code.
+- Latest Olive & Ember Vapi test showed the assistant was assigned correctly, but the synced assistant used stale direct-OpenAI-Realtime settings (`gpt-realtime-2025-08-28` + OpenAI voice `marin`) instead of the preferred Vapi baseline (`gpt-5.2-instant` + Vapi voice `Elliot`).
+- Code now guards Vapi assistant sync against that stale env leak: direct Realtime model names are mapped back to `gpt-5.2-instant`, and `VAPI_OPENAI_VOICE_ID` no longer overrides the Vapi voice unless `VAPI_VOICE_PROVIDER=openai` is explicitly set.
 
 Current Vapi demo numbers:
 
@@ -121,6 +123,14 @@ Current primary numbers:
 
 Vapi fixed assistant sync works only after omitting custom `serverMessages`; let
 Vapi use its default server events for tool calls and end-of-call reports.
+
+Vapi voice/model baseline for demos:
+
+- Model: `gpt-5.2-instant`
+- Voice provider: `vapi`
+- Voice ID: `Elliot`
+- Do not let `OPENAI_REALTIME_MODEL`, `VAPI_OPENAI_MODEL=gpt-realtime-*`, or
+  `VAPI_OPENAI_VOICE_ID=marin` overwrite this baseline during demo sync.
 
 Known cleanup: older Olive & Ember Vapi rows for `+1 781 523 0266` and
 `+1 781 523 0284` still appear in `phone_numbers` as active and are not the

@@ -13,6 +13,7 @@ const DEFAULT_VAPI_API_BASE_URL = "https://api.vapi.ai";
 const DEFAULT_VAPI_MODEL = "gpt-5.2-instant";
 const DEFAULT_VAPI_OPENAI_VOICE_ID = "marin";
 const DEFAULT_VAPI_VOICE_ID = "Elliot";
+const DEFAULT_VAPI_VOICE_PROVIDER = "vapi";
 const DEFAULT_MAX_CALL_SECONDS = 600;
 const VAPI_WEBHOOK_BODY_LIMIT_SECONDS = 20;
 
@@ -124,10 +125,10 @@ export function buildVapiAssistantDraft({
   transient?: boolean;
 }) {
   const profile = getRuntimeBusinessProfile(context);
-  const model = env.VAPI_OPENAI_MODEL ?? DEFAULT_VAPI_MODEL;
+  const model = resolveVapiModel(env.VAPI_OPENAI_MODEL);
   const isRealtimeModel = isVapiRealtimeModel(model);
-  const voiceProvider = env.VAPI_VOICE_PROVIDER ?? (isRealtimeModel ? "openai" : "vapi");
-  const voiceId = env.VAPI_VOICE_ID ?? env.VAPI_OPENAI_VOICE_ID ?? (isRealtimeModel ? DEFAULT_VAPI_OPENAI_VOICE_ID : DEFAULT_VAPI_VOICE_ID);
+  const voiceProvider = (env.VAPI_VOICE_PROVIDER ?? DEFAULT_VAPI_VOICE_PROVIDER).trim() || DEFAULT_VAPI_VOICE_PROVIDER;
+  const voiceId = resolveVapiVoiceId(env, voiceProvider);
   const tools = buildVapiTools(selectVapiTools(buildOpenAIRealtimeTools(context), transient));
   const serverUrl = buildVapiServerUrl(env, locationId);
   const serverHeaders = env.VAPI_WEBHOOK_SECRET
@@ -760,6 +761,27 @@ function buildTransientVapiInstructions(context: RestaurantVoiceContext) {
 
 function isVapiRealtimeModel(model: string) {
   return /^gpt-(?:realtime|4o.*realtime)/i.test(model);
+}
+
+function resolveVapiModel(model?: string) {
+  const candidate = model?.trim();
+  if (!candidate) return DEFAULT_VAPI_MODEL;
+
+  // Vapi's model picker is separate from the direct OpenAI Realtime SIP path.
+  // A stale Realtime SIP env var here can silently overwrite the proven Vapi
+  // baseline when syncing demo assistants.
+  if (isVapiRealtimeModel(candidate)) return DEFAULT_VAPI_MODEL;
+
+  return candidate;
+}
+
+function resolveVapiVoiceId(env: VoiceServiceEnv, voiceProvider: string) {
+  const provider = voiceProvider.trim().toLowerCase();
+  if (provider === "openai") {
+    return env.VAPI_OPENAI_VOICE_ID?.trim() || env.VAPI_VOICE_ID?.trim() || DEFAULT_VAPI_OPENAI_VOICE_ID;
+  }
+
+  return env.VAPI_VOICE_ID?.trim() || DEFAULT_VAPI_VOICE_ID;
 }
 
 function buildVapiServerUrl(env: VoiceServiceEnv, locationId?: string) {

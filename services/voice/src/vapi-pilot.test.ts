@@ -53,7 +53,11 @@ describe("Vapi pilot", () => {
 
     expect(assistant.model).toMatchObject({
       provider: "openai",
-      model: "gpt-realtime-2025-08-28",
+      model: "gpt-5.2-instant",
+    });
+    expect(assistant.voice).toMatchObject({
+      provider: "vapi",
+      voiceId: "Elliot",
     });
     expect(JSON.stringify(assistant.model)).toContain("Never call a customer a lead");
     expect(JSON.stringify(assistant.model)).toContain("lookup_restaurant_context");
@@ -65,7 +69,7 @@ describe("Vapi pilot", () => {
         }),
       }),
     ]));
-    expect(assistant).not.toHaveProperty("transcriber");
+    expect(assistant).toHaveProperty("transcriber");
     expect(assistant.server).toMatchObject({
       headers: {
         "x-vapi-secret": "secret",
@@ -74,7 +78,7 @@ describe("Vapi pilot", () => {
     });
   });
 
-  it("keeps Deepgram transcriber config only for non-realtime Vapi model tests", () => {
+  it("keeps Deepgram transcriber config and Vapi voice for non-realtime Vapi model tests", () => {
     const env = { ...baseEnv, VAPI_OPENAI_MODEL: "gpt-4o-mini", VAPI_OPENAI_VOICE_ID: "nova" } as VoiceServiceEnv;
     const assistant = buildVapiAssistantDraft({ context: demoRestaurantContext, env, locationId: "loc_1" });
 
@@ -83,6 +87,25 @@ describe("Vapi pilot", () => {
       provider: "openai",
     });
     expect(assistant).toHaveProperty("transcriber");
+    expect(assistant.voice).toMatchObject({
+      provider: "vapi",
+      voiceId: "Elliot",
+    });
+  });
+
+  it("allows an explicit OpenAI voice provider when intentionally configured", () => {
+    const env = {
+      ...baseEnv,
+      VAPI_OPENAI_MODEL: "gpt-5.2-instant",
+      VAPI_OPENAI_VOICE_ID: "marin",
+      VAPI_VOICE_PROVIDER: "openai",
+    } as VoiceServiceEnv;
+    const assistant = buildVapiAssistantDraft({ context: demoRestaurantContext, env, locationId: "loc_1" });
+
+    expect(assistant.voice).toMatchObject({
+      provider: "openai",
+      voiceId: "marin",
+    });
   });
 
   it("keeps the pilot disabled unless VAPI_PILOT_ENABLED is explicitly true", () => {

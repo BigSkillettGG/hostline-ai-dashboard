@@ -773,3 +773,58 @@ Next action:
 
 - Publish the frontend so the asset is available at `https://signalhost.ai/audio/vapi-greetings/harbor-plumbing-greeting.mp3`.
 - In Vapi, test that URL as the first message for Harbor Plumbing.
+
+## 2026-05-22 16:45 ET - Olive & Ember Vapi Voice Regression
+
+Business:
+
+- Olive & Ember
+
+Path:
+
+- Vapi pilot
+
+Source call:
+
+- Call id `09f455ef-47d5-4a85-b030-12fb37b2a1cb`
+- Recording: Vapi stereo WAV attached in Supabase call record
+
+What happened:
+
+- The call reached the correct Olive & Ember Vapi number and used the assigned
+  Vapi assistant.
+- The spoken greeting came through as `Thank you. For calling Olive and Amber.
+  How can I help you?`
+- The voice sounded wrong compared with the Harbor Vapi baseline that tested
+  well.
+
+Diagnosis:
+
+- This was not a missing-assistant or routing failure.
+- The deployed Vapi assistant preview showed stale direct-OpenAI-Realtime
+  settings: `gpt-realtime-2025-08-28` with OpenAI voice `marin`.
+- The preferred Vapi baseline is `gpt-5.2-instant` with Vapi voice `Elliot`.
+- `VAPI_OPENAI_VOICE_ID=marin` was allowed to leak into the Vapi assistant sync
+  when `VAPI_VOICE_ID`/`VAPI_VOICE_PROVIDER` were not effectively applied.
+
+Change made:
+
+- Hardened `buildVapiAssistantDraft` so Vapi assistant sync maps stale
+  `gpt-realtime-*` model names back to `gpt-5.2-instant`.
+- Hardened Vapi voice selection so `VAPI_OPENAI_VOICE_ID` only applies when
+  `VAPI_VOICE_PROVIDER=openai` is explicitly set.
+- Default Vapi voice provider remains `vapi`; default voice remains `Elliot`.
+- No changes were made to OpenAI Realtime SIP, LiveKit, routing, business
+  knowledge, tools, or endpointing.
+
+Verification:
+
+- `.\\node_modules\\.bin\\vitest.cmd run services/voice/src/vapi-pilot.test.ts`
+- `node scripts\\build-voice.mjs`
+
+Next action:
+
+- Deploy `hostline-voice`.
+- Re-run Vapi assistant sync for all demo businesses so existing fixed
+  assistants are updated to the protected baseline.
+- Retest Olive & Ember at `+1 781 523 0245`.
