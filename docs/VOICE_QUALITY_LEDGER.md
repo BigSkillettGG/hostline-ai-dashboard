@@ -837,3 +837,26 @@ Follow-up:
 - Code now maps the GPT 5.2 Instant dashboard label to Vapi's accepted API
   model value `gpt-5.2-chat-latest`.
 - Code now omits `keytermsPrompt` from the Vapi transcriber payload.
+
+## 2026-05-22 18:55 ET - Vapi Duplicate Assistant Cleanup
+
+Path:
+
+- Vapi pilot
+
+What happened:
+
+- A repeated all-demo Vapi sync created duplicate fixed assistants for the demo businesses.
+- The sync script reused the existing Vapi phone numbers, but it did not reuse the assistant ID already assigned to those phone numbers.
+
+Change made:
+
+- `scripts/provision-vapi-demos.mjs` now reads each active Vapi phone row and reuses the stored `verification_results.vapiAssistantId` unless an explicit assistant mapping is passed.
+- Added platform-admin-only Vapi inventory and assistant-delete endpoints.
+- Added `npm run reconcile:vapi-demos` to dry-run duplicate assistant cleanup and `npm run reconcile:vapi-demos -- --commit` to delete only unassigned duplicate demo assistants.
+
+Guardrails:
+
+- The canonical assistant is the one currently assigned to the real demo phone number.
+- Cleanup only deletes unassigned assistants whose name exactly matches `SignalHost {Business}`.
+- No voice behavior, prompt behavior, routing, phone numbers, or business knowledge changed.

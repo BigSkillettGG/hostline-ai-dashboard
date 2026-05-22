@@ -46,7 +46,7 @@ VAPI_API_KEY=your_vapi_private_key
 VAPI_WEBHOOK_SECRET=make_up_a_long_random_secret
 VAPI_PILOT_ENABLED=true
 VAPI_PILOT_LOCATION_IDS=22222222-2222-4222-8222-222222222222
-VAPI_OPENAI_MODEL=gpt-5.2-instant
+VAPI_OPENAI_MODEL=gpt-5.2-chat-latest
 VAPI_VOICE_PROVIDER=vapi
 VAPI_VOICE_ID=Elliot
 ```
@@ -128,6 +128,18 @@ Dry run all demo businesses:
 npm run provision:vapi-demos
 ```
 
+Dry run duplicate-assistant cleanup:
+
+```powershell
+npm run reconcile:vapi-demos
+```
+
+Delete only unassigned duplicate fixed assistants after reviewing the dry run:
+
+```powershell
+npm run reconcile:vapi-demos -- --commit
+```
+
 Create/sync Vapi assistants only, if intentionally testing permanent assistants:
 
 ```powershell
@@ -172,6 +184,8 @@ VOICE_SERVICE_URL=https://hostline-voice.onrender.com
 
 The script does not run destructive actions by default. Without `--commit`, it only prints the intended changes.
 
+The assistant reconciliation script also does not run destructive actions by default. It keeps the assistant currently assigned to each real demo phone number, deletes only unassigned duplicate assistants with the exact expected demo assistant name, and repairs the stored Supabase `vapiAssistantId` if the phone-number assignment is the newer source of truth.
+
 ## Vapi Dashboard Setup
 
 1. Create or choose one test phone number in Vapi.
@@ -203,7 +217,8 @@ tool calls, recordings, and logs.
 For the current Vapi pilot, prefer the model that tested best in the dashboard:
 
 ```text
-gpt-5.2-instant
+Dashboard label: GPT 5.2 Instant
+API value: gpt-5.2-chat-latest
 ```
 
 If Vapi later exposes a stronger realtime voice model in the dashboard/API, test it against this baseline before changing all demos. Do not use `gpt-4o-mini` for the real comparison; it was only an early plumbing placeholder.

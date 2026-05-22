@@ -83,16 +83,22 @@ for (const target of demoTargets) {
 
   const areaCode = lookupMappedValue(areaCodeOverrides, target) ?? target.areaCodes[0];
   const areaCodes = areaCodeCandidates(areaCodeOverrides, target);
-  const assistantId = lookupMappedValue(assistantIds, target);
   const phoneNumberId = lookupMappedValue(existingPhoneNumberIds, target);
+  const existingVapiPhoneNumber = forceNewPhoneNumber
+    ? undefined
+    : await findExistingVapiPhoneNumber(target.locationId);
+  const assistantId = lookupMappedValue(assistantIds, target) ?? extractStoredVapiAssistantId(existingVapiPhoneNumber);
   const webhookUrl = `${voiceServiceUrl}/vapi/webhook?locationId=${encodeURIComponent(target.locationId)}`;
 
   if (!commit) {
     results.push({
       areaCode,
       areaCodes,
+      assistantId: assistantId ?? null,
       business: target.business,
       createPhoneNumber: createPhoneNumbers,
+      existingPhoneNumber: existingVapiPhoneNumber?.phone_number ?? null,
+      existingPhoneNumberId: existingVapiPhoneNumber?.provider_sid ?? null,
       locationId: target.locationId,
       makePrimary,
       phoneNumberId: phoneNumberId ?? null,
@@ -120,9 +126,6 @@ for (const target of demoTargets) {
   let attemptedAreaCodes = [];
   let reusedExistingPhoneNumber = false;
   if (createPhoneNumbers || phoneNumberId) {
-    const existingVapiPhoneNumber = phoneNumberId || !createPhoneNumbers || forceNewPhoneNumber
-      ? undefined
-      : await findExistingVapiPhoneNumber(target.locationId);
     const resolvedPhoneNumberId = phoneNumberId ?? existingVapiPhoneNumber?.provider_sid;
     reusedExistingPhoneNumber = Boolean(existingVapiPhoneNumber);
     const syncResult = await syncPhoneNumberWithAreaCodeFallback({
@@ -276,10 +279,16 @@ async function voiceRequest(path, token, body) {
 
 async function findExistingVapiPhoneNumber(locationId) {
   const rows = await supabaseRequest(
-    `phone_numbers?select=phone_number,provider_sid,status,updated_at&location_id=eq.${encodeURIComponent(locationId)}&provider=eq.vapi&status=eq.active&order=updated_at.desc&limit=1`,
+    `phone_numbers?select=phone_number,provider_sid,status,updated_at,verification_results&location_id=eq.${encodeURIComponent(locationId)}&provider=eq.vapi&status=eq.active&order=updated_at.desc&limit=1`,
     token,
   );
   return Array.isArray(rows) ? rows[0] : undefined;
+}
+
+function extractStoredVapiAssistantId(row) {
+  const results = row?.verification_results;
+  if (!results || typeof results !== "object" || Array.isArray(results)) return undefined;
+  return stringValue(results.vapiAssistantId) ?? stringValue(results.assistantId);
 }
 
 async function syncPhoneNumberWithAreaCodeFallback({ areaCodes, body, createPhoneNumbers, token }) {

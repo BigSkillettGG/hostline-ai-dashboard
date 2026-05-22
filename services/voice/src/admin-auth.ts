@@ -4,6 +4,7 @@ import { buildSupabaseServiceHeaders } from "./supabase-headers";
 
 export interface VoiceAdminAuthorization {
   authorized: boolean;
+  platformAdmin?: boolean;
   reason?: string;
   status: number;
   userId?: string;
@@ -34,7 +35,7 @@ export async function authorizeVoiceAdminRequest({
   req: IncomingMessage;
 }): Promise<VoiceAdminAuthorization> {
   if (isAuthorizedLegacyInternalRequest(req, currentEnv)) {
-    return { authorized: true, status: 200 };
+    return { authorized: true, platformAdmin: true, status: 200 };
   }
 
   if (!currentEnv.SUPABASE_URL || !currentEnv.SUPABASE_SECRET_KEY) {
@@ -55,7 +56,7 @@ export async function authorizeVoiceAdminRequest({
     }
 
     if (await isPlatformAdmin(userId, currentEnv)) {
-      return { authorized: true, status: 200, userId };
+      return { authorized: true, platformAdmin: true, status: 200, userId };
     }
 
     const membership = locationId

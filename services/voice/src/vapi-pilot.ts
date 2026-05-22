@@ -306,6 +306,63 @@ export class VapiPilotService {
     };
   }
 
+  async listResources() {
+    if (!this.env.VAPI_API_KEY) {
+      throw new Error("VAPI_API_KEY is not configured.");
+    }
+
+    const baseUrl = (this.env.VAPI_API_BASE_URL ?? DEFAULT_VAPI_API_BASE_URL).replace(/\/$/, "");
+    const [assistantsResponse, phoneNumbersResponse] = await Promise.all([
+      this.fetchImpl(`${baseUrl}/assistant`, {
+        headers: { Authorization: `Bearer ${this.env.VAPI_API_KEY}` },
+        method: "GET",
+      }),
+      this.fetchImpl(`${baseUrl}/phone-number`, {
+        headers: { Authorization: `Bearer ${this.env.VAPI_API_KEY}` },
+        method: "GET",
+      }),
+    ]);
+    const assistantsBody = await readResponseBody(assistantsResponse);
+    const phoneNumbersBody = await readResponseBody(phoneNumbersResponse);
+    if (!assistantsResponse.ok) {
+      throw new Error(`Vapi assistant list failed (${assistantsResponse.status}): ${compactErrorBody(assistantsBody)}`);
+    }
+    if (!phoneNumbersResponse.ok) {
+      throw new Error(`Vapi phone-number list failed (${phoneNumbersResponse.status}): ${compactErrorBody(phoneNumbersBody)}`);
+    }
+
+    return {
+      assistants: normalizeVapiList(assistantsBody),
+      phoneNumbers: normalizeVapiList(phoneNumbersBody),
+    };
+  }
+
+  async deleteAssistant({ assistantId }: { assistantId: string }) {
+    if (!this.env.VAPI_API_KEY) {
+      throw new Error("VAPI_API_KEY is not configured.");
+    }
+    const targetAssistantId = assistantId.trim();
+    if (!targetAssistantId) {
+      throw new Error("assistantId is required.");
+    }
+
+    const baseUrl = (this.env.VAPI_API_BASE_URL ?? DEFAULT_VAPI_API_BASE_URL).replace(/\/$/, "");
+    const response = await this.fetchImpl(`${baseUrl}/assistant/${encodeURIComponent(targetAssistantId)}`, {
+      headers: { Authorization: `Bearer ${this.env.VAPI_API_KEY}` },
+      method: "DELETE",
+    });
+    const body = await readResponseBody(response);
+    if (!response.ok) {
+      throw new Error(`Vapi assistant delete failed (${response.status}): ${compactErrorBody(body)}`);
+    }
+
+    return {
+      assistantId: targetAssistantId,
+      response: body,
+      status: response.status,
+    };
+  }
+
   async handleWebhook({
     headers,
     locationId,
@@ -781,6 +838,17 @@ function resolveVapiVoiceId(env: VoiceServiceEnv, voiceProvider: string) {
   }
 
   return env.VAPI_VOICE_ID?.trim() || DEFAULT_VAPI_VOICE_ID;
+}
+
+function normalizeVapiList(body: unknown): unknown[] {
+  if (Array.isArray(body)) return body;
+  if (!body || typeof body !== "object") return [];
+  const record = body as Record<string, unknown>;
+  for (const key of ["data", "items", "results"]) {
+    const value = record[key];
+    if (Array.isArray(value)) return value;
+  }
+  return [];
 }
 
 function buildVapiServerUrl(env: VoiceServiceEnv, locationId?: string) {

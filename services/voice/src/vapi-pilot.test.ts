@@ -234,7 +234,7 @@ describe("Vapi pilot", () => {
     });
 
     expect(result.status).toBe(201);
-    const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    const requestBody = firstFetchJsonBody(fetchMock);
     expect(fetchMock).toHaveBeenCalledWith(
       "https://api.vapi.ai/phone-number",
       expect.objectContaining({
@@ -267,7 +267,7 @@ describe("Vapi pilot", () => {
     });
 
     expect(result.status).toBe(201);
-    const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    const requestBody = firstFetchJsonBody(fetchMock);
     expect(requestBody).toEqual({
       name: "SignalHost Harbor Plumbing",
       numberDesiredAreaCode: "781",
@@ -301,7 +301,7 @@ describe("Vapi pilot", () => {
     });
 
     expect(result.status).toBe(200);
-    const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    const requestBody = firstFetchJsonBody(fetchMock);
     expect(fetchMock).toHaveBeenCalledWith(
       "https://api.vapi.ai/phone-number/pn_existing",
       expect.objectContaining({
@@ -313,4 +313,71 @@ describe("Vapi pilot", () => {
       name: "SignalHost Harbor Plumbing",
     });
   });
+
+  it("lists Vapi assistants and phone numbers for platform cleanup", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith("/assistant")) {
+        return new Response(JSON.stringify({
+          data: [
+            { id: "asst_1", name: "SignalHost Harbor Plumbing" },
+          ],
+        }), { status: 200 });
+      }
+      if (url.endsWith("/phone-number")) {
+        return new Response(JSON.stringify({
+          items: [
+            { assistantId: "asst_1", id: "pn_1", number: "+17815230283" },
+          ],
+        }), { status: 200 });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    const service = createVapiPilotService(baseEnv, {
+      callStore,
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      restaurantContextStore: contextStore,
+    });
+
+    const result = await service.listResources();
+
+    expect(result.assistants).toEqual([
+      { id: "asst_1", name: "SignalHost Harbor Plumbing" },
+    ]);
+    expect(result.phoneNumbers).toEqual([
+      { assistantId: "asst_1", id: "pn_1", number: "+17815230283" },
+    ]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.vapi.ai/assistant",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.vapi.ai/phone-number",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("deletes a Vapi assistant by id for duplicate cleanup", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ id: "asst_old" }), { status: 200 }));
+    const service = createVapiPilotService(baseEnv, {
+      callStore,
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      restaurantContextStore: contextStore,
+    });
+
+    const result = await service.deleteAssistant({ assistantId: "asst_old" });
+
+    expect(result).toMatchObject({
+      assistantId: "asst_old",
+      status: 200,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.vapi.ai/assistant/asst_old",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
 });
+
+function firstFetchJsonBody(fetchMock: ReturnType<typeof vi.fn>) {
+  const calls = fetchMock.mock.calls as unknown as Array<[string, RequestInit | undefined]>;
+  return JSON.parse(String(calls[0]?.[1]?.body));
+}

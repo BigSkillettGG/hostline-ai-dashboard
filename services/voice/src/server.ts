@@ -610,6 +610,67 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
     return;
   }
 
+  if (req.method === "GET" && url.pathname === "/vapi/resources") {
+    if (!(await allowRateLimitedRequest(req, res, "vapi-resources", 20, currentEnv))) return;
+
+    const authorization = await authorizeVoiceAdminRequest({
+      currentEnv,
+      locationId: url.searchParams.get("locationId") ?? currentEnv.SUPABASE_DEMO_LOCATION_ID,
+      req,
+    });
+    if (!authorization.authorized) {
+      sendJson(res, authorization.status, { error: authorization.reason ?? "Unauthorized" });
+      return;
+    }
+    if (!authorization.platformAdmin) {
+      sendJson(res, 403, { error: "Only platform admins can inspect Vapi account resources." });
+      return;
+    }
+
+    try {
+      const result = await vapiPilotService.listResources();
+      sendJson(res, 200, result);
+    } catch (error) {
+      sendCaughtError(res, error, "Vapi resource list failed", { includeDetail: true });
+    }
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/vapi/delete-assistant") {
+    if (!(await allowRateLimitedRequest(req, res, "vapi-delete-assistant", 10, currentEnv))) return;
+
+    try {
+      const body = parseJsonRequestBody(await readLimitedRequestBody(req, ADMIN_BODY_LIMIT_BYTES)) as {
+        assistantId?: string;
+        locationId?: string;
+      };
+      const authorization = await authorizeVoiceAdminRequest({
+        currentEnv,
+        locationId: body.locationId ?? url.searchParams.get("locationId") ?? currentEnv.SUPABASE_DEMO_LOCATION_ID,
+        req,
+      });
+      if (!authorization.authorized) {
+        sendJson(res, authorization.status, { error: authorization.reason ?? "Unauthorized" });
+        return;
+      }
+      if (!authorization.platformAdmin) {
+        sendJson(res, 403, { error: "Only platform admins can delete Vapi assistants." });
+        return;
+      }
+
+      const assistantId = body.assistantId?.trim();
+      if (!assistantId) {
+        sendJson(res, 400, { error: "assistantId is required." });
+        return;
+      }
+      const result = await vapiPilotService.deleteAssistant({ assistantId });
+      sendJson(res, 200, result);
+    } catch (error) {
+      sendCaughtError(res, error, "Vapi assistant delete failed", { includeDetail: true });
+    }
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/vapi/webhook") {
     if (!(await allowRateLimitedRequest(req, res, "vapi-webhook", 240, currentEnv))) return;
 
