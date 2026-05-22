@@ -10,8 +10,9 @@ import type { RestaurantContextStore } from "./restaurant-context-store";
 import { normalizeCustomerRequestKind, type CustomerRequestKind } from "../../../src/domain/business-links";
 
 const DEFAULT_VAPI_API_BASE_URL = "https://api.vapi.ai";
-const DEFAULT_VAPI_MODEL = "gpt-realtime-2025-08-28";
-const DEFAULT_VAPI_VOICE_ID = "marin";
+const DEFAULT_VAPI_MODEL = "gpt-5.2-instant";
+const DEFAULT_VAPI_OPENAI_VOICE_ID = "marin";
+const DEFAULT_VAPI_VOICE_ID = "Elliot";
 const DEFAULT_MAX_CALL_SECONDS = 600;
 const VAPI_WEBHOOK_BODY_LIMIT_SECONDS = 20;
 
@@ -31,6 +32,14 @@ export interface VapiPilotConfig {
 export interface VapiWebhookResult {
   body: unknown;
   status: number;
+}
+
+export interface VapiPhoneNumberSyncInput {
+  assistantId?: string;
+  locationId?: string;
+  name?: string;
+  numberDesiredAreaCode?: string;
+  phoneNumberId?: string;
 }
 
 interface VapiPilotServiceOptions {
@@ -117,6 +126,8 @@ export function buildVapiAssistantDraft({
   const profile = getRuntimeBusinessProfile(context);
   const model = env.VAPI_OPENAI_MODEL ?? DEFAULT_VAPI_MODEL;
   const isRealtimeModel = isVapiRealtimeModel(model);
+  const voiceProvider = env.VAPI_VOICE_PROVIDER ?? (isRealtimeModel ? "openai" : "vapi");
+  const voiceId = env.VAPI_VOICE_ID ?? env.VAPI_OPENAI_VOICE_ID ?? (isRealtimeModel ? DEFAULT_VAPI_OPENAI_VOICE_ID : DEFAULT_VAPI_VOICE_ID);
   const tools = buildVapiTools(selectVapiTools(buildOpenAIRealtimeTools(context), transient));
   const serverUrl = buildVapiServerUrl(env, locationId);
   const serverHeaders = env.VAPI_WEBHOOK_SECRET
@@ -187,8 +198,8 @@ export function buildVapiAssistantDraft({
       : {}),
     voicemailMessage: `Thanks for calling ${context.restaurantName}. Please call back or leave your name and number so the team can follow up.`,
     voice: {
-      provider: "openai",
-      voiceId: env.VAPI_OPENAI_VOICE_ID ?? DEFAULT_VAPI_VOICE_ID,
+      provider: voiceProvider,
+      voiceId,
     },
   };
 }
@@ -246,6 +257,57 @@ export class VapiPilotService {
       assistant,
       method,
       response: body,
+      status: response.status,
+    };
+  }
+
+  async syncPhoneNumber({
+    assistantId,
+    locationId,
+    name,
+    numberDesiredAreaCode,
+    phoneNumberId,
+  }: VapiPhoneNumberSyncInput) {
+    if (!this.env.VAPI_API_KEY) {
+      throw new Error("VAPI_API_KEY is not configured.");
+    }
+    const resolvedAssistantId = assistantId?.trim() || this.env.VAPI_PILOT_ASSISTANT_ID?.trim();
+    if (!resolvedAssistantId) {
+      throw new Error("A Vapi assistantId is required before syncing a Vapi phone number.");
+    }
+
+    const context = await this.restaurantContextStore.getContext(locationId);
+    const baseUrl = (this.env.VAPI_API_BASE_URL ?? DEFAULT_VAPI_API_BASE_URL).replace(/\/$/, "");
+    const targetPhoneNumberId = phoneNumberId?.trim() || this.env.VAPI_PILOT_PHONE_NUMBER_ID?.trim();
+    const method = targetPhoneNumberId ? "PATCH" : "POST";
+    const url = targetPhoneNumberId
+      ? `${baseUrl}/phone-number/${encodeURIComponent(targetPhoneNumberId)}`
+      : `${baseUrl}/phone-number`;
+    const body = buildVapiPhoneNumberDraft({
+      assistantId: resolvedAssistantId,
+      context,
+      existingPhoneNumberId: targetPhoneNumberId,
+      name,
+      numberDesiredAreaCode,
+    });
+
+    const response = await this.fetchImpl(url, {
+      body: JSON.stringify(body),
+      headers: {
+        Authorization: `Bearer ${this.env.VAPI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      method,
+    });
+    const responseBody = await readResponseBody(response);
+    if (!response.ok) {
+      throw new Error(`Vapi phone number sync failed (${response.status}): ${compactErrorBody(responseBody)}`);
+    }
+
+    return {
+      method,
+      phoneNumber: body,
+      response: responseBody,
       status: response.status,
     };
   }
@@ -611,6 +673,34 @@ export class VapiPilotService {
       unsupportedTool: toolCall.name,
     };
   }
+}
+
+function buildVapiPhoneNumberDraft({
+  assistantId,
+  context,
+  existingPhoneNumberId,
+  name,
+  numberDesiredAreaCode,
+}: {
+  assistantId: string;
+  context: RestaurantVoiceContext;
+  existingPhoneNumberId?: string;
+  name?: string;
+  numberDesiredAreaCode?: string;
+}) {
+  const body: Record<string, unknown> = {
+    assistantId,
+    name: compactAssistantName(name ?? `SignalHost ${context.restaurantName}`),
+  };
+
+  if (!existingPhoneNumberId) {
+    body.provider = "vapi";
+    if (numberDesiredAreaCode?.trim()) {
+      body.numberDesiredAreaCode = numberDesiredAreaCode.trim();
+    }
+  }
+
+  return body;
 }
 
 function buildVapiTools(tools: OpenAIRealtimeFunctionTool[]) {

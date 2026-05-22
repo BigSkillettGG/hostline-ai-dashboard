@@ -578,6 +578,38 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
     return;
   }
 
+  if (req.method === "POST" && url.pathname === "/vapi/sync-phone-number") {
+    if (!(await allowRateLimitedRequest(req, res, "vapi-sync-phone-number", 10, currentEnv))) return;
+
+    try {
+      const body = parseJsonRequestBody(await readLimitedRequestBody(req, ADMIN_BODY_LIMIT_BYTES)) as {
+        assistantId?: string;
+        locationId?: string;
+        name?: string;
+        numberDesiredAreaCode?: string;
+        phoneNumberId?: string;
+      };
+      const locationId = body.locationId ?? url.searchParams.get("locationId") ?? currentEnv.SUPABASE_DEMO_LOCATION_ID;
+      const authorization = await authorizeVoiceAdminRequest({ currentEnv, locationId, req });
+      if (!authorization.authorized) {
+        sendJson(res, authorization.status, { error: authorization.reason ?? "Unauthorized" });
+        return;
+      }
+
+      const result = await vapiPilotService.syncPhoneNumber({
+        assistantId: body.assistantId,
+        locationId: locationId ?? undefined,
+        name: body.name,
+        numberDesiredAreaCode: body.numberDesiredAreaCode,
+        phoneNumberId: body.phoneNumberId,
+      });
+      sendJson(res, 200, result);
+    } catch (error) {
+      sendCaughtError(res, error, "Vapi phone number sync failed");
+    }
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/vapi/webhook") {
     if (!(await allowRateLimitedRequest(req, res, "vapi-webhook", 240, currentEnv))) return;
 

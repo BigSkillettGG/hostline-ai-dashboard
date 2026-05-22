@@ -1,12 +1,12 @@
 # Vapi Pilot
 
-Status: experimental, quarantined.
+Status: controlled demo rollout.
 
-The primary SignalHost phone path remains OpenAI Realtime SIP through Twilio. Vapi is a controlled A/B pilot only. Do not move live demo numbers to Vapi unless the founder explicitly chooses that for a test.
+Vapi is now the preferred path for the next demo-call tests because early Vapi calls were much better on handset and speakerphone than the previous direct-SIP and LiveKit attempts. Keep rollout controlled and reversible: create or attach Vapi numbers, sync assistants from SignalHost, and keep SignalHost as the source of business knowledge, tools, transcripts, recordings, and owner workflows.
 
 ## Why We Are Testing It
 
-Vapi may help us compare a managed voice-agent orchestration layer against our direct OpenAI SIP path:
+Vapi helps us use a managed voice-agent orchestration layer while keeping the SignalHost product brain and operating system:
 
 - phone/SIP orchestration
 - interruptions and endpointing
@@ -29,7 +29,7 @@ Vapi webhook URL: https://hostline-voice.onrender.com/vapi/webhook?locationId=22
 Greeting: Thank you for calling Harbor Plumbing. How can I help you?
 ```
 
-Use a new Vapi test number first. Do not move the current Harbor SignalHost number until the Vapi pilot clearly beats the direct OpenAI SIP path.
+Use a new Vapi test number first for any new demo. After it passes, the Vapi number can become the demo account's primary AI number.
 
 Generate the exact setup values with:
 
@@ -46,8 +46,9 @@ VAPI_API_KEY=your_vapi_private_key
 VAPI_WEBHOOK_SECRET=make_up_a_long_random_secret
 VAPI_PILOT_ENABLED=true
 VAPI_PILOT_LOCATION_IDS=22222222-2222-4222-8222-222222222222
-VAPI_OPENAI_MODEL=gpt-realtime-2025-08-28
-VAPI_OPENAI_VOICE_ID=marin
+VAPI_OPENAI_MODEL=gpt-5.2-instant
+VAPI_VOICE_PROVIDER=vapi
+VAPI_VOICE_ID=Elliot
 ```
 
 Optional:
@@ -90,6 +91,78 @@ Body:
 }
 ```
 
+Phone-number sync endpoint, if we want SignalHost to create/update the Vapi phone number:
+
+```text
+POST https://hostline-voice.onrender.com/vapi/sync-phone-number
+```
+
+Body for creating a new free Vapi number:
+
+```json
+{
+  "locationId": "<location_uuid>",
+  "assistantId": "<vapi_assistant_id>",
+  "numberDesiredAreaCode": "781",
+  "name": "SignalHost Harbor Plumbing"
+}
+```
+
+Body for attaching an existing Vapi phone number:
+
+```json
+{
+  "locationId": "<location_uuid>",
+  "assistantId": "<vapi_assistant_id>",
+  "phoneNumberId": "<vapi_phone_number_id>",
+  "name": "SignalHost Harbor Plumbing"
+}
+```
+
+## Automated Demo Provisioning
+
+Dry run all demo businesses:
+
+```powershell
+npm run provision:vapi-demos
+```
+
+Create/sync Vapi assistants only:
+
+```powershell
+npm run provision:vapi-demos -- --commit
+```
+
+Create new free Vapi numbers, attach the synced assistants, persist the numbers to Supabase, and make them the primary AI numbers for each demo location:
+
+```powershell
+npm run provision:vapi-demos -- --commit --create-phone-numbers --make-primary
+```
+
+Provision only one vertical:
+
+```powershell
+npm run provision:vapi-demos -- --include=plumbing --commit --create-phone-numbers --make-primary
+```
+
+Attach existing Vapi phone numbers instead of creating new ones:
+
+```powershell
+npm run provision:vapi-demos -- --commit --make-primary --phone-number-ids=plumbing:c31aeea7-e06d-4ea3-9f79-ca20d613d934
+```
+
+Required local environment variables for the script:
+
+```text
+SIGNALHOST_ADMIN_EMAIL=tim@hostline.ai
+SIGNALHOST_ADMIN_PASSWORD=...
+VITE_SUPABASE_URL=...
+VITE_SUPABASE_PUBLISHABLE_KEY=...
+VOICE_SERVICE_URL=https://hostline-voice.onrender.com
+```
+
+The script does not run destructive actions by default. Without `--commit`, it only prints the intended changes.
+
 ## Vapi Dashboard Setup
 
 1. Create or choose one test phone number in Vapi.
@@ -118,13 +191,13 @@ tool calls, recordings, and logs.
 
 ## Model Choice
 
-For this pilot, use Vapi's OpenAI Realtime model slug:
+For the current Vapi pilot, prefer the model that tested best in the dashboard:
 
 ```text
-gpt-realtime-2025-08-28
+gpt-5.2-instant
 ```
 
-This is the Vapi-supported OpenAI Realtime path. It is closer to SignalHost's direct OpenAI Realtime SIP experience than a normal STT + text model + TTS pipeline. Do not use `gpt-4o-mini` for the real comparison; it was only an early plumbing placeholder.
+If Vapi later exposes a stronger realtime voice model in the dashboard/API, test it against this baseline before changing all demos. Do not use `gpt-4o-mini` for the real comparison; it was only an early plumbing placeholder.
 
 ## Tool Bridge
 
@@ -168,5 +241,8 @@ Vapi docs used for this pilot design:
 - Introduction: https://docs.vapi.ai/quickstart/introduction
 - How Vapi works: https://docs.vapi.ai/how-vapi-works
 - Server URL events: https://docs.vapi.ai/server-url/events
+- Free telephony: https://docs.vapi.ai/free-telephony
+- Create phone number: https://docs.vapi.ai/api-reference/phone-numbers/create
+- Update phone number: https://docs.vapi.ai/api-reference/phone-numbers/update
 - Monitoring: https://docs.vapi.ai/observability/monitoring-quickstart
 - Simulations: https://docs.vapi.ai/observability/simulations-quickstart

@@ -49,7 +49,7 @@ Do not route production demo calls back to Twilio ConversationRelay unless the u
 
 Do not route calls through LiveKit by default. LiveKit was tested as an experimental Harbor Plumbing speakerphone path, but it added complexity, latency, worker memory issues, and dead-air failures. Treat LiveKit as quarantined/experimental unless the user explicitly reopens it.
 
-Vapi is now also a quarantined experiment, not the default. It has its own pilot docs and endpoints in `docs/vapi-pilot.md`, `/vapi/pilot-config`, `/vapi/sync-assistant`, and `/vapi/webhook`. Do not move existing SignalHost demo numbers to Vapi unless the user explicitly approves a controlled A/B test.
+Vapi is now the preferred controlled demo-rollout path after materially better handset and speakerphone tests. It has its own docs and endpoints in `docs/vapi-pilot.md`, `/vapi/pilot-config`, `/vapi/sync-assistant`, `/vapi/sync-phone-number`, and `/vapi/webhook`. Keep the rollout automated and reversible; do not manually hand-build each demo unless debugging Vapi itself.
 
 ## Current Demo Businesses
 

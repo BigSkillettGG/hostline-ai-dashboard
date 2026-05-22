@@ -19,6 +19,7 @@
     "marketing:audio": "node scripts/generate-vera-audio.mjs",
     "preview": "vite preview",
     "provision:demos": "node scripts/provision-demo-numbers.mjs",
+    "provision:vapi-demos": "node scripts/provision-vapi-demos.mjs",
     "provision:harbor-ab": "node scripts/provision-harbor-ab-number.mjs",
     "scenario:lab": "tsx scripts/run-scenario-lab.ts",
     "setup:vapi-demo": "node scripts/setup-vapi-demo.mjs",

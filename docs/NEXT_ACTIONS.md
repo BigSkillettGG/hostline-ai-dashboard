@@ -8,20 +8,22 @@ The user requested a persistent memory system because repeated context compactio
 
 Current slice:
 
-- Add a quarantined Vapi pilot so SignalHost can A/B test managed voice orchestration without moving current demo numbers.
-- Keep direct OpenAI Realtime SIP with `gpt-realtime-2` as the primary live path.
-- Do not change LiveKit, ElevenLabs, ConversationRelay, routing, business knowledge, model, or voice while adding Vapi pilot scaffolding.
+- Convert the manual Vapi pilot into repeatable demo provisioning.
+- Keep the voice behavior untouched while adding automation.
+- Extend the same SignalHost/Vapi setup to all six demo vertical businesses once tested.
 
 ## Current Voice Situation
 
-Vapi pilot scaffolding has been added as an experiment only:
+Vapi pilot scaffolding has been added and is now the preferred controlled demo-rollout path:
 
 - Admin config endpoint: `/vapi/pilot-config`
 - Assistant sync endpoint: `/vapi/sync-assistant`
+- Phone-number sync endpoint: `/vapi/sync-phone-number`
 - Server webhook endpoint: `/vapi/webhook`
 - Setup/runbook: `docs/vapi-pilot.md`
+- Bulk demo script: `npm run provision:vapi-demos`
 - It reuses SignalHost business context, tools, and call logging.
-- It must not become default routing unless explicitly approved.
+- The user explicitly approved extending Vapi to the other demo businesses after strong test calls.
 
 The latest analyzed Olive & Ember calls hit the correct OpenAI Realtime SIP path. The current code fix is pending live deploy.
 

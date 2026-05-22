@@ -18,9 +18,19 @@ The strongest product direction is:
 
 ## Known Good Voice Direction
 
-Baseline details are frozen in `docs/VOICE_BASELINE_LOCK.md`. Read that file before changing live voice routing or Realtime tuning.
+Baseline details are frozen in `docs/VOICE_BASELINE_LOCK.md`. Read that file before changing direct OpenAI Realtime routing or tuning.
 
-Primary live calls should use:
+The newest preferred demo-call direction is a controlled Vapi rollout, because Vapi test calls were materially better on both handset and speakerphone than the previous direct-SIP and LiveKit experiments.
+
+Vapi demo calls should preserve:
+
+- SignalHost business context and tools through `/vapi/webhook`
+- Vapi-managed phone/voice orchestration
+- Vapi assistant/server setup generated from SignalHost, not manually rebuilt each time
+- Supabase call logging, transcripts, recordings, tasks, and owner workflows
+- No caller-facing use of the word "lead"
+
+The direct fallback path remains:
 
 - OpenAI Realtime SIP
 - `gpt-realtime-2`
@@ -44,13 +54,12 @@ Do not accidentally revert to these:
 - ElevenLabs for live calls.
 - Twilio ConversationRelay as the main experience.
 - LiveKit as default routing.
-- Vapi as default routing.
 - Odd/non-human voice names like Marin, Coral, Cedar, or Verse.
 - Rigid IVR-style flows that ignore the LLM's conversational ability.
 
 LiveKit may remain in code/docs as an experiment, but it is not the default unless the user explicitly restarts that pilot.
 
-Vapi may remain in code/docs as an experiment, but it is not the default unless the user explicitly starts a controlled A/B pilot.
+Vapi is no longer merely theoretical. The user explicitly approved moving demo businesses toward Vapi after strong test calls. Keep Vapi changes controlled and automated through `docs/vapi-pilot.md` and `scripts/provision-vapi-demos.mjs`.
 
 ## Greeting Contract
 

@@ -97,6 +97,8 @@ const envSchema = z.object({
     .optional(),
   VAPI_PILOT_LOCATION_IDS: z.string().optional(),
   VAPI_PILOT_PHONE_NUMBER_ID: z.string().optional(),
+  VAPI_VOICE_ID: z.string().optional(),
+  VAPI_VOICE_PROVIDER: z.string().optional(),
   VAPI_WEBHOOK_SECRET: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_AUDIO_DIAGNOSTIC_MODEL: z.string().optional(),
