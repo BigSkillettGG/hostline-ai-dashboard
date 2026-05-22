@@ -733,3 +733,43 @@ Next action:
 - Deploy the voice service.
 - Retest Olive & Ember on regular handset first, then speakerphone.
 - Expected behavior: shorter dead air after caller turns, no repeated greeting, and fewer self-interruptions from stale buffered echo.
+
+## 2026-05-22 14:30 ET - Harbor Plumbing Vapi Greeting Asset
+
+Business:
+
+- Harbor Plumbing
+
+Path:
+
+- Vapi pilot
+
+Source calls:
+
+- Clean Vapi greeting checks from `tmp/vapi-harbor-greeting-check/`
+
+What happened:
+
+- The first cold greeting-only Vapi call still had a small startup audio glitch.
+- The second and third greeting-only calls were clean.
+- `startSpeakingPlan.waitSeconds = 0.7` did not change that pattern.
+
+Diagnosis:
+
+- The remaining glitch looks like first-audio startup / TTS / PSTN media buffering, not prompt wording, punctuation, filler injection, or Smart Endpointing.
+
+Change made:
+
+- Generated a reusable Harbor Plumbing greeting asset from a clean Vapi-produced greeting.
+- Added roughly `450ms` of leading silence so the phone media path can settle before speech begins.
+- Did not change routing, model, prompt, voice provider, endpointing, Vapi Smart Endpointing, or business logic.
+
+Files:
+
+- `public/audio/vapi-greetings/harbor-plumbing-greeting.mp3`
+- `public/audio/vapi-greetings/harbor-plumbing-greeting.wav`
+
+Next action:
+
+- Publish the frontend so the asset is available at `https://signalhost.ai/audio/vapi-greetings/harbor-plumbing-greeting.mp3`.
+- In Vapi, test that URL as the first message for Harbor Plumbing.
