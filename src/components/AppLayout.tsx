@@ -86,14 +86,16 @@ export default function AppLayout() {
             </div>
 
             <div className="ml-auto md:ml-0 flex items-center gap-2">
-              <Badge
-                variant="outline"
-                className={authReadiness.ready ? "hidden border-success/20 bg-success/10 text-success lg:inline-flex" : "hidden border-warning/30 bg-warning/10 text-warning lg:inline-flex"}
-                title={authReadiness.detail}
-              >
-                {authReadiness.badge}
-              </Badge>
-              {isDemoWorkspace(user) && (
+              {platformAdmin && (
+                <Badge
+                  variant="outline"
+                  className={authReadiness.ready ? "hidden border-success/20 bg-success/10 text-success lg:inline-flex" : "hidden border-warning/30 bg-warning/10 text-warning lg:inline-flex"}
+                  title={authReadiness.detail}
+                >
+                  {authReadiness.badge}
+                </Badge>
+              )}
+              {platformAdmin && isDemoWorkspace(user) && (
                 <Badge variant="outline" className="hidden border-primary/20 bg-primary/10 text-primary lg:inline-flex">
                   Demo workspace
                 </Badge>
