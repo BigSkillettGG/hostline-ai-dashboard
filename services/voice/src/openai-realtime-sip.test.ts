@@ -1381,7 +1381,7 @@ describe("OpenAI Realtime SIP", () => {
         },
         {
           callStore: {
-            async addTranscriptTurn(input) {
+            async addTranscriptTurn(input: { speaker: string; text: string }) {
               transcriptTurns.push({ speaker: input.speaker, text: input.text });
             },
             async completeCall() {},
@@ -1391,7 +1391,7 @@ describe("OpenAI Realtime SIP", () => {
             async startRealtimeCall() {
               return { callId: "call_uuid" };
             },
-          } as unknown as Parameters<typeof createOpenAIRealtimeSipService>[2]["callStore"],
+          } as never,
           fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
           websocketFactory: () => socket as never,
         },
