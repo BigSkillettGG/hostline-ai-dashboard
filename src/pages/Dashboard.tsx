@@ -145,7 +145,13 @@ export default function Dashboard() {
     String(draft.assignedSignalHostNumber || draft.assignedHostLineNumber || draft.assignedPhoneNumber || "");
   const aiHostPhone = assignedPhoneNumber || "(415) 555-0142";
   const phoneIsDemo = !assignedPhoneNumber;
-  const hostEmail = String(draft.contactEmail || draft.email || "").trim();
+  const tenantSlug = (activeTenant?.locationName ?? String(draft.restaurantName || "host"))
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 32) || "host";
+  const hostEmail = String(draft.contactEmail || draft.email || "").trim() || `elliot+${tenantSlug}@signalhost.ai`;
+  const websiteChatConfigured = false; // until live website chat status is wired up
 
   const demoData = useMemo(
     () => adaptDemoDataForBusiness({
