@@ -470,11 +470,15 @@ export default function Dashboard() {
 
 
         {/* Daily brief */}
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between gap-3">
+        <Card className="relative overflow-hidden border-border/70 shadow-[var(--shadow-card)]">
+          <div className="absolute inset-y-0 left-0 w-1 bg-[image:var(--gradient-primary)]" />
+          <CardHeader className="pb-3 pl-7">
+            <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <CardTitle className="text-base">Daily brief</CardTitle>
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-3.5 w-3.5 text-primary" />
+                  <CardTitle className="text-base font-semibold tracking-tight">Daily brief</CardTitle>
+                </div>
                 <p className="mt-0.5 text-xs text-muted-foreground">{dailyBrief.dateLabel}</p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -493,8 +497,8 @@ export default function Dashboard() {
               </div>
             </div>
           </CardHeader>
-          <CardContent>
-            <p className="text-sm leading-6 text-muted-foreground">
+          <CardContent className="pl-7">
+            <p className="text-[15px] leading-7 text-foreground/85">
               {totalCalls === 0 && ordersCaptured === 0 && reservationRequests === 0
                 ? `No new customer interactions for ${businessName} yet today.`
                 : dailyBrief.ownerMessage}
@@ -515,34 +519,38 @@ export default function Dashboard() {
         </Card>
 
         {/* Recent activity */}
-        <Card>
-          <CardHeader className="pb-2">
+        <Card className="border-border/70 shadow-[var(--shadow-card)]">
+          <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Activity className="h-4 w-4 text-muted-foreground" />
-                Recent activity
-              </CardTitle>
-              <Link to="/app/calls" className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                  <Activity className="h-3.5 w-3.5" />
+                </div>
+                <CardTitle className="text-base font-semibold tracking-tight">Recent activity</CardTitle>
+              </div>
+              <Link to="/app/calls" className="inline-flex items-center gap-1 text-xs font-medium text-primary transition-colors hover:text-primary/80">
                 View all <ArrowRight className="h-3 w-3" />
               </Link>
             </div>
           </CardHeader>
-          <CardContent className="px-0">
+          <CardContent className="px-0 pb-2">
             {activity.length === 0 ? (
-              <div className="px-6 py-10 text-center text-sm text-muted-foreground">No recent activity yet.</div>
+              <div className="mx-6 my-2 rounded-lg border border-dashed border-border/70 bg-muted/20 px-6 py-10 text-center text-sm text-muted-foreground">
+                No recent activity yet.
+              </div>
             ) : (
-              <ul className="divide-y divide-border">
+              <ul className="divide-y divide-border/70">
                 {activity.map((activityItem) => (
                   <li
                     key={`${activityItem.type}-${activityItem.t}-${activityItem.item.id}`}
-                    className="group flex items-center gap-3 px-6 py-3 text-sm transition-colors hover:bg-muted/30"
+                    className="group flex items-center gap-3 px-6 py-3.5 text-sm transition-colors hover:bg-muted/30"
                   >
                     {activityItem.type === "call" && <CallActivity businessType={businessType} item={activityItem.item} />}
                     {activityItem.type === "order" && <OrderActivity item={activityItem.item} profile={verticalProfile} />}
                     {activityItem.type === "reservation" && <ReservationActivity item={activityItem.item} profile={verticalProfile} />}
                     {activityItem.type === "task" && <TaskActivity item={activityItem.item} />}
-                    <div className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">{formatTime(activityItem.t)}</div>
-                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground" />
+                    <div className="text-[11px] font-medium text-muted-foreground tabular-nums whitespace-nowrap">{formatTime(activityItem.t)}</div>
+                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/0 transition-all group-hover:text-muted-foreground group-hover:translate-x-0.5" />
                   </li>
                 ))}
               </ul>
@@ -553,6 +561,7 @@ export default function Dashboard() {
     </>
   );
 }
+
 
 function ContactRow({
   icon: Icon, label, value, href, muted,
