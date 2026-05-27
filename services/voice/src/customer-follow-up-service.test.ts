@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { VoiceServiceEnv } from "./env";
 import { createCustomerFollowUpService } from "./customer-follow-up-service";
 
-const env: VoiceServiceEnv = {
+const env = {
   ELEVENLABS_MODEL_ID: "eleven_flash_v2_5",
   ELEVENLABS_OUTPUT_FORMAT: "mp3_44100_128",
   ELEVENLABS_VOICE_ID: "voice_123",
@@ -39,7 +39,7 @@ const env: VoiceServiceEnv = {
   TWILIO_TTS_PROVIDER: "ElevenLabs",
   TWILIO_TTS_VOICE: "voice_123-flash_v2_5-1.0_0.5_0.8",
   VOICE_SERVICE_ALLOWED_ORIGIN: "https://app.signalhost.ai",
-};
+} as VoiceServiceEnv;
 
 describe("customer follow-up service", () => {
   afterEach(() => {

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { getEmailReadiness } from "./email-readiness";
 import type { VoiceServiceEnv } from "./env";
 
-const baseEnv: VoiceServiceEnv = {
+const baseEnv = {
   ELEVENLABS_EVE_VOICE_ID: "eve",
   ELEVENLABS_MICHAEL_VOICE_ID: "michael",
   OPENAI_REALTIME_GREETING_DELAY_MS: 900,
@@ -34,7 +34,7 @@ const baseEnv: VoiceServiceEnv = {
   TWILIO_TTS_PROVIDER: "Google",
   TWILIO_TTS_VOICE: "en-US-Standard-H",
   VOICE_SERVICE_ALLOWED_ORIGIN: "*",
-};
+} as VoiceServiceEnv;
 
 describe("email readiness", () => {
   it("builds exact inbound webhook setup details", () => {

@@ -3,7 +3,7 @@ import { createOwnerEmailCommandService, extractOwnerEmailCommandMessage } from 
 import type { VoiceServiceEnv } from "./env";
 import type { OwnerCommandRuntime } from "./owner-command-runtime";
 
-const env: VoiceServiceEnv = {
+const env = {
   ELEVENLABS_EVE_VOICE_ID: "eve",
   ELEVENLABS_MICHAEL_VOICE_ID: "michael",
   OPENAI_REALTIME_GREETING_DELAY_MS: 900,
@@ -38,7 +38,7 @@ const env: VoiceServiceEnv = {
   TWILIO_TTS_PROVIDER: "ElevenLabs",
   TWILIO_TTS_VOICE: "voice_123-flash_v2_5-1.0_0.5_0.8",
   VOICE_SERVICE_ALLOWED_ORIGIN: "*",
-};
+} as VoiceServiceEnv;
 
 describe("owner email command service", () => {
   afterEach(() => {
