@@ -242,8 +242,8 @@ export default function Dashboard() {
             Today, SignalHost handled{" "}
             <span className="font-medium text-foreground tabular-nums">{totalCalls}</span>{" "}
             {totalCalls === 1 ? "call" : "calls"},{" "}
-            <span className="font-medium text-foreground tabular-nums">{websiteChats}</span>{" "}
-            {websiteChats === 1 ? "chat" : "chats"}, and has{" "}
+            <span className="font-medium text-foreground tabular-nums">{websiteChats as number}</span>{" "}
+            {(websiteChats as number) === 1 ? "chat" : "chats"}, and has{" "}
             <span className="font-medium text-foreground tabular-nums">{needsAttentionCount}</span>{" "}
             {needsAttentionCount === 1 ? "item" : "items"} needing attention.
           </p>
