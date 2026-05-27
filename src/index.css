@@ -63,6 +63,15 @@
     --sidebar-accent-foreground: 36 33% 97%;
     --sidebar-border: 28 18% 22%;
     --sidebar-ring: 14 72% 50%;
+
+    /* Elevation + texture tokens for polished surfaces */
+    --gradient-hero: linear-gradient(135deg, hsl(14 72% 46% / 0.10) 0%, hsl(18 80% 58% / 0.06) 45%, hsl(36 60% 92% / 0.4) 100%);
+    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary-glow)) 100%);
+    --gradient-surface: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(36 33% 98%) 100%);
+    --shadow-card: 0 1px 2px hsl(24 14% 12% / 0.04), 0 1px 3px hsl(24 14% 12% / 0.03);
+    --shadow-elevated: 0 4px 6px -2px hsl(24 14% 12% / 0.05), 0 12px 28px -8px hsl(24 14% 12% / 0.10);
+    --shadow-glow: 0 8px 32px -8px hsl(14 72% 46% / 0.35);
+    --ring-soft: 0 0 0 1px hsl(30 14% 88%);
   }
 
   .dark {
