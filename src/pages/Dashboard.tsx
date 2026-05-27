@@ -551,7 +551,7 @@ function QuickAction({
 
 function CallActivity({ businessType, item }: { businessType: unknown; item: Call }) {
   const callerKnown = item.caller && !/^unknown/i.test(item.caller);
-  const displayName = callerKnown ? item.caller : (item.callerPhone || "Caller");
+  const displayName = callerKnown ? item.caller : "Caller";
   return (
     <>
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-info/10 text-info ring-4 ring-info/5">
