@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { getStripeBillingReadiness } from "./billing-readiness";
 import type { VoiceServiceEnv } from "./env";
 
-const baseEnv: VoiceServiceEnv = {
+const baseEnv = {
   ELEVENLABS_EVE_VOICE_ID: "eve",
   ELEVENLABS_MICHAEL_VOICE_ID: "michael",
   OPENAI_REALTIME_GREETING_DELAY_MS: 900,
@@ -34,7 +34,7 @@ const baseEnv: VoiceServiceEnv = {
   TWILIO_TTS_PROVIDER: "ElevenLabs",
   TWILIO_TTS_VOICE: "voice",
   VOICE_SERVICE_ALLOWED_ORIGIN: "https://app.signalhost.ai",
-};
+} as VoiceServiceEnv;
 
 describe("Stripe billing readiness", () => {
   it("reports the webhook URL, mode, and event list when configured", () => {

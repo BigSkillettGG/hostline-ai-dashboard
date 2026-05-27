@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createStaffNotificationService, formatStaffAlertMessage } from "./notification-service";
 import type { VoiceServiceEnv } from "./env";
 
-const env: VoiceServiceEnv = {
+const env = {
   ELEVENLABS_MODEL_ID: "eleven_flash_v2_5",
   ELEVENLABS_OUTPUT_FORMAT: "mp3_44100_128",
   ELEVENLABS_VOICE_ID: "voice_123",
@@ -41,7 +41,7 @@ const env: VoiceServiceEnv = {
   TWILIO_ELEVENLABS_SPEED: "1.0",
   TWILIO_ELEVENLABS_STABILITY: "0.5",
   VOICE_SERVICE_ALLOWED_ORIGIN: "*",
-};
+} as VoiceServiceEnv;
 
 describe("staff alert formatting", () => {
   afterEach(() => {
