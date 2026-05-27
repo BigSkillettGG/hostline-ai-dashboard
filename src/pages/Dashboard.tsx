@@ -36,7 +36,7 @@ import {
   getVerticalInsightProfile,
   type VerticalInsightProfile,
 } from "@/domain/vertical-insights";
-import { assignedDemoPhoneNumber } from "@/domain/onboarding";
+
 import { formatTime, formatMoney } from "@/lib/format";
 import { isPlatformAdminUser, useCurrentUser } from "@/lib/auth";
 import { loadOnboardingDraft } from "@/lib/onboarding-draft";
