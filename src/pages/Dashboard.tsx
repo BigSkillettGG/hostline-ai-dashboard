@@ -286,70 +286,46 @@ export default function Dashboard() {
         )}
 
         {/* Host Profile + Quick Actions */}
-        <div className="grid gap-4 lg:grid-cols-3">
-          <Card className="lg:col-span-2 relative overflow-hidden border-border/70 shadow-[var(--shadow-elevated)]">
-            {/* Ambient backdrop */}
-            <div className="absolute inset-0 bg-[image:var(--gradient-hero)] opacity-80" />
-            <div className="pointer-events-none absolute -left-20 -top-20 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
-            <div className="pointer-events-none absolute -right-24 bottom-0 h-56 w-56 rounded-full bg-primary-glow/10 blur-3xl" />
-
-            <div className="relative grid gap-0 md:grid-cols-[auto_1fr]">
-              <div className="flex items-center justify-center p-6 md:p-8">
-                <div className="relative">
-                  <div className="absolute -inset-2 rounded-full bg-[image:var(--gradient-primary)] opacity-20 blur-xl" />
-                  <Avatar className="relative h-28 w-28 ring-4 ring-background shadow-[var(--shadow-glow)]">
-                    <AvatarImage src={elliotAvatar} alt={`${HOST_NAME}, your SignalHost host`} className="object-cover" />
-                    <AvatarFallback className="bg-primary text-2xl font-semibold text-primary-foreground">
-                      {HOST_NAME[0]}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span
-                    className={`absolute bottom-1.5 right-1.5 h-4 w-4 rounded-full ring-[3px] ring-background ${
-                      hostStatus.tone === "ok"
-                        ? "bg-success after:absolute after:inset-0 after:rounded-full after:bg-success after:animate-ping after:opacity-60"
-                        : hostStatus.tone === "warn"
-                        ? "bg-warning"
-                        : "bg-muted-foreground"
-                    }`}
-                  />
-                </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card className="border-border/70 shadow-[var(--shadow-card)]">
+            <div className="flex items-center gap-4 p-4">
+              <div className="relative shrink-0">
+                <Avatar className="h-12 w-12 ring-2 ring-background">
+                  <AvatarImage src={elliotAvatar} alt={`${HOST_NAME}, your SignalHost host`} className="object-cover" />
+                  <AvatarFallback className="bg-primary text-sm font-semibold text-primary-foreground">
+                    {HOST_NAME[0]}
+                  </AvatarFallback>
+                </Avatar>
+                <span
+                  className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full ring-2 ring-background ${
+                    hostStatus.tone === "ok" ? "bg-success" : hostStatus.tone === "warn" ? "bg-warning" : "bg-muted-foreground"
+                  }`}
+                />
               </div>
-              <div className="p-5 md:p-6 md:pl-2">
+              <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-primary">
-                    Your SignalHost host
-                  </span>
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-2.5">
-                  <h2 className="text-2xl font-semibold tracking-tight">{HOST_NAME}</h2>
+                  <h2 className="text-base font-semibold tracking-tight">{HOST_NAME}</h2>
                   <Badge
                     variant="outline"
                     className={
                       hostStatus.tone === "ok"
-                        ? "border-success/30 bg-success/10 text-success"
-                        : "border-warning/30 bg-warning/10 text-warning"
+                        ? "border-success/30 bg-success/10 text-success text-[10px] px-1.5 py-0"
+                        : "border-warning/30 bg-warning/10 text-warning text-[10px] px-1.5 py-0"
                     }
                   >
-                    <span className={`mr-1.5 h-1.5 w-1.5 rounded-full ${hostStatus.tone === "ok" ? "bg-success" : "bg-warning"}`} />
                     {hostStatus.label}
                   </Badge>
                 </div>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Call or text your host.
-                </p>
-
-                <div className="mt-5 grid gap-2 text-sm sm:grid-cols-2">
-                  <ContactRow icon={Phone} label="Call or text" value={aiHostPhone} href={`tel:${aiHostPhone}`} />
-                  <ContactRow icon={Mail} label="Email" value={hostEmail} href={`mailto:${hostEmail}`} />
-                </div>
-
-                <div className="mt-5 flex flex-wrap gap-2">
-                  <Button size="sm" variant="outline" asChild>
-                    <Link to="/app/assistant">
-                      <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-                      Message {HOST_NAME}
-                    </Link>
-                  </Button>
+                <p className="text-xs text-muted-foreground">Call or text your host</p>
+                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                  <a href={`tel:${aiHostPhone}`} className="inline-flex items-center gap-1.5 text-foreground hover:text-primary transition-colors">
+                    <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="tabular-nums">{aiHostPhone}</span>
+                  </a>
+                  <a href={`mailto:${hostEmail}`} className="inline-flex items-center gap-1.5 text-foreground hover:text-primary transition-colors min-w-0">
+                    <Mail className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span className="truncate">{hostEmail}</span>
+                  </a>
                 </div>
               </div>
             </div>
@@ -391,6 +367,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
+
 
 
         {/* Needs Attention */}
