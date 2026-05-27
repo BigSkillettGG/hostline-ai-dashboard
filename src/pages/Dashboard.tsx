@@ -25,7 +25,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import elliotAvatar from "@/assets/elliot-avatar.jpg";
 import { calls as sampleCalls, orders as sampleOrders, reservations as sampleReservations } from "@/data/mock";
 import type { Call, Order, Reservation } from "@/data/mock";
 import { buildDailyBrief } from "@/domain/daily-brief";
@@ -231,21 +232,28 @@ export default function Dashboard() {
 
   return (
     <>
-      <div className="border-b border-border bg-background">
-        <div className="px-4 py-6 md:px-6 md:py-7">
-          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <Calendar className="h-3.5 w-3.5" />
+      {/* Page header — elevated hero strip */}
+      <div className="relative border-b border-border/60 bg-[image:var(--gradient-hero)]">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_hsl(var(--primary)/0.08),_transparent_55%)]" />
+        <div className="relative px-4 py-7 md:px-8 md:py-9">
+          <div className="flex flex-wrap items-center gap-2 text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+            <Calendar className="h-3 w-3" />
             <span>{today}</span>
+            <span className="text-border">·</span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className={`h-1.5 w-1.5 rounded-full ${hostStatus.tone === "ok" ? "bg-success animate-pulse" : "bg-warning"}`} />
+              {hostStatus.tone === "ok" ? "Live" : "Setup pending"}
+            </span>
           </div>
-          <h1 className="mt-1.5 text-[26px] font-semibold tracking-tight md:text-[28px]">{businessName}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Today, SignalHost handled{" "}
-            <span className="font-medium text-foreground tabular-nums">{totalCalls}</span>{" "}
+          <h1 className="mt-2 text-[28px] font-semibold tracking-tight md:text-[32px]">{businessName}</h1>
+          <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+            Today, {HOST_NAME} handled{" "}
+            <span className="font-semibold text-foreground tabular-nums">{totalCalls}</span>{" "}
             {totalCalls === 1 ? "call" : "calls"},{" "}
-            <span className="font-medium text-foreground tabular-nums">{websiteChats as number}</span>{" "}
-            {(websiteChats as number) === 1 ? "chat" : "chats"}, and has{" "}
-            <span className="font-medium text-foreground tabular-nums">{needsAttentionCount}</span>{" "}
-            {needsAttentionCount === 1 ? "item" : "items"} needing attention.
+            <span className="font-semibold text-foreground tabular-nums">{websiteChats as number}</span>{" "}
+            {(websiteChats as number) === 1 ? "chat" : "chats"}, and flagged{" "}
+            <span className="font-semibold text-foreground tabular-nums">{needsAttentionCount}</span>{" "}
+            {needsAttentionCount === 1 ? "item" : "items"} for your attention.
           </p>
         </div>
       </div>
@@ -280,25 +288,41 @@ export default function Dashboard() {
 
         {/* Host Profile + Quick Actions */}
         <div className="grid gap-4 lg:grid-cols-3">
-          <Card className="lg:col-span-2 overflow-hidden border-primary/15">
-            <div className="grid gap-0 md:grid-cols-[auto_1fr]">
-              <div className="flex items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5 p-6 md:p-8">
+          <Card className="lg:col-span-2 relative overflow-hidden border-border/70 shadow-[var(--shadow-elevated)]">
+            {/* Ambient backdrop */}
+            <div className="absolute inset-0 bg-[image:var(--gradient-hero)] opacity-80" />
+            <div className="pointer-events-none absolute -left-20 -top-20 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
+            <div className="pointer-events-none absolute -right-24 bottom-0 h-56 w-56 rounded-full bg-primary-glow/10 blur-3xl" />
+
+            <div className="relative grid gap-0 md:grid-cols-[auto_1fr]">
+              <div className="flex items-center justify-center p-6 md:p-8">
                 <div className="relative">
-                  <Avatar className="h-24 w-24 ring-4 ring-background">
+                  <div className="absolute -inset-2 rounded-full bg-[image:var(--gradient-primary)] opacity-20 blur-xl" />
+                  <Avatar className="relative h-28 w-28 ring-4 ring-background shadow-[var(--shadow-glow)]">
+                    <AvatarImage src={elliotAvatar} alt={`${HOST_NAME}, your SignalHost host`} className="object-cover" />
                     <AvatarFallback className="bg-primary text-2xl font-semibold text-primary-foreground">
                       {HOST_NAME[0]}
                     </AvatarFallback>
                   </Avatar>
                   <span
-                    className={`absolute bottom-1 right-1 h-4 w-4 rounded-full ring-2 ring-background ${
-                      hostStatus.tone === "ok" ? "bg-success" : hostStatus.tone === "warn" ? "bg-warning" : "bg-muted-foreground"
+                    className={`absolute bottom-1.5 right-1.5 h-4 w-4 rounded-full ring-[3px] ring-background ${
+                      hostStatus.tone === "ok"
+                        ? "bg-success after:absolute after:inset-0 after:rounded-full after:bg-success after:animate-ping after:opacity-60"
+                        : hostStatus.tone === "warn"
+                        ? "bg-warning"
+                        : "bg-muted-foreground"
                     }`}
                   />
                 </div>
               </div>
-              <div className="p-5 md:p-6">
+              <div className="p-5 md:p-6 md:pl-2">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-xl font-semibold tracking-tight">{HOST_NAME}</h2>
+                  <span className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-primary">
+                    Your SignalHost host
+                  </span>
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-2.5">
+                  <h2 className="text-2xl font-semibold tracking-tight">{HOST_NAME}</h2>
                   <Badge
                     variant="outline"
                     className={
@@ -307,14 +331,15 @@ export default function Dashboard() {
                         : "border-warning/30 bg-warning/10 text-warning"
                     }
                   >
+                    <span className={`mr-1.5 h-1.5 w-1.5 rounded-full ${hostStatus.tone === "ok" ? "bg-success" : "bg-warning"}`} />
                     {hostStatus.label}
                   </Badge>
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Your SignalHost host for {businessName}
+                  Greets every caller for {businessName} with a warm, on-brand welcome.
                 </p>
 
-                <div className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
+                <div className="mt-5 grid gap-2 text-sm sm:grid-cols-2">
                   <ContactRow icon={Phone} label="Call your host" value={aiHostPhone} href={`tel:${aiHostPhone}`} />
                   <ContactRow icon={MessageSquare} label="Text your host" value={aiHostPhone} href={`sms:${aiHostPhone}`} />
                   <ContactRow
@@ -327,7 +352,7 @@ export default function Dashboard() {
                 </div>
 
                 <div className="mt-5 flex flex-wrap gap-2">
-                  <Button size="sm" asChild>
+                  <Button size="sm" asChild className="shadow-[var(--shadow-glow)]">
                     <Link to="/app/calls">View calls</Link>
                   </Button>
                   <Button size="sm" variant="outline" asChild>
@@ -336,10 +361,10 @@ export default function Dashboard() {
                       Message {HOST_NAME}
                     </Link>
                   </Button>
-                  <Button size="sm" variant="outline" asChild>
+                  <Button size="sm" variant="ghost" asChild>
                     <Link to="/app/settings">Phone setup</Link>
                   </Button>
-                  <Button size="sm" variant="outline" asChild>
+                  <Button size="sm" variant="ghost" asChild>
                     <Link to="/app/website-chat">Website snippet</Link>
                   </Button>
                 </div>
@@ -347,11 +372,13 @@ export default function Dashboard() {
             </div>
           </Card>
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Quick actions</CardTitle>
+          <Card className="border-border/70 shadow-[var(--shadow-card)]">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                Quick actions
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-1.5">
+            <CardContent className="space-y-0.5">
               <QuickAction to="/app/needs-attention" icon={AlertTriangle} label="Review needs attention" badge={needsAttentionCount || undefined} />
               <QuickAction to="/app/calls" icon={Phone} label="View calls" />
               <QuickAction to="/app/kitchen" icon={ChefHat} label="Open kitchen" />
@@ -362,36 +389,45 @@ export default function Dashboard() {
           </Card>
         </div>
 
+
         {/* Needs Attention */}
-        <Card>
-          <CardHeader className="pb-2">
+        <Card className="border-border/70 shadow-[var(--shadow-card)]">
+          <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-warning" />
-                Needs attention
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-warning/10 text-warning">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                </div>
+                <CardTitle className="text-base font-semibold tracking-tight">
+                  Needs attention
+                </CardTitle>
                 {needsAttentionCount > 0 && (
                   <Badge variant="outline" className="border-warning/30 bg-warning/10 text-warning">
                     {needsAttentionCount}
                   </Badge>
                 )}
-              </CardTitle>
-              <Link to="/app/needs-attention" className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+              </div>
+              <Link to="/app/needs-attention" className="inline-flex items-center gap-1 text-xs font-medium text-primary transition-colors hover:text-primary/80">
                 View all <ArrowRight className="h-3 w-3" />
               </Link>
             </div>
           </CardHeader>
-          <CardContent className="px-0">
+          <CardContent className="px-0 pb-2">
             {openTasks.length === 0 ? (
-              <div className="px-6 py-10 text-center text-sm text-muted-foreground">
-                Nothing needs your attention right now. Nice.
+              <div className="mx-6 my-2 flex flex-col items-center gap-2 rounded-lg border border-dashed border-border/70 bg-muted/20 px-6 py-10 text-center text-sm text-muted-foreground">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-success/10 text-success">
+                  <Sparkles className="h-4 w-4" />
+                </div>
+                <div className="font-medium text-foreground">All clear</div>
+                <div>Nothing needs your attention right now. Nice.</div>
               </div>
             ) : (
-              <ul className="divide-y divide-border">
+              <ul className="divide-y divide-border/70">
                 {openTasks.slice(0, 6).map((task) => {
                   const badge = priorityBadge[task.priority];
                   return (
-                    <li key={task.id} className="flex items-start gap-3 px-6 py-3 text-sm">
-                      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-warning/10 text-warning">
+                    <li key={task.id} className="group/row flex items-start gap-3 px-6 py-3.5 text-sm transition-colors hover:bg-muted/30">
+                      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-warning/10 text-warning ring-4 ring-warning/5">
                         <AlertTriangle className="h-3.5 w-3.5" />
                       </div>
                       <div className="min-w-0 flex-1">
@@ -401,7 +437,7 @@ export default function Dashboard() {
                         </div>
                         <div className="mt-0.5 truncate text-xs text-muted-foreground">{task.title}</div>
                       </div>
-                      <Button size="sm" variant="ghost" asChild>
+                      <Button size="sm" variant="ghost" asChild className="opacity-70 transition-opacity group-hover/row:opacity-100">
                         <Link to="/app/needs-attention">Review</Link>
                       </Button>
                     </li>
@@ -413,23 +449,36 @@ export default function Dashboard() {
         </Card>
 
         {/* Activity metrics */}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-          <StatCard label="Calls answered" value={totalCalls} delta={0} icon={Phone} accent />
-          <StatCard label="Missed recovered" value={missedRecovered} delta={0} icon={PhoneIncoming} />
-          <StatCard label="Website chats" value={websiteChats} delta={0} icon={MessageCircle} />
-          <StatCard label={verticalProfile.primaryWorkflow.metricLabel} value={ordersCaptured} delta={0} icon={ShoppingBag} />
-          <StatCard label={verticalProfile.secondaryWorkflow.metricLabel} value={reservationRequests} delta={0} icon={CalendarDays} />
-          <Link to="/app/needs-attention" className="contents">
-            <StatCard label="Needs attention" value={needsAttentionCount} delta={0} icon={AlertTriangle} />
-          </Link>
+        <div>
+          <div className="mb-3 flex items-end justify-between px-1">
+            <h2 className="text-sm font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              Today's activity
+            </h2>
+            <span className="text-[11px] text-muted-foreground">Last 24 hours</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+            <StatCard label="Calls answered" value={totalCalls} delta={0} icon={Phone} accent />
+            <StatCard label="Missed recovered" value={missedRecovered} delta={0} icon={PhoneIncoming} />
+            <StatCard label="Website chats" value={websiteChats} delta={0} icon={MessageCircle} />
+            <StatCard label={verticalProfile.primaryWorkflow.metricLabel} value={ordersCaptured} delta={0} icon={ShoppingBag} />
+            <StatCard label={verticalProfile.secondaryWorkflow.metricLabel} value={reservationRequests} delta={0} icon={CalendarDays} />
+            <Link to="/app/needs-attention" className="contents">
+              <StatCard label="Needs attention" value={needsAttentionCount} delta={0} icon={AlertTriangle} />
+            </Link>
+          </div>
         </div>
 
+
         {/* Daily brief */}
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between gap-3">
+        <Card className="relative overflow-hidden border-border/70 shadow-[var(--shadow-card)]">
+          <div className="absolute inset-y-0 left-0 w-1 bg-[image:var(--gradient-primary)]" />
+          <CardHeader className="pb-3 pl-7">
+            <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <CardTitle className="text-base">Daily brief</CardTitle>
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-3.5 w-3.5 text-primary" />
+                  <CardTitle className="text-base font-semibold tracking-tight">Daily brief</CardTitle>
+                </div>
                 <p className="mt-0.5 text-xs text-muted-foreground">{dailyBrief.dateLabel}</p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -448,8 +497,8 @@ export default function Dashboard() {
               </div>
             </div>
           </CardHeader>
-          <CardContent>
-            <p className="text-sm leading-6 text-muted-foreground">
+          <CardContent className="pl-7">
+            <p className="text-[15px] leading-7 text-foreground/85">
               {totalCalls === 0 && ordersCaptured === 0 && reservationRequests === 0
                 ? `No new customer interactions for ${businessName} yet today.`
                 : dailyBrief.ownerMessage}
@@ -470,34 +519,38 @@ export default function Dashboard() {
         </Card>
 
         {/* Recent activity */}
-        <Card>
-          <CardHeader className="pb-2">
+        <Card className="border-border/70 shadow-[var(--shadow-card)]">
+          <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Activity className="h-4 w-4 text-muted-foreground" />
-                Recent activity
-              </CardTitle>
-              <Link to="/app/calls" className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                  <Activity className="h-3.5 w-3.5" />
+                </div>
+                <CardTitle className="text-base font-semibold tracking-tight">Recent activity</CardTitle>
+              </div>
+              <Link to="/app/calls" className="inline-flex items-center gap-1 text-xs font-medium text-primary transition-colors hover:text-primary/80">
                 View all <ArrowRight className="h-3 w-3" />
               </Link>
             </div>
           </CardHeader>
-          <CardContent className="px-0">
+          <CardContent className="px-0 pb-2">
             {activity.length === 0 ? (
-              <div className="px-6 py-10 text-center text-sm text-muted-foreground">No recent activity yet.</div>
+              <div className="mx-6 my-2 rounded-lg border border-dashed border-border/70 bg-muted/20 px-6 py-10 text-center text-sm text-muted-foreground">
+                No recent activity yet.
+              </div>
             ) : (
-              <ul className="divide-y divide-border">
+              <ul className="divide-y divide-border/70">
                 {activity.map((activityItem) => (
                   <li
                     key={`${activityItem.type}-${activityItem.t}-${activityItem.item.id}`}
-                    className="group flex items-center gap-3 px-6 py-3 text-sm transition-colors hover:bg-muted/30"
+                    className="group flex items-center gap-3 px-6 py-3.5 text-sm transition-colors hover:bg-muted/30"
                   >
                     {activityItem.type === "call" && <CallActivity businessType={businessType} item={activityItem.item} />}
                     {activityItem.type === "order" && <OrderActivity item={activityItem.item} profile={verticalProfile} />}
                     {activityItem.type === "reservation" && <ReservationActivity item={activityItem.item} profile={verticalProfile} />}
                     {activityItem.type === "task" && <TaskActivity item={activityItem.item} />}
-                    <div className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">{formatTime(activityItem.t)}</div>
-                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground" />
+                    <div className="text-[11px] font-medium text-muted-foreground tabular-nums whitespace-nowrap">{formatTime(activityItem.t)}</div>
+                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/0 transition-all group-hover:text-muted-foreground group-hover:translate-x-0.5" />
                   </li>
                 ))}
               </ul>
@@ -509,21 +562,24 @@ export default function Dashboard() {
   );
 }
 
+
 function ContactRow({
   icon: Icon, label, value, href, muted,
 }: {
   icon: typeof Phone; label: string; value: string; href?: string; muted?: boolean;
 }) {
   const content = (
-    <div className="flex items-center gap-2.5 rounded-md border border-border bg-card px-3 py-2">
-      <Icon className={`h-3.5 w-3.5 shrink-0 ${muted ? "text-muted-foreground" : "text-primary"}`} />
+    <div className="group/contact flex items-center gap-3 rounded-lg border border-border/70 bg-card/80 px-3 py-2.5 backdrop-blur-sm transition-all hover:border-primary/30 hover:bg-card hover:shadow-[var(--shadow-card)]">
+      <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors ${muted ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary group-hover/contact:bg-primary/15"}`}>
+        <Icon className="h-3.5 w-3.5" />
+      </div>
       <div className="min-w-0 leading-tight">
-        <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
-        <div className={`truncate text-sm font-medium tabular-nums ${muted ? "text-muted-foreground" : ""}`}>{value}</div>
+        <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">{label}</div>
+        <div className={`truncate text-sm font-medium tabular-nums ${muted ? "text-muted-foreground" : "text-foreground"}`}>{value}</div>
       </div>
     </div>
   );
-  if (href && !muted) return <a href={href} className="hover:opacity-90">{content}</a>;
+  if (href && !muted) return <a href={href} className="block">{content}</a>;
   return content;
 }
 
@@ -533,17 +589,19 @@ function QuickAction({
   return (
     <Link
       to={to}
-      className="group flex items-center justify-between rounded-md border border-transparent px-2.5 py-2 text-sm transition-colors hover:border-border hover:bg-muted/40"
+      className="group flex items-center justify-between gap-2 rounded-lg px-2.5 py-2.5 text-sm transition-all hover:bg-muted/50"
     >
       <span className="flex items-center gap-2.5">
-        <Icon className="h-4 w-4 text-muted-foreground group-hover:text-primary" />
-        {label}
+        <span className="flex h-7 w-7 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
+          <Icon className="h-3.5 w-3.5" />
+        </span>
+        <span className="font-medium text-foreground/90">{label}</span>
       </span>
       <span className="flex items-center gap-2">
         {badge !== undefined && (
           <Badge variant="outline" className="border-warning/30 bg-warning/10 text-warning">{badge}</Badge>
         )}
-        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 transition-all group-hover:opacity-100 group-hover:translate-x-0.5" />
       </span>
     </Link>
   );

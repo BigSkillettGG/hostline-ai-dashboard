@@ -190,5 +190,6 @@ function createTelephonyService(): TelephonyService {
       status: "released" as const,
     })),
     searchAvailableNumbers: vi.fn(async () => []),
-  };
+    repairOpenAIRealtimeSipRouting: vi.fn(async () => ({ ok: true as const })),
+  } as unknown as TelephonyService;
 }

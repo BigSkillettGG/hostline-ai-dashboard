@@ -1381,7 +1381,7 @@ describe("OpenAI Realtime SIP", () => {
         },
         {
           callStore: {
-            async addTranscriptTurn(input) {
+            async addTranscriptTurn(input: { speaker: string; text: string }) {
               transcriptTurns.push({ speaker: input.speaker, text: input.text });
             },
             async completeCall() {},
@@ -1391,7 +1391,7 @@ describe("OpenAI Realtime SIP", () => {
             async startRealtimeCall() {
               return { callId: "call_uuid" };
             },
-          },
+          } as never,
           fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
           websocketFactory: () => socket as never,
         },
@@ -5616,7 +5616,7 @@ describe("OpenAI Realtime SIP", () => {
       unknownItems: ["pepperoni pizza"],
     });
     expect(String(result.message)).toContain("Do not save this as a pickup order yet");
-    expect(result.alternatives).toEqual(expect.arrayContaining(["Margherita Pizza", "Diavola Pizza", "Funghi Pizza"]));
+    expect((result as { alternatives?: string[] }).alternatives).toEqual(expect.arrayContaining(["Margherita Pizza", "Diavola Pizza", "Funghi Pizza"]));
     expect(requests).toHaveLength(0);
   });
 
