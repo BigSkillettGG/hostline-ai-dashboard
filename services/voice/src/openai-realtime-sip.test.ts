@@ -5616,7 +5616,7 @@ describe("OpenAI Realtime SIP", () => {
       unknownItems: ["pepperoni pizza"],
     });
     expect(String(result.message)).toContain("Do not save this as a pickup order yet");
-    expect(result.alternatives).toEqual(expect.arrayContaining(["Margherita Pizza", "Diavola Pizza", "Funghi Pizza"]));
+    expect((result as { alternatives?: string[] }).alternatives).toEqual(expect.arrayContaining(["Margherita Pizza", "Diavola Pizza", "Funghi Pizza"]));
     expect(requests).toHaveLength(0);
   });
 
