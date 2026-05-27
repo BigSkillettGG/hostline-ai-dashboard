@@ -426,6 +426,7 @@ describe("restaurant context store", () => {
       ELEVENLABS_VOICE_ID: "voice_1",
       ELEVENLABS_EVE_VOICE_ID: "eve",
       ELEVENLABS_MICHAEL_VOICE_ID: "michael",
+  OPENAI_REALTIME_GREETING_DELAY_MS: 900,
     });
 
     const context = await store.getContext("loc_hvac");

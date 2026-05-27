@@ -5,6 +5,7 @@ import { resolveConversationRelayTtsVoice, resolvePreviewElevenLabsVoiceId } fro
 const env = {
   ELEVENLABS_EVE_VOICE_ID: "eve",
   ELEVENLABS_MICHAEL_VOICE_ID: "michael",
+  OPENAI_REALTIME_GREETING_DELAY_MS: 900,
   TWILIO_ELEVENLABS_MODEL_ID: "flash_v2_5",
   TWILIO_ELEVENLABS_SIMILARITY_BOOST: "0.8",
   TWILIO_ELEVENLABS_SPEED: "1.0",

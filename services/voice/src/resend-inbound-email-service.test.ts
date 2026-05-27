@@ -8,6 +8,7 @@ import type { OwnerEmailCommandService } from "./owner-email-command-service";
 const env = {
   ELEVENLABS_EVE_VOICE_ID: "eve",
   ELEVENLABS_MICHAEL_VOICE_ID: "michael",
+  OPENAI_REALTIME_GREETING_DELAY_MS: 900,
   ELEVENLABS_MODEL_ID: "eleven_flash_v2_5",
   ELEVENLABS_OUTPUT_FORMAT: "mp3_44100_128",
   ELEVENLABS_VOICE_ID: "voice_123",

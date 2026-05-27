@@ -8,6 +8,7 @@ const baseEnv: VoiceServiceEnv = {
   ELEVENLABS_VOICE_ID: "voice_1",
   ELEVENLABS_EVE_VOICE_ID: "eve",
   ELEVENLABS_MICHAEL_VOICE_ID: "michael",
+  OPENAI_REALTIME_GREETING_DELAY_MS: 900,
   NODE_ENV: "production",
   OPENAI_MODEL: "gpt-5-mini",
   OPENAI_REPLY_TIMEOUT_MS: 4500,
