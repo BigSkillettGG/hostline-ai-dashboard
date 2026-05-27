@@ -1,71 +1,64 @@
 import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, Phone, ShoppingBag, CalendarDays, BookOpen,
-  Bot, Plug, Settings as SettingsIcon, UtensilsCrossed, Flame,
-  CreditCard, Users, Building2, ChevronDown, AlertTriangle, BellRing,
-  ChefHat, ListChecks, ListTodo, MessageCircle, Sparkles,
+  Flame, CreditCard, ChefHat, AlertTriangle, BellRing, ListChecks,
+  Settings as SettingsIcon,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
   SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
   SidebarHeader, SidebarFooter, useSidebar,
 } from "@/components/ui/sidebar";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { useState } from "react";
 import { getOnboardingBusinessTemplate } from "@/domain/onboarding";
 import { loadOnboardingDraft } from "@/lib/onboarding-draft";
+import { isPlatformAdminUser, useCurrentUser } from "@/lib/auth";
 
-const operations = [
+type NavItem = { title: string; url: string; icon: typeof Phone; end?: boolean };
+
+const main: NavItem[] = [
   { title: "Dashboard", url: "/app", icon: LayoutDashboard, end: true },
-  { title: "Owner Assistant", url: "/app/assistant", icon: Sparkles },
-  { title: "Test Suite", url: "/app/test-suite", icon: ListChecks },
-  { title: "Alert Log", url: "/app/alert-log", icon: BellRing },
-  { title: "Action Center", url: "/app/tasks", icon: ListTodo },
+  { title: "Needs Attention", url: "/app/needs-attention", icon: AlertTriangle },
   { title: "Calls", url: "/app/calls", icon: Phone },
+];
+const operations: NavItem[] = [
   { title: "Orders", url: "/app/orders", icon: ShoppingBag },
   { title: "Kitchen", url: "/app/kitchen", icon: ChefHat },
   { title: "Reservations", url: "/app/reservations", icon: CalendarDays },
-  { title: "Escalations", url: "/app/escalations", icon: AlertTriangle },
 ];
-const content = [
-  { title: "Menu", url: "/app/menu", icon: UtensilsCrossed },
+const knowledge: NavItem[] = [
   { title: "Knowledge Base", url: "/app/knowledge", icon: BookOpen },
 ];
-const settings = [
-  { title: "Voice Agent", url: "/app/voice-agent", icon: Bot },
-  { title: "Integrations", url: "/app/integrations", icon: Plug },
-  { title: "Website Chat", url: "/app/website-chat", icon: MessageCircle },
-  { title: "Phone & Hours", url: "/app/settings", icon: Phone },
-  { title: "Alerts & Routing", url: "/app/settings/alerts", icon: BellRing },
-  { title: "Team", url: "/app/team", icon: Users },
-  { title: "Business Profile", url: "/app/profile", icon: Building2 },
+const account: NavItem[] = [
+  { title: "Settings", url: "/app/settings", icon: SettingsIcon },
   { title: "Billing", url: "/app/billing", icon: CreditCard },
+];
+const diagnostics: NavItem[] = [
+  { title: "Test Suite", url: "/app/test-suite", icon: ListChecks },
+  { title: "Alert Log", url: "/app/alert-log", icon: BellRing },
 ];
 
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const { pathname } = useLocation();
-  const isActive = (url: string, end?: boolean) => end ? pathname === url : pathname === url || pathname.startsWith(url + "/");
-  const settingsActive = settings.some((s) => isActive(s.url));
-  const [settingsOpen, setSettingsOpen] = useState(settingsActive);
+  const user = useCurrentUser();
+  const platformAdmin = isPlatformAdminUser(user);
+  const isActive = (url: string, end?: boolean) =>
+    end ? pathname === url : pathname === url || pathname.startsWith(url + "/");
+
   const draft = loadOnboardingDraft();
   const businessTemplate = getOnboardingBusinessTemplate(draft);
   const businessName = String(draft.restaurantName || businessTemplate.defaultName);
-  const operationsNav = operations.map((item) => {
+
+  const adaptOps = (items: NavItem[]) => items.map((item) => {
     if (businessTemplate.id === "restaurant") return item;
     if (item.title === "Orders") return { ...item, title: businessTemplate.id === "salon_barber" ? "Client Requests" : "Requests" };
     if (item.title === "Kitchen") return { ...item, title: businessTemplate.id === "salon_barber" ? "Front Desk" : "Dispatch" };
     if (item.title === "Reservations") return { ...item, title: businessTemplate.appointmentNoun === "inspection" ? "Inspections" : "Appointments" };
     return item;
   });
-  const contentNav = content.map((item) => {
-    if (businessTemplate.id === "restaurant") return item;
-    if (item.title === "Menu") return { ...item, title: businessTemplate.id === "salon_barber" ? "Services" : "Service Catalog" };
-    return item;
-  });
 
-  const renderItem = (item: { title: string; url: string; icon: typeof Phone; end?: boolean }) => (
+  const renderItem = (item: NavItem) => (
     <SidebarMenuItem key={item.title}>
       <SidebarMenuButton asChild isActive={isActive(item.url, item.end)} tooltip={item.title}>
         <NavLink to={item.url} end={item.end} className="flex items-center gap-2.5">
@@ -94,49 +87,49 @@ export function AppSidebar() {
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Operations</SidebarGroupLabel>
+          <SidebarGroupLabel>Main</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>{operationsNav.map(renderItem)}</SidebarMenu>
+            <SidebarMenu>{main.map(renderItem)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Content</SidebarGroupLabel>
+          <SidebarGroupLabel>
+            {businessTemplate.id === "restaurant" ? "Restaurant Operations" : "Operations"}
+          </SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>{contentNav.map(renderItem)}</SidebarMenu>
+            <SidebarMenu>{adaptOps(operations).map(renderItem)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {collapsed ? (
+        <SidebarGroup>
+          <SidebarGroupLabel>Knowledge</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>{knowledge.map(renderItem)}</SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Account</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>{account.map(renderItem)}</SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {platformAdmin && (
           <SidebarGroup>
-            <SidebarGroupLabel>Settings</SidebarGroupLabel>
+            <SidebarGroupLabel>Diagnostics</SidebarGroupLabel>
             <SidebarGroupContent>
-              <SidebarMenu>{settings.map(renderItem)}</SidebarMenu>
+              <SidebarMenu>{diagnostics.map(renderItem)}</SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
-        ) : (
-          <Collapsible open={settingsOpen} onOpenChange={setSettingsOpen}>
-            <SidebarGroup>
-              <CollapsibleTrigger asChild>
-                <SidebarGroupLabel className="group/label flex cursor-pointer items-center justify-between hover:text-sidebar-foreground">
-                  <span className="flex items-center gap-1.5"><SettingsIcon className="h-3 w-3" />Settings</span>
-                  <ChevronDown className={`h-3 w-3 transition-transform ${settingsOpen ? "" : "-rotate-90"}`} />
-                </SidebarGroupLabel>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <SidebarGroupContent>
-                  <SidebarMenu>{settings.map(renderItem)}</SidebarMenu>
-                </SidebarGroupContent>
-              </CollapsibleContent>
-            </SidebarGroup>
-          </Collapsible>
         )}
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border">
         {!collapsed && (
           <div className="px-2 py-2 text-[11px] text-sidebar-foreground/60">
-            v1.0 - <span className="text-sidebar-foreground/80">Live</span>
+            v1.0 · <span className="text-sidebar-foreground/80">Live</span>
           </div>
         )}
       </SidebarFooter>
