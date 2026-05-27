@@ -367,6 +367,7 @@ export default function Dashboard() {
               <QuickAction to="/app/kitchen" icon={ChefHat} label="Open kitchen" />
               <QuickAction to="/app/reservations" icon={CalendarDays} label="View reservations" />
               <QuickAction to="/app/knowledge" icon={BookOpen} label="Update knowledge base" />
+              <QuickAction to="/app/website-chat" icon={Globe2} label="Website snippet" />
               <QuickAction to="/app/settings" icon={SettingsIcon} label="Phone setup" />
             </CardContent>
           </Card>
