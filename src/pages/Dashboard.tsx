@@ -145,11 +145,8 @@ export default function Dashboard() {
   const assignedPhoneNumber = activeTenant?.aiHostPhone ??
     String(draft.assignedSignalHostNumber || draft.assignedHostLineNumber || draft.assignedPhoneNumber || "");
   const aiHostPhone = assignedPhoneNumber || "(415) 555-0142";
-  const phoneIsDemo = !assignedPhoneNumber ||
-    assignedPhoneNumber === assignedDemoPhoneNumber ||
-    assignedPhoneNumber.includes("555");
+  const phoneIsDemo = !assignedPhoneNumber;
   const hostEmail = String(draft.contactEmail || draft.email || "").trim();
-  const hasWebsite = Boolean(String(draft.websiteUrl || draft.website || "").trim());
 
   const demoData = useMemo(
     () => adaptDemoDataForBusiness({
