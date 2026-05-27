@@ -391,35 +391,43 @@ export default function Dashboard() {
 
 
         {/* Needs Attention */}
-        <Card>
-          <CardHeader className="pb-2">
+        <Card className="border-border/70 shadow-[var(--shadow-card)]">
+          <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-warning" />
-                Needs attention
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-warning/10 text-warning">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                </div>
+                <CardTitle className="text-base font-semibold tracking-tight">
+                  Needs attention
+                </CardTitle>
                 {needsAttentionCount > 0 && (
                   <Badge variant="outline" className="border-warning/30 bg-warning/10 text-warning">
                     {needsAttentionCount}
                   </Badge>
                 )}
-              </CardTitle>
-              <Link to="/app/needs-attention" className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+              </div>
+              <Link to="/app/needs-attention" className="inline-flex items-center gap-1 text-xs font-medium text-primary transition-colors hover:text-primary/80">
                 View all <ArrowRight className="h-3 w-3" />
               </Link>
             </div>
           </CardHeader>
-          <CardContent className="px-0">
+          <CardContent className="px-0 pb-2">
             {openTasks.length === 0 ? (
-              <div className="px-6 py-10 text-center text-sm text-muted-foreground">
-                Nothing needs your attention right now. Nice.
+              <div className="mx-6 my-2 flex flex-col items-center gap-2 rounded-lg border border-dashed border-border/70 bg-muted/20 px-6 py-10 text-center text-sm text-muted-foreground">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-success/10 text-success">
+                  <Sparkles className="h-4 w-4" />
+                </div>
+                <div className="font-medium text-foreground">All clear</div>
+                <div>Nothing needs your attention right now. Nice.</div>
               </div>
             ) : (
-              <ul className="divide-y divide-border">
+              <ul className="divide-y divide-border/70">
                 {openTasks.slice(0, 6).map((task) => {
                   const badge = priorityBadge[task.priority];
                   return (
-                    <li key={task.id} className="flex items-start gap-3 px-6 py-3 text-sm">
-                      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-warning/10 text-warning">
+                    <li key={task.id} className="group/row flex items-start gap-3 px-6 py-3.5 text-sm transition-colors hover:bg-muted/30">
+                      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-warning/10 text-warning ring-4 ring-warning/5">
                         <AlertTriangle className="h-3.5 w-3.5" />
                       </div>
                       <div className="min-w-0 flex-1">
@@ -429,7 +437,7 @@ export default function Dashboard() {
                         </div>
                         <div className="mt-0.5 truncate text-xs text-muted-foreground">{task.title}</div>
                       </div>
-                      <Button size="sm" variant="ghost" asChild>
+                      <Button size="sm" variant="ghost" asChild className="opacity-70 transition-opacity group-hover/row:opacity-100">
                         <Link to="/app/needs-attention">Review</Link>
                       </Button>
                     </li>
@@ -441,16 +449,25 @@ export default function Dashboard() {
         </Card>
 
         {/* Activity metrics */}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-          <StatCard label="Calls answered" value={totalCalls} delta={0} icon={Phone} accent />
-          <StatCard label="Missed recovered" value={missedRecovered} delta={0} icon={PhoneIncoming} />
-          <StatCard label="Website chats" value={websiteChats} delta={0} icon={MessageCircle} />
-          <StatCard label={verticalProfile.primaryWorkflow.metricLabel} value={ordersCaptured} delta={0} icon={ShoppingBag} />
-          <StatCard label={verticalProfile.secondaryWorkflow.metricLabel} value={reservationRequests} delta={0} icon={CalendarDays} />
-          <Link to="/app/needs-attention" className="contents">
-            <StatCard label="Needs attention" value={needsAttentionCount} delta={0} icon={AlertTriangle} />
-          </Link>
+        <div>
+          <div className="mb-3 flex items-end justify-between px-1">
+            <h2 className="text-sm font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              Today's activity
+            </h2>
+            <span className="text-[11px] text-muted-foreground">Last 24 hours</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+            <StatCard label="Calls answered" value={totalCalls} delta={0} icon={Phone} accent />
+            <StatCard label="Missed recovered" value={missedRecovered} delta={0} icon={PhoneIncoming} />
+            <StatCard label="Website chats" value={websiteChats} delta={0} icon={MessageCircle} />
+            <StatCard label={verticalProfile.primaryWorkflow.metricLabel} value={ordersCaptured} delta={0} icon={ShoppingBag} />
+            <StatCard label={verticalProfile.secondaryWorkflow.metricLabel} value={reservationRequests} delta={0} icon={CalendarDays} />
+            <Link to="/app/needs-attention" className="contents">
+              <StatCard label="Needs attention" value={needsAttentionCount} delta={0} icon={AlertTriangle} />
+            </Link>
+          </div>
         </div>
+
 
         {/* Daily brief */}
         <Card>
