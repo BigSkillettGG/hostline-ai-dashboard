@@ -15,7 +15,6 @@ import {
   Globe2,
   Mail,
   MessageCircle,
-  MessageCircle,
   Phone,
   PhoneIncoming,
   Settings as SettingsIcon,
