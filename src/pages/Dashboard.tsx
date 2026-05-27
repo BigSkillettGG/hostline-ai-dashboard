@@ -15,7 +15,6 @@ import {
   Globe2,
   Mail,
   MessageCircle,
-  MessageSquare,
   Phone,
   PhoneIncoming,
   Settings as SettingsIcon,
@@ -37,7 +36,7 @@ import {
   getVerticalInsightProfile,
   type VerticalInsightProfile,
 } from "@/domain/vertical-insights";
-import { assignedDemoPhoneNumber } from "@/domain/onboarding";
+
 import { formatTime, formatMoney } from "@/lib/format";
 import { isPlatformAdminUser, useCurrentUser } from "@/lib/auth";
 import { loadOnboardingDraft } from "@/lib/onboarding-draft";
@@ -145,11 +144,8 @@ export default function Dashboard() {
   const assignedPhoneNumber = activeTenant?.aiHostPhone ??
     String(draft.assignedSignalHostNumber || draft.assignedHostLineNumber || draft.assignedPhoneNumber || "");
   const aiHostPhone = assignedPhoneNumber || "(415) 555-0142";
-  const phoneIsDemo = !assignedPhoneNumber ||
-    assignedPhoneNumber === assignedDemoPhoneNumber ||
-    assignedPhoneNumber.includes("555");
+  const phoneIsDemo = !assignedPhoneNumber;
   const hostEmail = String(draft.contactEmail || draft.email || "").trim();
-  const hasWebsite = Boolean(String(draft.websiteUrl || draft.website || "").trim());
 
   const demoData = useMemo(
     () => adaptDemoDataForBusiness({
@@ -336,36 +332,22 @@ export default function Dashboard() {
                   </Badge>
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Greets every caller for {businessName} with a warm, on-brand welcome.
+                  Call or text your host.
                 </p>
 
                 <div className="mt-5 grid gap-2 text-sm sm:grid-cols-2">
-                  <ContactRow icon={Phone} label="Call your host" value={aiHostPhone} href={`tel:${aiHostPhone}`} />
-                  <ContactRow icon={MessageSquare} label="Text your host" value={aiHostPhone} href={`sms:${aiHostPhone}`} />
-                  <ContactRow
-                    icon={Globe2}
-                    label="Website chat"
-                    value={hasWebsite ? "Active" : "Not installed"}
-                    muted={!hasWebsite}
-                  />
-                  {hostEmail && <ContactRow icon={Mail} label="Email" value={hostEmail} href={`mailto:${hostEmail}`} />}
+                  <ContactRow icon={Phone} label="Call or text" value={aiHostPhone} href={`tel:${aiHostPhone}`} />
+                  {hostEmail && (
+                    <ContactRow icon={Mail} label="Email" value={hostEmail} href={`mailto:${hostEmail}`} />
+                  )}
                 </div>
 
                 <div className="mt-5 flex flex-wrap gap-2">
-                  <Button size="sm" asChild className="shadow-[var(--shadow-glow)]">
-                    <Link to="/app/calls">View calls</Link>
-                  </Button>
                   <Button size="sm" variant="outline" asChild>
                     <Link to="/app/assistant">
                       <Sparkles className="mr-1.5 h-3.5 w-3.5" />
                       Message {HOST_NAME}
                     </Link>
-                  </Button>
-                  <Button size="sm" variant="ghost" asChild>
-                    <Link to="/app/settings">Phone setup</Link>
-                  </Button>
-                  <Button size="sm" variant="ghost" asChild>
-                    <Link to="/app/website-chat">Website snippet</Link>
                   </Button>
                 </div>
               </div>
@@ -384,6 +366,7 @@ export default function Dashboard() {
               <QuickAction to="/app/kitchen" icon={ChefHat} label="Open kitchen" />
               <QuickAction to="/app/reservations" icon={CalendarDays} label="View reservations" />
               <QuickAction to="/app/knowledge" icon={BookOpen} label="Update knowledge base" />
+              <QuickAction to="/app/website-chat" icon={Globe2} label="Website snippet" />
               <QuickAction to="/app/settings" icon={SettingsIcon} label="Phone setup" />
             </CardContent>
           </Card>
