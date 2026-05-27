@@ -25,7 +25,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import elliotAvatar from "@/assets/elliot-avatar.jpg";
 import { calls as sampleCalls, orders as sampleOrders, reservations as sampleReservations } from "@/data/mock";
 import type { Call, Order, Reservation } from "@/data/mock";
 import { buildDailyBrief } from "@/domain/daily-brief";
