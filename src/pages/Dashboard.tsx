@@ -7,30 +7,28 @@ import {
   Activity,
   AlertTriangle,
   ArrowRight,
-  Bot,
-  Brain,
+  BookOpen,
   Calendar,
   CalendarDays,
-  CheckCircle2,
+  ChefHat,
   ClipboardList,
-  CreditCard,
-  Database,
   Globe2,
-  ListChecks,
-  Megaphone,
+  Mail,
+  MessageCircle,
   MessageSquare,
   Phone,
   PhoneIncoming,
-  ShieldCheck,
+  Settings as SettingsIcon,
   ShoppingBag,
   Sparkles,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { calls as sampleCalls, orders as sampleOrders, reservations as sampleReservations } from "@/data/mock";
 import type { Call, Order, Reservation } from "@/data/mock";
-import { buildDailyBrief, type DailyBriefFollowUp, type DailyBriefSuggestion } from "@/domain/daily-brief";
+import { buildDailyBrief } from "@/domain/daily-brief";
 import type { StaffTask } from "@/domain/staff-tasks";
 import { adaptDemoDataForBusiness } from "@/domain/vertical-demo-data";
 import {
@@ -38,30 +36,10 @@ import {
   getVerticalInsightProfile,
   type VerticalInsightProfile,
 } from "@/domain/vertical-insights";
-import {
-  assignedDemoPhoneNumber,
-  calculateOnboardingProgress,
-} from "@/domain/onboarding";
-import {
-  buildProductTestReadiness,
-  type ProductReadinessItem,
-  type ProductReadinessStatus,
-} from "@/domain/product-test-readiness";
-import { summarizeScenarioRuns, voiceScenarios } from "@/domain/scenario-lab";
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { assignedDemoPhoneNumber } from "@/domain/onboarding";
 import { formatTime, formatMoney } from "@/lib/format";
-import { getAuthReadiness, isPlatformAdminUser, useCurrentUser } from "@/lib/auth";
+import { isPlatformAdminUser, useCurrentUser } from "@/lib/auth";
 import { loadOnboardingDraft } from "@/lib/onboarding-draft";
-import { loadScenarioRuns } from "@/lib/scenario-run-storage";
 import {
   fetchCallsFromSupabase,
   fetchOrdersFromSupabase,
@@ -73,7 +51,6 @@ import {
 } from "@/lib/supabase-rest";
 import {
   deliverOwnerDailyReport,
-  fetchVoiceServiceHealth,
   generateOwnerDailyReport,
   isVoiceServiceConfigured,
 } from "@/lib/voice-service";
@@ -100,6 +77,25 @@ const emptyOrders: Order[] = [];
 const emptyReservations: Reservation[] = [];
 const emptyTasks: StaffTask[] = [];
 
+const HOST_NAME = "Elliot";
+
+const priorityBadge: Record<StaffTask["priority"], { label: string; className: string }> = {
+  urgent: { label: "Urgent", className: "border-destructive/30 bg-destructive/10 text-destructive" },
+  high: { label: "Needs manager", className: "border-warning/30 bg-warning/10 text-warning" },
+  normal: { label: "Normal", className: "border-border bg-muted/50 text-foreground" },
+  low: { label: "Low", className: "border-border bg-muted/30 text-muted-foreground" },
+};
+
+const taskTypeLabel: Record<StaffTask["type"], string> = {
+  customer_request: "Customer callback requested",
+  delivery_issue: "Order issue needs review",
+  general: "Needs attention",
+  low_confidence_review: "Question SignalHost couldn't answer",
+  manager_callback: "Manager follow-up needed",
+  order_follow_up: "Order request needs review",
+  reservation_review: "Reservation request needs review",
+};
+
 export default function Dashboard() {
   const user = useCurrentUser();
   const platformAdmin = isPlatformAdminUser(user);
@@ -107,8 +103,6 @@ export default function Dashboard() {
   const supabaseConfigured = isSupabaseConfigured();
   const liveEnabled = Boolean(supabaseConfigured && activeLocationId);
   const voiceConfigured = isVoiceServiceConfigured();
-  const authReadiness = getAuthReadiness();
-  const scenarioSummary = useMemo(() => summarizeScenarioRuns(voiceScenarios, loadScenarioRuns("app")), []);
 
   const callQuery = useQuery({
     enabled: liveEnabled,
@@ -140,18 +134,8 @@ export default function Dashboard() {
     queryKey: ["tenant-directory", "dashboard", activeLocationId],
     staleTime: 60_000,
   });
-  const voiceHealthQuery = useQuery({
-    enabled: voiceConfigured,
-    queryFn: fetchVoiceServiceHealth,
-    queryKey: ["dashboard", "voice-health"],
-    refetchInterval: 60_000,
-    staleTime: 30_000,
-  });
 
-  const dashboardTasks = useMemo(
-    () => liveEnabled ? taskQuery.data ?? emptyTasks : emptyTasks,
-    [liveEnabled, taskQuery.data],
-  );
+  const dashboardTasks = liveEnabled ? taskQuery.data ?? emptyTasks : emptyTasks;
   const activeTenant = tenantQuery.data?.find((tenant) => tenant.locationId === activeLocationId);
   const draft = loadOnboardingDraft();
   const businessType = activeTenant?.businessType ?? draft.businessType;
@@ -160,10 +144,12 @@ export default function Dashboard() {
   const assignedPhoneNumber = activeTenant?.aiHostPhone ??
     String(draft.assignedSignalHostNumber || draft.assignedHostLineNumber || draft.assignedPhoneNumber || "");
   const aiHostPhone = assignedPhoneNumber || "(415) 555-0142";
-  const assignedPhoneNumberIsDemo = !assignedPhoneNumber ||
+  const phoneIsDemo = !assignedPhoneNumber ||
     assignedPhoneNumber === assignedDemoPhoneNumber ||
     assignedPhoneNumber.includes("555");
-  const onboardingProgress = calculateOnboardingProgress(draft);
+  const hostEmail = String(draft.contactEmail || draft.email || "").trim();
+  const hasWebsite = Boolean(String(draft.websiteUrl || draft.website || "").trim());
+
   const demoData = useMemo(
     () => adaptDemoDataForBusiness({
       businessType,
@@ -173,21 +159,14 @@ export default function Dashboard() {
     }),
     [businessType],
   );
-  const dashboardCalls = useMemo(
-    () => liveEnabled ? callQuery.data ?? emptyCalls : demoData.calls,
-    [callQuery.data, demoData.calls, liveEnabled],
-  );
-  const dashboardOrders = useMemo(
-    () => liveEnabled ? orderQuery.data ?? emptyOrders : demoData.orders,
-    [demoData.orders, liveEnabled, orderQuery.data],
-  );
-  const dashboardReservations = useMemo(
-    () => liveEnabled ? reservationQuery.data ?? emptyReservations : demoData.reservations,
-    [demoData.reservations, liveEnabled, reservationQuery.data],
-  );
+  const dashboardCalls = liveEnabled ? callQuery.data ?? emptyCalls : demoData.calls;
+  const dashboardOrders = liveEnabled ? orderQuery.data ?? emptyOrders : demoData.orders;
+  const dashboardReservations = liveEnabled ? reservationQuery.data ?? emptyReservations : demoData.reservations;
+
   const recentCalls = useMemo(() => dashboardCalls.filter((call) => isWithinLastHours(call.time, 24)), [dashboardCalls]);
   const recentOrders = useMemo(() => dashboardOrders.filter((order) => isWithinLastHours(order.createdAt, 24)), [dashboardOrders]);
   const recentTasks = useMemo(() => dashboardTasks.filter((task) => isWithinLastHours(task.createdAt, 24)), [dashboardTasks]);
+
   const dailyBrief = useMemo(
     () => buildDailyBrief({
       businessType: String(businessType ?? ""),
@@ -199,71 +178,47 @@ export default function Dashboard() {
     }),
     [businessName, businessType, dashboardCalls, dashboardOrders, dashboardReservations, dashboardTasks],
   );
-  const callVolume = useMemo(() => buildHourlyCallVolume(recentCalls), [recentCalls]);
-  const peakHour = callVolume.reduce((max, item) => (item.calls > max.calls ? item : max), callVolume[0]);
-  const topIntents = useMemo(() => buildTopIntents(recentCalls, businessType), [businessType, recentCalls]);
+
   const totalCalls = recentCalls.length;
-  const activeStaffFollowUps = dashboardTasks.filter((task) => task.status === "open" || task.status === "in_progress").length;
   const ordersCaptured = recentOrders.length;
-  const reservationRequests = dashboardReservations.filter((reservation) =>
-    reservation.createdAt ? isWithinLastHours(reservation.createdAt, 24) : true,
+  const reservationRequests = dashboardReservations.filter((r) =>
+    r.createdAt ? isWithinLastHours(r.createdAt, 24) : true,
   ).length;
-  const missedRecovered = recentCalls.filter((call) => call.outcome !== "missed" && call.outcome !== "voicemail").length;
-  const salesCalls = recentCalls.filter((call) => call.intent === "sales").length;
-  const revenueCaptured = recentOrders.reduce((sum, order) => sum + order.total, 0);
-  const resolvedCalls = recentCalls.filter((call) =>
-    call.outcome === "resolved" ||
-    call.outcome === "order_placed" ||
-    call.outcome === "reservation_booked",
-  ).length;
-  const containment = totalCalls ? Math.round((resolvedCalls / totalCalls) * 100) : 0;
+  const missedRecovered = recentCalls.filter((c) => c.outcome !== "missed" && c.outcome !== "voicemail").length;
+  const openTasks = dashboardTasks
+    .filter((t) => t.status === "open" || t.status === "in_progress")
+    .sort((a, b) => priorityRank(b.priority) - priorityRank(a.priority));
+  const needsAttentionCount = openTasks.length;
+  const websiteChats = 0; // placeholder until live chat metric exists
+
   const activity = useMemo(() => buildActivity(dashboardCalls, dashboardOrders, dashboardReservations, recentTasks), [
-    dashboardCalls,
-    dashboardOrders,
-    dashboardReservations,
-    recentTasks,
+    dashboardCalls, dashboardOrders, dashboardReservations, recentTasks,
   ]);
+
   const hasLiveError = callQuery.isError || orderQuery.isError || reservationQuery.isError || taskQuery.isError;
-  const productReadiness = buildProductTestReadiness({
-    assignedPhoneNumber,
-    assignedPhoneNumberIsDemo,
-    authMode: authReadiness.mode,
-    authReady: authReadiness.ready,
-    businessName,
-    hasWebsiteUrl: Boolean(String(draft.websiteUrl || draft.website || "").trim()),
-    liveEnabled,
-    locationId: activeLocationId,
-    onboardingProgressPercent: onboardingProgress.percent,
-    openTaskCount: activeStaffFollowUps,
-    recentCallCount: liveEnabled ? recentCalls.length : 0,
-    scenarioSummary,
-    selectedPlanName: String(draft.selectedPlanName || ""),
-    supabaseConfigured,
-    voiceHealth: voiceHealthQuery.data,
-    voiceHealthError: voiceHealthQuery.isError,
-    voiceServiceConfigured: voiceConfigured,
-  });
+
+  // Owner-friendly status
+  const setupNeeded = !liveEnabled || phoneIsDemo;
+  const hostStatus: { label: string; tone: "ok" | "warn" | "off" } = setupNeeded
+    ? { label: "Needs setup", tone: "warn" }
+    : { label: "Answering calls", tone: "ok" };
+
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+
   const saveReportMutation = useMutation({
     mutationFn: () => generateOwnerDailyReport(activeLocationId),
-    onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Could not save owner report");
-    },
-    onSuccess: (result) => {
-      toast.success(result.reportId ? "Owner report saved" : "Owner report generated");
-    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not save brief"),
+    onSuccess: (result) => toast.success(result.reportId ? "Brief saved" : "Brief generated"),
   });
   const deliverReportMutation = useMutation({
     mutationFn: () => deliverOwnerDailyReport(activeLocationId),
-    onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Could not send owner report");
-    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not send brief"),
     onSuccess: (result) => {
-      const sent = result.delivery?.attempts.filter((attempt) => attempt.status === "sent").length ?? 0;
-      toast.success(sent ? `Owner report sent to ${sent} channel${sent === 1 ? "" : "s"}` : "Owner report generated, but no delivery channel is ready");
+      const sent = result.delivery?.attempts.filter((a) => a.status === "sent").length ?? 0;
+      toast.success(sent ? `Brief sent to ${sent} channel${sent === 1 ? "" : "s"}` : "Brief generated, but no delivery channel is ready");
     },
   });
-  const reportActionBusy = saveReportMutation.isPending || deliverReportMutation.isPending;
+  const reportBusy = saveReportMutation.isPending || deliverReportMutation.isPending;
 
   async function copyDailyBrief() {
     try {
@@ -278,70 +233,20 @@ export default function Dashboard() {
     <>
       <div className="border-b border-border bg-background">
         <div className="px-4 py-6 md:px-6 md:py-7">
-          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-            <div>
-              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                <Calendar className="h-3.5 w-3.5" />
-                <span>{today}</span>
-                <span className="mx-1 h-1 w-1 rounded-full bg-muted-foreground/40" />
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="h-1.5 w-1.5 rounded-full bg-success" />
-                  {liveEnabled ? "Live customer data" : "Demo workspace"}
-                </span>
-              </div>
-              <h1 className="mt-1.5 text-[26px] font-semibold tracking-tight md:text-[28px]">
-                {businessName}
-              </h1>
-              <p className="mt-1 text-sm text-muted-foreground">
-                SignalHost handled <span className="font-medium text-foreground tabular-nums">{totalCalls}</span> calls in the last 24 hours
-                {ordersCaptured > 0 && revenueCaptured > 0 ? (
-                  <> and captured <span className="font-medium text-foreground">{formatMoney(revenueCaptured)}</span> in {verticalProfile.primaryWorkflow.ownerPhrase} value.</>
-                ) : ordersCaptured > 0 ? (
-                  <> and logged <span className="font-medium text-foreground tabular-nums">{ordersCaptured}</span> {ordersCaptured === 1 ? verticalProfile.primaryWorkflow.singular : verticalProfile.primaryWorkflow.plural}.</>
-                ) : (
-                  <> with <span className="font-medium text-foreground tabular-nums">{activeStaffFollowUps}</span> open staff follow-ups.</>
-                )}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-3 rounded-md border border-border bg-card px-3 py-2 shadow-sm">
-                <div className="relative">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
-                    S
-                  </div>
-                  <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-success ring-2 ring-card" />
-                </div>
-                <div className="leading-tight">
-                  <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase text-muted-foreground">
-                    <Phone className="h-3 w-3" />
-                    SignalHost answering
-                  </div>
-                  <a href={`tel:${aiHostPhone}`} className="block text-sm font-semibold tabular-nums hover:text-primary">
-                    {aiHostPhone}
-                  </a>
-                </div>
-              </div>
-              <Button
-                disabled={!voiceConfigured || reportActionBusy}
-                onClick={() => saveReportMutation.mutate()}
-                size="sm"
-                variant="outline"
-              >
-                {saveReportMutation.isPending ? "Saving..." : "Save report"}
-              </Button>
-              <Button
-                disabled={!voiceConfigured || reportActionBusy}
-                onClick={() => deliverReportMutation.mutate()}
-                size="sm"
-                variant="outline"
-              >
-                {deliverReportMutation.isPending ? "Sending..." : "Send report"}
-              </Button>
-              <Button size="sm" asChild>
-                <Link to="/app/calls">View calls<ArrowRight className="ml-1.5 h-3.5 w-3.5" /></Link>
-              </Button>
-            </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <Calendar className="h-3.5 w-3.5" />
+            <span>{today}</span>
           </div>
+          <h1 className="mt-1.5 text-[26px] font-semibold tracking-tight md:text-[28px]">{businessName}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Today, SignalHost handled{" "}
+            <span className="font-medium text-foreground tabular-nums">{totalCalls}</span>{" "}
+            {totalCalls === 1 ? "call" : "calls"},{" "}
+            <span className="font-medium text-foreground tabular-nums">{websiteChats}</span>{" "}
+            {websiteChats === 1 ? "chat" : "chats"}, and has{" "}
+            <span className="font-medium text-foreground tabular-nums">{needsAttentionCount}</span>{" "}
+            {needsAttentionCount === 1 ? "item" : "items"} needing attention.
+          </p>
         </div>
       </div>
 
@@ -350,198 +255,221 @@ export default function Dashboard() {
           <Card className="border-warning/30 bg-warning/10 p-4 text-sm">
             <div className="font-medium text-foreground">SignalHost staff view</div>
             <p className="mt-1 text-muted-foreground">
-              You are viewing {activeTenant.locationName} with live tenant data. Owner demo data remains separate.
+              You are viewing {activeTenant.locationName} with live tenant data.
             </p>
           </Card>
         )}
         {hasLiveError && (
           <Card className="border-warning/30 bg-warning/10 p-4 text-sm text-muted-foreground">
-            Some live dashboard panels could not load. Calls, orders, reservations, and tasks will update automatically once Supabase responds.
+            Some live data could not load. It will refresh automatically.
+          </Card>
+        )}
+        {setupNeeded && (
+          <Card className="flex flex-wrap items-center justify-between gap-3 border-warning/30 bg-warning/5 p-4 text-sm">
+            <div>
+              <div className="font-medium text-foreground">SignalHost needs phone setup before it can answer calls.</div>
+              <p className="mt-1 text-muted-foreground">
+                Finish phone forwarding so customers reach your host.
+              </p>
+            </div>
+            <Button size="sm" asChild>
+              <Link to="/app/settings">Review phone setup</Link>
+            </Button>
           </Card>
         )}
 
-        <ProductTestReadinessCard readiness={productReadiness} />
-
-        <Card className="overflow-hidden border-primary/15">
-          <div className="grid gap-0 lg:grid-cols-[1.4fr_0.9fr]">
-            <div className="p-5 md:p-6">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline" className="border-primary/20 bg-primary/10 text-primary">
-                  Daily brief
-                </Badge>
-                <span className="text-xs text-muted-foreground">{dailyBrief.dateLabel}</span>
-              </div>
-              <h2 className="mt-3 text-xl font-semibold tracking-tight">{dailyBrief.headline}</h2>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{dailyBrief.ownerMessage}</p>
-              <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
-                {dailyBrief.metrics.map((metric) => (
-                  <div key={metric.label} className="rounded-md border border-border bg-muted/20 p-3">
-                    <div className="text-[10px] font-medium uppercase text-muted-foreground">{metric.label}</div>
-                    <div className="mt-1 text-xl font-semibold tabular-nums">{metric.value}</div>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-5 flex flex-wrap gap-2">
-                <Button size="sm" onClick={copyDailyBrief}>
-                  Copy brief
-                </Button>
-                <Button variant="outline" size="sm" asChild>
-                  <Link to="/app/tasks">Open follow-ups</Link>
-                </Button>
-                <Button variant="outline" size="sm" asChild>
-                  <Link to="/app/calls">Review calls</Link>
-                </Button>
-              </div>
-            </div>
-            <div className="border-t border-border bg-muted/20 p-5 md:p-6 lg:border-l lg:border-t-0">
-              <div className="grid gap-4">
-                <BriefList
-                  empty="Nothing needs owner attention right now."
-                  items={dailyBrief.followUps}
-                  title="Needs attention"
-                  type="followup"
-                />
-                <BriefList
-                  empty="No knowledge updates suggested yet."
-                  items={dailyBrief.suggestedUpdates}
-                  title="Suggested updates"
-                  type="suggestion"
-                />
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-          <StatCard label="Calls answered" value={totalCalls} delta={0} icon={Phone} accent />
-          <StatCard label="Missed recovered" value={missedRecovered} delta={0} icon={PhoneIncoming} />
-          <StatCard label={verticalProfile.primaryWorkflow.metricLabel} value={ordersCaptured} delta={0} icon={ShoppingBag} />
-          <StatCard label={verticalProfile.secondaryWorkflow.metricLabel} value={reservationRequests} delta={0} icon={CalendarDays} />
-          <Link to="/app/tasks" className="contents">
-            <StatCard label={verticalProfile.dashboard.staffFollowUpsLabel} value={activeStaffFollowUps} delta={0} icon={AlertTriangle} />
-          </Link>
-          <Link to="/app/calls?intent=sales" className="contents">
-            <StatCard label={verticalProfile.vendorMetricLabel} value={salesCalls} delta={0} icon={Megaphone} />
-          </Link>
-        </div>
-
+        {/* Host Profile + Quick Actions */}
         <div className="grid gap-4 lg:grid-cols-3">
-          <Card className="lg:col-span-2">
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <CardTitle className="text-base">Call volume</CardTitle>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    Peak at <span className="font-medium text-foreground">{peakHour.hour}</span> · {peakHour.calls} calls · {totalCalls} total in 24h
-                  </p>
-                </div>
-                <div className="flex items-center gap-1 rounded-md border border-border bg-card p-0.5">
-                  <button className="rounded px-2 py-1 text-[11px] font-medium bg-muted">24h</button>
-                  <button className="rounded px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted/50">7d</button>
-                  <button className="rounded px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted/50">30d</button>
+          <Card className="lg:col-span-2 overflow-hidden border-primary/15">
+            <div className="grid gap-0 md:grid-cols-[auto_1fr]">
+              <div className="flex items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5 p-6 md:p-8">
+                <div className="relative">
+                  <Avatar className="h-24 w-24 ring-4 ring-background">
+                    <AvatarFallback className="bg-primary text-2xl font-semibold text-primary-foreground">
+                      {HOST_NAME[0]}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span
+                    className={`absolute bottom-1 right-1 h-4 w-4 rounded-full ring-2 ring-background ${
+                      hostStatus.tone === "ok" ? "bg-success" : hostStatus.tone === "warn" ? "bg-warning" : "bg-muted-foreground"
+                    }`}
+                  />
                 </div>
               </div>
-            </CardHeader>
-            <CardContent>
-              <div className="h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={callVolume} margin={{ top: 10, right: 8, left: -20, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="callFill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.32} />
-                        <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
-                    <XAxis
-                      dataKey="hour"
-                      tickLine={false}
-                      axisLine={false}
-                      tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                      interval={2}
-                    />
-                    <YAxis
-                      tickLine={false}
-                      axisLine={false}
-                      tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                      width={36}
-                    />
-                    <Tooltip
-                      cursor={{ stroke: "hsl(var(--primary))", strokeWidth: 1, strokeDasharray: "3 3" }}
-                      contentStyle={{
-                        background: "hsl(var(--popover))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: 8,
-                        boxShadow: "0 4px 12px hsl(var(--foreground) / 0.08)",
-                        fontSize: 12,
-                      }}
-                      labelStyle={{ color: "hsl(var(--muted-foreground))", fontSize: 11 }}
-                      formatter={(value: number) => [`${value} calls`, ""]}
-                    />
-                    <ReferenceLine x={peakHour.hour} stroke="hsl(var(--primary))" strokeDasharray="3 3" strokeOpacity={0.5} />
-                    <Area
-                      type="monotone"
-                      dataKey="calls"
-                      stroke="hsl(var(--primary))"
-                      strokeWidth={2}
-                      fill="url(#callFill)"
-                      activeDot={{ r: 4, strokeWidth: 2, stroke: "hsl(var(--background))" }}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
+              <div className="p-5 md:p-6">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-xl font-semibold tracking-tight">{HOST_NAME}</h2>
+                  <Badge
+                    variant="outline"
+                    className={
+                      hostStatus.tone === "ok"
+                        ? "border-success/30 bg-success/10 text-success"
+                        : "border-warning/30 bg-warning/10 text-warning"
+                    }
+                  >
+                    {hostStatus.label}
+                  </Badge>
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Your SignalHost host for {businessName}
+                </p>
+
+                <div className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
+                  <ContactRow icon={Phone} label="Call your host" value={aiHostPhone} href={`tel:${aiHostPhone}`} />
+                  <ContactRow icon={MessageSquare} label="Text your host" value={aiHostPhone} href={`sms:${aiHostPhone}`} />
+                  <ContactRow
+                    icon={Globe2}
+                    label="Website chat"
+                    value={hasWebsite ? "Active" : "Not installed"}
+                    muted={!hasWebsite}
+                  />
+                  {hostEmail && <ContactRow icon={Mail} label="Email" value={hostEmail} href={`mailto:${hostEmail}`} />}
+                </div>
+
+                <div className="mt-5 flex flex-wrap gap-2">
+                  <Button size="sm" asChild>
+                    <Link to="/app/calls">View calls</Link>
+                  </Button>
+                  <Button size="sm" variant="outline" asChild>
+                    <Link to="/app/assistant">
+                      <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                      Message {HOST_NAME}
+                    </Link>
+                  </Button>
+                  <Button size="sm" variant="outline" asChild>
+                    <Link to="/app/settings">Phone setup</Link>
+                  </Button>
+                  <Button size="sm" variant="outline" asChild>
+                    <Link to="/app/website-chat">Website snippet</Link>
+                  </Button>
+                </div>
               </div>
-            </CardContent>
+            </div>
           </Card>
 
           <Card>
             <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-base">Top intents</CardTitle>
-                  <p className="mt-0.5 text-xs text-muted-foreground">{verticalProfile.dashboard.topIntentSubtitle}</p>
-                </div>
-                <Sparkles className="h-4 w-4 text-primary/60" />
-              </div>
+              <CardTitle className="text-base">Quick actions</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              {topIntents.length === 0 && (
-                <div className="rounded-md border border-dashed border-border p-5 text-center text-sm text-muted-foreground">
-                  No call intents yet.
-                </div>
-              )}
-              {topIntents.map((intent) => (
-                <div key={intent.name}>
-                  <div className="mb-1 flex items-center justify-between text-xs">
-                    <span className="font-medium">{intent.name}</span>
-                    <span className="text-muted-foreground tabular-nums">{intent.value} · {intent.percent}%</span>
-                  </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className="h-full rounded-full bg-primary transition-all"
-                      style={{ width: `${intent.percent}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-              <div className="mt-4 rounded-md border border-success/20 bg-success/5 p-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-[11px] font-medium uppercase text-muted-foreground">Containment</div>
-                    <div className="mt-0.5 text-2xl font-semibold tabular-nums text-success">{containment}%</div>
-                  </div>
-                  <Badge variant="secondary" className="border-0 bg-success/15 text-success">
-                    <CheckCircle2 className="mr-1 h-3 w-3" />
-                    Live
-                  </Badge>
-                </div>
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  Calls resolved without staff handoff
-                </p>
-              </div>
+            <CardContent className="space-y-1.5">
+              <QuickAction to="/app/needs-attention" icon={AlertTriangle} label="Review needs attention" badge={needsAttentionCount || undefined} />
+              <QuickAction to="/app/calls" icon={Phone} label="View calls" />
+              <QuickAction to="/app/kitchen" icon={ChefHat} label="Open kitchen" />
+              <QuickAction to="/app/reservations" icon={CalendarDays} label="View reservations" />
+              <QuickAction to="/app/knowledge" icon={BookOpen} label="Update knowledge base" />
+              <QuickAction to="/app/settings" icon={SettingsIcon} label="Phone setup" />
             </CardContent>
           </Card>
         </div>
 
+        {/* Needs Attention */}
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-warning" />
+                Needs attention
+                {needsAttentionCount > 0 && (
+                  <Badge variant="outline" className="border-warning/30 bg-warning/10 text-warning">
+                    {needsAttentionCount}
+                  </Badge>
+                )}
+              </CardTitle>
+              <Link to="/app/needs-attention" className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+                View all <ArrowRight className="h-3 w-3" />
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent className="px-0">
+            {openTasks.length === 0 ? (
+              <div className="px-6 py-10 text-center text-sm text-muted-foreground">
+                Nothing needs your attention right now. Nice.
+              </div>
+            ) : (
+              <ul className="divide-y divide-border">
+                {openTasks.slice(0, 6).map((task) => {
+                  const badge = priorityBadge[task.priority];
+                  return (
+                    <li key={task.id} className="flex items-start gap-3 px-6 py-3 text-sm">
+                      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-warning/10 text-warning">
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium">{taskTypeLabel[task.type]}</span>
+                          <Badge variant="outline" className={badge.className}>{badge.label}</Badge>
+                        </div>
+                        <div className="mt-0.5 truncate text-xs text-muted-foreground">{task.title}</div>
+                      </div>
+                      <Button size="sm" variant="ghost" asChild>
+                        <Link to="/app/needs-attention">Review</Link>
+                      </Button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Activity metrics */}
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+          <StatCard label="Calls answered" value={totalCalls} delta={0} icon={Phone} accent />
+          <StatCard label="Missed recovered" value={missedRecovered} delta={0} icon={PhoneIncoming} />
+          <StatCard label="Website chats" value={websiteChats} delta={0} icon={MessageCircle} />
+          <StatCard label={verticalProfile.primaryWorkflow.metricLabel} value={ordersCaptured} delta={0} icon={ShoppingBag} />
+          <StatCard label={verticalProfile.secondaryWorkflow.metricLabel} value={reservationRequests} delta={0} icon={CalendarDays} />
+          <Link to="/app/needs-attention" className="contents">
+            <StatCard label="Needs attention" value={needsAttentionCount} delta={0} icon={AlertTriangle} />
+          </Link>
+        </div>
+
+        {/* Daily brief */}
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <CardTitle className="text-base">Daily brief</CardTitle>
+                <p className="mt-0.5 text-xs text-muted-foreground">{dailyBrief.dateLabel}</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={copyDailyBrief}>Copy brief</Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!voiceConfigured || reportBusy}
+                  onClick={() => deliverReportMutation.mutate()}
+                >
+                  {deliverReportMutation.isPending ? "Sending..." : "Send brief"}
+                </Button>
+                <Button size="sm" asChild>
+                  <Link to="/app/needs-attention">Review needs attention</Link>
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm leading-6 text-muted-foreground">
+              {totalCalls === 0 && ordersCaptured === 0 && reservationRequests === 0
+                ? `No new customer interactions for ${businessName} yet today.`
+                : dailyBrief.ownerMessage}
+            </p>
+            {platformAdmin && voiceConfigured && (
+              <div className="mt-3">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={reportBusy}
+                  onClick={() => saveReportMutation.mutate()}
+                >
+                  {saveReportMutation.isPending ? "Saving..." : "Save report (staff)"}
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Recent activity */}
         <Card>
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
@@ -556,11 +484,14 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent className="px-0">
             {activity.length === 0 ? (
-              <div className="px-6 py-10 text-center text-sm text-muted-foreground">No live activity yet.</div>
+              <div className="px-6 py-10 text-center text-sm text-muted-foreground">No recent activity yet.</div>
             ) : (
               <ul className="divide-y divide-border">
                 {activity.map((activityItem) => (
-                  <li key={`${activityItem.type}-${activityItem.t}-${activityItem.item.id}`} className="group flex items-center gap-3 px-6 py-3 text-sm transition-colors hover:bg-muted/30">
+                  <li
+                    key={`${activityItem.type}-${activityItem.t}-${activityItem.item.id}`}
+                    className="group flex items-center gap-3 px-6 py-3 text-sm transition-colors hover:bg-muted/30"
+                  >
                     {activityItem.type === "call" && <CallActivity businessType={businessType} item={activityItem.item} />}
                     {activityItem.type === "order" && <OrderActivity item={activityItem.item} profile={verticalProfile} />}
                     {activityItem.type === "reservation" && <ReservationActivity item={activityItem.item} profile={verticalProfile} />}
@@ -578,126 +509,60 @@ export default function Dashboard() {
   );
 }
 
-function ProductTestReadinessCard({ readiness }: { readiness: ReturnType<typeof buildProductTestReadiness> }) {
-  const next = readiness.nextItem;
-
-  return (
-    <Card className="overflow-hidden border-primary/20">
-      <div className="grid gap-0 xl:grid-cols-[0.9fr_1.6fr]">
-        <div className="border-b border-border bg-muted/20 p-5 md:p-6 xl:border-b-0 xl:border-r">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge className={overallStatusClass(readiness.overallStatus)}>
-              <ListChecks className="mr-1 h-3.5 w-3.5" />
-              {readiness.readyCount}/{readiness.totalCount} ready
-            </Badge>
-            <span className="text-xs text-muted-foreground">{readiness.testableCount} testable now</span>
-          </div>
-          <h2 className="mt-3 text-xl font-semibold tracking-tight">{readiness.headline}</h2>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">{readiness.summary}</p>
-
-          <div className="mt-5 rounded-md border border-primary/20 bg-primary/5 p-4">
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                {readinessIcon(next)}
-              </div>
-              <div className="min-w-0">
-                <div className="text-xs font-medium uppercase text-muted-foreground">Next best test</div>
-                <div className="mt-1 text-sm font-semibold">{next.label}</div>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">{next.testPrompt ?? next.detail}</p>
-              </div>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button size="sm" asChild>
-                <Link to={next.actionTo}>{next.actionLabel}<ArrowRight className="ml-1.5 h-3.5 w-3.5" /></Link>
-              </Button>
-              <Button size="sm" variant="outline" asChild>
-                <Link to="/app/onboarding">Open launch center</Link>
-              </Button>
-              <Button size="sm" variant="outline" asChild>
-                <Link to="/app/test-suite">Open test suite</Link>
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid gap-3 p-5 md:p-6 sm:grid-cols-2">
-          {readiness.items.map((item) => (
-            <div key={item.id} className="rounded-md border border-border bg-card p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex min-w-0 items-start gap-3">
-                  <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${readinessIconClass(item.status)}`}>
-                    {readinessIcon(item)}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold">{item.label}</div>
-                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{item.detail}</p>
-                  </div>
-                </div>
-                <Badge variant="outline" className={`shrink-0 ${readinessBadgeClass(item.status)}`}>
-                  {item.statusLabel}
-                </Badge>
-              </div>
-              <div className="mt-3 flex items-center justify-between gap-3">
-                <div className="text-[11px] text-muted-foreground">
-                  {item.testPrompt ? "Has test prompt" : "Review setup"}
-                </div>
-                <Link to={item.actionTo} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
-                  {item.actionLabel}
-                  <ArrowRight className="h-3 w-3" />
-                </Link>
-              </div>
-            </div>
-          ))}
-        </div>
+function ContactRow({
+  icon: Icon, label, value, href, muted,
+}: {
+  icon: typeof Phone; label: string; value: string; href?: string; muted?: boolean;
+}) {
+  const content = (
+    <div className="flex items-center gap-2.5 rounded-md border border-border bg-card px-3 py-2">
+      <Icon className={`h-3.5 w-3.5 shrink-0 ${muted ? "text-muted-foreground" : "text-primary"}`} />
+      <div className="min-w-0 leading-tight">
+        <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
+        <div className={`truncate text-sm font-medium tabular-nums ${muted ? "text-muted-foreground" : ""}`}>{value}</div>
       </div>
-    </Card>
+    </div>
+  );
+  if (href && !muted) return <a href={href} className="hover:opacity-90">{content}</a>;
+  return content;
+}
+
+function QuickAction({
+  to, icon: Icon, label, badge,
+}: { to: string; icon: typeof Phone; label: string; badge?: number }) {
+  return (
+    <Link
+      to={to}
+      className="group flex items-center justify-between rounded-md border border-transparent px-2.5 py-2 text-sm transition-colors hover:border-border hover:bg-muted/40"
+    >
+      <span className="flex items-center gap-2.5">
+        <Icon className="h-4 w-4 text-muted-foreground group-hover:text-primary" />
+        {label}
+      </span>
+      <span className="flex items-center gap-2">
+        {badge !== undefined && (
+          <Badge variant="outline" className="border-warning/30 bg-warning/10 text-warning">{badge}</Badge>
+        )}
+        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+      </span>
+    </Link>
   );
 }
 
-function readinessIcon(item: ProductReadinessItem) {
-  const className = "h-4 w-4";
-  if (item.id === "workspace") return <Database className={className} />;
-  if (item.id === "voice") return <Bot className={className} />;
-  if (item.id === "phone_number") return <Phone className={className} />;
-  if (item.id === "call_logging") return <ClipboardList className={className} />;
-  if (item.id === "owner_learning") return <Brain className={className} />;
-  if (item.id === "owner_commands") return <ShieldCheck className={className} />;
-  if (item.id === "website_chat") return <MessageSquare className={className} />;
-  if (item.id === "reports") return <Globe2 className={className} />;
-  if (item.id === "test_suite") return <ListChecks className={className} />;
-  return <CreditCard className={className} />;
-}
-
-function readinessIconClass(status: ProductReadinessStatus) {
-  if (status === "ready") return "bg-success/10 text-success";
-  if (status === "partial") return "bg-warning/15 text-warning";
-  if (status === "needs_setup") return "bg-destructive/10 text-destructive";
-  return "bg-muted text-muted-foreground";
-}
-
-function readinessBadgeClass(status: ProductReadinessStatus) {
-  if (status === "ready") return "border-success/20 bg-success/10 text-success";
-  if (status === "partial") return "border-warning/20 bg-warning/10 text-warning";
-  if (status === "needs_setup") return "border-destructive/20 bg-destructive/10 text-destructive";
-  return "border-border bg-muted/40 text-muted-foreground";
-}
-
-function overallStatusClass(status: ReturnType<typeof buildProductTestReadiness>["overallStatus"]) {
-  if (status === "ready_to_test") return "border-0 bg-success/15 text-success";
-  if (status === "setup_first") return "border-0 bg-warning/15 text-warning";
-  return "border-0 bg-muted text-muted-foreground";
-}
-
 function CallActivity({ businessType, item }: { businessType: unknown; item: Call }) {
+  const callerKnown = item.caller && !/^unknown/i.test(item.caller);
+  const displayName = callerKnown ? item.caller : (item.callerPhone || "Caller");
   return (
     <>
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-info/10 text-info ring-4 ring-info/5">
         <Phone className="h-3.5 w-3.5" />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="truncate">
-          <span className="font-medium">{item.caller}</span>
-          <span className={`ml-2 text-xs font-medium ${intentColor[item.intent]}`}>{formatVerticalIntent(item.intent, businessType)}</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="truncate font-medium">{displayName}</span>
+          <span className={`text-[11px] font-medium ${intentColor[item.intent] ?? "text-muted-foreground"}`}>
+            {formatVerticalIntent(item.intent, businessType)}
+          </span>
         </div>
         <div className="truncate text-xs text-muted-foreground">{item.summary}</div>
       </div>
@@ -712,9 +577,9 @@ function OrderActivity({ item, profile }: { item: Order; profile: VerticalInsigh
         <ShoppingBag className="h-3.5 w-3.5" />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="truncate"><span className="font-medium">{profile.primaryWorkflow.activityTitle}</span> - {item.customer}</div>
+        <div className="truncate"><span className="font-medium">{profile.primaryWorkflow.activityTitle}</span> · {item.customer}</div>
         <div className="text-xs text-muted-foreground">
-          {item.total > 0 ? `${formatMoney(item.total)} - ` : ""}{item.etaMinutes ? `ETA ${item.etaMinutes}m` : item.status.replace(/_/g, " ")}
+          {item.total > 0 ? `${formatMoney(item.total)} · ` : ""}{item.etaMinutes ? `ETA ${item.etaMinutes}m` : item.status.replace(/_/g, " ")}
         </div>
       </div>
     </>
@@ -729,8 +594,10 @@ function ReservationActivity({ item, profile }: { item: Reservation; profile: Ve
       </div>
       <div className="min-w-0 flex-1">
         <div className="truncate">
-          <span className="font-medium">{profile.businessType === "restaurant" ? item.guest : profile.secondaryWorkflow.activityTitle}</span>
-          {profile.businessType === "restaurant" ? ` - party of ${item.partySize}` : ` - ${item.guest}`}
+          <span className="font-medium">
+            {profile.businessType === "restaurant" ? item.guest : profile.secondaryWorkflow.activityTitle}
+          </span>
+          {profile.businessType === "restaurant" ? ` · party of ${item.partySize}` : ` · ${item.guest}`}
         </div>
         <div className="text-xs text-muted-foreground">{item.date} at {item.time}</div>
       </div>
@@ -745,61 +612,15 @@ function TaskActivity({ item }: { item: StaffTask }) {
         <ClipboardList className="h-3.5 w-3.5" />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="truncate"><span className="font-medium">Staff follow-up</span> · {item.title}</div>
+        <div className="truncate"><span className="font-medium">{taskTypeLabel[item.type]}</span> · {item.title}</div>
         <div className="text-xs text-muted-foreground capitalize">{item.priority} priority · {item.status.replace(/_/g, " ")}</div>
       </div>
     </>
   );
 }
 
-function BriefList({
-  empty,
-  items,
-  title,
-  type,
-}: {
-  empty: string;
-  items: DailyBriefFollowUp[] | DailyBriefSuggestion[];
-  title: string;
-  type: "followup" | "suggestion";
-}) {
-  return (
-    <div>
-      <div className="mb-2 text-xs font-medium uppercase text-muted-foreground">{title}</div>
-      {items.length === 0 ? (
-        <div className="rounded-md border border-dashed border-border bg-background/60 p-3 text-sm text-muted-foreground">
-          {empty}
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {items.slice(0, 3).map((item) => (
-            <div key={item.id} className="rounded-md border border-border bg-background/70 p-3">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-medium">{item.title}</div>
-                  <div className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
-                    {type === "followup" ? (item as DailyBriefFollowUp).action : (item as DailyBriefSuggestion).detail}
-                  </div>
-                </div>
-                {type === "followup" && (
-                  <Badge variant="outline" className="shrink-0 capitalize">
-                    {(item as DailyBriefFollowUp).priority}
-                  </Badge>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function buildActivity(
-  calls: Call[],
-  orders: Order[],
-  reservations: Reservation[],
-  tasks: StaffTask[],
+  calls: Call[], orders: Order[], reservations: Reservation[], tasks: StaffTask[],
 ): ActivityItem[] {
   return [
     ...calls.slice(0, 5).map((item) => ({ item, t: item.time, type: "call" as const })),
@@ -811,41 +632,6 @@ function buildActivity(
     })),
     ...tasks.slice(0, 4).map((item) => ({ item, t: item.createdAt, type: "task" as const })),
   ].sort((first, second) => +new Date(second.t) - +new Date(first.t)).slice(0, 8);
-}
-
-function buildHourlyCallVolume(calls: Call[]) {
-  const now = new Date();
-  const buckets = Array.from({ length: 24 }, (_, index) => {
-    const date = new Date(now.getTime() - (23 - index) * 60 * 60_000);
-    return {
-      calls: 0,
-      hour: formatHour(date),
-      rawHour: date.getHours(),
-    };
-  });
-
-  for (const call of calls) {
-    const date = new Date(call.time);
-    const bucket = buckets.find((item) => item.rawHour === date.getHours());
-    if (bucket) bucket.calls += 1;
-  }
-
-  return buckets.map(({ hour, calls }) => ({ hour, calls }));
-}
-
-function buildTopIntents(calls: Call[], businessType: unknown) {
-  const counts = new Map<string, number>();
-  for (const call of calls) counts.set(call.intent, (counts.get(call.intent) ?? 0) + 1);
-  const total = calls.length || 1;
-
-  return [...counts.entries()]
-    .sort((first, second) => second[1] - first[1])
-    .slice(0, 5)
-    .map(([intent, value]) => ({
-      name: formatVerticalIntent(intent, businessType),
-      percent: Math.round((value / total) * 100),
-      value,
-    }));
 }
 
 function isWithinLastHours(value: string | undefined, hours: number) {
@@ -860,9 +646,6 @@ function reservationDateTime(reservation: Reservation) {
   return new Date(`${reservation.date}T${reservation.time || "00:00"}:00`).toISOString();
 }
 
-function formatHour(date: Date) {
-  const hour = date.getHours();
-  const period = hour < 12 ? "AM" : "PM";
-  const display = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-  return `${display}${period}`;
+function priorityRank(p: StaffTask["priority"]) {
+  return p === "urgent" ? 4 : p === "high" ? 3 : p === "normal" ? 2 : 1;
 }
