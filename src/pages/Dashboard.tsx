@@ -232,21 +232,28 @@ export default function Dashboard() {
 
   return (
     <>
-      <div className="border-b border-border bg-background">
-        <div className="px-4 py-6 md:px-6 md:py-7">
-          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <Calendar className="h-3.5 w-3.5" />
+      {/* Page header — elevated hero strip */}
+      <div className="relative border-b border-border/60 bg-[image:var(--gradient-hero)]">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_hsl(var(--primary)/0.08),_transparent_55%)]" />
+        <div className="relative px-4 py-7 md:px-8 md:py-9">
+          <div className="flex flex-wrap items-center gap-2 text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+            <Calendar className="h-3 w-3" />
             <span>{today}</span>
+            <span className="text-border">·</span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className={`h-1.5 w-1.5 rounded-full ${hostStatus.tone === "ok" ? "bg-success animate-pulse" : "bg-warning"}`} />
+              {hostStatus.tone === "ok" ? "Live" : "Setup pending"}
+            </span>
           </div>
-          <h1 className="mt-1.5 text-[26px] font-semibold tracking-tight md:text-[28px]">{businessName}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Today, SignalHost handled{" "}
-            <span className="font-medium text-foreground tabular-nums">{totalCalls}</span>{" "}
+          <h1 className="mt-2 text-[28px] font-semibold tracking-tight md:text-[32px]">{businessName}</h1>
+          <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+            Today, {HOST_NAME} handled{" "}
+            <span className="font-semibold text-foreground tabular-nums">{totalCalls}</span>{" "}
             {totalCalls === 1 ? "call" : "calls"},{" "}
-            <span className="font-medium text-foreground tabular-nums">{websiteChats as number}</span>{" "}
-            {(websiteChats as number) === 1 ? "chat" : "chats"}, and has{" "}
-            <span className="font-medium text-foreground tabular-nums">{needsAttentionCount}</span>{" "}
-            {needsAttentionCount === 1 ? "item" : "items"} needing attention.
+            <span className="font-semibold text-foreground tabular-nums">{websiteChats as number}</span>{" "}
+            {(websiteChats as number) === 1 ? "chat" : "chats"}, and flagged{" "}
+            <span className="font-semibold text-foreground tabular-nums">{needsAttentionCount}</span>{" "}
+            {needsAttentionCount === 1 ? "item" : "items"} for your attention.
           </p>
         </div>
       </div>
@@ -281,25 +288,41 @@ export default function Dashboard() {
 
         {/* Host Profile + Quick Actions */}
         <div className="grid gap-4 lg:grid-cols-3">
-          <Card className="lg:col-span-2 overflow-hidden border-primary/15">
-            <div className="grid gap-0 md:grid-cols-[auto_1fr]">
-              <div className="flex items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5 p-6 md:p-8">
+          <Card className="lg:col-span-2 relative overflow-hidden border-border/70 shadow-[var(--shadow-elevated)]">
+            {/* Ambient backdrop */}
+            <div className="absolute inset-0 bg-[image:var(--gradient-hero)] opacity-80" />
+            <div className="pointer-events-none absolute -left-20 -top-20 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
+            <div className="pointer-events-none absolute -right-24 bottom-0 h-56 w-56 rounded-full bg-primary-glow/10 blur-3xl" />
+
+            <div className="relative grid gap-0 md:grid-cols-[auto_1fr]">
+              <div className="flex items-center justify-center p-6 md:p-8">
                 <div className="relative">
-                  <Avatar className="h-24 w-24 ring-4 ring-background">
+                  <div className="absolute -inset-2 rounded-full bg-[image:var(--gradient-primary)] opacity-20 blur-xl" />
+                  <Avatar className="relative h-28 w-28 ring-4 ring-background shadow-[var(--shadow-glow)]">
+                    <AvatarImage src={elliotAvatar} alt={`${HOST_NAME}, your SignalHost host`} className="object-cover" />
                     <AvatarFallback className="bg-primary text-2xl font-semibold text-primary-foreground">
                       {HOST_NAME[0]}
                     </AvatarFallback>
                   </Avatar>
                   <span
-                    className={`absolute bottom-1 right-1 h-4 w-4 rounded-full ring-2 ring-background ${
-                      hostStatus.tone === "ok" ? "bg-success" : hostStatus.tone === "warn" ? "bg-warning" : "bg-muted-foreground"
+                    className={`absolute bottom-1.5 right-1.5 h-4 w-4 rounded-full ring-[3px] ring-background ${
+                      hostStatus.tone === "ok"
+                        ? "bg-success after:absolute after:inset-0 after:rounded-full after:bg-success after:animate-ping after:opacity-60"
+                        : hostStatus.tone === "warn"
+                        ? "bg-warning"
+                        : "bg-muted-foreground"
                     }`}
                   />
                 </div>
               </div>
-              <div className="p-5 md:p-6">
+              <div className="p-5 md:p-6 md:pl-2">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-xl font-semibold tracking-tight">{HOST_NAME}</h2>
+                  <span className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-primary">
+                    Your SignalHost host
+                  </span>
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-2.5">
+                  <h2 className="text-2xl font-semibold tracking-tight">{HOST_NAME}</h2>
                   <Badge
                     variant="outline"
                     className={
@@ -308,14 +331,15 @@ export default function Dashboard() {
                         : "border-warning/30 bg-warning/10 text-warning"
                     }
                   >
+                    <span className={`mr-1.5 h-1.5 w-1.5 rounded-full ${hostStatus.tone === "ok" ? "bg-success" : "bg-warning"}`} />
                     {hostStatus.label}
                   </Badge>
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Your SignalHost host for {businessName}
+                  Greets every caller for {businessName} with a warm, on-brand welcome.
                 </p>
 
-                <div className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
+                <div className="mt-5 grid gap-2 text-sm sm:grid-cols-2">
                   <ContactRow icon={Phone} label="Call your host" value={aiHostPhone} href={`tel:${aiHostPhone}`} />
                   <ContactRow icon={MessageSquare} label="Text your host" value={aiHostPhone} href={`sms:${aiHostPhone}`} />
                   <ContactRow
@@ -328,7 +352,7 @@ export default function Dashboard() {
                 </div>
 
                 <div className="mt-5 flex flex-wrap gap-2">
-                  <Button size="sm" asChild>
+                  <Button size="sm" asChild className="shadow-[var(--shadow-glow)]">
                     <Link to="/app/calls">View calls</Link>
                   </Button>
                   <Button size="sm" variant="outline" asChild>
@@ -337,10 +361,10 @@ export default function Dashboard() {
                       Message {HOST_NAME}
                     </Link>
                   </Button>
-                  <Button size="sm" variant="outline" asChild>
+                  <Button size="sm" variant="ghost" asChild>
                     <Link to="/app/settings">Phone setup</Link>
                   </Button>
-                  <Button size="sm" variant="outline" asChild>
+                  <Button size="sm" variant="ghost" asChild>
                     <Link to="/app/website-chat">Website snippet</Link>
                   </Button>
                 </div>
@@ -348,11 +372,13 @@ export default function Dashboard() {
             </div>
           </Card>
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Quick actions</CardTitle>
+          <Card className="border-border/70 shadow-[var(--shadow-card)]">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                Quick actions
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-1.5">
+            <CardContent className="space-y-0.5">
               <QuickAction to="/app/needs-attention" icon={AlertTriangle} label="Review needs attention" badge={needsAttentionCount || undefined} />
               <QuickAction to="/app/calls" icon={Phone} label="View calls" />
               <QuickAction to="/app/kitchen" icon={ChefHat} label="Open kitchen" />
@@ -362,6 +388,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
+
 
         {/* Needs Attention */}
         <Card>
