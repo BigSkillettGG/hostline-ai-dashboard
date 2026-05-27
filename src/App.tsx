@@ -83,6 +83,7 @@ const App = () => (
             <Route path="test-suite" element={<ScenarioLab audience="app" />} />
             <Route path="tasks" element={<Tasks />} />
             <Route path="action-center" element={<Tasks />} />
+            <Route path="needs-attention" element={<Tasks />} />
             <Route path="calls" element={<Calls />} />
             <Route path="escalations" element={<Escalations />} />
             <Route path="orders" element={<Orders />} />
