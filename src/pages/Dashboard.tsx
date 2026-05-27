@@ -7,17 +7,14 @@ import {
   Activity,
   AlertTriangle,
   ArrowRight,
-  BookOpen,
   Calendar,
   CalendarDays,
-  ChefHat,
   ClipboardList,
   Globe2,
   Mail,
   MessageCircle,
   Phone,
   PhoneIncoming,
-  Settings as SettingsIcon,
   ShoppingBag,
   Sparkles,
 } from "lucide-react";
@@ -145,7 +142,13 @@ export default function Dashboard() {
     String(draft.assignedSignalHostNumber || draft.assignedHostLineNumber || draft.assignedPhoneNumber || "");
   const aiHostPhone = assignedPhoneNumber || "(415) 555-0142";
   const phoneIsDemo = !assignedPhoneNumber;
-  const hostEmail = String(draft.contactEmail || draft.email || "").trim();
+  const tenantSlug = (activeTenant?.locationName ?? String(draft.restaurantName || "host"))
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 32) || "host";
+  const hostEmail = String(draft.contactEmail || draft.email || "").trim() || `elliot+${tenantSlug}@signalhost.ai`;
+  const websiteChatConfigured = false; // until live website chat status is wired up
 
   const demoData = useMemo(
     () => adaptDemoDataForBusiness({
@@ -337,9 +340,7 @@ export default function Dashboard() {
 
                 <div className="mt-5 grid gap-2 text-sm sm:grid-cols-2">
                   <ContactRow icon={Phone} label="Call or text" value={aiHostPhone} href={`tel:${aiHostPhone}`} />
-                  {hostEmail && (
-                    <ContactRow icon={Mail} label="Email" value={hostEmail} href={`mailto:${hostEmail}`} />
-                  )}
+                  <ContactRow icon={Mail} label="Email" value={hostEmail} href={`mailto:${hostEmail}`} />
                 </div>
 
                 <div className="mt-5 flex flex-wrap gap-2">
@@ -354,20 +355,39 @@ export default function Dashboard() {
             </div>
           </Card>
 
-          <Card className="border-border/70 shadow-[var(--shadow-card)]">
+          <Card className="border-border/70 shadow-[var(--shadow-card)] flex flex-col">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                 Quick actions
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-0.5">
-              <QuickAction to="/app/needs-attention" icon={AlertTriangle} label="Review needs attention" badge={needsAttentionCount || undefined} />
-              <QuickAction to="/app/calls" icon={Phone} label="View calls" />
-              <QuickAction to="/app/kitchen" icon={ChefHat} label="Open kitchen" />
-              <QuickAction to="/app/reservations" icon={CalendarDays} label="View reservations" />
-              <QuickAction to="/app/knowledge" icon={BookOpen} label="Update knowledge base" />
-              <QuickAction to="/app/website-chat" icon={Globe2} label="Website snippet" />
-              <QuickAction to="/app/settings" icon={SettingsIcon} label="Phone setup" />
+            <CardContent className="flex flex-1 flex-col gap-3">
+              <div className="space-y-0.5">
+                <QuickAction to="/app/needs-attention" icon={AlertTriangle} label="Review needs attention" badge={needsAttentionCount || undefined} />
+                <QuickAction to="/app/calls" icon={Phone} label="View calls" />
+                <QuickAction to="/app/reservations" icon={CalendarDays} label="View reservations" />
+              </div>
+
+              {!websiteChatConfigured && (
+                <Link
+                  to="/app/website-chat"
+                  className="group mt-auto block rounded-lg border border-warning/30 bg-warning/5 p-3 transition-all hover:border-warning/50 hover:bg-warning/10"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-warning/15 text-warning">
+                      <Globe2 className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-warning">To do</span>
+                      </div>
+                      <div className="mt-0.5 text-sm font-medium text-foreground">Set up website chat</div>
+                      <div className="mt-0.5 text-xs text-muted-foreground">Add the snippet so {HOST_NAME} can answer visitors on your site.</div>
+                    </div>
+                    <ArrowRight className="mt-1 h-3.5 w-3.5 text-muted-foreground transition-all group-hover:text-warning group-hover:translate-x-0.5" />
+                  </div>
+                </Link>
+              )}
             </CardContent>
           </Card>
         </div>
