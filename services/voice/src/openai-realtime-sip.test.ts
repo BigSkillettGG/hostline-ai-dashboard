@@ -1391,7 +1391,7 @@ describe("OpenAI Realtime SIP", () => {
             async startRealtimeCall() {
               return { callId: "call_uuid" };
             },
-          },
+          } as unknown as Parameters<typeof createOpenAIRealtimeSipService>[2]["callStore"],
           fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
           websocketFactory: () => socket as never,
         },
