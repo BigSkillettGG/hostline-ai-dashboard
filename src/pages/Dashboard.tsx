@@ -569,15 +569,17 @@ function ContactRow({
   icon: typeof Phone; label: string; value: string; href?: string; muted?: boolean;
 }) {
   const content = (
-    <div className="flex items-center gap-2.5 rounded-md border border-border bg-card px-3 py-2">
-      <Icon className={`h-3.5 w-3.5 shrink-0 ${muted ? "text-muted-foreground" : "text-primary"}`} />
+    <div className="group/contact flex items-center gap-3 rounded-lg border border-border/70 bg-card/80 px-3 py-2.5 backdrop-blur-sm transition-all hover:border-primary/30 hover:bg-card hover:shadow-[var(--shadow-card)]">
+      <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors ${muted ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary group-hover/contact:bg-primary/15"}`}>
+        <Icon className="h-3.5 w-3.5" />
+      </div>
       <div className="min-w-0 leading-tight">
-        <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
-        <div className={`truncate text-sm font-medium tabular-nums ${muted ? "text-muted-foreground" : ""}`}>{value}</div>
+        <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">{label}</div>
+        <div className={`truncate text-sm font-medium tabular-nums ${muted ? "text-muted-foreground" : "text-foreground"}`}>{value}</div>
       </div>
     </div>
   );
-  if (href && !muted) return <a href={href} className="hover:opacity-90">{content}</a>;
+  if (href && !muted) return <a href={href} className="block">{content}</a>;
   return content;
 }
 
@@ -587,17 +589,19 @@ function QuickAction({
   return (
     <Link
       to={to}
-      className="group flex items-center justify-between rounded-md border border-transparent px-2.5 py-2 text-sm transition-colors hover:border-border hover:bg-muted/40"
+      className="group flex items-center justify-between gap-2 rounded-lg px-2.5 py-2.5 text-sm transition-all hover:bg-muted/50"
     >
       <span className="flex items-center gap-2.5">
-        <Icon className="h-4 w-4 text-muted-foreground group-hover:text-primary" />
-        {label}
+        <span className="flex h-7 w-7 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
+          <Icon className="h-3.5 w-3.5" />
+        </span>
+        <span className="font-medium text-foreground/90">{label}</span>
       </span>
       <span className="flex items-center gap-2">
         {badge !== undefined && (
           <Badge variant="outline" className="border-warning/30 bg-warning/10 text-warning">{badge}</Badge>
         )}
-        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 transition-all group-hover:opacity-100 group-hover:translate-x-0.5" />
       </span>
     </Link>
   );
