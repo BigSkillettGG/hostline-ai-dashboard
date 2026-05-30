@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { getAuthReadiness, isDemoAuthMode, isPlatformAdminUser, useCurrentUser, signOut, setRole } from "@/lib/auth";
 import { useNavigate } from "react-router-dom";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const items = [
   { title: "Overview", url: "/super", icon: LayoutDashboard, end: true },
@@ -79,6 +80,7 @@ function SuperSidebar() {
 export default function SuperLayout() {
   const user = useCurrentUser();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const authReadiness = getAuthReadiness();
   const demoAuth = isDemoAuthMode();
   const platformAccess = isPlatformAdminUser(user);
@@ -127,7 +129,7 @@ export default function SuperLayout() {
               </DropdownMenu>
             </div>
           </header>
-          <main className="flex-1 min-w-0"><Outlet /></main>
+          <main className="flex-1 min-w-0"><ErrorBoundary resetKey={pathname} scopeLabel="page"><Outlet /></ErrorBoundary></main>
         </div>
       </div>
     </SidebarProvider>

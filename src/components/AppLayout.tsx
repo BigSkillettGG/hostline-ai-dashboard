@@ -1,4 +1,4 @@
-import { Outlet, useNavigate } from "react-router-dom";
+import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { Bell, Search, MapPin, ChevronDown } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -27,11 +27,13 @@ import {
 import { fetchTenantDirectoryFromSupabase, isSupabaseConfigured } from "@/lib/supabase-rest";
 import { getOnboardingBusinessTemplate } from "@/domain/onboarding";
 import { loadOnboardingDraft } from "@/lib/onboarding-draft";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 export default function AppLayout() {
   const [agentLive, setAgentLive] = useState(true);
   const user = useCurrentUser();
   const navigate = useNavigate();
+  const location = useLocation();
   const initials = (user?.name ?? "ML").split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase();
   const authReadiness = getAuthReadiness();
   const demoAuth = isDemoAuthMode();
@@ -161,7 +163,9 @@ export default function AppLayout() {
           </header>
 
           <main className="flex-1 min-w-0">
-            <Outlet />
+            <ErrorBoundary resetKey={location.pathname} scopeLabel="page">
+              <Outlet />
+            </ErrorBoundary>
           </main>
         </div>
       </div>
