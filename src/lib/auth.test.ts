@@ -147,4 +147,36 @@ describe("auth helpers", () => {
       workspaceKind: "platform",
     });
   });
+
+  it("captures access token expiry from expires_at", () => {
+    const expiresAt = Math.floor(Date.now() / 1000) + 3600;
+    const user = mapSupabaseAuthResponse({
+      access_token: "access_token",
+      expires_at: expiresAt,
+      refresh_token: "refresh_token",
+      user: {
+        email: "owner@example.com",
+        id: "user_3",
+      },
+    });
+
+    expect(user.accessTokenExpiresAt).toBe(expiresAt);
+    expect(user.refreshToken).toBe("refresh_token");
+    signOut();
+  });
+
+  it("derives access token expiry from expires_in when expires_at is absent", () => {
+    const before = Math.floor(Date.now() / 1000);
+    const user = mapSupabaseAuthResponse({
+      access_token: "access_token",
+      expires_in: 3600,
+      user: {
+        email: "owner@example.com",
+        id: "user_4",
+      },
+    });
+
+    expect(user.accessTokenExpiresAt).toBeGreaterThanOrEqual(before + 3600);
+    signOut();
+  });
 });

@@ -17,7 +17,7 @@ import type {
   ReservationStatus,
   TranscriptSpeaker,
 } from "@/data/mock";
-import { getActiveLocationId, getActiveOrganizationId, getSupabaseAccessToken } from "@/lib/auth";
+import { getActiveLocationId, getActiveOrganizationId, getSupabaseAccessToken, getValidSupabaseAccessToken, refreshSupabaseSession } from "@/lib/auth";
 import type { ParsedMenuCategory } from "@/domain/menu-ingestion";
 import { calculateOnboardingProgress, type OnboardingDraft } from "@/domain/onboarding";
 import { getBusinessTemplate, normalizeBusinessType, type BusinessType } from "@/domain/business-templates";
@@ -3704,17 +3704,33 @@ async function supabaseRequest<T>(
     method?: "DELETE" | "GET" | "PATCH" | "POST";
   },
 ) {
-  const response = await fetch(`${supabaseUrl}/rest/v1/${table}?${params.toString()}`, {
-    body: options?.body ? JSON.stringify(options.body) : undefined,
-    headers: {
-      apikey: supabasePublishableKey,
-      Authorization: `Bearer ${getSupabaseAccessToken() ?? supabasePublishableKey}`,
-      "Content-Type": "application/json",
-      Prefer: "return=minimal",
-      ...options?.headers,
-    },
-    method: options?.method ?? "GET",
-  });
+  // Proactively obtain a valid (refreshed if near expiry) access token. Falls
+  // back to the publishable key when there is no Supabase session, which is the
+  // expected anon path guarded by RLS.
+  const proactiveToken = (await getValidSupabaseAccessToken()) ?? getSupabaseAccessToken();
+  const sendRequest = (token: string | undefined) =>
+    fetch(`${supabaseUrl}/rest/v1/${table}?${params.toString()}`, {
+      body: options?.body ? JSON.stringify(options.body) : undefined,
+      headers: {
+        apikey: supabasePublishableKey,
+        Authorization: `Bearer ${token ?? supabasePublishableKey}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+        ...options?.headers,
+      },
+      method: options?.method ?? "GET",
+    });
+
+  let response = await sendRequest(proactiveToken);
+
+  // Reactive safety net: if the token was rejected (expired between checks, or
+  // we could not determine expiry), refresh once and retry a single time.
+  if (response.status === 401 && proactiveToken) {
+    const refreshedToken = await refreshSupabaseSession();
+    if (refreshedToken) {
+      response = await sendRequest(refreshedToken);
+    }
+  }
 
   if (!response.ok) {
     const body = await response.text();

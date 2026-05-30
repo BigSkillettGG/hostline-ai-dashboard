@@ -26,6 +26,7 @@ export interface RestaurantMembership {
 
 export interface CurrentUser {
   accessToken?: string;
+  accessTokenExpiresAt?: number;
   activeLocationId?: string;
   activeOrganizationId?: string;
   authProvider: AuthMode;
@@ -63,6 +64,8 @@ interface SupabaseAuthUser {
 
 interface SupabaseAuthResponse {
   access_token?: string;
+  expires_at?: number;
+  expires_in?: number;
   refresh_token?: string;
   user?: SupabaseAuthUser;
 }
@@ -139,6 +142,130 @@ export function getActiveLocationId() {
 export function getSupabaseAccessToken() {
   const user = readUser();
   return user?.authProvider === "supabase" ? user.accessToken : undefined;
+}
+
+// Refresh the access token this many seconds before it actually expires, so an
+// in-flight request never goes out with a token that lapses mid-request.
+const ACCESS_TOKEN_REFRESH_BUFFER_SECONDS = 60;
+
+// Module-level in-flight refresh promise. Concurrent callers share one network
+// round-trip instead of each firing their own refresh (which would race and
+// invalidate each other's refresh tokens).
+let inFlightRefresh: Promise<string | undefined> | null = null;
+
+/**
+ * Returns a Supabase access token that is valid right now, proactively
+ * refreshing it if it is missing, expired, or within the refresh buffer of
+ * expiring. Falls back to the current token if the session is not a Supabase
+ * session or cannot be refreshed. Callers in the data layer should use this
+ * instead of the synchronous getSupabaseAccessToken() when about to make a
+ * request.
+ */
+export async function getValidSupabaseAccessToken(): Promise<string | undefined> {
+  const user = readUser();
+  if (user?.authProvider !== "supabase") return undefined;
+  if (!user.accessToken) return undefined;
+
+  if (!isAccessTokenExpiring(user)) {
+    return user.accessToken;
+  }
+
+  const refreshed = await refreshSupabaseSession();
+  return refreshed ?? undefined;
+}
+
+/**
+ * Forces a refresh of the Supabase session using the stored refresh token.
+ * Deduplicates concurrent calls. On success, updates the stored user and
+ * returns the new access token. On failure, signs the user out and returns
+ * undefined so callers can surface a re-authentication prompt.
+ */
+export async function refreshSupabaseSession(): Promise<string | undefined> {
+  if (inFlightRefresh) return inFlightRefresh;
+
+  inFlightRefresh = (async () => {
+    const user = readUser();
+    const config = getAuthRuntimeConfig();
+
+    if (
+      user?.authProvider !== "supabase" ||
+      !user.refreshToken ||
+      !config.supabaseUrl ||
+      !config.supabasePublishableKey
+    ) {
+      return undefined;
+    }
+
+    try {
+      const data = await supabaseAuthRequest<SupabaseAuthResponse>(
+        "token?grant_type=refresh_token",
+        { refresh_token: user.refreshToken },
+        config,
+      );
+
+      if (!data.access_token) {
+        throw new Error("Supabase refresh did not return an access token.");
+      }
+
+      const next: CurrentUser = normalizeStoredUser({
+        ...user,
+        accessToken: data.access_token,
+        accessTokenExpiresAt: resolveAccessTokenExpiry(data),
+        refreshToken: data.refresh_token ?? user.refreshToken,
+      });
+      writeUser(next);
+      return next.accessToken;
+    } catch (error) {
+      // A failed refresh means the session is no longer valid. Sign out so the
+      // user is routed back to login rather than left in a broken state where
+      // every request 401s silently.
+      console.error("[auth] Supabase session refresh failed", error);
+      signOut();
+      return undefined;
+    }
+  })();
+
+  try {
+    return await inFlightRefresh;
+  } finally {
+    inFlightRefresh = null;
+  }
+}
+
+function isAccessTokenExpiring(user: CurrentUser): boolean {
+  const expiresAt = user.accessTokenExpiresAt ?? decodeJwtExpiry(user.accessToken);
+  // If we genuinely cannot determine expiry, treat the token as still valid so
+  // we do not refresh on every single request. A reactive 401 retry in the data
+  // layer is the safety net for this case.
+  if (!expiresAt) return false;
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  return nowSeconds >= expiresAt - ACCESS_TOKEN_REFRESH_BUFFER_SECONDS;
+}
+
+function resolveAccessTokenExpiry(data: SupabaseAuthResponse): number | undefined {
+  if (typeof data.expires_at === "number" && Number.isFinite(data.expires_at)) {
+    return data.expires_at;
+  }
+  if (typeof data.expires_in === "number" && Number.isFinite(data.expires_in)) {
+    return Math.floor(Date.now() / 1000) + data.expires_in;
+  }
+  return decodeJwtExpiry(data.access_token);
+}
+
+function decodeJwtExpiry(token: string | undefined): number | undefined {
+  if (!token) return undefined;
+  const segments = token.split(".");
+  if (segments.length < 2) return undefined;
+  try {
+    const payloadSegment = segments[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = payloadSegment.padEnd(Math.ceil(payloadSegment.length / 4) * 4, "=");
+    const json = typeof atob === "function" ? atob(padded) : "";
+    if (!json) return undefined;
+    const payload = JSON.parse(json) as { exp?: unknown };
+    return typeof payload.exp === "number" && Number.isFinite(payload.exp) ? payload.exp : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function isDemoWorkspace(user: CurrentUser | null | undefined) {
@@ -308,6 +435,7 @@ export function mapSupabaseAuthResponse(
 
   return applyAccessModel({
     accessToken: data.access_token,
+    accessTokenExpiresAt: resolveAccessTokenExpiry(data),
     activeLocationId:
       access.activeLocationId ??
       stringMetadataValue(data.user.app_metadata, "location_id") ??
