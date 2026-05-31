@@ -100,31 +100,31 @@ export default function TenantDetail() {
     enabled,
     queryFn: () => fetchCallsFromSupabase(locationId),
     queryKey: queryKeys.calls.list(locationId),
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
   });
   const ordersQuery = useQuery({
     enabled,
     queryFn: () => fetchOrdersFromSupabase(locationId),
     queryKey: queryKeys.orders.list(locationId),
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
   });
   const reservationsQuery = useQuery({
     enabled,
     queryFn: () => fetchReservationsFromSupabase(locationId),
     queryKey: queryKeys.reservations.list(locationId),
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
   });
   const tasksQuery = useQuery({
     enabled,
     queryFn: () => fetchStaffTasksFromSupabase(locationId),
     queryKey: queryKeys.staffTasks.list(locationId),
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
   });
   const alertsQuery = useQuery({
     enabled,
     queryFn: () => fetchStaffAlertEventsFromSupabase(locationId),
     queryKey: ["tenant-detail", "alerts", locationId],
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
   });
   const phoneQuery = useQuery({
     enabled,

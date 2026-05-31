@@ -49,6 +49,11 @@ export function createQueryClient(): QueryClient {
         // Refetch on focus only if data is older than staleTime, so returning to
         // a tab refreshes genuinely stale data without spamming requests.
         refetchOnWindowFocus: true,
+        // Pause interval polling while the browser tab is in the background. An
+        // owner who leaves the dashboard open in a background tab all day should
+        // not generate continuous Supabase traffic; polling resumes the moment
+        // the tab becomes visible again. Individual queries can still override.
+        refetchIntervalInBackground: false,
       },
       mutations: {
         // Writes are user-initiated; silently retrying them can cause duplicate

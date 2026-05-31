@@ -42,6 +42,7 @@ describe("createQueryClient", () => {
     const defaults = client.getDefaultOptions();
     expect(defaults.queries?.staleTime).toBe(30_000);
     expect(defaults.queries?.gcTime).toBe(5 * 60_000);
+    expect(defaults.queries?.refetchIntervalInBackground).toBe(false);
     expect(defaults.mutations?.retry).toBe(false);
     expect(typeof defaults.queries?.retry).toBe("function");
   });
