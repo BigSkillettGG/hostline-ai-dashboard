@@ -19,6 +19,7 @@ import { Search, Download, Play, FileText, MessageSquare, UserCheck, Send, Phone
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { queryKeys } from "@/lib/query-keys";
 import { isDemoWorkspace, isPlatformAdminUser, useCurrentUser } from "@/lib/auth";
 import {
   buildInteractionInsight,
@@ -121,13 +122,13 @@ export default function Calls() {
   const callQuery = useQuery({
     enabled: supabaseConfigured,
     queryFn: () => fetchCallsFromSupabase(callLocationFilter),
-    queryKey: ["calls", "supabase", callLocationFilter ?? "all"],
+    queryKey: queryKeys.calls.list(callLocationFilter),
     refetchInterval: 30_000,
   });
   const feedbackQuery = useQuery({
     enabled: feedbackConfigured && Boolean(selectedCallId),
     queryFn: () => fetchCallFeedbackFromSupabase(selectedCallId!),
-    queryKey: ["call-feedback", selectedCallId],
+    queryKey: queryKeys.calls.feedback(selectedCallId),
   });
   const feedbackMutation = useMutation({
     mutationFn: createCallFeedbackInSupabase,
@@ -137,7 +138,7 @@ export default function Calls() {
     onSuccess: (savedFeedback) => {
       const selectedCall = selected?.id === savedFeedback.callId ? selected : calls.find((call) => call.id === savedFeedback.callId);
       resetFeedbackForm();
-      void queryClient.invalidateQueries({ queryKey: ["call-feedback", savedFeedback.callId] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.calls.feedback(savedFeedback.callId) });
       if (selectedCall) {
         const nextFeedback = [
           savedFeedback,
@@ -149,7 +150,7 @@ export default function Calls() {
           insight: nextInsight,
         })
           .then(() => {
-            void queryClient.invalidateQueries({ queryKey: ["calls", "supabase"] });
+            void queryClient.invalidateQueries({ queryKey: queryKeys.calls.root });
           })
           .catch((error) => {
             console.warn("[calls] Could not update persisted call insight after feedback", error);

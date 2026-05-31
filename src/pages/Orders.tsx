@@ -17,6 +17,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Printer, Send, Clock, Phone, ShoppingBag, RefreshCw } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
+import { queryKeys } from "@/lib/query-keys";
 import { Input } from "@/components/ui/input";
 import {
   createOrderDeliveryAttemptInSupabase,
@@ -99,7 +100,7 @@ export default function Orders() {
   const orderQuery = useQuery({
     enabled: supabaseConfigured,
     queryFn: () => fetchOrdersFromSupabase(),
-    queryKey: ["orders", "supabase"],
+    queryKey: queryKeys.orders.list(),
     refetchInterval: 30_000,
   });
   const usingSupabase = Boolean(supabaseConfigured && orderQuery.isSuccess);
@@ -111,7 +112,7 @@ export default function Orders() {
     },
     onSuccess: async (_, variables) => {
       setSelected((current) => current?.id === variables.id ? { ...current, status: variables.status } : current);
-      await queryClient.invalidateQueries({ queryKey: ["orders", "supabase"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.orders.root });
       toast.success("Order status updated");
     },
   });
@@ -130,7 +131,7 @@ export default function Orders() {
             }
           : current);
       }
-      await queryClient.invalidateQueries({ queryKey: ["orders", "supabase"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.orders.root });
       toast.success(`${deliveryLabel(variables.destination)} delivery recorded`);
     },
   });

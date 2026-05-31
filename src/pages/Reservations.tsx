@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { queryKeys } from "@/lib/query-keys";
 import {
   createReservationInSupabase,
   fetchReservationsFromSupabase,
@@ -62,7 +63,7 @@ export default function Reservations() {
   const reservationQuery = useQuery({
     enabled: reservationPersistenceConfigured,
     queryFn: fetchReservationsFromSupabase,
-    queryKey: ["reservations", "supabase"],
+    queryKey: queryKeys.reservations.list(),
     refetchInterval: 30_000,
   });
   const usingSupabase = Boolean(reservationPersistenceConfigured && reservationQuery.isSuccess);
@@ -75,7 +76,7 @@ export default function Reservations() {
       toast.error(error instanceof Error ? error.message : "Reservation update failed.");
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["reservations", "supabase"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.reservations.root });
       toast.success("Reservation updated.");
     },
   });
@@ -86,7 +87,7 @@ export default function Reservations() {
       toast.error(error instanceof Error ? error.message : "Reservation creation failed.");
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["reservations", "supabase"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.reservations.root });
       setAddOpen(false);
       setForm(emptyReservationForm);
       toast.success("Reservation saved.");

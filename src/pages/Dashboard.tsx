@@ -37,6 +37,7 @@ import {
 import { formatTime, formatMoney } from "@/lib/format";
 import { isPlatformAdminUser, useCurrentUser } from "@/lib/auth";
 import { loadOnboardingDraft } from "@/lib/onboarding-draft";
+import { queryKeys } from "@/lib/query-keys";
 import {
   fetchCallsFromSupabase,
   fetchOrdersFromSupabase,
@@ -104,25 +105,25 @@ export default function Dashboard() {
   const callQuery = useQuery({
     enabled: liveEnabled,
     queryFn: () => fetchCallsFromSupabase(activeLocationId),
-    queryKey: ["dashboard", "calls", activeLocationId],
+    queryKey: queryKeys.calls.list(activeLocationId),
     refetchInterval: 30_000,
   });
   const orderQuery = useQuery({
     enabled: liveEnabled,
     queryFn: () => fetchOrdersFromSupabase(activeLocationId),
-    queryKey: ["dashboard", "orders", activeLocationId],
+    queryKey: queryKeys.orders.list(activeLocationId),
     refetchInterval: 30_000,
   });
   const reservationQuery = useQuery({
     enabled: liveEnabled,
     queryFn: () => fetchReservationsFromSupabase(activeLocationId),
-    queryKey: ["dashboard", "reservations", activeLocationId],
+    queryKey: queryKeys.reservations.list(activeLocationId),
     refetchInterval: 30_000,
   });
   const taskQuery = useQuery({
     enabled: liveEnabled,
     queryFn: () => fetchStaffTasksFromSupabase(activeLocationId),
-    queryKey: ["dashboard", "tasks", activeLocationId],
+    queryKey: queryKeys.staffTasks.list(activeLocationId),
     refetchInterval: 30_000,
   });
   const tenantQuery = useQuery({

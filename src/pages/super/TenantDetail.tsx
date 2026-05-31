@@ -42,6 +42,7 @@ import {
 } from "@/lib/supabase-rest";
 import { fetchVoiceServiceHealth, isVoiceServiceConfigured } from "@/lib/voice-service";
 import { updateCurrentUserAccess } from "@/lib/auth";
+import { queryKeys } from "@/lib/query-keys";
 import { formatDuration, formatMoney, formatTime } from "@/lib/format";
 import { toast } from "sonner";
 
@@ -98,25 +99,25 @@ export default function TenantDetail() {
   const callsQuery = useQuery({
     enabled,
     queryFn: () => fetchCallsFromSupabase(locationId),
-    queryKey: ["tenant-detail", "calls", locationId],
+    queryKey: queryKeys.calls.list(locationId),
     refetchInterval: 30_000,
   });
   const ordersQuery = useQuery({
     enabled,
     queryFn: () => fetchOrdersFromSupabase(locationId),
-    queryKey: ["tenant-detail", "orders", locationId],
+    queryKey: queryKeys.orders.list(locationId),
     refetchInterval: 30_000,
   });
   const reservationsQuery = useQuery({
     enabled,
     queryFn: () => fetchReservationsFromSupabase(locationId),
-    queryKey: ["tenant-detail", "reservations", locationId],
+    queryKey: queryKeys.reservations.list(locationId),
     refetchInterval: 30_000,
   });
   const tasksQuery = useQuery({
     enabled,
     queryFn: () => fetchStaffTasksFromSupabase(locationId),
-    queryKey: ["tenant-detail", "tasks", locationId],
+    queryKey: queryKeys.staffTasks.list(locationId),
     refetchInterval: 30_000,
   });
   const alertsQuery = useQuery({

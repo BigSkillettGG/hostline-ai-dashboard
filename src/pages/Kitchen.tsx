@@ -33,6 +33,7 @@ import {
   updateOrderStatusInSupabase,
 } from "@/lib/supabase-rest";
 import { toast } from "sonner";
+import { queryKeys } from "@/lib/query-keys";
 
 type KitchenLaneStatus = Extract<OrderStatus, "new" | "accepted" | "in_progress">;
 
@@ -108,7 +109,7 @@ export default function Kitchen() {
   const orderQuery = useQuery({
     enabled: supabaseConfigured,
     queryFn: () => fetchOrdersFromSupabase(),
-    queryKey: ["orders", "supabase"],
+    queryKey: queryKeys.orders.list(),
     refetchInterval: 10_000,
   });
   const usingSupabase = Boolean(supabaseConfigured && orderQuery.isSuccess);
@@ -172,7 +173,7 @@ export default function Kitchen() {
       }
 
       await statusMutation.mutateAsync({ id: order.id, status: nextStatus });
-      await queryClient.invalidateQueries({ queryKey: ["orders", "supabase"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.orders.root });
       toast.success(`${order.customer} moved to ${nextStatus.replace(/_/g, " ")}`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Kitchen ticket update failed");

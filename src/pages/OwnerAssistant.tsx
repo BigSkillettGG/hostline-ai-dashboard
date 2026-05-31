@@ -40,6 +40,7 @@ import { defaultTrustedContactPermissions, trustedContactTypeFromRole } from "@/
 import { adaptDemoDataForBusiness } from "@/domain/vertical-demo-data";
 import { getSignalHostVoiceProfile } from "@/domain/voice-selection";
 import { isPlatformAdminUser, useCurrentUser } from "@/lib/auth";
+import { queryKeys } from "@/lib/query-keys";
 import { loadBusinessLiveState, saveBusinessLiveState } from "@/lib/business-live-updates-storage";
 import { loadOnboardingDraft } from "@/lib/onboarding-draft";
 import {
@@ -107,25 +108,25 @@ export default function OwnerAssistant() {
   const callQuery = useQuery({
     enabled: liveEnabled,
     queryFn: () => fetchCallsFromSupabase(activeLocationId),
-    queryKey: ["owner-assistant", "calls", activeLocationId],
+    queryKey: queryKeys.calls.list(activeLocationId),
     refetchInterval: 30_000,
   });
   const orderQuery = useQuery({
     enabled: liveEnabled,
     queryFn: () => fetchOrdersFromSupabase(activeLocationId),
-    queryKey: ["owner-assistant", "orders", activeLocationId],
+    queryKey: queryKeys.orders.list(activeLocationId),
     refetchInterval: 30_000,
   });
   const reservationQuery = useQuery({
     enabled: liveEnabled,
     queryFn: () => fetchReservationsFromSupabase(activeLocationId),
-    queryKey: ["owner-assistant", "reservations", activeLocationId],
+    queryKey: queryKeys.reservations.list(activeLocationId),
     refetchInterval: 30_000,
   });
   const taskQuery = useQuery({
     enabled: liveEnabled,
     queryFn: () => fetchStaffTasksFromSupabase(activeLocationId),
-    queryKey: ["owner-assistant", "tasks", activeLocationId],
+    queryKey: queryKeys.staffTasks.list(activeLocationId),
     refetchInterval: 30_000,
   });
   const tenantQuery = useQuery({

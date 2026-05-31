@@ -44,6 +44,7 @@ import {
   updateCallInteractionInsightInSupabase,
   updateCallStatusInSupabase,
 } from "@/lib/supabase-rest";
+import { queryKeys } from "@/lib/query-keys";
 import { formatDuration, formatTime } from "@/lib/format";
 import { toast } from "sonner";
 
@@ -83,7 +84,7 @@ export default function CallQA() {
   const callsQuery = useQuery({
     enabled: supabaseConfigured,
     queryFn: () => fetchCallsFromSupabase(null),
-    queryKey: ["qa", "calls", "all"],
+    queryKey: queryKeys.calls.list(null),
     refetchInterval: 30_000,
   });
   const tenantQuery = useQuery({
@@ -157,8 +158,8 @@ export default function CallQA() {
         });
       }
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["call-feedback", feedback.callId] }),
-        queryClient.invalidateQueries({ queryKey: ["qa", "calls", "all"] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.calls.feedback(feedback.callId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.calls.root }),
       ]);
       toast.success(feedback.addedToKnowledge ? "QA note saved for knowledge approval" : "QA note saved");
     },
@@ -172,7 +173,7 @@ export default function CallQA() {
       toast.error(error instanceof Error ? error.message : "Could not mark reviewed");
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["qa", "calls", "all"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.calls.root });
       toast.success("Call marked reviewed");
     },
   });

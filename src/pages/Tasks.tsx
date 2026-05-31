@@ -63,6 +63,7 @@ import {
 import { isVoiceServiceConfigured, sendCustomerFollowUp } from "@/lib/voice-service";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { queryKeys } from "@/lib/query-keys";
 
 type TabKey = "active" | "all" | StaffTaskStatus;
 type TypeFilter = "all" | StaffTaskType;
@@ -241,7 +242,7 @@ export default function Tasks() {
   const taskQuery = useQuery({
     enabled: persistenceConfigured,
     queryFn: () => fetchStaffTasksFromSupabase(superConsole ? null : undefined),
-    queryKey: ["staff-tasks", "supabase", superConsole ? "all-tenants" : "active-location"],
+    queryKey: queryKeys.staffTasks.list(superConsole ? null : undefined),
     refetchInterval: 15_000,
   });
   const usingSupabase = Boolean(persistenceConfigured && taskQuery.isSuccess);
@@ -321,8 +322,7 @@ export default function Tasks() {
     setBusyTaskId(task.id);
     try {
       await statusMutation.mutateAsync({ id: task.id, status });
-      await queryClient.invalidateQueries({ queryKey: ["staff-tasks", "supabase"] });
-      await queryClient.invalidateQueries({ queryKey: ["tenant-detail", "tasks"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.staffTasks.root });
       toast.success(`${task.title} moved to ${status.replace(/_/g, " ")}`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Staff task update failed");
@@ -349,10 +349,10 @@ export default function Tasks() {
     setBusyTaskId(task.id);
     try {
       await resolutionMutation.mutateAsync({ answer, task });
-      await queryClient.invalidateQueries({ queryKey: ["staff-tasks", "supabase"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.staffTasks.root });
       await queryClient.invalidateQueries({ queryKey: ["knowledge-suggestions"] });
       await queryClient.invalidateQueries({ queryKey: ["knowledge-sections"] });
-      await queryClient.invalidateQueries({ queryKey: ["tenant-detail", "tasks"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.staffTasks.root });
       toast.success("Answer saved, task closed, and knowledge updated");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Customer answer could not be saved");
@@ -370,8 +370,7 @@ export default function Tasks() {
     setBusyTaskId(task.id);
     try {
       const result = await followUpMutation.mutateAsync({ message, recipientEmail, task });
-      await queryClient.invalidateQueries({ queryKey: ["staff-tasks", "supabase"] });
-      await queryClient.invalidateQueries({ queryKey: ["tenant-detail", "tasks"] });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.staffTasks.root });
       toast.success(`Follow-up sent to ${result.recipient}`);
     } catch (error) {
       toast.error(error instanceof Error ? readableActionError(error.message) : "Follow-up could not be sent");
