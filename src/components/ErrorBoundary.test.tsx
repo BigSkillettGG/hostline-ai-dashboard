@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { ErrorBoundary } from "./ErrorBoundary";
 
-function Boom({ message = "kaboom" }: { message?: string }) {
+function Boom({ message = "kaboom" }: { message?: string }): never {
   throw new Error(message);
 }
 
