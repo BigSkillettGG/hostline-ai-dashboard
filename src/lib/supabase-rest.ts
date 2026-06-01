@@ -19,6 +19,7 @@ import type {
 } from "@/data/mock";
 import { getActiveLocationId, getActiveOrganizationId, getSupabaseAccessToken, getValidSupabaseAccessToken, refreshSupabaseSession } from "@/lib/auth";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
+import { fetchInBatches } from "@/lib/batch";
 import type { ParsedMenuCategory } from "@/domain/menu-ingestion";
 import { calculateOnboardingProgress, type OnboardingDraft } from "@/domain/onboarding";
 import { getBusinessTemplate, normalizeBusinessType, type BusinessType } from "@/domain/business-templates";
@@ -1068,27 +1069,33 @@ export async function fetchCallsFromSupabase(
   const callIds = calls.map((call) => call.id);
   const [transcriptTurns, orderLinks, reservationLinks] = callIds.length
     ? await Promise.all([
-        supabaseRequest<SupabaseTranscriptTurnRow[]>(
-          "transcript_turns",
-          new URLSearchParams({
-            call_id: `in.(${callIds.join(",")})`,
-            order: "offset_seconds.asc",
-            select: "call_id,speaker,text,offset_seconds",
-          }),
+        fetchInBatches<SupabaseTranscriptTurnRow>(callIds, (inFilter) =>
+          supabaseRequest<SupabaseTranscriptTurnRow[]>(
+            "transcript_turns",
+            new URLSearchParams({
+              call_id: inFilter,
+              order: "offset_seconds.asc",
+              select: "call_id,speaker,text,offset_seconds",
+            }),
+          ),
         ),
-        supabaseRequest<SupabaseCallOrderLinkRow[]>(
-          "orders",
-          new URLSearchParams({
-            source_call_id: `in.(${callIds.join(",")})`,
-            select: "id,source_call_id",
-          }),
+        fetchInBatches<SupabaseCallOrderLinkRow>(callIds, (inFilter) =>
+          supabaseRequest<SupabaseCallOrderLinkRow[]>(
+            "orders",
+            new URLSearchParams({
+              source_call_id: inFilter,
+              select: "id,source_call_id",
+            }),
+          ),
         ),
-        supabaseRequest<SupabaseCallReservationLinkRow[]>(
-          "reservations",
-          new URLSearchParams({
-            source_call_id: `in.(${callIds.join(",")})`,
-            select: "id,source_call_id",
-          }),
+        fetchInBatches<SupabaseCallReservationLinkRow>(callIds, (inFilter) =>
+          supabaseRequest<SupabaseCallReservationLinkRow[]>(
+            "reservations",
+            new URLSearchParams({
+              source_call_id: inFilter,
+              select: "id,source_call_id",
+            }),
+          ),
         ),
       ])
     : [[], [], []];
@@ -1157,39 +1164,43 @@ export async function fetchTenantDirectoryFromSupabase(): Promise<TenantDirector
   const organizationIds = organizations.map((organization) => organization.id);
   if (!organizationIds.length) return [];
 
-  const locations = await supabaseRequest<SupabaseLocationDirectoryRow[]>(
-    "locations",
-    new URLSearchParams({
-      order: "created_at.desc",
-      organization_id: `in.(${organizationIds.join(",")})`,
-      select: "id,organization_id,name,cuisine,timezone,phone,ai_host_phone,address,created_at",
-    }),
+  const locations = await fetchInBatches<SupabaseLocationDirectoryRow>(organizationIds, (inFilter) =>
+    supabaseRequest<SupabaseLocationDirectoryRow[]>(
+      "locations",
+      new URLSearchParams({
+        order: "created_at.desc",
+        organization_id: inFilter,
+        select: "id,organization_id,name,cuisine,timezone,phone,ai_host_phone,address,created_at",
+      }),
+    ),
   );
 
   const locationIds = locations.map((location) => location.id);
   const [memberships, onboardingProfiles, phoneNumbers, monthlyCalls, billingAccounts] = await Promise.all([
-    supabaseRequest<SupabaseMembershipDirectoryRow[]>(
-      "user_memberships",
-      new URLSearchParams({
-        organization_id: `in.(${organizationIds.join(",")})`,
-        order: "created_at.asc",
-        select: "organization_id,role,member_name,member_email,created_at",
-      }),
+    fetchInBatches<SupabaseMembershipDirectoryRow>(organizationIds, (inFilter) =>
+      supabaseRequest<SupabaseMembershipDirectoryRow[]>(
+        "user_memberships",
+        new URLSearchParams({
+          organization_id: inFilter,
+          order: "created_at.asc",
+          select: "organization_id,role,member_name,member_email,created_at",
+        }),
+      ),
     ),
-    locationIds.length
-      ? supabaseRequest<SupabaseOnboardingProfileRow[]>(
-          "onboarding_profiles",
-          new URLSearchParams({
-            location_id: `in.(${locationIds.join(",")})`,
-            select: "location_id,draft,progress_percent,completed_required,total_required,status,updated_at",
-          }),
-        )
-      : Promise.resolve([]),
-    locationIds.length
-      ? supabaseRequest<SupabasePhoneNumberDirectoryRow[]>(
+    fetchInBatches<SupabaseOnboardingProfileRow>(locationIds, (inFilter) =>
+      supabaseRequest<SupabaseOnboardingProfileRow[]>(
+        "onboarding_profiles",
+        new URLSearchParams({
+          location_id: inFilter,
+          select: "location_id,draft,progress_percent,completed_required,total_required,status,updated_at",
+        }),
+      ),
+    ),
+    fetchInBatches<SupabasePhoneNumberDirectoryRow>(locationIds, (inFilter) =>
+      supabaseRequest<SupabasePhoneNumberDirectoryRow[]>(
         "phone_numbers",
         new URLSearchParams({
-          location_id: `in.(${locationIds.join(",")})`,
+          location_id: inFilter,
           order: "created_at.desc",
           select: "location_id,phone_number,status,forwarding_status,voice_webhook_url,trial_started_at,trial_ends_at,trial_grace_ends_at,released_at",
         }),
@@ -1198,29 +1209,31 @@ export async function fetchTenantDirectoryFromSupabase(): Promise<TenantDirector
         return supabaseRequest<SupabasePhoneNumberDirectoryRow[]>(
           "phone_numbers",
           new URLSearchParams({
-            location_id: `in.(${locationIds.join(",")})`,
+            location_id: inFilter,
             order: "created_at.desc",
             select: "location_id,phone_number,status,forwarding_status,voice_webhook_url",
           }),
         );
-      })
-      : Promise.resolve([]),
-    locationIds.length
-      ? supabaseRequest<Array<Pick<SupabaseCallRow, "id" | "location_id">>>(
-          "calls",
-          new URLSearchParams({
-            location_id: `in.(${locationIds.join(",")})`,
-            select: "id,location_id",
-            started_at: `gte.${firstDayOfCurrentMonthIso()}`,
-          }),
-        ).catch(() => [])
-      : Promise.resolve([]),
-    supabaseRequest<SupabaseBillingAccountDirectoryRow[]>(
-      "billing_accounts",
-      new URLSearchParams({
-        organization_id: `in.(${organizationIds.join(",")})`,
-        select: "organization_id,location_id,status,plan_name,monthly_cents,included_interactions,overage_label,current_period_end,cancel_at_period_end,updated_at",
       }),
+    ),
+    fetchInBatches<Pick<SupabaseCallRow, "id" | "location_id">>(locationIds, (inFilter) =>
+      supabaseRequest<Array<Pick<SupabaseCallRow, "id" | "location_id">>>(
+        "calls",
+        new URLSearchParams({
+          location_id: inFilter,
+          select: "id,location_id",
+          started_at: `gte.${firstDayOfCurrentMonthIso()}`,
+        }),
+      ),
+    ).catch(() => []),
+    fetchInBatches<SupabaseBillingAccountDirectoryRow>(organizationIds, (inFilter) =>
+      supabaseRequest<SupabaseBillingAccountDirectoryRow[]>(
+        "billing_accounts",
+        new URLSearchParams({
+          organization_id: inFilter,
+          select: "organization_id,location_id,status,plan_name,monthly_cents,included_interactions,overage_label,current_period_end,cancel_at_period_end,updated_at",
+        }),
+      ),
     ).catch(() => []),
   ]);
 
@@ -1638,20 +1651,24 @@ export async function fetchOrdersFromSupabase(
   const orderIds = orders.map((order) => order.id);
   const [orderItems, deliveryAttempts]: [SupabaseOrderItemRow[], SupabaseOrderDeliveryAttemptRow[]] = orderIds.length
     ? await Promise.all([
-        supabaseRequest<SupabaseOrderItemRow[]>(
-          "order_items",
-          new URLSearchParams({
-            order_id: `in.(${orderIds.join(",")})`,
-            select: "order_id,name,quantity,price_cents,modifiers,notes",
-          }),
+        fetchInBatches<SupabaseOrderItemRow>(orderIds, (inFilter) =>
+          supabaseRequest<SupabaseOrderItemRow[]>(
+            "order_items",
+            new URLSearchParams({
+              order_id: inFilter,
+              select: "order_id,name,quantity,price_cents,modifiers,notes",
+            }),
+          ),
         ),
-        supabaseRequest<SupabaseOrderDeliveryAttemptRow[]>(
-          "order_delivery_attempts",
-          new URLSearchParams({
-            order: "created_at.desc",
-            order_id: `in.(${orderIds.join(",")})`,
-            select: "id,order_id,destination,status,error_message,created_at,delivered_at",
-          }),
+        fetchInBatches<SupabaseOrderDeliveryAttemptRow>(orderIds, (inFilter) =>
+          supabaseRequest<SupabaseOrderDeliveryAttemptRow[]>(
+            "order_delivery_attempts",
+            new URLSearchParams({
+              order: "created_at.desc",
+              order_id: inFilter,
+              select: "id,order_id,destination,status,error_message,created_at,delivered_at",
+            }),
+          ),
         ).catch(() => []),
       ])
     : [[], []];
