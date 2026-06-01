@@ -18,6 +18,7 @@ import type {
   TranscriptSpeaker,
 } from "@/data/mock";
 import { getActiveLocationId, getActiveOrganizationId, getSupabaseAccessToken, getValidSupabaseAccessToken, refreshSupabaseSession } from "@/lib/auth";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import type { ParsedMenuCategory } from "@/domain/menu-ingestion";
 import { calculateOnboardingProgress, type OnboardingDraft } from "@/domain/onboarding";
 import { getBusinessTemplate, normalizeBusinessType, type BusinessType } from "@/domain/business-templates";
@@ -3709,17 +3710,22 @@ async function supabaseRequest<T>(
   // expected anon path guarded by RLS.
   const proactiveToken = (await getValidSupabaseAccessToken()) ?? getSupabaseAccessToken();
   const sendRequest = (token: string | undefined) =>
-    fetch(`${supabaseUrl}/rest/v1/${table}?${params.toString()}`, {
-      body: options?.body ? JSON.stringify(options.body) : undefined,
-      headers: {
-        apikey: supabasePublishableKey,
-        Authorization: `Bearer ${token ?? supabasePublishableKey}`,
-        "Content-Type": "application/json",
-        Prefer: "return=minimal",
-        ...options?.headers,
+    fetchWithTimeout(
+      `${supabaseUrl}/rest/v1/${table}?${params.toString()}`,
+      {
+        body: options?.body ? JSON.stringify(options.body) : undefined,
+        headers: {
+          apikey: supabasePublishableKey,
+          Authorization: `Bearer ${token ?? supabasePublishableKey}`,
+          "Content-Type": "application/json",
+          Prefer: "return=minimal",
+          ...options?.headers,
+        },
+        method: options?.method ?? "GET",
       },
-      method: options?.method ?? "GET",
-    });
+      undefined,
+      `Supabase ${table} request`,
+    );
 
   let response = await sendRequest(proactiveToken);
 
