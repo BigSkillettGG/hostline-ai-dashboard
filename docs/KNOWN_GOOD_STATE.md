@@ -50,6 +50,17 @@ Production verification completed on 2026-08-06:
 - Anonymous access cannot read populated partner/department foundation rows. Full executable negative isolation coverage across partner, organization, location, and department boundaries is still required before broader UI/runtime use.
 - Production voice health remained ready with Vapi preferred, routing-policy enforcement disabled, and LiveKit quarantined; the migration did not activate a route or change voice configuration.
 
+The subsequent repository-only telephony ownership foundation in `docs/COMMERCIAL_TELEPHONY_FOUNDATION.md` adds these invariants for its eventual production application:
+
+- Existing `phone_numbers` remains the compatibility source used by Vapi/Twilio provisioning, lifecycle, messaging, and dashboard code.
+- Telephony resource ownership, billing responsibility, and end-customer relationship ownership are separate fields; provider credentials never belong in account/trunk settings.
+- Existing/new numbers receive a SignalHost-managed compatibility account when no explicit account is supplied.
+- Every number receives one primary `observed` route to its location's default department. Observed means documented, not runtime-enforced.
+- SIP trunks and explicit number routes require service-recorded verification and `runtime_enforced = true` before active status.
+- The deployed global Twilio SIP trunk is not backfilled or tenant-manageable in this slice.
+- Vapi remains preferred, no runtime reads `number_routes`, and no current provider/number/assistant/webhook/prompt/model/voice/tool/route is changed.
+- This third migration is repository truth only until a production deployment and live verification are recorded.
+
 ## Known Good Voice Direction
 
 Baseline details are frozen in `docs/VOICE_BASELINE_LOCK.md`. Read that file before changing Vapi assignments or direct OpenAI Realtime fallback routing/tuning.

@@ -1138,3 +1138,226 @@ grant all on staff_directory_entries to service_role;
 grant all on queues to service_role;
 grant all on queue_members to service_role;
 grant all on transfer_targets to service_role;
+
+create or replace function public.can_access_telephony_account(target_telephony_account_id uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select public.is_platform_admin()
+    or exists (
+      select 1
+      from public.telephony_accounts
+      where id = target_telephony_account_id
+        and (
+          public.partner_role(channel_partner_id) is not null
+          or (organization_id is not null and public.can_access_organization(organization_id))
+          or (location_id is not null and public.can_access_location(location_id))
+        )
+    );
+$$;
+
+create or replace function public.can_manage_telephony_account(target_telephony_account_id uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select public.is_platform_admin()
+    or exists (
+      select 1
+      from public.telephony_accounts
+      where id = target_telephony_account_id
+        and resource_owner = 'partner'
+        and public.partner_role(channel_partner_id) in ('owner', 'admin')
+    )
+    or exists (
+      select 1
+      from public.telephony_accounts
+      where id = target_telephony_account_id
+        and resource_owner = 'customer'
+        and (
+          public.partner_role(channel_partner_id) in ('owner', 'admin')
+          or (location_id is not null and public.can_manage_location(location_id))
+          or (
+            location_id is null
+            and organization_id is not null
+            and public.can_manage_organization(organization_id)
+          )
+        )
+    );
+$$;
+
+create or replace function public.phone_number_location_id(target_phone_number_id uuid)
+returns uuid
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select location_id from public.phone_numbers where id = target_phone_number_id;
+$$;
+
+create or replace function public.number_route_department_id(target_number_route_id uuid)
+returns uuid
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select department_id from public.number_routes where id = target_number_route_id;
+$$;
+
+create or replace function public.number_route_phone_number_id(target_number_route_id uuid)
+returns uuid
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select phone_number_id from public.number_routes where id = target_number_route_id;
+$$;
+
+create or replace function public.can_access_number_route(target_number_route_id uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select public.is_platform_admin()
+    or (
+      public.can_access_location(
+        public.phone_number_location_id(
+          public.number_route_phone_number_id(target_number_route_id)
+        )
+      )
+      and public.can_access_department(public.number_route_department_id(target_number_route_id))
+    );
+$$;
+
+create or replace function public.can_manage_number_route(target_number_route_id uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select public.is_platform_admin()
+    or (
+      public.can_manage_location(
+        public.phone_number_location_id(
+          public.number_route_phone_number_id(target_number_route_id)
+        )
+      )
+      and public.can_manage_department(public.number_route_department_id(target_number_route_id))
+    );
+$$;
+
+alter table telephony_accounts enable row level security;
+alter table sip_trunks enable row level security;
+alter table number_routes enable row level security;
+
+create policy telephony_accounts_select_accessible on telephony_accounts
+for select to authenticated
+using (public.can_access_telephony_account(id));
+
+create policy telephony_accounts_insert_owners on telephony_accounts
+for insert to authenticated
+with check (
+  public.is_platform_admin()
+  or (
+    resource_owner = 'partner'
+    and public.partner_role(channel_partner_id) in ('owner', 'admin')
+  )
+  or (
+    resource_owner = 'customer'
+    and (
+      public.partner_role(channel_partner_id) in ('owner', 'admin')
+      or (location_id is not null and public.can_manage_location(location_id))
+      or (
+        location_id is null
+        and organization_id is not null
+        and public.can_manage_organization(organization_id)
+      )
+    )
+  )
+);
+
+create policy telephony_accounts_update_owners on telephony_accounts
+for update to authenticated
+using (public.can_manage_telephony_account(id))
+with check (
+  public.is_platform_admin()
+  or (
+    resource_owner = 'partner'
+    and public.partner_role(channel_partner_id) in ('owner', 'admin')
+  )
+  or (
+    resource_owner = 'customer'
+    and (
+      public.partner_role(channel_partner_id) in ('owner', 'admin')
+      or (location_id is not null and public.can_manage_location(location_id))
+      or (
+        location_id is null
+        and organization_id is not null
+        and public.can_manage_organization(organization_id)
+      )
+    )
+  )
+);
+
+create policy telephony_accounts_delete_owners on telephony_accounts
+for delete to authenticated
+using (public.can_manage_telephony_account(id));
+
+create policy sip_trunks_select_accessible on sip_trunks
+for select to authenticated
+using (public.can_access_telephony_account(telephony_account_id));
+
+create policy sip_trunks_insert_owners on sip_trunks
+for insert to authenticated
+with check (public.can_manage_telephony_account(telephony_account_id));
+
+create policy sip_trunks_update_owners on sip_trunks
+for update to authenticated
+using (public.can_manage_telephony_account(telephony_account_id))
+with check (public.can_manage_telephony_account(telephony_account_id));
+
+create policy sip_trunks_delete_owners on sip_trunks
+for delete to authenticated
+using (public.can_manage_telephony_account(telephony_account_id) and not runtime_enforced);
+
+create policy number_routes_select_accessible on number_routes
+for select to authenticated
+using (public.can_access_number_route(id));
+
+create policy number_routes_insert_managers on number_routes
+for insert to authenticated
+with check (
+  public.can_manage_location(public.phone_number_location_id(phone_number_id))
+  and public.can_manage_department(department_id)
+);
+
+create policy number_routes_update_managers on number_routes
+for update to authenticated
+using (public.can_manage_number_route(id))
+with check (
+  public.can_manage_location(public.phone_number_location_id(phone_number_id))
+  and public.can_manage_department(department_id)
+);
+
+create policy number_routes_delete_managers on number_routes
+for delete to authenticated
+using (public.can_manage_number_route(id) and status <> 'observed' and not runtime_enforced);
+
+grant select, insert, update, delete on telephony_accounts to authenticated;
+grant select, insert, update, delete on sip_trunks to authenticated;
+grant select, insert, update, delete on number_routes to authenticated;
+
+grant all on telephony_accounts to service_role;
+grant all on sip_trunks to service_role;
+grant all on number_routes to service_role;

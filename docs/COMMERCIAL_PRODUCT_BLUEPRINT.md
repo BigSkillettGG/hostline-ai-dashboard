@@ -609,3 +609,17 @@ This slice does not implement live transfer, number routing, queue presence/ring
 - Verified each checked demo organization has a channel partner and each checked location has exactly one default General Reception department with one active callback-only Primary Queue.
 - Confirmed production voice health remained ready with Vapi preferred, provider routing-policy enforcement disabled, and LiveKit quarantined.
 - Executable negative isolation coverage across partner, organization, location, and department boundaries remains an explicit Phase 1 acceptance gap; production application alone does not close it.
+
+### Phase 1 foundation slice status — telephony ownership and observed number routes
+
+The third Phase 1 slice is implemented in the repository but is not yet applied to production:
+
+- Added `telephony_accounts` with separate SignalHost/partner/customer resource ownership, billing responsibility, and SignalHost/partner end-customer relationship ownership.
+- Added dormant `sip_trunks` with service-controlled verification/runtime enforcement. The deployed global Twilio SIP trunk remains environment-managed and is not backfilled.
+- Added a required telephony-account relationship to existing `phone_numbers`, with a compatibility trigger that assigns provider-specific SignalHost-managed accounts when current services/scripts omit the new field.
+- Added provider-neutral `number_routes`; every existing/new number receives one primary `observed`, non-enforced route to its default department.
+- Added cross-scope validation, ownership-aware RLS, service-only runtime activation, clean-install snapshots/types, vocabulary tests, and migration contract tests.
+- Preserved existing phone IDs, provider/provider IDs, lifecycle, forwarding state, webhooks, `ai_host_phone`, Vapi assistants, and every live route. No runtime reads the new route table.
+- Verification: 97 test files / 586 tests, TypeScript, lint with zero errors and eight pre-existing warnings, and all three production builds pass.
+
+Production application, live backfill/RLS verification, partner/customer telephony administration, credential vaulting, trunk import, PBX adapters, carrier billing reconciliation, and runtime route enforcement remain open.

@@ -8,10 +8,10 @@ The user requested a persistent memory system because repeated context compactio
 
 Current slice:
 
-- Preserve the verified production application of the first two compatibility-safe Phase 1 migrations.
-- Design the next narrow Phase 1 slice around partner-owned telephony identities and dormant number routes.
-- Keep the existing `phone_numbers` table and all current Vapi/Twilio bindings compatible; add ownership/routing records rather than replacing working data.
-- Do not make a new route operational, change a provider binding, or connect department queues to live calls until a separately verified runtime slice.
+- Apply and verify the third compatibility-safe Phase 1 migration only after its repository checkpoint is pushed and an exact database-capable deployment path is available.
+- Keep the existing `phone_numbers` table and all current Vapi/Twilio bindings as the compatibility source; `telephony_accounts`, `sip_trunks`, and `number_routes` are ownership/control-plane identities only.
+- Keep every backfilled number route `observed` and `runtime_enforced = false`.
+- Do not import the global Twilio SIP trunk, make a new route operational, change a provider binding, or connect department queues to live calls until a separately verified runtime slice.
 - Do not change live assistants, phone numbers, webhooks, prompts, tools, voices, models, or routes.
 - Keep production application, repository implementation, and runtime activation as three explicitly separate states.
 
@@ -33,6 +33,11 @@ Status update:
 - Live PostgREST verification resolves all eight new tables. Authenticated checks across all six demo tenants confirm the existing location remains visible, its organization has a channel partner, and the location has exactly one default General Reception department with one active callback-only Primary Queue.
 - Anonymous access cannot read the populated partner/department foundation rows, and the checked-in migrations enable RLS on all eight tables. A dedicated executable cross-partner/cross-organization/cross-location/cross-department negative test harness remains open before UI/runtime dependency expands.
 - Production voice verification remained green after the database deployment: `https://hostline-voice.onrender.com` is production-ready, Vapi is preferred, direct routing-policy enforcement remains off, and LiveKit remains quarantined.
+- Phase 1 slice 3 is implemented in the repository under `docs/COMMERCIAL_TELEPHONY_FOUNDATION.md` and migration `20260806070000_commercial_telephony_ownership_foundation.sql`.
+- The slice adds non-secret telephony account ownership/billing/customer-relationship metadata, dormant SIP trunk identities, a required compatibility account on `phone_numbers`, and observed default-department number routes. Legacy service/script inserts remain compatible through a default-account/observed-route trigger path.
+- Browser users cannot self-verify a trunk/route, enable runtime enforcement, alter observed routes, move numbers across locations, or attach an unauthorized provider account. Current voice/runtime code does not read the new route table.
+- Slice 3 repository verification is green: 97 test files / 586 tests, TypeScript, lint with zero errors and eight pre-existing warnings, and dashboard, voice-service, and LiveKit-agent production builds.
+- The slice 3 migration is not yet applied to production. Do not make UI/runtime code depend on its tables until live backfill, RLS, demo-login, and voice-health verification is recorded.
 - Number routes, AI agent/workflow/knowledge/report scoping, production-backed location/department switching, immutable support audit, and executable cross-tenant RLS tests remain later Phase 1 slices.
 - The Vapi executor still lacks some tools advertised by fixed assistants; action parity is a later verified slice, not part of this non-routing foundation change.
 - Vapi pilot location allow-list now includes all six demo businesses.
