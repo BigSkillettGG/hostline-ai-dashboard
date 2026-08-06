@@ -6,6 +6,7 @@ import {
   buildDemoSuperAdmin,
   getAuthReadiness,
   getActiveLocationId,
+  getActivePartnerId,
   mapSupabaseAuthResponse,
   roleFromEmailAndMetadata,
   signOut,
@@ -146,6 +147,66 @@ describe("auth helpers", () => {
       role: "superadmin",
       workspaceKind: "platform",
     });
+  });
+
+  it("maps partner memberships into a partner workspace", () => {
+    const user = mapSupabaseAuthResponse({
+      access_token: "access_token",
+      user: {
+        email: "operator@partner.example",
+        id: "partner_user_1",
+      },
+    }, {
+      activeLocationId: "loc_2",
+      activeOrganizationId: "org_2",
+      activePartnerId: "partner_1",
+      partnerMemberships: [{ partnerId: "partner_1", role: "operator" }],
+    });
+
+    expect(user).toMatchObject({
+      activeLocationId: "loc_2",
+      activeOrganizationId: "org_2",
+      activePartnerId: "partner_1",
+      partnerMembershipRole: "operator",
+      role: "admin",
+      workspaceKind: "partner",
+    });
+  });
+
+  it("recalculates customer and partner roles for the selected scope", () => {
+    signOut();
+    localStorage.setItem("signalhost.currentUser", JSON.stringify({
+      accessToken: "access_token",
+      activeOrganizationId: "org_1",
+      activePartnerId: "partner_1",
+      authProvider: "supabase",
+      email: "multi-scope@example.com",
+      memberships: [
+        { organizationId: "org_1", role: "owner" },
+        { organizationId: "org_2", role: "staff" },
+      ],
+      name: "Multi Scope",
+      partnerMemberships: [
+        { partnerId: "partner_1", role: "admin" },
+        { partnerId: "partner_2", role: "viewer" },
+      ],
+      role: "admin",
+      supabaseUserId: "user_5",
+    }));
+
+    const user = updateCurrentUserAccess({
+      activeLocationId: "loc_2",
+      activeOrganizationId: "org_2",
+      activePartnerId: "partner_2",
+    });
+
+    expect(user).toMatchObject({
+      partnerMembershipRole: "viewer",
+      restaurantMembershipRole: "staff",
+      workspaceKind: "partner",
+    });
+    expect(getActivePartnerId()).toBe("partner_2");
+    signOut();
   });
 
   it("captures access token expiry from expires_at", () => {

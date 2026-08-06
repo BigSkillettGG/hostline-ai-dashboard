@@ -625,3 +625,14 @@ The third Phase 1 slice is implemented and was applied to production on 2026-08-
 - Production voice health remained ready after application. Vapi stays preferred and no provider or runtime route changed.
 
 Partner/customer telephony administration, broader write-isolation coverage, credential vaulting, trunk import, PBX adapters, carrier billing reconciliation, and runtime route enforcement remain open.
+
+### Phase 1 foundation slice status — authenticated workspace switching
+
+- Supabase sign-in hydrates customer organization memberships and channel-partner memberships.
+- The live tenant directory carries partner, organization, and location identities under the signed-in bearer token.
+- The dashboard header selector lists only RLS-visible locations and updates active partner/customer/location context without changing authorization.
+- Customer and partner roles are recalculated for the selected scope, and dashboard queries are invalidated after a switch.
+- Existing platform staff tenant view and single-location customer behavior are preserved.
+- Department switching, partner administration/branding, partner aggregate reporting, support-session audit, and broader write-isolation coverage remain open.
+- This slice does not change Vapi, providers, assistants, numbers, webhooks, prompts, models, tools, routes, or any voice runtime.
+- Verification: 97 test files / 590 tests, TypeScript, lint with zero errors and eight pre-existing warnings, all three production builds, the authenticated six-tenant production RLS gate, and a real Supabase customer browser login. Production browser coverage for multi-customer partner switching requires a deliberately provisioned partner test identity.

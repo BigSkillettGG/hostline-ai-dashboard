@@ -15,6 +15,7 @@ import {
   type TenantDirectoryStatus,
 } from "@/lib/supabase-rest";
 import { startDemoSession, updateCurrentUserAccess } from "@/lib/auth";
+import { SIGNALHOST_DIRECT_PARTNER_ID } from "@/domain/commercial-hierarchy";
 import { toast } from "sonner";
 
 interface TenantTableRow {
@@ -22,6 +23,7 @@ interface TenantTableRow {
   aiNumber: string;
   businessLabel: string;
   callsThisMonth: number;
+  channelPartnerId: string;
   id: string;
   includedInteractions: number;
   locationId: string;
@@ -81,6 +83,7 @@ export default function SuperTenants() {
     updateCurrentUserAccess({
       activeLocationId: tenant.locationId,
       activeOrganizationId: tenant.organizationId,
+      activePartnerId: tenant.channelPartnerId,
     });
     toast.success(`Viewing ${tenant.name} as SignalHost staff`);
     navigate("/app");
@@ -249,6 +252,7 @@ function mapDirectoryTenant(tenant: TenantDirectoryRecord): TenantTableRow {
     aiNumber: tenant.aiHostPhone ?? "Not provisioned",
     businessLabel: tenant.businessLabel,
     callsThisMonth: tenant.callsThisMonth,
+    channelPartnerId: tenant.channelPartnerId,
     id: tenant.locationId,
     includedInteractions: tenant.includedInteractions,
     locationId: tenant.locationId,
@@ -271,6 +275,7 @@ function mapMockTenant(tenant: Tenant): TenantTableRow {
     aiNumber: tenant.aiNumber,
     businessLabel: tenant.businessLabel ?? "Restaurant",
     callsThisMonth: tenant.callsThisMonth,
+    channelPartnerId: SIGNALHOST_DIRECT_PARTNER_ID,
     id: tenant.id,
     includedInteractions: tenant.includedCalls,
     locationId: tenant.locationId ?? tenant.id,

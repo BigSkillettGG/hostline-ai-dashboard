@@ -8,14 +8,21 @@ import {
   type RestaurantMembershipRole,
   type UserRole,
 } from "@/domain/access-control";
+import {
+  comparePartnerRoles,
+  getPartnerRoleLabel,
+  isPartnerRole,
+  type PartnerRole,
+} from "@/domain/commercial-hierarchy";
 import { getVerticalDemoProfile, type VerticalDemoProfile } from "@/domain/demo-verticals";
 import { createOnboardingDraftForBusiness } from "@/domain/onboarding";
 import { saveOnboardingDraft } from "@/lib/onboarding-draft";
 
 export type { RestaurantMembershipRole, UserRole } from "@/domain/access-control";
+export type { PartnerRole } from "@/domain/commercial-hierarchy";
 
 export type AuthMode = "demo" | "supabase";
-export type WorkspaceKind = "demo" | "restaurant" | "platform";
+export type WorkspaceKind = "demo" | "partner" | "restaurant" | "platform";
 
 export interface RestaurantMembership {
   createdAt?: string;
@@ -24,17 +31,27 @@ export interface RestaurantMembership {
   role: RestaurantMembershipRole;
 }
 
+export interface PartnerMembership {
+  createdAt?: string;
+  id?: string;
+  partnerId: string;
+  role: PartnerRole;
+}
+
 export interface CurrentUser {
   accessToken?: string;
   accessTokenExpiresAt?: number;
   activeLocationId?: string;
   activeOrganizationId?: string;
+  activePartnerId?: string;
   authProvider: AuthMode;
   email: string;
   isPlatformAdmin?: boolean;
   memberships?: RestaurantMembership[];
   name: string;
   refreshToken?: string;
+  partnerMembershipRole?: PartnerRole;
+  partnerMemberships?: PartnerMembership[];
   restaurantId?: string;
   restaurantMembershipRole?: RestaurantMembershipRole;
   role: UserRole;
@@ -75,6 +92,18 @@ interface SupabaseMembershipRow {
   id?: string;
   organization_id?: string;
   role?: string;
+}
+
+interface SupabasePartnerMembershipRow {
+  created_at?: string | null;
+  id?: string;
+  partner_id?: string;
+  role?: string;
+}
+
+interface SupabaseOrganizationAccessRow {
+  channel_partner_id?: string | null;
+  id?: string;
 }
 
 interface SupabaseLocationRow {
@@ -133,6 +162,10 @@ export function getCurrentUser() {
 
 export function getActiveOrganizationId() {
   return readUser()?.activeOrganizationId;
+}
+
+export function getActivePartnerId() {
+  return readUser()?.activePartnerId;
 }
 
 export function getActiveLocationId() {
@@ -290,7 +323,7 @@ export function canCurrentUserManageSettings(user: CurrentUser | null | undefine
   return Boolean(user && user.role === "admin" && canManageRestaurantSettings(user.restaurantMembershipRole));
 }
 
-export { getRestaurantRoleLabel };
+export { getPartnerRoleLabel, getRestaurantRoleLabel };
 
 export async function signIn(email: string, password: string): Promise<CurrentUser> {
   const config = getAuthRuntimeConfig();
@@ -342,7 +375,9 @@ export function signOut() {
 export function updateCurrentUserAccess(input: {
   activeLocationId?: string;
   activeOrganizationId?: string;
+  activePartnerId?: string;
   memberships?: RestaurantMembership[];
+  partnerMemberships?: PartnerMembership[];
 }) {
   const current = readUser();
   if (!current) return null;
@@ -351,7 +386,9 @@ export function updateCurrentUserAccess(input: {
     ...current,
     activeLocationId: input.activeLocationId ?? current.activeLocationId,
     activeOrganizationId: input.activeOrganizationId ?? current.activeOrganizationId,
+    activePartnerId: input.activePartnerId ?? current.activePartnerId,
     memberships: input.memberships ?? current.memberships,
+    partnerMemberships: input.partnerMemberships ?? current.partnerMemberships,
     restaurantId: input.activeOrganizationId ?? current.restaurantId,
   });
   writeUser(next);
@@ -417,16 +454,25 @@ export function buildDemoSuperAdmin(email = "staff@signalhost.ai", name = "Signa
 
 export function mapSupabaseAuthResponse(
   data: SupabaseAuthResponse,
-  access: { activeLocationId?: string; isPlatformAdmin?: boolean; memberships?: RestaurantMembership[] } = {},
+  access: {
+    activeLocationId?: string;
+    activeOrganizationId?: string;
+    activePartnerId?: string;
+    isPlatformAdmin?: boolean;
+    memberships?: RestaurantMembership[];
+    partnerMemberships?: PartnerMembership[];
+  } = {},
 ): CurrentUser {
   if (!data.access_token || !data.user?.email || !data.user.id) {
     throw new Error("Supabase Auth did not return an active session. Confirm the email address before signing in.");
   }
 
   const memberships = sortMemberships(access.memberships ?? []);
+  const partnerMemberships = sortPartnerMemberships(access.partnerMemberships ?? []);
   const role = roleFromEmailAndMetadata(data.user.email, data.user.app_metadata, data.user.user_metadata, {
     isPlatformAdmin: access.isPlatformAdmin,
     memberships,
+    partnerMemberships,
   });
   const name =
     stringMetadataValue(data.user.user_metadata, "name") ??
@@ -440,12 +486,15 @@ export function mapSupabaseAuthResponse(
       access.activeLocationId ??
       stringMetadataValue(data.user.app_metadata, "location_id") ??
       stringMetadataValue(data.user.user_metadata, "location_id"),
+    activeOrganizationId: access.activeOrganizationId,
+    activePartnerId: access.activePartnerId,
     authProvider: "supabase",
     email: data.user.email,
     isPlatformAdmin: Boolean(access.isPlatformAdmin),
     memberships,
     name,
     refreshToken: data.refresh_token,
+    partnerMemberships,
     restaurantId: stringMetadataValue(data.user.app_metadata, "restaurant_id") ?? memberships[0]?.organizationId,
     role,
     supabaseUserId: data.user.id,
@@ -460,13 +509,14 @@ export function roleFromEmailAndMetadata(
     inferSignalHostEmail?: boolean;
     isPlatformAdmin?: boolean;
     memberships?: RestaurantMembership[];
+    partnerMemberships?: PartnerMembership[];
   } = {},
 ): UserRole {
   const role = stringMetadataValue(appMetadata, "role") ?? stringMetadataValue(userMetadata, "role");
   const platformFlag = booleanMetadataValue(appMetadata, "platform_admin") ?? booleanMetadataValue(appMetadata, "is_platform_admin");
 
   if (access.isPlatformAdmin || platformFlag || role === "superadmin") return "superadmin";
-  if (access.memberships?.length || role === "admin") return "admin";
+  if (access.memberships?.length || access.partnerMemberships?.length || role === "admin") return "admin";
   return access.inferSignalHostEmail && isSignalHostStaffEmail(email) ? "superadmin" : "admin";
 }
 
@@ -518,15 +568,32 @@ async function signUpWithSupabase(
 
 async function hydrateSupabaseUser(data: SupabaseAuthResponse, config: AuthRuntimeConfig) {
   const base = mapSupabaseAuthResponse(data);
-  const [memberships, isPlatformAdmin] = await Promise.all([
+  const [memberships, partnerMemberships, isPlatformAdmin] = await Promise.all([
     fetchSupabaseMemberships(base, config),
+    fetchSupabasePartnerMemberships(base, config),
     fetchSupabasePlatformAdmin(base, config),
   ]);
-  const activeLocationId = memberships[0]?.organizationId
-    ? await fetchSupabasePrimaryLocation(base, config, memberships[0].organizationId)
+  const membershipOrganizationId = memberships[0]?.organizationId;
+  const partnerOrganization = !membershipOrganizationId && partnerMemberships[0]?.partnerId
+    ? await fetchSupabasePrimaryPartnerOrganization(base, config, partnerMemberships[0].partnerId)
+    : undefined;
+  const activeOrganizationId = membershipOrganizationId ?? partnerOrganization?.id;
+  const organizationScope = activeOrganizationId
+    ? partnerOrganization ?? await fetchSupabaseOrganizationScope(base, config, activeOrganizationId)
+    : undefined;
+  const activePartnerId = organizationScope?.channel_partner_id ?? partnerMemberships[0]?.partnerId;
+  const activeLocationId = activeOrganizationId
+    ? await fetchSupabasePrimaryLocation(base, config, activeOrganizationId)
     : undefined;
 
-  return mapSupabaseAuthResponse(data, { activeLocationId, isPlatformAdmin, memberships });
+  return mapSupabaseAuthResponse(data, {
+    activeLocationId,
+    activeOrganizationId,
+    activePartnerId,
+    isPlatformAdmin,
+    memberships,
+    partnerMemberships,
+  });
 }
 
 async function fetchSupabaseMemberships(user: CurrentUser, config: AuthRuntimeConfig): Promise<RestaurantMembership[]> {
@@ -541,6 +608,18 @@ async function fetchSupabaseMemberships(user: CurrentUser, config: AuthRuntimeCo
   return sortMemberships(rows.map(mapSupabaseMembershipRow).filter(Boolean) as RestaurantMembership[]);
 }
 
+async function fetchSupabasePartnerMemberships(user: CurrentUser, config: AuthRuntimeConfig): Promise<PartnerMembership[]> {
+  if (!user.accessToken || !user.supabaseUserId) return [];
+
+  const params = new URLSearchParams({
+    order: "created_at.asc",
+    select: "id,partner_id,role,created_at",
+    user_id: `eq.${user.supabaseUserId}`,
+  });
+  const rows = await supabaseRestRequest<SupabasePartnerMembershipRow[]>("partner_memberships", params, user.accessToken, config);
+  return sortPartnerMemberships(rows.map(mapSupabasePartnerMembershipRow).filter(Boolean) as PartnerMembership[]);
+}
+
 async function fetchSupabasePlatformAdmin(user: CurrentUser, config: AuthRuntimeConfig) {
   if (!user.accessToken || !user.supabaseUserId) return false;
 
@@ -551,6 +630,39 @@ async function fetchSupabasePlatformAdmin(user: CurrentUser, config: AuthRuntime
   });
   const rows = await supabaseRestRequest<Array<{ id?: string }>>("platform_admins", params, user.accessToken, config);
   return rows.length > 0;
+}
+
+async function fetchSupabasePrimaryPartnerOrganization(
+  user: CurrentUser,
+  config: AuthRuntimeConfig,
+  partnerId: string,
+) {
+  if (!user.accessToken) return undefined;
+
+  const params = new URLSearchParams({
+    channel_partner_id: `eq.${partnerId}`,
+    limit: "1",
+    order: "created_at.asc",
+    select: "id,channel_partner_id",
+  });
+  const rows = await supabaseRestRequest<SupabaseOrganizationAccessRow[]>("organizations", params, user.accessToken, config);
+  return rows[0];
+}
+
+async function fetchSupabaseOrganizationScope(
+  user: CurrentUser,
+  config: AuthRuntimeConfig,
+  organizationId: string,
+) {
+  if (!user.accessToken) return undefined;
+
+  const params = new URLSearchParams({
+    id: `eq.${organizationId}`,
+    limit: "1",
+    select: "id,channel_partner_id",
+  });
+  const rows = await supabaseRestRequest<SupabaseOrganizationAccessRow[]>("organizations", params, user.accessToken, config);
+  return rows[0];
 }
 
 async function fetchSupabasePrimaryLocation(
@@ -621,31 +733,57 @@ async function supabaseRestRequest<T>(
 
 function normalizeStoredUser(user: CurrentUser): CurrentUser {
   const memberships = sortMemberships((user.memberships ?? []).map(normalizeMembership).filter(Boolean) as RestaurantMembership[]);
+  const partnerMemberships = sortPartnerMemberships(
+    (user.partnerMemberships ?? []).map(normalizePartnerMembership).filter(Boolean) as PartnerMembership[],
+  );
   return applyAccessModel({
     ...user,
     authProvider: user.authProvider ?? "demo",
     isPlatformAdmin: Boolean(user.isPlatformAdmin || user.role === "superadmin"),
     memberships,
+    partnerMemberships,
     role: user.role ?? "admin",
   });
 }
 
 function applyAccessModel(user: CurrentUser): CurrentUser {
   const memberships = sortMemberships((user.memberships ?? []).map(normalizeMembership).filter(Boolean) as RestaurantMembership[]);
+  const partnerMemberships = sortPartnerMemberships(
+    (user.partnerMemberships ?? []).map(normalizePartnerMembership).filter(Boolean) as PartnerMembership[],
+  );
   const primaryMembership = memberships[0];
-  const restaurantMembershipRole = user.restaurantMembershipRole && isRestaurantMembershipRole(user.restaurantMembershipRole)
-    ? user.restaurantMembershipRole
-    : primaryMembership?.role;
+  const primaryPartnerMembership = partnerMemberships[0];
+  const activeOrganizationId = user.activeOrganizationId ?? primaryMembership?.organizationId;
+  const activePartnerId = user.activePartnerId ?? primaryPartnerMembership?.partnerId;
+  const selectedMembership = activeOrganizationId
+    ? memberships.find((membership) => membership.organizationId === activeOrganizationId)
+    : primaryMembership;
+  const selectedPartnerMembership = activePartnerId
+    ? partnerMemberships.find((membership) => membership.partnerId === activePartnerId)
+    : primaryPartnerMembership;
+  const restaurantMembershipRole = selectedMembership?.role ?? (
+    memberships.length === 0 && user.restaurantMembershipRole && isRestaurantMembershipRole(user.restaurantMembershipRole)
+      ? user.restaurantMembershipRole
+      : undefined
+  );
+  const partnerMembershipRole = selectedPartnerMembership?.role ?? (
+    partnerMemberships.length === 0 && user.partnerMembershipRole && isPartnerRole(user.partnerMembershipRole)
+      ? user.partnerMembershipRole
+      : undefined
+  );
   const role: UserRole = user.isPlatformAdmin || user.role === "superadmin" ? "superadmin" : "admin";
-  const workspaceKind = user.workspaceKind ?? defaultWorkspaceKind(user.authProvider, role);
+  const workspaceKind = resolveWorkspaceKind(user.authProvider, role, partnerMemberships);
 
   return {
     ...user,
-    activeOrganizationId: user.activeOrganizationId ?? primaryMembership?.organizationId,
+    activeOrganizationId,
     activeLocationId: user.activeLocationId,
+    activePartnerId,
     isPlatformAdmin: Boolean(user.isPlatformAdmin || role === "superadmin"),
     memberships,
-    restaurantId: user.restaurantId ?? primaryMembership?.organizationId,
+    partnerMembershipRole,
+    partnerMemberships,
+    restaurantId: activeOrganizationId ?? user.restaurantId,
     restaurantMembershipRole,
     role,
     workspaceKind,
@@ -672,8 +810,32 @@ function normalizeMembership(value: RestaurantMembership): RestaurantMembership 
   };
 }
 
+function mapSupabasePartnerMembershipRow(row: SupabasePartnerMembershipRow): PartnerMembership | null {
+  if (!row.partner_id || !isPartnerRole(row.role)) return null;
+  return {
+    createdAt: row.created_at ?? undefined,
+    id: row.id,
+    partnerId: row.partner_id,
+    role: row.role,
+  };
+}
+
+function normalizePartnerMembership(value: PartnerMembership): PartnerMembership | null {
+  if (!value.partnerId || !isPartnerRole(value.role)) return null;
+  return {
+    createdAt: value.createdAt,
+    id: value.id,
+    partnerId: value.partnerId,
+    role: value.role,
+  };
+}
+
 function sortMemberships(memberships: RestaurantMembership[]) {
   return [...memberships].sort((a, b) => compareRestaurantRoles(a.role, b.role));
+}
+
+function sortPartnerMemberships(memberships: PartnerMembership[]) {
+  return [...memberships].sort((a, b) => comparePartnerRoles(a.role, b.role));
 }
 
 function normalizeAuthMode(value: unknown): AuthMode {
@@ -686,9 +848,14 @@ function normalizeAuthMode(value: unknown): AuthMode {
   return supabaseUrl && supabasePublishableKey ? "supabase" : "demo";
 }
 
-function defaultWorkspaceKind(authProvider: AuthMode, role: UserRole): WorkspaceKind {
+function resolveWorkspaceKind(
+  authProvider: AuthMode,
+  role: UserRole,
+  partnerMemberships: PartnerMembership[],
+): WorkspaceKind {
   if (authProvider === "demo") return role === "superadmin" ? "platform" : "demo";
-  return role === "superadmin" ? "platform" : "restaurant";
+  if (role === "superadmin") return "platform";
+  return partnerMemberships.length ? "partner" : "restaurant";
 }
 
 function defaultNameFor(email: string, role: UserRole) {

@@ -1,6 +1,6 @@
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
-import { Bell, Search, MapPin, ChevronDown } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { Bell, Check, Search, MapPin, ChevronDown } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,7 @@ import {
 import {
   getAuthReadiness,
   getActiveLocationId,
+  getPartnerRoleLabel,
   getRestaurantRoleLabel,
   isDemoAuthMode,
   isDemoWorkspace,
@@ -23,15 +24,18 @@ import {
   useCurrentUser,
   signOut,
   setRole,
+  updateCurrentUserAccess,
 } from "@/lib/auth";
 import { fetchTenantDirectoryFromSupabase, isSupabaseConfigured } from "@/lib/supabase-rest";
 import { getOnboardingBusinessTemplate } from "@/domain/onboarding";
 import { loadOnboardingDraft } from "@/lib/onboarding-draft";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { toast } from "sonner";
 
 export default function AppLayout() {
   const [agentLive, setAgentLive] = useState(true);
   const user = useCurrentUser();
+  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
   const initials = (user?.name ?? "ML").split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase();
@@ -46,7 +50,10 @@ export default function AppLayout() {
     staleTime: 60_000,
   });
   const activeTenant = tenantQuery.data?.find((tenant) => tenant.locationId === activeLocationId);
+  const tenantOptions = tenantQuery.data?.filter((tenant) => tenant.locationId !== "not-created") ?? [];
   const restaurantRole = getRestaurantRoleLabel(user?.restaurantMembershipRole);
+  const partnerRole = getPartnerRoleLabel(user?.partnerMembershipRole);
+  const partnerWorkspace = user?.workspaceKind === "partner";
   const draft = loadOnboardingDraft();
   const businessTemplate = getOnboardingBusinessTemplate(draft);
   const businessName = String(draft.restaurantName || businessTemplate.defaultName);
@@ -54,6 +61,22 @@ export default function AppLayout() {
     activeTenant?.locationName ??
     (businessTemplate.id === "restaurant" ? `${businessName} - Valencia` : businessName);
   const workspaceLabel = activeTenant?.businessLabel ?? businessTemplate.workspaceLabel;
+  const scopeMenuLabel = platformAdmin
+    ? "Customer workspaces"
+    : partnerWorkspace
+      ? "Partner workspaces"
+      : "Locations";
+
+  function switchWorkspace(tenant: NonNullable<typeof tenantQuery.data>[number]) {
+    if (tenant.locationId === activeLocationId) return;
+    updateCurrentUserAccess({
+      activeLocationId: tenant.locationId,
+      activeOrganizationId: tenant.organizationId,
+      activePartnerId: tenant.channelPartnerId,
+    });
+    void queryClient.invalidateQueries();
+    toast.success(`Switched to ${tenant.locationName}`);
+  }
 
   return (
     <SidebarProvider>
@@ -74,11 +97,31 @@ export default function AppLayout() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-56">
-                <DropdownMenuLabel>Locations</DropdownMenuLabel>
-                <DropdownMenuItem>{locationLabel}</DropdownMenuItem>
-                <DropdownMenuItem disabled>{workspaceLabel} second location (soon)</DropdownMenuItem>
+                <DropdownMenuLabel>{scopeMenuLabel}</DropdownMenuLabel>
+                {tenantQuery.isLoading && <DropdownMenuItem disabled>Loading accessible locations...</DropdownMenuItem>}
+                {tenantQuery.isError && <DropdownMenuItem disabled>Could not load accessible locations</DropdownMenuItem>}
+                {!tenantQuery.isLoading && !tenantQuery.isError && tenantOptions.length === 0 && (
+                  <DropdownMenuItem disabled>{locationLabel}</DropdownMenuItem>
+                )}
+                {tenantOptions.map((tenant) => (
+                  <DropdownMenuItem
+                    key={tenant.locationId}
+                    className="items-start gap-2"
+                    onSelect={() => switchWorkspace(tenant)}
+                  >
+                    <Check className={`mt-0.5 h-3.5 w-3.5 ${tenant.locationId === activeLocationId ? "opacity-100" : "opacity-0"}`} />
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">{tenant.locationName}</div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        {partnerWorkspace || platformAdmin
+                          ? `${tenant.channelPartnerName} · ${tenant.organizationName}`
+                          : tenant.organizationName}
+                      </div>
+                    </div>
+                  </DropdownMenuItem>
+                ))}
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>Add location</DropdownMenuItem>
+                <DropdownMenuItem disabled>Add location (soon)</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
 
@@ -105,6 +148,11 @@ export default function AppLayout() {
               {platformAdmin && activeLocationId && (
                 <Badge variant="outline" className="hidden border-warning/30 bg-warning/10 text-warning lg:inline-flex">
                   Staff tenant view
+                </Badge>
+              )}
+              {partnerWorkspace && (
+                <Badge variant="outline" className="hidden border-primary/20 bg-primary/10 text-primary lg:inline-flex">
+                  Partner workspace
                 </Badge>
               )}
               {platformAdmin && (
@@ -135,7 +183,9 @@ export default function AppLayout() {
                   <DropdownMenuLabel>
                     <div className="text-sm">{user?.name ?? "Maria Lombardi"}</div>
                     <div className="text-xs font-normal text-muted-foreground">{user?.email ?? "Owner"}</div>
-                    <div className="text-xs font-normal text-muted-foreground">{restaurantRole}</div>
+                    <div className="text-xs font-normal text-muted-foreground">
+                      {partnerWorkspace ? partnerRole : restaurantRole}
+                    </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => navigate("/app/profile")}>Profile</DropdownMenuItem>

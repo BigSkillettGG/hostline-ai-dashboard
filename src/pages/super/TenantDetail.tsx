@@ -194,6 +194,7 @@ export default function TenantDetail() {
     updateCurrentUserAccess({
       activeLocationId: tenant.locationId,
       activeOrganizationId: tenant.organizationId,
+      activePartnerId: tenant.channelPartnerId,
     });
     toast.success(`Viewing ${tenant.locationName} as SignalHost staff`);
     navigate("/app");

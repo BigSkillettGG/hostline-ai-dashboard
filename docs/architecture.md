@@ -38,6 +38,8 @@ The additive hierarchy foundation is defined in `docs/COMMERCIAL_HIERARCHY_FOUND
 
 The telephony ownership foundation in `docs/COMMERCIAL_TELEPHONY_FOUNDATION.md` and migration `20260806070000_commercial_telephony_ownership_foundation.sql` extends the control plane with non-secret carrier/runtime/PBX account ownership, dormant SIP trunk identities, and observed number-to-default-department routes. It was applied and verified in production on 2026-08-06 with all six authenticated demo tenants. `phone_numbers` remains the live compatibility record, the global Twilio SIP trunk remains environment-managed, every verified backfilled route remains non-enforced, and neither the dashboard nor voice runtimes read the new route table. `npm run check:commercial-telephony` is the repeatable read-only production/RLS verification command.
 
+The first production-backed workspace selector is defined in `docs/COMMERCIAL_SCOPE_SWITCHING.md`. Supabase sign-in now hydrates both customer organization memberships and channel-partner memberships. The dashboard tenant directory includes partner identity, and the header selector changes the active partner/organization/location only among rows already visible through the user's RLS-scoped bearer token. Scope changes invalidate dashboard queries and recalculate the role for the selected organization/partner; they do not impersonate another Auth user or alter any database authorization or voice route.
+
 ### Voice Service
 
 Owns inbound phone sessions, streaming audio, barge-in, turn detection, tool calls, escalation, call summaries, and transcript persistence.

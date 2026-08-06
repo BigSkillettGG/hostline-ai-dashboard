@@ -190,7 +190,13 @@ interface SupabaseCallRow {
 }
 
 interface SupabaseOrganizationRow {
+  channel_partner_id: string;
   created_at: string | null;
+  id: string;
+  name: string;
+}
+
+interface SupabaseChannelPartnerRow {
   id: string;
   name: string;
 }
@@ -622,6 +628,8 @@ export interface TenantDirectoryRecord {
   businessLabel: string;
   businessType: BusinessType;
   callsThisMonth: number;
+  channelPartnerId: string;
+  channelPartnerName: string;
   createdAt: string;
   includedInteractions: number;
   locationId: string;
@@ -1157,12 +1165,13 @@ export async function fetchTenantDirectoryFromSupabase(): Promise<TenantDirector
     "organizations",
     new URLSearchParams({
       order: "created_at.desc",
-      select: "id,name,created_at",
+      select: "id,name,channel_partner_id,created_at",
     }),
   );
 
   const organizationIds = organizations.map((organization) => organization.id);
   if (!organizationIds.length) return [];
+  const partnerIds = [...new Set(organizations.map((organization) => organization.channel_partner_id))];
 
   const locations = await fetchInBatches<SupabaseLocationDirectoryRow>(organizationIds, (inFilter) =>
     supabaseRequest<SupabaseLocationDirectoryRow[]>(
@@ -1176,7 +1185,16 @@ export async function fetchTenantDirectoryFromSupabase(): Promise<TenantDirector
   );
 
   const locationIds = locations.map((location) => location.id);
-  const [memberships, onboardingProfiles, phoneNumbers, monthlyCalls, billingAccounts] = await Promise.all([
+  const [channelPartners, memberships, onboardingProfiles, phoneNumbers, monthlyCalls, billingAccounts] = await Promise.all([
+    fetchInBatches<SupabaseChannelPartnerRow>(partnerIds, (inFilter) =>
+      supabaseRequest<SupabaseChannelPartnerRow[]>(
+        "channel_partners",
+        new URLSearchParams({
+          id: inFilter,
+          select: "id,name",
+        }),
+      ),
+    ),
     fetchInBatches<SupabaseMembershipDirectoryRow>(organizationIds, (inFilter) =>
       supabaseRequest<SupabaseMembershipDirectoryRow[]>(
         "user_memberships",
@@ -1239,6 +1257,7 @@ export async function fetchTenantDirectoryFromSupabase(): Promise<TenantDirector
 
   return mapSupabaseTenantDirectory({
     billingAccounts,
+    channelPartners,
     locations,
     memberships,
     monthlyCalls,
@@ -3177,6 +3196,7 @@ function mapSupabaseCallInteractionInsight(call: SupabaseCallRow): Call["interac
 
 export function mapSupabaseTenantDirectory(input: {
   billingAccounts?: SupabaseBillingAccountDirectoryRow[];
+  channelPartners: SupabaseChannelPartnerRow[];
   locations: SupabaseLocationDirectoryRow[];
   memberships: SupabaseMembershipDirectoryRow[];
   monthlyCalls: Array<Pick<SupabaseCallRow, "id" | "location_id">>;
@@ -3185,6 +3205,7 @@ export function mapSupabaseTenantDirectory(input: {
   phoneNumbers: SupabasePhoneNumberDirectoryRow[];
 }): TenantDirectoryRecord[] {
   const billingByOrganizationId = groupBy(input.billingAccounts ?? [], (account) => account.organization_id);
+  const channelPartnerById = new Map(input.channelPartners.map((partner) => [partner.id, partner]));
   const membershipsByOrganizationId = groupBy(input.memberships, (membership) => membership.organization_id);
   const locationsByOrganizationId = groupBy(input.locations, (location) => location.organization_id);
   const onboardingByLocationId = new Map(input.onboardingProfiles.map((profile) => [profile.location_id, profile]));
@@ -3197,6 +3218,7 @@ export function mapSupabaseTenantDirectory(input: {
     if (!organizationLocations.length) {
       return [buildTenantDirectoryRecord({
         billingAccount: billingByOrganizationId.get(organization.id)?.[0] ?? null,
+        channelPartner: channelPartnerById.get(organization.channel_partner_id) ?? null,
         callsThisMonth: 0,
         location: null,
         memberships: membershipsByOrganizationId.get(organization.id) ?? [],
@@ -3208,6 +3230,7 @@ export function mapSupabaseTenantDirectory(input: {
 
     return organizationLocations.map((location) => buildTenantDirectoryRecord({
       billingAccount: selectBillingAccountForLocation(billingByOrganizationId.get(organization.id) ?? [], location.id),
+      channelPartner: channelPartnerById.get(organization.channel_partner_id) ?? null,
       callsThisMonth: callsByLocationId.get(location.id)?.length ?? 0,
       location,
       memberships: membershipsByOrganizationId.get(organization.id) ?? [],
@@ -3220,6 +3243,7 @@ export function mapSupabaseTenantDirectory(input: {
 
 function buildTenantDirectoryRecord(input: {
   billingAccount: SupabaseBillingAccountDirectoryRow | null;
+  channelPartner: SupabaseChannelPartnerRow | null;
   callsThisMonth: number;
   location: SupabaseLocationDirectoryRow | null;
   memberships: SupabaseMembershipDirectoryRow[];
@@ -3260,6 +3284,8 @@ function buildTenantDirectoryRecord(input: {
     businessLabel: template.label,
     businessType,
     callsThisMonth: input.callsThisMonth,
+    channelPartnerId: input.organization.channel_partner_id,
+    channelPartnerName: input.channelPartner?.name ?? "Unknown partner",
     createdAt: input.location?.created_at ?? input.organization.created_at ?? "",
     includedInteractions:
       billing?.included_interactions ??

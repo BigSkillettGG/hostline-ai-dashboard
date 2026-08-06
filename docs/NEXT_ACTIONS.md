@@ -39,6 +39,8 @@ Status update:
 - Lovable recorded the application as generated version `20260806144125`; its checked-in file is a documented no-op ledger marker because canonical migration `20260806070000` already contains the full DDL for clean installations.
 - Production voice verification remained healthy after slice 3 application. Vapi is still the preferred runtime and no runtime reads `number_routes`.
 - The repeatable authenticated verifier is now the first executable cross-tenant read-isolation gate. Partner/customer scope switching, broader write-isolation cases, department-scoped AI/workflow/knowledge/report behavior, immutable support audit, and runtime routing remain open.
+- The first partner/customer scope-switching implementation now hydrates partner memberships, adds partner identity to the live directory, recalculates roles per selected scope, and replaces the header's placeholder location menu with RLS-visible live workspaces. Department switching, partner administration/branding, aggregate reporting, and immutable support audit remain open.
+- Scope-switching verification is green: 97 test files / 590 tests, TypeScript, lint with zero errors and eight pre-existing warnings, all three production builds, a passing six-tenant production RLS gate, and a real Supabase customer browser login showing only its own location. Production browser coverage for partner switching awaits a deliberately provisioned partner test identity.
 - The Vapi executor still lacks some tools advertised by fixed assistants; action parity is a later verified slice, not part of this non-routing foundation change.
 - Vapi pilot location allow-list now includes all six demo businesses.
 - Vapi demo provisioning has been run successfully for all six demos.

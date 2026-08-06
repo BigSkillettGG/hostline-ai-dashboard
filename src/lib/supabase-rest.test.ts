@@ -1005,6 +1005,7 @@ describe("Supabase tenant directory mapping", () => {
         status: "active",
         updated_at: "2026-05-12T12:05:00.000Z",
       }],
+      channelPartners: [{ id: "partner_1", name: "Northstar Telecom" }],
       locations: [{
         address: "Waltham, MA",
         ai_host_phone: "+17815550100",
@@ -1041,7 +1042,12 @@ describe("Supabase tenant directory mapping", () => {
         total_required: 12,
         updated_at: "2026-05-12T12:01:00.000Z",
       }],
-      organizations: [{ created_at: "2026-05-12T11:58:00.000Z", id: "org_1", name: "Summit Air" }],
+      organizations: [{
+        channel_partner_id: "partner_1",
+        created_at: "2026-05-12T11:58:00.000Z",
+        id: "org_1",
+        name: "Summit Air",
+      }],
       phoneNumbers: [{
         forwarding_status: "pending_verification",
         location_id: "loc_1",
@@ -1060,6 +1066,8 @@ describe("Supabase tenant directory mapping", () => {
       businessLabel: "HVAC",
       businessType: "hvac",
       callsThisMonth: 2,
+      channelPartnerId: "partner_1",
+      channelPartnerName: "Northstar Telecom",
       billingCurrentPeriodEnd: "2026-06-12T12:00:00.000Z",
       billingStatus: "active",
       billingUpdatedAt: "2026-05-12T12:05:00.000Z",
@@ -1080,11 +1088,17 @@ describe("Supabase tenant directory mapping", () => {
 
   it("surfaces incomplete tenant setup as attention or critical", () => {
     const rows = mapSupabaseTenantDirectory({
+      channelPartners: [{ id: "partner_1", name: "Northstar Telecom" }],
       locations: [],
       memberships: [],
       monthlyCalls: [],
       onboardingProfiles: [],
-      organizations: [{ created_at: "2026-05-12T11:58:00.000Z", id: "org_1", name: "No Location Yet" }],
+      organizations: [{
+        channel_partner_id: "partner_1",
+        created_at: "2026-05-12T11:58:00.000Z",
+        id: "org_1",
+        name: "No Location Yet",
+      }],
       phoneNumbers: [],
     });
 

@@ -7,7 +7,9 @@ import {
   canPartnerRoleManageMemberships,
   canPartnerRoleManageOrganizations,
   canPartnerRoleOperateOrganizations,
+  comparePartnerRoles,
   departmentInheritsLocationAccess,
+  getPartnerRoleLabel,
   isPartnerRole,
   SIGNALHOST_DIRECT_PARTNER_ID,
 } from "./commercial-hierarchy";
@@ -41,5 +43,16 @@ describe("commercial hierarchy access contract", () => {
     expect(isPartnerRole("owner")).toBe(true);
     expect(isPartnerRole("staff")).toBe(false);
     expect(isPartnerRole(undefined)).toBe(false);
+  });
+
+  it("labels and sorts partner roles consistently", () => {
+    expect(getPartnerRoleLabel("operator")).toBe("Partner operator");
+    expect(getPartnerRoleLabel(undefined)).toBe("Partner user");
+    expect((["viewer", "owner", "operator", "admin"] as const).slice().sort(comparePartnerRoles)).toEqual([
+      "owner",
+      "admin",
+      "operator",
+      "viewer",
+    ]);
   });
 });

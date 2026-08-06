@@ -69,8 +69,21 @@ if (failures.length > 0) process.exit(2);
 
 async function verifyTenant(account) {
   const token = await signIn(account.email, demoPassword);
-  const [locations, phoneNumbers, departments, numberRoutes, telephonyAccounts, sipTrunks] = await Promise.all([
+  const [
+    locations,
+    organizations,
+    channelPartners,
+    partnerMemberships,
+    phoneNumbers,
+    departments,
+    numberRoutes,
+    telephonyAccounts,
+    sipTrunks,
+  ] = await Promise.all([
     rest("locations?select=id,organization_id", token),
+    rest("organizations?select=id,channel_partner_id", token),
+    rest("channel_partners?select=id,name", token),
+    rest("partner_memberships?select=id,partner_id,user_id,role", token),
     rest("phone_numbers?select=id,location_id,telephony_account_id,provider,status", token),
     rest("departments?select=id,location_id,is_default,status", token),
     rest("number_routes?select=id,phone_number_id,department_id,queue_id,sip_trunk_id,status,is_primary,runtime_enforced", token),
@@ -80,6 +93,20 @@ async function verifyTenant(account) {
 
   assert(locations.length === 1, `${account.business}: expected exactly one visible location, found ${locations.length}.`);
   assert(locations[0]?.id === account.locationId, `${account.business}: visible location does not match the signed-in tenant.`);
+  assert(organizations.length === 1, `${account.business}: expected exactly one visible customer organization.`);
+  assert(
+    locations[0]?.organization_id === organizations[0]?.id,
+    `${account.business}: location and organization scope do not agree.`,
+  );
+  assert(channelPartners.length === 1, `${account.business}: expected exactly one visible channel partner.`);
+  assert(
+    organizations[0]?.channel_partner_id === channelPartners[0]?.id,
+    `${account.business}: organization and channel-partner scope do not agree.`,
+  );
+  assert(
+    partnerMemberships.length === 0,
+    `${account.business}: customer membership can see a channel-partner membership.`,
+  );
   assert(phoneNumbers.length > 0, `${account.business}: no phone numbers are visible.`);
   assert(departments.some((department) => department.is_default), `${account.business}: no default department is visible.`);
 
@@ -107,6 +134,7 @@ async function verifyTenant(account) {
 
   return {
     business: account.business,
+    channelPartners: channelPartners.length,
     departments: departments.length,
     locationId: account.locationId,
     numberRoutes: numberRoutes.length,

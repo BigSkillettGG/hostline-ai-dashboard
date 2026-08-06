@@ -63,6 +63,16 @@ The subsequent telephony ownership foundation in `docs/COMMERCIAL_TELEPHONY_FOUN
 - Production voice health remained ready after application. Vapi and all current runtime routes remain unchanged.
 - Lovable recorded the applied telephony DDL under generated version `20260806144125`. Keep its checked-in no-op marker, the full DDL in canonical version `20260806070000`, and the live-regenerated Supabase types so clean installs and the production ledger remain reconcilable.
 
+The first commercial workspace-switching slice preserves these additional invariants:
+
+- The live directory and Supabase RLS remain the access source of truth; changing local active scope never grants access.
+- Supabase sign-in hydrates both organization and partner memberships.
+- Customer and partner roles are recalculated for the selected organization/partner instead of carrying a role across scopes.
+- The header selector lists only RLS-visible live locations and invalidates queries after an explicit switch.
+- Platform staff tenant view remains visibly identified. Support-session audit and department switching remain unfinished.
+- No voice, provider, phone, assistant, route, or runtime behavior changes with dashboard scope.
+- Verification is green: 97 test files / 590 tests, TypeScript, lint with zero errors and eight pre-existing warnings, all three production builds, the authenticated production RLS verifier, and a real Supabase customer browser login. The customer menu showed only its own live location. A seeded partner demo identity is still needed for production browser coverage of multi-customer partner switching.
+
 ## Known Good Voice Direction
 
 Baseline details are frozen in `docs/VOICE_BASELINE_LOCK.md`. Read that file before changing Vapi assignments or direct OpenAI Realtime fallback routing/tuning.
