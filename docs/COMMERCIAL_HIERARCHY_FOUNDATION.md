@@ -116,3 +116,5 @@ These were intentionally excluded from this first slice. The later routing-ident
 - A customer organization user cannot change `channel_partner_id`.
 - New tables and helper functions are represented in the checked-in Supabase types and schema/RLS snapshots.
 - Current tenant bootstrap tests, auth tests, all application tests, typecheck, lint, and builds remain green.
+
+The follow-on production role evidence is now executable through `npm run check:commercial-role-matrix`. Its isolated fixture and the passing organization/department capability matrix are documented in `docs/COMMERCIAL_ROLE_MATRIX_VERIFICATION.md`.

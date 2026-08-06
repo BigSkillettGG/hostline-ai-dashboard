@@ -24,6 +24,15 @@ export type DepartmentAccessMode = (typeof departmentAccessModes)[number];
 export const departmentMembershipRoles = ["manager", "agent", "viewer"] as const;
 export type DepartmentMembershipRole = (typeof departmentMembershipRoles)[number];
 
+export const organizationMembershipRoles = ["owner", "admin", "manager", "staff"] as const;
+export type OrganizationMembershipRole = (typeof organizationMembershipRoles)[number];
+
+export interface ScopeCapabilities {
+  access: boolean;
+  manage: boolean;
+  operate: boolean;
+}
+
 export function isPartnerRole(value: unknown): value is PartnerRole {
   return typeof value === "string" && partnerRoles.includes(value as PartnerRole);
 }
@@ -66,6 +75,35 @@ export function canDepartmentRoleOperate(role: DepartmentMembershipRole | undefi
 
 export function canDepartmentRoleManageMemberships(role: DepartmentMembershipRole | undefined) {
   return role === "manager";
+}
+
+export function getOrganizationRoleCapabilities(
+  role: OrganizationMembershipRole | undefined,
+): ScopeCapabilities {
+  return {
+    access: role !== undefined,
+    manage: role === "owner" || role === "admin",
+    operate: role !== undefined,
+  };
+}
+
+export function getDepartmentRoleCapabilities(
+  accessMode: DepartmentAccessMode,
+  organizationRole: OrganizationMembershipRole | undefined,
+  departmentRole: DepartmentMembershipRole | undefined,
+): ScopeCapabilities {
+  const organization = getOrganizationRoleCapabilities(organizationRole);
+  const inheritsOrganization = accessMode === "inherit_location";
+
+  return {
+    access: organization.manage || departmentRole !== undefined || (inheritsOrganization && organization.access),
+    manage: organization.manage || departmentRole === "manager",
+    operate:
+      organization.manage ||
+      departmentRole === "manager" ||
+      departmentRole === "agent" ||
+      (inheritsOrganization && organization.operate),
+  };
 }
 
 export function selectActiveDepartmentId(

@@ -673,3 +673,13 @@ Partner/customer telephony administration, broader write-isolation coverage, cre
 - Production browser verification showed all six partner workspaces, the default department, and a successful switch from Olive & Ember to Summit Air with the correct vertical-specific live data.
 - The isolation browser check found that an authenticated partner with no visible location fell back to the local Olive & Ember demo. Commit `563bc4e` now renders `No customer workspaces assigned` before the app shell for non-platform Supabase users without an active location. It is published at `signalhost.ai`; the control-partner retest showed no app shell, customer identity, metrics, or demo data, and all three commercial production gates passed afterward.
 - Legacy authorization helpers may return SQL `NULL` rather than explicit `false` when every branch is absent. RLS denies both; normalizing those helpers remains a later contract-hardening slice.
+
+### Phase 1 foundation slice status — organization and department role verification
+
+- Added pure capability helpers and exhaustive domain tests for organization `owner` / `admin` / `manager` / `staff` plus restricted department `manager` / `agent` / `viewer`.
+- Provisioned an inactive/internal `SignalHost Authorization QA` production hierarchy with seven controlled identities and no telephony or voice resources.
+- Added `npm run check:commercial-role-matrix` to verify exact memberships, inherited/restricted department and queue visibility, public access/manage/operate predicates, positive and negative current-value writes, operational request writes, and cross-partner denial.
+- All seven personas passed in production on 2026-08-06. The gate issues no insert/delete and never targets customer business rows; allowed no-op writes can refresh only QA fixture timestamps.
+- The internal `department_role` helper remains service-only. The verifier uses the caller's RLS-visible membership plus the public policy predicates and treats every non-`true` result, including legacy SQL `NULL`, as denied.
+- Repository verification is green at 101 test files / 615 tests, TypeScript, lint with zero errors and eight pre-existing warnings, the production dashboard build, all four commercial production gates, voice health, and whitespace validation.
+- The remaining authorization foundation gaps are controlled disposable insert/delete and provisioning-trigger coverage plus immutable, attributable support-session audit. Broader department ownership must wait for those boundaries or add equivalent narrow acceptance evidence.

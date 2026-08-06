@@ -9,6 +9,8 @@ import {
   canPartnerRoleOperateOrganizations,
   comparePartnerRoles,
   departmentInheritsLocationAccess,
+  getDepartmentRoleCapabilities,
+  getOrganizationRoleCapabilities,
   getPartnerRoleLabel,
   isPartnerRole,
   selectActiveDepartmentId,
@@ -38,6 +40,47 @@ describe("commercial hierarchy access contract", () => {
     expect(canDepartmentRoleOperate("agent")).toBe(true);
     expect(canDepartmentRoleManageMemberships("agent")).toBe(false);
     expect(canDepartmentRoleManageMemberships("manager")).toBe(true);
+  });
+
+  it("keeps organization role capabilities aligned with production RLS", () => {
+    expect(getOrganizationRoleCapabilities("owner")).toEqual({ access: true, manage: true, operate: true });
+    expect(getOrganizationRoleCapabilities("admin")).toEqual({ access: true, manage: true, operate: true });
+    expect(getOrganizationRoleCapabilities("manager")).toEqual({ access: true, manage: false, operate: true });
+    expect(getOrganizationRoleCapabilities("staff")).toEqual({ access: true, manage: false, operate: true });
+    expect(getOrganizationRoleCapabilities(undefined)).toEqual({ access: false, manage: false, operate: false });
+  });
+
+  it("combines organization, inherited, and explicit department roles without privilege drift", () => {
+    expect(getDepartmentRoleCapabilities("inherit_location", "staff", undefined)).toEqual({
+      access: true,
+      manage: false,
+      operate: true,
+    });
+    expect(getDepartmentRoleCapabilities("restricted", "staff", undefined)).toEqual({
+      access: false,
+      manage: false,
+      operate: false,
+    });
+    expect(getDepartmentRoleCapabilities("restricted", "staff", "manager")).toEqual({
+      access: true,
+      manage: true,
+      operate: true,
+    });
+    expect(getDepartmentRoleCapabilities("restricted", "staff", "agent")).toEqual({
+      access: true,
+      manage: false,
+      operate: true,
+    });
+    expect(getDepartmentRoleCapabilities("restricted", "staff", "viewer")).toEqual({
+      access: true,
+      manage: false,
+      operate: false,
+    });
+    expect(getDepartmentRoleCapabilities("restricted", "admin", undefined)).toEqual({
+      access: true,
+      manage: true,
+      operate: true,
+    });
   });
 
   it("rejects unknown partner roles", () => {

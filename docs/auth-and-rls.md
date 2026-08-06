@@ -9,12 +9,14 @@ SignalHost supports two dashboard auth modes:
 
 For a clean database, run `docs/supabase-schema.sql` and then `docs/supabase-rls.sql`. For an existing SignalHost database, apply the ordered files in `supabase/migrations/`; do not rerun the clean-install schema over live tables.
 
-The current commercial foundation migrations are, in order:
+The principal commercial foundation migrations are, in order:
 
 1. `20260806010000_commercial_hierarchy_foundation.sql`;
-2. `20260806020000_commercial_routing_foundation.sql`.
+2. `20260806020000_commercial_routing_foundation.sql`;
+3. `20260806070000_commercial_telephony_ownership_foundation.sql`; and
+4. `20260806170000_commercial_function_privilege_hardening.sql`.
 
-Applying them is a separate production database operation and must be verified through a database-capable deployment path.
+These migrations are applied in production. New databases must still apply every ordered file in `supabase/migrations/`, including the no-op production-ledger markers, rather than treating this summary as the complete ledger.
 
 After the schema is current:
 
@@ -58,12 +60,14 @@ The voice service should continue to use `SUPABASE_SECRET_KEY` from the backend 
 - Platform: `platform_admins` is reserved for SignalHost internal support and platform operations across tenants.
 - Partner `owner` / `admin`: manage their partner and assigned customer organizations; `operator` can operate customer work; `viewer` is read-only.
 - Customer `owner` and `admin`: manage organization settings, locations, onboarding, phone numbers, integrations, and routing.
-- Customer `manager`: operate customer workflows and manage most location content.
-- `staff`: operate calls, orders, reservations, and tasks.
+- Customer `manager`: access organization and location data and operate customer workflows, but not manage organization, location, department, queue, or membership configuration.
+- Customer `staff`: access organization and location data and operate calls, requests, orders, reservations, and tasks, but not manage tenant configuration.
 - Department `manager` / `agent` / `viewer`: explicit roles used when a department is restricted. The default `General Reception` department uses `inherit_location`, so current organization access remains unchanged.
 - Queue `supervisor` / `member`: operational membership can grant access to its queue while the linked user retains base platform/partner/customer/department affiliation, but it does not grant department administration. Transfer targets remain manager-controlled and service-verified.
 - Demo access is not a database role. It is a local seeded workspace for sales walkthroughs and Lovable/local development.
 
 Every organization defaults to the deterministic `SignalHost Direct` partner and every location gets a default `General Reception` department. Customer users cannot reassign their organization to a different partner. See `docs/COMMERCIAL_HIERARCHY_FOUNDATION.md` for the complete compatibility and role contract.
 
-The current UI still has a single active location selector driven by `VITE_SUPABASE_DEMO_LOCATION_ID`; production-backed location and department switching remains a later Phase 1 slice.
+The authenticated production UI now switches among only the partner, organization, location, and department rows visible through the caller's RLS token. `VITE_SUPABASE_DEMO_LOCATION_ID` remains a demo/default input, not the production authorization boundary. The UI does not yet expose the full role-management matrix; database policy remains authoritative until those administration surfaces are deliberately implemented and verified.
+
+Run `npm run check:commercial-role-matrix` after role or RLS changes. The production fixture and expected capability contract are documented in `docs/COMMERCIAL_ROLE_MATRIX_VERIFICATION.md`.

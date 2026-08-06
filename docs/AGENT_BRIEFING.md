@@ -151,6 +151,8 @@ Do not claim to have listened to audio unless you actually used the recording, a
 - Commercial product blueprint: `docs/COMMERCIAL_PRODUCT_BLUEPRINT.md`
 - Commercial hierarchy foundation: `docs/COMMERCIAL_HIERARCHY_FOUNDATION.md`
 - Commercial routing foundation: `docs/COMMERCIAL_ROUTING_FOUNDATION.md`
+- Commercial write isolation: `docs/COMMERCIAL_WRITE_ISOLATION.md`
+- Commercial organization/department role matrix: `docs/COMMERCIAL_ROLE_MATRIX_VERIFICATION.md`
 - Demo testing: `docs/demo-testing-runbook.md`
 - OpenAI Realtime: `docs/openai-realtime-pilot.md`
 - LiveKit experiment: `docs/livekit-harbor-pilot.md`
