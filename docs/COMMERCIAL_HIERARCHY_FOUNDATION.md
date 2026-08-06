@@ -96,6 +96,8 @@ If application rollout must pause, the new records and column can remain unused 
 
 ## Explicit non-goals for this slice
 
+These were intentionally excluded from this first slice. The later routing-identity contract is tracked separately in `docs/COMMERCIAL_ROUTING_FOUNDATION.md`.
+
 - Partner branding, custom domains, rate cards, or wholesale billing.
 - Partner-facing UI and support impersonation.
 - Location or department switching in the dashboard.

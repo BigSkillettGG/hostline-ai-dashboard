@@ -32,6 +32,15 @@ The first Phase 1 foundation slice preserves these invariants:
 
 The canonical contract is `docs/COMMERCIAL_HIERARCHY_FOUNDATION.md`. Do not make dashboard or voice code depend on these new tables until production migration state is verified.
 
+The subsequent routing-identity foundation in `docs/COMMERCIAL_ROUTING_FOUNDATION.md` preserves these additional invariants:
+
+- `staff_directory_entries` represents human employees/contractors; it does not replace the location-level AI `agent_configs` record or trusted `business_contacts`.
+- Every department receives a callback-only Primary Queue. That queue is an ownership identity, not proof of live telephony routing.
+- Queue membership and transfer-target references cannot cross location/department ownership boundaries; linked users lose queue-derived access when their base tenant affiliation is removed.
+- Transfer targets start dormant, require service-recorded verification before activation, and require re-verification after routing-relevant changes.
+- Existing alert JSON, trusted-contact fallbacks, free-text task assignment, fixed Vapi assistants/numbers, and all voice prompts/routes remain unchanged.
+- No runtime may claim or attempt live transfer merely because a transfer-target row exists.
+
 ## Known Good Voice Direction
 
 Baseline details are frozen in `docs/VOICE_BASELINE_LOCK.md`. Read that file before changing Vapi assignments or direct OpenAI Realtime fallback routing/tuning.

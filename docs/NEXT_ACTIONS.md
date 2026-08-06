@@ -8,9 +8,10 @@ The user requested a persistent memory system because repeated context compactio
 
 Current slice:
 
-- Execute the first compatibility-safe foundation slice of Phase 1 in `docs/COMMERCIAL_PRODUCT_BLUEPRINT.md`.
-- Add the channel-partner and department identities that the commercial hierarchy requires, while preserving the current organization/location application paths.
-- Do not add queues, transfer targets, switching UI, partner branding, or department-scoping to existing operational records in this slice.
+- Execute the second compatibility-safe foundation slice of Phase 1 in `docs/COMMERCIAL_PRODUCT_BLUEPRINT.md`.
+- Add dormant staff-directory, queue, queue-membership, and transfer-target identities beneath departments.
+- Keep every default queue callback-only and require service verification before a transfer target can become active.
+- Do not connect the new identities to phone numbers, calls, AI agents, workflows, knowledge, tasks, reports, or live runtime behavior in this slice.
 - Do not change live assistants, phone numbers, webhooks, prompts, tools, voices, models, or routes.
 - Keep the production-application state explicit: committed migration is not the same as an applied production migration.
 
@@ -20,11 +21,14 @@ Status update:
 - Phase 0 is deployed and healthy at `d34e498`: Vapi is preferred, direct OpenAI Realtime SIP is the maintained fallback, ConversationRelay is the legacy fallback, and LiveKit is quarantined. Catalog reporting remains intentionally non-routing (`routingPolicyEnforced: false`).
 - The Phase 1 hierarchy contract is documented in `docs/COMMERCIAL_HIERARCHY_FOUNDATION.md`.
 - Additive migration `20260806010000_commercial_hierarchy_foundation.sql` now defines channel partners, partner memberships, departments, department memberships, the deterministic `SignalHost Direct` parent, default General Reception backfill/trigger, and partner-aware RLS helpers.
+- Routing contract `docs/COMMERCIAL_ROUTING_FOUNDATION.md` and additive migration `20260806020000_commercial_routing_foundation.sql` define human staff directory entries, callback-only department queues, queue members, and verification-gated transfer targets.
+- Current handoff remains callback/task/alert. `business_contacts`, alert-routing JSON, `agent_configs`, `phone_numbers`, free-text task assignment, Vapi assistants, and all live routes are unchanged.
+- Cross-location staff/queue/target references are rejected; browser users cannot self-verify transfer targets or silently edit verified routing details.
 - Existing organization/location IDs, bootstrap writes, dashboard queries, demos, and voice routing remain unchanged. Default departments inherit location access.
 - Checked-in Supabase types and clean-install schema/RLS snapshots represent the new objects.
-- Verification is green: 92 test files / 563 tests, TypeScript, lint with zero errors and eight pre-existing warnings, all three production builds, and independent PostgreSQL parsing of the migration and SQL snapshots.
-- The migration has not yet been applied to production: this workspace has no linked Supabase CLI session, access token, database URL, or database password. It must be applied and verified through a database-capable path before UI code depends on it.
-- Queues, transfer targets, production-backed location/department switching, immutable support audit, and executable cross-tenant RLS tests remain later Phase 1 slices.
+- Verification is green: 94 test files / 574 tests, TypeScript, lint with zero errors and eight pre-existing warnings, all three production builds, and independent PostgreSQL parsing of both migrations and SQL snapshots.
+- The two Phase 1 migrations have not yet been applied to production: this workspace has no linked Supabase CLI session, access token, database URL, or database password. They must be applied in order and verified through a database-capable path before app/runtime code depends on them.
+- Number routes, AI agent/workflow/knowledge/report scoping, production-backed location/department switching, immutable support audit, and executable cross-tenant RLS tests remain later Phase 1 slices.
 - The Vapi executor still lacks some tools advertised by fixed assistants; action parity is a later verified slice, not part of this non-routing foundation change.
 - Vapi pilot location allow-list now includes all six demo businesses.
 - Vapi demo provisioning has been run successfully for all six demos.

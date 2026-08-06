@@ -582,4 +582,19 @@ The first Phase 1 slice is implemented in the repository but deliberately stops 
 - Updated checked-in Supabase types and clean-install schema/RLS snapshots.
 - Added pure role-matrix tests and migration contract tests. Verification: 92 test files / 563 tests, TypeScript, lint with zero errors and eight pre-existing warnings, and all production builds pass. PostgreSQL parsing succeeds for the migration and both SQL snapshots.
 
-This is not the completion of Phase 1. Queues, transfer targets, production-backed scope switching, support-access audit, executable database isolation tests, partner administration, and downstream department scoping remain open. The migration is not considered applied to production until a database-capable deployment path verifies it; current app and voice code therefore do not depend on the new objects.
+That checkpoint was not the completion of Phase 1: queues, transfer targets, production-backed scope switching, support-access audit, executable database isolation tests, partner administration, and downstream department scoping were still open. The migration is not considered applied to production until a database-capable deployment path verifies it; current app and voice code therefore do not depend on the new objects.
+
+### Phase 1 foundation slice status — dormant queues and transfer identities
+
+The second Phase 1 slice is implemented in the repository as a data/authorization boundary only:
+
+- Documented the current handoff truth and compatibility contract in `docs/COMMERCIAL_ROUTING_FOUNDATION.md`.
+- Added human `staff_directory_entries` without conflating trusted contacts, Auth users, or location-level AI `agent_configs`.
+- Added department-owned `queues` and `queue_members`, with one callback-only Primary Queue backfilled/created per department.
+- Added provider-neutral `transfer_targets` for queue, staff, PSTN, SIP URI, PBX extension, voicemail, and callback destinations.
+- Enforced location/department ownership with triggers and helper-based RLS.
+- Required service-recorded verification before target activation and re-verification after routing-relevant changes.
+- Updated checked-in Supabase types and clean-install schema/RLS snapshots.
+- Added routing vocabulary and migration contract tests. Verification: 94 test files / 574 tests, TypeScript, lint with zero errors and eight pre-existing warnings, and all production builds pass. PostgreSQL parsing succeeds for both migrations and both SQL snapshots.
+
+This slice does not implement live transfer, number routing, queue presence/ring strategy, structured task assignment, department-scoped AI agents/workflows/knowledge/reporting, or UI. Current handoff remains callback/task/alert, and all voice runtimes continue to report live transfer unavailable. Neither Phase 1 migration is considered applied to production until a database-capable deployment verifies ordered application, backfills, and executable RLS isolation.

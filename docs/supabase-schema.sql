@@ -636,6 +636,370 @@ create trigger locations_create_default_department
 after insert on locations
 for each row execute function public.ensure_default_department_for_location();
 
+-- Dormant commercial routing identities. These records do not enable or alter
+-- a live voice route until a verified runtime adapter explicitly consumes them.
+create table staff_directory_entries (
+  id uuid primary key default gen_random_uuid(),
+  location_id uuid not null references locations(id) on delete cascade,
+  primary_department_id uuid references departments(id) on delete set null,
+  user_id uuid references auth.users(id) on delete set null,
+  business_contact_id uuid references business_contacts(id) on delete set null,
+  name text not null,
+  title text,
+  email text,
+  phone text,
+  extension text,
+  status text not null default 'active' check (status in ('active', 'inactive')),
+  can_receive_live_transfers boolean not null default false,
+  can_receive_callbacks boolean not null default true,
+  external_refs jsonb not null default '{}'::jsonb,
+  settings jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index staff_directory_entries_location_id_idx
+  on staff_directory_entries(location_id);
+
+create index staff_directory_entries_primary_department_id_idx
+  on staff_directory_entries(primary_department_id)
+  where primary_department_id is not null;
+
+create unique index staff_directory_entries_location_user_unique
+  on staff_directory_entries(location_id, user_id)
+  where user_id is not null;
+
+create unique index staff_directory_entries_location_contact_unique
+  on staff_directory_entries(location_id, business_contact_id)
+  where business_contact_id is not null;
+
+create table queues (
+  id uuid primary key default gen_random_uuid(),
+  department_id uuid not null references departments(id) on delete cascade,
+  name text not null,
+  slug text not null check (
+    slug = lower(slug)
+    and slug ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'
+  ),
+  purpose text not null default 'general',
+  status text not null default 'active' check (status in ('active', 'inactive')),
+  routing_mode text not null default 'callback_only' check (
+    routing_mode in ('callback_only', 'live_transfer', 'hybrid', 'external')
+  ),
+  is_default boolean not null default false,
+  sla_policy jsonb not null default '{}'::jsonb,
+  settings jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (department_id, slug)
+);
+
+create unique index queues_one_default_per_department
+  on queues(department_id)
+  where is_default;
+
+create index queues_department_id_idx
+  on queues(department_id);
+
+create table queue_members (
+  id uuid primary key default gen_random_uuid(),
+  queue_id uuid not null references queues(id) on delete cascade,
+  staff_directory_entry_id uuid not null references staff_directory_entries(id) on delete cascade,
+  role text not null default 'member' check (role in ('supervisor', 'member')),
+  priority integer not null default 100 check (priority >= 0),
+  status text not null default 'active' check (status in ('active', 'inactive')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (queue_id, staff_directory_entry_id)
+);
+
+create index queue_members_staff_directory_entry_id_idx
+  on queue_members(staff_directory_entry_id);
+
+create table transfer_targets (
+  id uuid primary key default gen_random_uuid(),
+  department_id uuid not null references departments(id) on delete cascade,
+  name text not null,
+  slug text not null check (
+    slug = lower(slug)
+    and slug ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'
+  ),
+  target_kind text not null check (
+    target_kind in ('queue', 'staff', 'pstn', 'sip_uri', 'pbx_extension', 'voicemail', 'callback')
+  ),
+  queue_id uuid references queues(id) on delete cascade,
+  staff_directory_entry_id uuid references staff_directory_entries(id) on delete cascade,
+  destination text,
+  provider_key text,
+  external_id text,
+  status text not null default 'draft' check (
+    status in ('draft', 'verified', 'active', 'disabled', 'failed')
+  ),
+  supports_live_transfer boolean not null default false,
+  supports_callback boolean not null default true,
+  verified_at timestamptz,
+  verified_by uuid references auth.users(id) on delete set null,
+  settings jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (department_id, slug),
+  check (status <> 'active' or verified_at is not null),
+  check (
+    (
+      target_kind = 'queue'
+      and queue_id is not null
+      and staff_directory_entry_id is null
+      and destination is null
+    )
+    or (
+      target_kind = 'staff'
+      and queue_id is null
+      and staff_directory_entry_id is not null
+      and destination is null
+    )
+    or (
+      target_kind in ('pstn', 'sip_uri', 'pbx_extension', 'voicemail')
+      and queue_id is null
+      and staff_directory_entry_id is null
+      and nullif(btrim(destination), '') is not null
+    )
+    or (
+      target_kind = 'callback'
+      and queue_id is null
+      and staff_directory_entry_id is null
+      and destination is null
+    )
+  )
+);
+
+create index transfer_targets_department_id_idx
+  on transfer_targets(department_id);
+
+create index transfer_targets_queue_id_idx
+  on transfer_targets(queue_id)
+  where queue_id is not null;
+
+create index transfer_targets_staff_directory_entry_id_idx
+  on transfer_targets(staff_directory_entry_id)
+  where staff_directory_entry_id is not null;
+
+create trigger staff_directory_entries_set_updated_at
+before update on staff_directory_entries
+for each row execute function public.set_commercial_hierarchy_updated_at();
+
+create trigger queues_set_updated_at
+before update on queues
+for each row execute function public.set_commercial_hierarchy_updated_at();
+
+create trigger queue_members_set_updated_at
+before update on queue_members
+for each row execute function public.set_commercial_hierarchy_updated_at();
+
+create trigger transfer_targets_set_updated_at
+before update on transfer_targets
+for each row execute function public.set_commercial_hierarchy_updated_at();
+
+create or replace function public.user_has_location_affiliation(target_user_id uuid, target_location_id uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.platform_admins
+    where platform_admins.user_id = target_user_id
+  )
+  or exists (
+    select 1
+    from public.locations
+    join public.user_memberships
+      on user_memberships.organization_id = locations.organization_id
+    where locations.id = target_location_id
+      and user_memberships.user_id = target_user_id
+  )
+  or exists (
+    select 1
+    from public.departments
+    join public.department_memberships
+      on department_memberships.department_id = departments.id
+    where departments.location_id = target_location_id
+      and department_memberships.user_id = target_user_id
+  )
+  or exists (
+    select 1
+    from public.locations
+    join public.organizations
+      on organizations.id = locations.organization_id
+    join public.partner_memberships
+      on partner_memberships.partner_id = organizations.channel_partner_id
+    where locations.id = target_location_id
+      and partner_memberships.user_id = target_user_id
+  );
+$$;
+
+create or replace function public.validate_staff_directory_entry_scope()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  linked_location_id uuid;
+begin
+  if new.primary_department_id is not null then
+    select location_id
+    into linked_location_id
+    from public.departments
+    where id = new.primary_department_id;
+
+    if linked_location_id is distinct from new.location_id then
+      raise exception 'A staff directory primary department must belong to the same location.';
+    end if;
+  end if;
+
+  if new.business_contact_id is not null then
+    select location_id
+    into linked_location_id
+    from public.business_contacts
+    where id = new.business_contact_id;
+
+    if linked_location_id is distinct from new.location_id then
+      raise exception 'A linked business contact must belong to the same location.';
+    end if;
+  end if;
+
+  if new.user_id is not null
+    and not public.user_has_location_affiliation(new.user_id, new.location_id)
+  then
+    raise exception 'A linked Auth user must already have platform, partner, organization, or department access to the location.';
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger staff_directory_entries_validate_scope
+before insert or update of location_id, primary_department_id, user_id, business_contact_id
+on staff_directory_entries
+for each row execute function public.validate_staff_directory_entry_scope();
+
+create or replace function public.validate_queue_member_scope()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  queue_location_id uuid;
+  staff_location_id uuid;
+begin
+  select departments.location_id
+  into queue_location_id
+  from public.queues
+  join public.departments on departments.id = queues.department_id
+  where queues.id = new.queue_id;
+
+  select location_id
+  into staff_location_id
+  from public.staff_directory_entries
+  where id = new.staff_directory_entry_id;
+
+  if queue_location_id is distinct from staff_location_id then
+    raise exception 'Queue members must belong to the same location as the queue department.';
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger queue_members_validate_scope
+before insert or update of queue_id, staff_directory_entry_id
+on queue_members
+for each row execute function public.validate_queue_member_scope();
+
+create or replace function public.validate_transfer_target_scope()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  target_department_location_id uuid;
+  linked_department_id uuid;
+  linked_staff_location_id uuid;
+begin
+  select location_id
+  into target_department_location_id
+  from public.departments
+  where id = new.department_id;
+
+  if new.queue_id is not null then
+    select department_id
+    into linked_department_id
+    from public.queues
+    where id = new.queue_id;
+
+    if linked_department_id is distinct from new.department_id then
+      raise exception 'A queue transfer target must reference a queue in the same department.';
+    end if;
+  end if;
+
+  if new.staff_directory_entry_id is not null then
+    select location_id
+    into linked_staff_location_id
+    from public.staff_directory_entries
+    where id = new.staff_directory_entry_id;
+
+    if linked_staff_location_id is distinct from target_department_location_id then
+      raise exception 'A staff transfer target must reference a staff entry at the same location.';
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger transfer_targets_validate_scope
+before insert or update of department_id, queue_id, staff_directory_entry_id
+on transfer_targets
+for each row execute function public.validate_transfer_target_scope();
+
+create or replace function public.ensure_default_queue_for_department()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.queues (
+    department_id,
+    name,
+    slug,
+    purpose,
+    status,
+    routing_mode,
+    is_default
+  )
+  values (
+    new.id,
+    'Primary Queue',
+    'primary',
+    'general',
+    'active',
+    'callback_only',
+    true
+  );
+
+  return new;
+end;
+$$;
+
+create trigger departments_create_default_queue
+after insert on departments
+for each row execute function public.ensure_default_queue_for_department();
+
 -- Dashboard read access should be protected with Supabase Auth + RLS before production launch.
 -- The browser should use VITE_SUPABASE_PUBLISHABLE_KEY or the legacy anon key.
 -- The voice service must use SUPABASE_SECRET_KEY or a legacy service_role key only on the backend.

@@ -274,6 +274,172 @@ as $$
     );
 $$;
 
+create or replace function public.queue_department_id(target_queue_id uuid)
+returns uuid
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select department_id
+  from public.queues
+  where id = target_queue_id;
+$$;
+
+create or replace function public.user_has_location_affiliation(target_user_id uuid, target_location_id uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.platform_admins
+    where platform_admins.user_id = target_user_id
+  )
+  or exists (
+    select 1
+    from public.locations
+    join public.user_memberships
+      on user_memberships.organization_id = locations.organization_id
+    where locations.id = target_location_id
+      and user_memberships.user_id = target_user_id
+  )
+  or exists (
+    select 1
+    from public.departments
+    join public.department_memberships
+      on department_memberships.department_id = departments.id
+    where departments.location_id = target_location_id
+      and department_memberships.user_id = target_user_id
+  )
+  or exists (
+    select 1
+    from public.locations
+    join public.organizations
+      on organizations.id = locations.organization_id
+    join public.partner_memberships
+      on partner_memberships.partner_id = organizations.channel_partner_id
+    where locations.id = target_location_id
+      and partner_memberships.user_id = target_user_id
+  );
+$$;
+
+create or replace function public.can_access_queue(target_queue_id uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select public.is_platform_admin()
+    or public.can_access_department(public.queue_department_id(target_queue_id))
+    or exists (
+      select 1
+      from public.queue_members
+      join public.staff_directory_entries
+        on staff_directory_entries.id = queue_members.staff_directory_entry_id
+      where queue_members.queue_id = target_queue_id
+        and queue_members.status = 'active'
+        and staff_directory_entries.status = 'active'
+        and staff_directory_entries.user_id = auth.uid()
+        and public.user_has_location_affiliation(auth.uid(), staff_directory_entries.location_id)
+    );
+$$;
+
+create or replace function public.can_manage_queue(target_queue_id uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select public.is_platform_admin()
+    or public.can_manage_department(public.queue_department_id(target_queue_id));
+$$;
+
+create or replace function public.can_operate_queue(target_queue_id uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select public.is_platform_admin()
+    or public.can_operate_department(public.queue_department_id(target_queue_id))
+    or exists (
+      select 1
+      from public.queue_members
+      join public.staff_directory_entries
+        on staff_directory_entries.id = queue_members.staff_directory_entry_id
+      where queue_members.queue_id = target_queue_id
+        and queue_members.status = 'active'
+        and staff_directory_entries.status = 'active'
+        and staff_directory_entries.user_id = auth.uid()
+        and public.user_has_location_affiliation(auth.uid(), staff_directory_entries.location_id)
+    );
+$$;
+
+create or replace function public.can_access_staff_directory_entry(target_staff_directory_entry_id uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select public.is_platform_admin()
+    or exists (
+      select 1
+      from public.staff_directory_entries
+      where id = target_staff_directory_entry_id
+        and (
+          user_id = auth.uid()
+          and public.user_has_location_affiliation(auth.uid(), location_id)
+          or (
+            primary_department_id is null
+            and public.can_access_location(location_id)
+          )
+          or (
+            primary_department_id is not null
+            and public.can_access_department(primary_department_id)
+          )
+        )
+    )
+    or exists (
+      select 1
+      from public.queue_members
+      where staff_directory_entry_id = target_staff_directory_entry_id
+        and status = 'active'
+        and public.can_access_queue(queue_id)
+    );
+$$;
+
+create or replace function public.can_manage_staff_directory_entry(target_staff_directory_entry_id uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select public.is_platform_admin()
+    or exists (
+      select 1
+      from public.staff_directory_entries
+      where id = target_staff_directory_entry_id
+        and (
+          (
+            primary_department_id is null
+            and public.can_manage_location(location_id)
+          )
+          or (
+            primary_department_id is not null
+            and public.can_manage_department(primary_department_id)
+          )
+        )
+    );
+$$;
+
 create or replace function public.protect_organization_partner_assignment()
 returns trigger
 language plpgsql
@@ -322,6 +488,88 @@ $$;
 create trigger departments_protect_default_contract
 before update of is_default, location_id, access_mode on public.departments
 for each row execute function public.protect_default_department_contract();
+
+create or replace function public.protect_default_queue_contract()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if old.is_default
+    and auth.uid() is not null
+    and not public.is_platform_admin()
+    and (
+      not new.is_default
+      or new.department_id is distinct from old.department_id
+    )
+  then
+    raise exception 'The default queue must remain assigned to its department.';
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger queues_protect_default_contract
+before update of is_default, department_id on public.queues
+for each row execute function public.protect_default_queue_contract();
+
+create or replace function public.protect_transfer_target_verification()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null or public.is_platform_admin() then
+    return new;
+  end if;
+
+  if tg_op = 'INSERT' then
+    if new.status in ('verified', 'active')
+      or new.verified_at is not null
+      or new.verified_by is not null
+    then
+      raise exception 'Transfer target verification must be recorded by a SignalHost verification service.';
+    end if;
+
+    return new;
+  end if;
+
+  if new.verified_at is distinct from old.verified_at
+    or new.verified_by is distinct from old.verified_by
+    or (
+      new.status in ('verified', 'active')
+      and old.status not in ('verified', 'active')
+    )
+    or (
+      old.status in ('verified', 'active')
+      and new.status in ('verified', 'active')
+      and (
+        new.department_id is distinct from old.department_id
+        or new.target_kind is distinct from old.target_kind
+        or new.queue_id is distinct from old.queue_id
+        or new.staff_directory_entry_id is distinct from old.staff_directory_entry_id
+        or new.destination is distinct from old.destination
+        or new.provider_key is distinct from old.provider_key
+        or new.external_id is distinct from old.external_id
+        or new.supports_live_transfer is distinct from old.supports_live_transfer
+        or new.supports_callback is distinct from old.supports_callback
+        or new.settings is distinct from old.settings
+      )
+    )
+  then
+    raise exception 'Transfer target verification must be recorded by a SignalHost verification service.';
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger transfer_targets_protect_verification
+before insert or update on public.transfer_targets
+for each row execute function public.protect_transfer_target_verification();
 
 create or replace function public.call_location_id(target_call_id uuid)
 returns uuid
@@ -396,6 +644,10 @@ alter table channel_partners enable row level security;
 alter table partner_memberships enable row level security;
 alter table departments enable row level security;
 alter table department_memberships enable row level security;
+alter table staff_directory_entries enable row level security;
+alter table queues enable row level security;
+alter table queue_members enable row level security;
+alter table transfer_targets enable row level security;
 
 create policy organizations_select_members on organizations
 for select to authenticated
@@ -535,6 +787,95 @@ using (public.can_manage_department(department_id))
 with check (public.can_manage_department(department_id));
 
 create policy department_memberships_delete_managers on department_memberships
+for delete to authenticated
+using (public.can_manage_department(department_id));
+
+create policy staff_directory_entries_select_accessible on staff_directory_entries
+for select to authenticated
+using (public.can_access_staff_directory_entry(id));
+
+create policy staff_directory_entries_insert_managers on staff_directory_entries
+for insert to authenticated
+with check (
+  (
+    primary_department_id is null
+    and public.can_manage_location(location_id)
+  )
+  or (
+    primary_department_id is not null
+    and public.can_manage_department(primary_department_id)
+  )
+);
+
+create policy staff_directory_entries_update_managers on staff_directory_entries
+for update to authenticated
+using (public.can_manage_staff_directory_entry(id))
+with check (
+  (
+    primary_department_id is null
+    and public.can_manage_location(location_id)
+  )
+  or (
+    primary_department_id is not null
+    and public.can_manage_department(primary_department_id)
+  )
+);
+
+create policy staff_directory_entries_delete_managers on staff_directory_entries
+for delete to authenticated
+using (public.can_manage_staff_directory_entry(id));
+
+create policy queues_select_accessible on queues
+for select to authenticated
+using (public.can_access_queue(id));
+
+create policy queues_insert_department_managers on queues
+for insert to authenticated
+with check (public.can_manage_department(department_id));
+
+create policy queues_update_department_managers on queues
+for update to authenticated
+using (public.can_manage_queue(id))
+with check (public.can_manage_department(department_id));
+
+create policy queues_delete_department_managers on queues
+for delete to authenticated
+using (public.can_manage_queue(id) and not is_default);
+
+create policy queue_members_select_accessible on queue_members
+for select to authenticated
+using (public.can_access_queue(queue_id));
+
+create policy queue_members_insert_managers on queue_members
+for insert to authenticated
+with check (public.can_manage_queue(queue_id));
+
+create policy queue_members_update_managers on queue_members
+for update to authenticated
+using (public.can_manage_queue(queue_id))
+with check (public.can_manage_queue(queue_id));
+
+create policy queue_members_delete_managers on queue_members
+for delete to authenticated
+using (public.can_manage_queue(queue_id));
+
+create policy transfer_targets_select_accessible on transfer_targets
+for select to authenticated
+using (
+  public.can_access_department(department_id)
+  or (queue_id is not null and public.can_access_queue(queue_id))
+);
+
+create policy transfer_targets_insert_managers on transfer_targets
+for insert to authenticated
+with check (public.can_manage_department(department_id));
+
+create policy transfer_targets_update_managers on transfer_targets
+for update to authenticated
+using (public.can_manage_department(department_id))
+with check (public.can_manage_department(department_id));
+
+create policy transfer_targets_delete_managers on transfer_targets
 for delete to authenticated
 using (public.can_manage_department(department_id));
 
@@ -784,3 +1125,7 @@ grant select, insert, update, delete on channel_partners to authenticated;
 grant select, insert, update, delete on partner_memberships to authenticated;
 grant select, insert, update, delete on departments to authenticated;
 grant select, insert, update, delete on department_memberships to authenticated;
+grant select, insert, update, delete on staff_directory_entries to authenticated;
+grant select, insert, update, delete on queues to authenticated;
+grant select, insert, update, delete on queue_members to authenticated;
+grant select, insert, update, delete on transfer_targets to authenticated;

@@ -34,7 +34,7 @@ The Calls, Orders, and Reservations pages can read from Supabase REST using `VIT
 
 Dashboard auth can run in local demo mode or Supabase Auth mode. In Supabase mode, dashboard REST calls use the signed-in user's access token so `docs/supabase-rls.sql` can enforce scoped access. The commercial hierarchy is SignalHost platform -> channel partner -> customer organization -> location/rooftop -> department. Existing customer users retain organization memberships (`owner`, `admin`, `manager`, `staff`); partner users use partner memberships (`owner`, `admin`, `operator`, `viewer`); SignalHost internal users use `platform_admins`. The demo workspace is a seeded local sales/development experience, not a production role.
 
-The additive hierarchy foundation is defined in `docs/COMMERCIAL_HIERARCHY_FOUNDATION.md` and migration `20260806010000_commercial_hierarchy_foundation.sql`. It supplies stable partner and department identities without changing the current single-location UI. Queues, transfer targets, scoped switching, and support-audit controls remain later Phase 1 work.
+The additive hierarchy foundation is defined in `docs/COMMERCIAL_HIERARCHY_FOUNDATION.md` and migration `20260806010000_commercial_hierarchy_foundation.sql`. The subsequent dormant routing-identity foundation is defined in `docs/COMMERCIAL_ROUTING_FOUNDATION.md` and migration `20260806020000_commercial_routing_foundation.sql`. Together they supply stable partner, department, human-directory, queue, membership, and destination identities without changing the current single-location UI or any live route. Number routes, scoped switching, runtime transfer adapters, and support-audit controls remain later work.
 
 ### Voice Service
 
@@ -70,6 +70,9 @@ Own POS, reservation, SMS, printing, and kitchen tablet delivery. Integration fa
 - Organization.
 - Location.
 - Department and department membership.
+- Human staff directory entry.
+- Department queue and queue membership.
+- Dormant transfer target.
 - User.
 - Phone number.
 - Agent configuration.
