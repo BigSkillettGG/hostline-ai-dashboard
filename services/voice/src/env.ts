@@ -265,9 +265,9 @@ export function getVoiceServiceReadiness(env: VoiceServiceEnv): VoiceServiceRead
       required: false,
     },
     {
-      detail: "Optional quarantined Vapi pilot for A/B testing managed voice orchestration against the primary OpenAI Realtime SIP path.",
+      detail: "Preferred managed voice runtime for new production assignments; SignalHost retains provider-independent context, actions, and records.",
       id: "vapi_pilot",
-      label: "Vapi pilot",
+      label: "Vapi preferred runtime",
       ready: Boolean(env.VAPI_API_KEY && env.PUBLIC_HTTP_BASE_URL),
       required: false,
     },

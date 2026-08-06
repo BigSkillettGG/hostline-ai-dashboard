@@ -182,6 +182,7 @@ The code can remain until replacements are proven, but the following must not dr
 
 - Documentation that says direct OpenAI Realtime SIP is the primary production runtime is obsolete. The implementation is maintained fallback.
 - Documentation that calls Vapi an optional/quarantined pilot is obsolete. Vapi is the preferred default; its remaining “pilot” names are migration debt.
+- The repository readiness label/detail has now been corrected to describe Vapi as preferred; production `/health` will retain the obsolete wording until the voice service is redeployed. The `vapi_pilot` ID remains temporarily for compatibility. Verification is green at 99 test files / 603 tests, TypeScript, lint with zero errors and eight pre-existing warnings, the voice production build, and whitespace validation.
 - The earlier Vapi dynamic-assistant recommendation is obsolete for the current demos. Fixed assistant assignment is the known working mode after dynamic request failures; dynamic mode remains a capability to retest deliberately.
 - LiveKit/Harbor A/B routing, SIP handoff, and agent code are quarantined experiments. They must remain disabled by default unless a named test plan reopens them.
 - Twilio ConversationRelay plus Google/ElevenLabs TTS is a legacy fallback, not a target architecture.

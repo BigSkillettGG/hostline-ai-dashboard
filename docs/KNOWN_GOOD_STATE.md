@@ -79,6 +79,8 @@ The customer-to-customer production write-isolation gate is also passing. `npm r
 
 The repository now carries explicit department navigation context below the active location. The header loads only RLS-visible active departments, keeps a valid selection or chooses the location default, and clears stale department state on location switches. This is navigation context only: existing calls, requests, workflows, knowledge, and reports remain location-scoped until their department ownership is deliberately modeled. Verification is green at 99 test files / 602 tests, TypeScript, lint with zero errors and eight pre-existing warnings, the production dashboard build, and whitespace validation. Public dashboard publication and browser verification remain pending.
 
+The repository health metadata now labels Vapi consistently as the preferred managed runtime. The legacy readiness-check ID and implementation filenames may still contain `vapi_pilot`, but the public label/detail no longer claims Vapi is quarantined or that direct OpenAI SIP is primary. Verification is green at 99 test files / 603 tests, TypeScript, lint with zero errors and eight pre-existing warnings, the voice production build, and whitespace validation. The production voice service still exposes the obsolete wording until this voice-service commit is deployed.
+
 ## Known Good Voice Direction
 
 Baseline details are frozen in `docs/VOICE_BASELINE_LOCK.md`. Read that file before changing Vapi assignments or direct OpenAI Realtime fallback routing/tuning.

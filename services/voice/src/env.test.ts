@@ -99,6 +99,23 @@ describe("voice service readiness", () => {
     });
   });
 
+  it("describes Vapi consistently as the preferred runtime despite legacy pilot identifiers", () => {
+    const readiness = getVoiceServiceReadiness({
+      ...baseEnv,
+      PUBLIC_HTTP_BASE_URL: "https://voice.signalhost.ai",
+      VAPI_API_KEY: "vapi",
+    });
+    const vapi = readiness.checks.find((check) => check.id === "vapi_pilot");
+
+    expect(vapi).toMatchObject({
+      label: "Vapi preferred runtime",
+      ready: true,
+      required: false,
+    });
+    expect(vapi?.detail.toLowerCase()).toContain("preferred managed voice runtime");
+    expect(vapi?.detail.toLowerCase()).not.toContain("quarantined");
+  });
+
   it("flags wildcard CORS as not production-ready", () => {
     const readiness = getVoiceServiceReadiness({
       ...baseEnv,
