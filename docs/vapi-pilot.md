@@ -1,6 +1,6 @@
-# Vapi Pilot
+# Vapi Production Runtime (Legacy Pilot Names)
 
-Status: controlled demo rollout.
+Status: preferred production voice runtime; code/endpoints/environment variables retain `pilot` names until a compatibility-safe migration.
 
 Vapi is now the preferred path for the next demo-call tests because early Vapi calls were much better on handset and speakerphone than the previous direct-SIP and LiveKit attempts. Keep rollout controlled and reversible: create or attach Vapi numbers, sync assistants from SignalHost, and keep SignalHost as the source of business knowledge, tools, transcripts, recordings, and owner workflows.
 
@@ -91,8 +91,7 @@ Body:
 }
 ```
 
-Phone-number sync endpoint, if we want SignalHost to create/update the Vapi phone number.
-By default, numbers point to the SignalHost server URL so Vapi asks us for a fresh dynamic assistant on each call:
+Phone-number sync endpoint, if we want SignalHost to create/update the Vapi phone number. Passing no `assistantId` requests the older dynamic-assistant mode; do not use that mode for the current demos:
 
 ```text
 POST https://hostline-voice.onrender.com/vapi/sync-phone-number
@@ -118,7 +117,7 @@ Body for attaching an existing Vapi phone number:
 }
 ```
 
-Only include `assistantId` when intentionally attaching a permanent Vapi assistant. The preferred demo path is no `assistantId`, because SignalHost returns the business-specific assistant dynamically from `/vapi/webhook`.
+The known-good path is a fixed assistant: include/reuse the assistant already assigned to the demo number. Dynamic assistant requests can fail with a generic “set your assistant ID” error and require a deliberate retest before use.
 
 ## Automated Demo Provisioning
 
@@ -140,13 +139,13 @@ Delete only unassigned duplicate fixed assistants after reviewing the dry run:
 npm run reconcile:vapi-demos -- --commit
 ```
 
-Create/sync Vapi assistants only, if intentionally testing permanent assistants:
+Create/sync the fixed Vapi assistants:
 
 ```powershell
 npm run provision:vapi-demos -- --commit --sync-assistants
 ```
 
-Create new free Vapi numbers, attach each number to the dynamic SignalHost server URL, persist the numbers to Supabase, and make them the primary AI numbers for each demo location:
+Experimental only: create new free Vapi numbers in dynamic-assistant mode, persist the numbers to Supabase, and make them primary. Do not run this against current demos unless dynamic mode has first been revalidated:
 
 ```powershell
 npm run provision:vapi-demos -- --commit --create-phone-numbers --make-primary

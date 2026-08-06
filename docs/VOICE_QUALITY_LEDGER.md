@@ -26,15 +26,22 @@ Next action:
 
 ## Current Voice Baseline
 
-Primary target path:
+Preferred target path:
 
-- OpenAI Realtime SIP
+- Vapi-managed orchestration
+- `gpt-5.2-chat-latest` (Vapi dashboard label GPT 5.2 Instant)
+- Vapi voice `Elliot`
+- fixed assistants on the known-good demo numbers
+- SignalHost webhook actions and Supabase call logging
+
+Maintained fallback:
+
+- direct OpenAI Realtime SIP
 - `gpt-realtime-2`
 - OpenAI Realtime voice profiles
 - Twilio SIP routing
-- Supabase call logging
 
-Important settings and behavior from `docs/openai-realtime-pilot.md`:
+Important fallback settings and behavior from `docs/openai-realtime-pilot.md`:
 
 - `OPENAI_REALTIME_NOISE_REDUCTION=far_field`
 - `OPENAI_REALTIME_TURN_DETECTION_MODE=semantic_vad`
@@ -42,7 +49,7 @@ Important settings and behavior from `docs/openai-realtime-pilot.md`:
 - `OPENAI_REALTIME_MANUAL_RESPONSE_GATING=true`
 - `OPENAI_REALTIME_INTERRUPT_RESPONSE=false`
 
-These settings were chosen to reduce false interruptions and speakerphone echo problems. Do not loosen them casually.
+These direct-SIP fallback settings were chosen to reduce false interruptions and speakerphone echo problems. Do not loosen them casually. Historical entries below are evidence from the runtime active at that time and must not be rewritten to match current policy.
 
 ## Known Repeated Failure Modes
 

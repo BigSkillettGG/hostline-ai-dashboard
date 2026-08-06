@@ -60,6 +60,7 @@ import { buildSupabaseServiceHeaders } from "./supabase-headers";
 import { validateTwilioSignature } from "./twilio-signature";
 import { buildConversationRelayTwiML, buildEmptyTwiML, buildHangupTwiML, buildUnavailableTwiML } from "./twiml";
 import { resolveConversationRelayTtsVoice } from "./voice-selection";
+import { buildVoiceRuntimeCatalog } from "./voice-runtime-provider";
 import { createWebChatService, type WebChatMessageInput } from "./web-chat";
 
 const env = loadEnv();
@@ -195,6 +196,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       service: "signalhost-voice",
       productionReady: readiness.productionReady,
       readinessChecks: readiness.checks,
+      voiceRuntime: buildVoiceRuntimeCatalog(currentEnv),
       openaiConfigured: Boolean(currentEnv.OPENAI_API_KEY),
       openAIVoiceConfigured: Boolean(currentEnv.OPENAI_API_KEY),
       elevenLabsConfigured: Boolean(currentEnv.ELEVENLABS_API_KEY),
@@ -258,6 +260,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, currentE
       productionReady: readiness.productionReady,
       readinessChecks: readiness.checks,
       service: "signalhost-voice",
+      voiceRuntime: buildVoiceRuntimeCatalog(currentEnv),
     });
     return;
   }

@@ -136,16 +136,18 @@ The user likes it when the agent briefly explains the next step, as long as it s
 
 ## Voice Provider And Routing Decisions
 
-The current live-call direction is OpenAI Realtime SIP.
+The current live-call direction is Vapi. It materially outperformed the custom direct-SIP and LiveKit implementations in handset and speakerphone tests. Direct OpenAI Realtime SIP remains a maintained fallback and must retain its known-good behavior.
 
 Important:
 
-- Do not use ElevenLabs for live calls.
-- Do not switch back to ConversationRelay.
+- Do not use ElevenLabs as the default live-call runtime.
+- Do not switch back to ConversationRelay as the primary path.
 - Do not default to LiveKit.
 - Treat LiveKit as an experiment that caused enough instability to quarantine.
+- Do not silently reroute known-good Vapi numbers or rebuild their fixed assistants.
+- Keep SignalHost business actions provider-neutral so the product is not permanently locked to Vapi.
 
-`gpt-realtime-2` sounded better and more expressive to the user than earlier realtime models.
+For the maintained direct fallback, `gpt-realtime-2` sounded better and more expressive to the user than earlier realtime models.
 
 The user wants OpenAI Realtime's intelligence to shine. Do not over-constrain the agent into rigid IVR scripts.
 
@@ -418,4 +420,3 @@ Before touching reporting:
 
 - Make it vertical-specific.
 - Make it useful to the owner, not just pretty.
-

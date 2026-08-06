@@ -18,9 +18,9 @@ The strongest product direction is:
 
 ## Known Good Voice Direction
 
-Baseline details are frozen in `docs/VOICE_BASELINE_LOCK.md`. Read that file before changing direct OpenAI Realtime routing or tuning.
+Baseline details are frozen in `docs/VOICE_BASELINE_LOCK.md`. Read that file before changing Vapi assignments or direct OpenAI Realtime fallback routing/tuning.
 
-The newest preferred demo-call direction is a controlled Vapi rollout, because Vapi test calls were materially better on both handset and speakerphone than the previous direct-SIP and LiveKit experiments.
+The preferred production voice direction is Vapi, because Vapi test calls were materially better on both handset and speakerphone than the previous direct-SIP and LiveKit experiments. Legacy names may still call it a pilot while the provider boundary is introduced.
 
 Vapi demo calls should preserve:
 
@@ -59,7 +59,7 @@ Do not accidentally revert to these:
 
 LiveKit may remain in code/docs as an experiment, but it is not the default unless the user explicitly restarts that pilot.
 
-Vapi is no longer merely theoretical. The user explicitly approved moving demo businesses toward Vapi after strong test calls. Keep Vapi changes controlled and automated through `docs/vapi-pilot.md` and `scripts/provision-vapi-demos.mjs`.
+Vapi is the preferred runtime, not merely a pilot comparison. The user explicitly approved moving demo businesses toward Vapi after strong test calls. Keep Vapi changes controlled and automated through `docs/vapi-pilot.md` and `scripts/provision-vapi-demos.mjs`.
 
 ## Greeting Contract
 

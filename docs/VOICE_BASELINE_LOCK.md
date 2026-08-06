@@ -1,28 +1,30 @@
 # Voice Baseline Lock
 
-This file freezes the current intended live voice path so future edits do not accidentally undo a working state.
+This file freezes the preferred Vapi path and the maintained direct-SIP fallback so future edits do not accidentally undo a working state.
 
-## Primary Live Path
+## Preferred Live Path
 
 Use this path for production-style test calls unless the user explicitly asks for an experiment:
 
-- Provider: OpenAI Realtime SIP
-- Model: `gpt-realtime-2`
-- Live-call provider: custom OpenAI Realtime accept payload by default
-- Voice provider: OpenAI Realtime voices
-- Telephony: Twilio numbers and SIP/OpenAI Realtime routing
+- Provider: Vapi
+- Model: `gpt-5.2-chat-latest` (Vapi dashboard label GPT 5.2 Instant)
+- Assistant assignment: fixed assistant per known-good demo number
+- Voice provider: Vapi
+- Voice: `Elliot`
+- Telephony: current Vapi numbers; future partner-owned telephony must use an explicit provider-neutral route
 - Logging: Supabase `calls`, `transcript_turns`, and recording metadata
 
 Do not switch the default live path back to:
 
-- ElevenLabs
-- Twilio ConversationRelay
+- ElevenLabs as the default runtime
+- Twilio ConversationRelay as the primary path
 - LiveKit
 - OpenAI Agents SDK pilot
+- direct OpenAI Realtime SIP as the default without a deliberate routing decision
 
-Those paths can stay in the repo as experiments or fallbacks, but they are not the default working path.
+Those paths can stay in the repo as experiments or fallbacks, but they are not the preferred working path. Direct OpenAI Realtime SIP is the maintained fallback.
 
-## Current Voice Behavior To Preserve
+## Maintained Direct OpenAI Fallback Behavior To Preserve
 
 The following settings are deliberately conservative because speakerphone echo and greeting barge-in are fragile:
 

@@ -35,21 +35,24 @@ The product is no longer only a restaurant phone-answering app. Restaurants are 
 
 ## Current Production Voice Direction
 
-Primary live-call path:
+Preferred live-call path:
 
-- OpenAI Realtime SIP
-- Model: `gpt-realtime-2` when configured
-- Voice provider for live calls: OpenAI Realtime voices
-- Twilio owns phone numbers and SIP routing
-- Supabase stores calls, transcripts, tasks, requests, phone numbers, and demo data
+- Vapi-managed voice orchestration
+- Current demo model: Vapi API value `gpt-5.2-chat-latest` (dashboard label GPT 5.2 Instant)
+- Current demo voice: Vapi voice `Elliot`
+- Fixed assistants attached to the six known-good demo numbers
+- SignalHost `/vapi/webhook` for context, actions, transcripts, recordings, and owner workflows
+- Supabase for calls, transcripts, tasks, requests, phone numbers, and demo data
 
-Do not treat ElevenLabs as the live-call voice provider. ElevenLabs was explored earlier and may still exist in preview/legacy code, tests, or docs, but live calls should use OpenAI Realtime unless the user explicitly changes strategy.
+Direct OpenAI Realtime SIP with `gpt-realtime-2`, OpenAI voices, and Twilio SIP routing remains the maintained fallback. Preserve its locked speakerphone behavior, but do not treat it as the preferred production runtime.
+
+Do not treat ElevenLabs as the live-call voice provider. ElevenLabs was explored earlier and may still exist in preview/legacy code, tests, or docs, but it is not the default live-call runtime.
 
 Do not route production demo calls back to Twilio ConversationRelay unless the user explicitly asks for legacy testing. ConversationRelay exists as legacy/fallback code and can produce a worse experience.
 
 Do not route calls through LiveKit by default. LiveKit was tested as an experimental Harbor Plumbing speakerphone path, but it added complexity, latency, worker memory issues, and dead-air failures. Treat LiveKit as quarantined/experimental unless the user explicitly reopens it.
 
-Vapi is now the preferred controlled demo-rollout path after materially better handset and speakerphone tests. It has its own docs and endpoints in `docs/vapi-pilot.md`, `/vapi/pilot-config`, `/vapi/sync-assistant`, `/vapi/sync-phone-number`, and `/vapi/webhook`. Keep the rollout automated and reversible; do not manually hand-build each demo unless debugging Vapi itself.
+Vapi is the preferred production voice runtime after materially better handset and speakerphone tests. Legacy code and environment names still say `pilot`. It has its own docs and endpoints in `docs/vapi-pilot.md`, `/vapi/pilot-config`, `/vapi/sync-assistant`, `/vapi/sync-phone-number`, and `/vapi/webhook`. Keep provisioning automated and reversible; do not manually hand-build each demo unless debugging Vapi itself.
 
 ## Current Demo Businesses
 

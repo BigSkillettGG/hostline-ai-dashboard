@@ -17,4 +17,4 @@ Do not make a fix when the user only asks for analysis.
 
 Do not say calls cannot be listened to. Use the deployed debug endpoint described in `docs/AGENT_BRIEFING.md`.
 
-Primary live voice direction is OpenAI Realtime SIP, not ElevenLabs, not LiveKit by default, and not Twilio ConversationRelay by default.
+Primary live voice direction is Vapi. Direct OpenAI Realtime SIP is the maintained fallback. ElevenLabs is preview/legacy only, LiveKit is quarantined, and Twilio ConversationRelay is legacy fallback only. Do not change live routing without a measured test and explicit rollback.

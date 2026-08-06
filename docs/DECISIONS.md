@@ -4,11 +4,30 @@ This is the durable record of important product and architecture decisions. Add 
 
 ## Voice Stack
 
-### Use OpenAI Realtime SIP As Primary Live Voice
+### Use Vapi As The Preferred Production Voice Runtime
 
 Decision:
 
-- Production live calls should use OpenAI Realtime SIP.
+- New production voice work targets Vapi by default while SignalHost owns business context, actions, persistence, administration, and reporting.
+- Provider-specific orchestration must sit behind a SignalHost boundary so Vapi can be replaced or complemented without rewriting business workflows.
+
+Why:
+
+- Vapi materially outperformed the custom direct-SIP and LiveKit implementations in handset and speakerphone testing.
+- Managed voice orchestration reduced the call-quality burden that was consuming product development.
+
+Implication:
+
+- Preserve fixed Vapi assistant/number assignments for the six known-good demos.
+- Do not advertise actions that the SignalHost Vapi executor cannot complete.
+- Direct OpenAI Realtime SIP remains a maintained fallback.
+- Live routing changes require a measured test and rollback; adding the provider boundary alone does not reroute calls.
+
+### Maintain OpenAI Realtime SIP As The Direct Fallback
+
+Decision:
+
+- Direct OpenAI Realtime SIP remains the maintained fallback, not the preferred default.
 
 Why:
 
@@ -19,8 +38,8 @@ Why:
 
 Implication:
 
-- Tune OpenAI Realtime SIP before adding another voice stack.
-- Keep Twilio phone numbers/SIP trunk routing.
+- Preserve its known-good tuning and conformance-test it against the shared action contract.
+- Keep existing Twilio number/SIP trunk support available for fallback and future partner-owned telephony patterns.
 
 ### Do Not Use ElevenLabs For Live Calls
 
@@ -167,4 +186,3 @@ Decision:
 - Do not call customers "leads" out loud.
 
 Internal systems can score opportunities; caller-facing language must remain human and natural.
-

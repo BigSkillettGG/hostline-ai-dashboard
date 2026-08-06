@@ -108,6 +108,8 @@ Optional checks:
 
 ## Deployment Order
 
+The steps below describe the legacy Twilio/ConversationRelay deployment path. They are not the preferred Vapi production-number runbook. For Vapi assignments use `docs/vapi-pilot.md`, preserve fixed assistant/number mappings, and verify the `voiceRuntime` catalog in `/health`.
+
 1. Run `docs/supabase-schema.sql`, then `docs/supabase-rls.sql`.
 2. Create platform admin users and initial restaurant memberships.
 3. Deploy the voice service with production secrets.
@@ -119,6 +121,8 @@ Optional checks:
 Set `SIGNALHOST_INTERNAL_API_KEY` only in the voice-service environment, or in the shell before running the check command, if you want server-side deployment checks to include live-call URL and TwiML preview checks. Do not expose it as a dashboard `VITE_` variable.
 
 ## First Live Call Checklist
+
+This checklist verifies the legacy Twilio/ConversationRelay route only. A Vapi launch requires its API key, authenticated SignalHost webhook, enabled/allowed location, fixed assistant assignment, provider event persistence, and a real test call.
 
 Before assigning a customer-facing number:
 

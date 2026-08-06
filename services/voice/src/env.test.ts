@@ -49,7 +49,7 @@ describe("voice service readiness", () => {
     try {
       const env = loadEnv();
       expect(env.OPENAI_REALTIME_TURN_DETECTION_MODE).toBe("server_vad");
-      expect(env.OPENAI_REALTIME_SERVER_VAD_THRESHOLD).toBe(0.93);
+      expect(env.OPENAI_REALTIME_SERVER_VAD_THRESHOLD).toBe(0.98);
       expect(env.OPENAI_REALTIME_SERVER_VAD_SILENCE_MS).toBe(1100);
     } finally {
       for (const [key, value] of Object.entries(original)) {

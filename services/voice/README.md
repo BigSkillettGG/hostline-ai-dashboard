@@ -1,6 +1,6 @@
 # SignalHost Voice Service
 
-This service is the production path for inbound SignalHost calls, chats, owner commands, and operational webhooks. Production phone calls should use OpenAI Realtime SIP; Twilio ConversationRelay remains as a legacy fallback and test path.
+This service is the production path for inbound SignalHost calls, chats, owner commands, and operational webhooks. Vapi is the preferred production voice runtime. Direct OpenAI Realtime SIP is the maintained fallback, and Twilio ConversationRelay remains a legacy fallback/test path.
 
 ## What It Does Today
 
@@ -10,7 +10,7 @@ This service is the production path for inbound SignalHost calls, chats, owner c
 - Processes queued menu URL/text ingestion jobs through `POST /ingestion/run-next`.
 - Handles website chat messages at `POST /web-chat/message` using the same business context, configured links, and customer request fallback as the phone agent.
 - Supports side-effect-free Scenario Lab reply testing at `POST /agent/test-reply` for dashboard QA and deploy smoke tests.
-- Supports the legacy ConversationRelay path, while production live calls use OpenAI Realtime SIP.
+- Supports the preferred Vapi webhook bridge, the maintained direct OpenAI Realtime SIP fallback, and the legacy ConversationRelay path.
 - Receives ConversationRelay setup, prompt, DTMF, interrupt, and error messages.
 - Generates restaurant-host replies with OpenAI Responses API when `OPENAI_API_KEY` is set.
 - Falls back to deterministic restaurant-safe replies when OpenAI is not configured.
@@ -21,6 +21,7 @@ This service is the production path for inbound SignalHost calls, chats, owner c
 - Persists OpenAI Realtime SIP calls to Supabase, including caller/agent transcript turns, call summary, intent/outcome, and staff-review status.
 - Auto-starts Twilio call recording for OpenAI SIP calls when Twilio sends a `CallSid`, accepts recording status callbacks at `POST /twilio/recording-status`, and attaches the recording URL to the matching call row.
 - Exposes Prometheus-style operational metrics at `GET /metrics` for request counts, request latency sums, active socket counts, and realtime tool-call success/latency counters.
+- Exposes a canonical provider catalog in `GET /health` and `GET /ready`; the catalog is observational and does not reroute calls.
 - Supports optional Redis REST backed rate limiting with `RATE_LIMIT_REDIS_REST_URL` and `RATE_LIMIT_REDIS_REST_TOKEN` so multiple Render instances share the same abuse buckets. Without those variables, it safely uses local in-process buckets.
 - Loads the onboarded restaurant profile from Supabase for greetings, policies, hours, parking, reservation rules, menu items, FAQs, and knowledge sections.
 - Creates staff-review pickup orders when the caller clearly asks for pickup/takeout and mentions recognized menu items.
@@ -97,6 +98,14 @@ POST https://your-tunnel.ngrok.app/twilio/voice
 ```
 
 ## Required Provider Setup
+
+Preferred Vapi runtime:
+
+- `VAPI_API_KEY`, `VAPI_WEBHOOK_SECRET`, `VAPI_PILOT_ENABLED=true`, and the intended location allow-list.
+- Fixed Vapi assistants attached to the known-good demo numbers; see `docs/vapi-pilot.md`.
+- SignalHost `/vapi/webhook` configured for provider events and tool calls.
+
+Maintained direct-SIP and legacy Twilio capabilities:
 
 - Twilio account with ConversationRelay enabled and Predictive/Generative AI terms accepted.
 - Twilio phone number pointed at `/twilio/voice`.

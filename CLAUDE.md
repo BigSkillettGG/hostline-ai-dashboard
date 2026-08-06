@@ -11,6 +11,6 @@ Before making changes, read:
 5. `docs/CHANGE_PROTOCOL.md`
 6. `docs/NEXT_ACTIONS.md`
 
-Primary live voice direction is OpenAI Realtime SIP. Treat LiveKit as experimental, ElevenLabs as not the live-call provider, and Twilio ConversationRelay as legacy/fallback.
+Primary live voice direction is Vapi. Direct OpenAI Realtime SIP is the maintained fallback. Treat LiveKit as quarantined, ElevenLabs as preview/legacy only, and Twilio ConversationRelay as legacy fallback.
 
 When diagnosing test calls, use the call recording/debug workflow in `docs/AGENT_BRIEFING.md` before proposing changes.

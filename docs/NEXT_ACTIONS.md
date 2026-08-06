@@ -8,12 +8,19 @@ The user requested a persistent memory system because repeated context compactio
 
 Current slice:
 
-- Convert the manual Vapi pilot into repeatable demo provisioning.
-- Keep the voice behavior untouched while adding automation.
-- Extend the same SignalHost/Vapi setup to all six demo vertical businesses once tested.
+- Execute Phase 0 of `docs/COMMERCIAL_PRODUCT_BLUEPRINT.md`.
+- Keep Vapi as the preferred runtime while adding a provider-neutral catalog and truthful lifecycle labels.
+- Do not change live assistants, phone numbers, webhooks, prompts, tools, voices, models, or routes in this slice.
+- Restore green verification gates and update canonical memory without rewriting historical call evidence.
 
 Status update:
 
+- Commercial repository audit completed on 2026-08-05 at `f91ffa5`; the blueprint records existing, incomplete, mock/fallback, obsolete, missing, and risk states.
+- Added a provider catalog boundary with Vapi preferred, direct OpenAI Realtime SIP maintained fallback, ConversationRelay legacy fallback, and LiveKit quarantined.
+- Provider catalog reporting is intentionally non-routing (`routingPolicyEnforced: false`).
+- Phase 0 verification is green: 90 test files / 554 tests, TypeScript, lint with zero errors, and all three production builds pass.
+- The hierarchy still stops at organization/location; partner/department/queue migrations have not started.
+- The Vapi executor still lacks some tools advertised by fixed assistants; action parity is a later verified slice, not part of this non-routing foundation change.
 - Vapi pilot location allow-list now includes all six demo businesses.
 - Vapi demo provisioning has been run successfully for all six demos.
 - `scripts/provision-vapi-demos.mjs` is now idempotent: it reuses an active Vapi number for a demo location instead of creating another one, unless `--force-new-phone-number` is explicitly passed.
@@ -41,7 +48,7 @@ Cleanup note:
 
 ## Current Voice Situation
 
-Vapi pilot scaffolding has been added and is now the preferred controlled demo-rollout path:
+Vapi legacy-pilot scaffolding is the current preferred production voice path while naming and provider boundaries are migrated:
 
 - Admin config endpoint: `/vapi/pilot-config`
 - Assistant sync endpoint: `/vapi/sync-assistant`
@@ -53,7 +60,7 @@ Vapi pilot scaffolding has been added and is now the preferred controlled demo-r
 - It reuses SignalHost business context, tools, and call logging.
 - The user explicitly approved extending Vapi to the other demo businesses after strong test calls.
 
-The latest analyzed Olive & Ember calls hit the correct OpenAI Realtime SIP path. The current code fix is pending live deploy.
+The OpenAI Realtime notes below are historical direct-fallback tuning evidence. They are not the current default-runtime declaration.
 
 Most recent analyzed issue:
 
