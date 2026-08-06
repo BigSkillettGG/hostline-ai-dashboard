@@ -14,430 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      channel_partners: {
-        Row: {
-          created_at: string
-          id: string
-          is_internal: boolean
-          name: string
-          partner_type: string
-          settings: Json
-          slug: string
-          status: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          is_internal?: boolean
-          name: string
-          partner_type?: string
-          settings?: Json
-          slug: string
-          status?: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          is_internal?: boolean
-          name?: string
-          partner_type?: string
-          settings?: Json
-          slug?: string
-          status?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      department_memberships: {
-        Row: {
-          created_at: string
-          department_id: string
-          id: string
-          role: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          department_id: string
-          id?: string
-          role: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          department_id?: string
-          id?: string
-          role?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "department_memberships_department_id_fkey"
-            columns: ["department_id"]
-            isOneToOne: false
-            referencedRelation: "departments"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      departments: {
-        Row: {
-          access_mode: string
-          created_at: string
-          department_type: string
-          id: string
-          is_default: boolean
-          location_id: string
-          name: string
-          settings: Json
-          slug: string
-          status: string
-          updated_at: string
-        }
-        Insert: {
-          access_mode?: string
-          created_at?: string
-          department_type?: string
-          id?: string
-          is_default?: boolean
-          location_id: string
-          name: string
-          settings?: Json
-          slug: string
-          status?: string
-          updated_at?: string
-        }
-        Update: {
-          access_mode?: string
-          created_at?: string
-          department_type?: string
-          id?: string
-          is_default?: boolean
-          location_id?: string
-          name?: string
-          settings?: Json
-          slug?: string
-          status?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "departments_location_id_fkey"
-            columns: ["location_id"]
-            isOneToOne: false
-            referencedRelation: "locations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      partner_memberships: {
-        Row: {
-          created_at: string
-          id: string
-          partner_id: string
-          role: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          partner_id: string
-          role: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          partner_id?: string
-          role?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "partner_memberships_partner_id_fkey"
-            columns: ["partner_id"]
-            isOneToOne: false
-            referencedRelation: "channel_partners"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      queue_members: {
-        Row: {
-          created_at: string
-          id: string
-          priority: number
-          queue_id: string
-          role: string
-          staff_directory_entry_id: string
-          status: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          priority?: number
-          queue_id: string
-          role?: string
-          staff_directory_entry_id: string
-          status?: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          priority?: number
-          queue_id?: string
-          role?: string
-          staff_directory_entry_id?: string
-          status?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "queue_members_queue_id_fkey"
-            columns: ["queue_id"]
-            isOneToOne: false
-            referencedRelation: "queues"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "queue_members_staff_directory_entry_id_fkey"
-            columns: ["staff_directory_entry_id"]
-            isOneToOne: false
-            referencedRelation: "staff_directory_entries"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      queues: {
-        Row: {
-          created_at: string
-          department_id: string
-          id: string
-          is_default: boolean
-          name: string
-          purpose: string
-          routing_mode: string
-          settings: Json
-          sla_policy: Json
-          slug: string
-          status: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          department_id: string
-          id?: string
-          is_default?: boolean
-          name: string
-          purpose?: string
-          routing_mode?: string
-          settings?: Json
-          sla_policy?: Json
-          slug: string
-          status?: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          department_id?: string
-          id?: string
-          is_default?: boolean
-          name?: string
-          purpose?: string
-          routing_mode?: string
-          settings?: Json
-          sla_policy?: Json
-          slug?: string
-          status?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "queues_department_id_fkey"
-            columns: ["department_id"]
-            isOneToOne: false
-            referencedRelation: "departments"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      staff_directory_entries: {
-        Row: {
-          business_contact_id: string | null
-          can_receive_callbacks: boolean
-          can_receive_live_transfers: boolean
-          created_at: string
-          email: string | null
-          extension: string | null
-          external_refs: Json
-          id: string
-          location_id: string
-          name: string
-          phone: string | null
-          primary_department_id: string | null
-          settings: Json
-          status: string
-          title: string | null
-          updated_at: string
-          user_id: string | null
-        }
-        Insert: {
-          business_contact_id?: string | null
-          can_receive_callbacks?: boolean
-          can_receive_live_transfers?: boolean
-          created_at?: string
-          email?: string | null
-          extension?: string | null
-          external_refs?: Json
-          id?: string
-          location_id: string
-          name: string
-          phone?: string | null
-          primary_department_id?: string | null
-          settings?: Json
-          status?: string
-          title?: string | null
-          updated_at?: string
-          user_id?: string | null
-        }
-        Update: {
-          business_contact_id?: string | null
-          can_receive_callbacks?: boolean
-          can_receive_live_transfers?: boolean
-          created_at?: string
-          email?: string | null
-          extension?: string | null
-          external_refs?: Json
-          id?: string
-          location_id?: string
-          name?: string
-          phone?: string | null
-          primary_department_id?: string | null
-          settings?: Json
-          status?: string
-          title?: string | null
-          updated_at?: string
-          user_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "staff_directory_entries_business_contact_id_fkey"
-            columns: ["business_contact_id"]
-            isOneToOne: false
-            referencedRelation: "business_contacts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "staff_directory_entries_location_id_fkey"
-            columns: ["location_id"]
-            isOneToOne: false
-            referencedRelation: "locations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "staff_directory_entries_primary_department_id_fkey"
-            columns: ["primary_department_id"]
-            isOneToOne: false
-            referencedRelation: "departments"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      transfer_targets: {
-        Row: {
-          created_at: string
-          department_id: string
-          destination: string | null
-          external_id: string | null
-          id: string
-          name: string
-          provider_key: string | null
-          queue_id: string | null
-          settings: Json
-          slug: string
-          staff_directory_entry_id: string | null
-          status: string
-          supports_callback: boolean
-          supports_live_transfer: boolean
-          target_kind: string
-          updated_at: string
-          verified_at: string | null
-          verified_by: string | null
-        }
-        Insert: {
-          created_at?: string
-          department_id: string
-          destination?: string | null
-          external_id?: string | null
-          id?: string
-          name: string
-          provider_key?: string | null
-          queue_id?: string | null
-          settings?: Json
-          slug: string
-          staff_directory_entry_id?: string | null
-          status?: string
-          supports_callback?: boolean
-          supports_live_transfer?: boolean
-          target_kind: string
-          updated_at?: string
-          verified_at?: string | null
-          verified_by?: string | null
-        }
-        Update: {
-          created_at?: string
-          department_id?: string
-          destination?: string | null
-          external_id?: string | null
-          id?: string
-          name?: string
-          provider_key?: string | null
-          queue_id?: string | null
-          settings?: Json
-          slug?: string
-          staff_directory_entry_id?: string | null
-          status?: string
-          supports_callback?: boolean
-          supports_live_transfer?: boolean
-          target_kind?: string
-          updated_at?: string
-          verified_at?: string | null
-          verified_by?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "transfer_targets_department_id_fkey"
-            columns: ["department_id"]
-            isOneToOne: false
-            referencedRelation: "departments"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "transfer_targets_queue_id_fkey"
-            columns: ["queue_id"]
-            isOneToOne: false
-            referencedRelation: "queues"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "transfer_targets_staff_directory_entry_id_fkey"
-            columns: ["staff_directory_entry_id"]
-            isOneToOne: false
-            referencedRelation: "staff_directory_entries"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       agent_configs: {
         Row: {
           after_hours_behavior: string
@@ -959,6 +535,42 @@ export type Database = {
           },
         ]
       }
+      channel_partners: {
+        Row: {
+          created_at: string
+          id: string
+          is_internal: boolean
+          name: string
+          partner_type: string
+          settings: Json
+          slug: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_internal?: boolean
+          name: string
+          partner_type?: string
+          settings?: Json
+          slug: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_internal?: boolean
+          name?: string
+          partner_type?: string
+          settings?: Json
+          slug?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       customer_requests: {
         Row: {
           created_at: string
@@ -1043,6 +655,91 @@ export type Database = {
             columns: ["source_call_id"]
             isOneToOne: false
             referencedRelation: "calls"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      department_memberships: {
+        Row: {
+          created_at: string
+          department_id: string
+          id: string
+          role: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          department_id: string
+          id?: string
+          role: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          department_id?: string
+          id?: string
+          role?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "department_memberships_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      departments: {
+        Row: {
+          access_mode: string
+          created_at: string
+          department_type: string
+          id: string
+          is_default: boolean
+          location_id: string
+          name: string
+          settings: Json
+          slug: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          access_mode?: string
+          created_at?: string
+          department_type?: string
+          id?: string
+          is_default?: boolean
+          location_id: string
+          name: string
+          settings?: Json
+          slug: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          access_mode?: string
+          created_at?: string
+          department_type?: string
+          id?: string
+          is_default?: boolean
+          location_id?: string
+          name?: string
+          settings?: Json
+          slug?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "departments_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
             referencedColumns: ["id"]
           },
         ]
@@ -1907,6 +1604,41 @@ export type Database = {
           },
         ]
       }
+      partner_memberships: {
+        Row: {
+          created_at: string
+          id: string
+          partner_id: string
+          role: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          partner_id: string
+          role: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          partner_id?: string
+          role?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partner_memberships_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "channel_partners"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       phone_numbers: {
         Row: {
           capabilities: Json
@@ -2007,6 +1739,107 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      queue_members: {
+        Row: {
+          created_at: string
+          id: string
+          priority: number
+          queue_id: string
+          role: string
+          staff_directory_entry_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          priority?: number
+          queue_id: string
+          role?: string
+          staff_directory_entry_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          priority?: number
+          queue_id?: string
+          role?: string
+          staff_directory_entry_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "queue_members_queue_id_fkey"
+            columns: ["queue_id"]
+            isOneToOne: false
+            referencedRelation: "queues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "queue_members_staff_directory_entry_id_fkey"
+            columns: ["staff_directory_entry_id"]
+            isOneToOne: false
+            referencedRelation: "staff_directory_entries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      queues: {
+        Row: {
+          created_at: string
+          department_id: string
+          id: string
+          is_default: boolean
+          name: string
+          purpose: string
+          routing_mode: string
+          settings: Json
+          sla_policy: Json
+          slug: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          department_id: string
+          id?: string
+          is_default?: boolean
+          name: string
+          purpose?: string
+          routing_mode?: string
+          settings?: Json
+          sla_policy?: Json
+          slug: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          department_id?: string
+          id?: string
+          is_default?: boolean
+          name?: string
+          purpose?: string
+          routing_mode?: string
+          settings?: Json
+          sla_policy?: Json
+          slug?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "queues_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       reservations: {
         Row: {
@@ -2142,6 +1975,88 @@ export type Database = {
             columns: ["location_id"]
             isOneToOne: false
             referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_directory_entries: {
+        Row: {
+          business_contact_id: string | null
+          can_receive_callbacks: boolean
+          can_receive_live_transfers: boolean
+          created_at: string
+          email: string | null
+          extension: string | null
+          external_refs: Json
+          id: string
+          location_id: string
+          name: string
+          phone: string | null
+          primary_department_id: string | null
+          settings: Json
+          status: string
+          title: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          business_contact_id?: string | null
+          can_receive_callbacks?: boolean
+          can_receive_live_transfers?: boolean
+          created_at?: string
+          email?: string | null
+          extension?: string | null
+          external_refs?: Json
+          id?: string
+          location_id: string
+          name: string
+          phone?: string | null
+          primary_department_id?: string | null
+          settings?: Json
+          status?: string
+          title?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          business_contact_id?: string | null
+          can_receive_callbacks?: boolean
+          can_receive_live_transfers?: boolean
+          created_at?: string
+          email?: string | null
+          extension?: string | null
+          external_refs?: Json
+          id?: string
+          location_id?: string
+          name?: string
+          phone?: string | null
+          primary_department_id?: string | null
+          settings?: Json
+          status?: string
+          title?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_directory_entries_business_contact_id_fkey"
+            columns: ["business_contact_id"]
+            isOneToOne: false
+            referencedRelation: "business_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_directory_entries_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_directory_entries_primary_department_id_fkey"
+            columns: ["primary_department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
             referencedColumns: ["id"]
           },
         ]
@@ -2308,6 +2223,91 @@ export type Database = {
           },
         ]
       }
+      transfer_targets: {
+        Row: {
+          created_at: string
+          department_id: string
+          destination: string | null
+          external_id: string | null
+          id: string
+          name: string
+          provider_key: string | null
+          queue_id: string | null
+          settings: Json
+          slug: string
+          staff_directory_entry_id: string | null
+          status: string
+          supports_callback: boolean
+          supports_live_transfer: boolean
+          target_kind: string
+          updated_at: string
+          verified_at: string | null
+          verified_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          department_id: string
+          destination?: string | null
+          external_id?: string | null
+          id?: string
+          name: string
+          provider_key?: string | null
+          queue_id?: string | null
+          settings?: Json
+          slug: string
+          staff_directory_entry_id?: string | null
+          status?: string
+          supports_callback?: boolean
+          supports_live_transfer?: boolean
+          target_kind: string
+          updated_at?: string
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          department_id?: string
+          destination?: string | null
+          external_id?: string | null
+          id?: string
+          name?: string
+          provider_key?: string | null
+          queue_id?: string | null
+          settings?: Json
+          slug?: string
+          staff_directory_entry_id?: string | null
+          status?: string
+          supports_callback?: boolean
+          supports_live_transfer?: boolean
+          target_kind?: string
+          updated_at?: string
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transfer_targets_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transfer_targets_queue_id_fkey"
+            columns: ["queue_id"]
+            isOneToOne: false
+            referencedRelation: "queues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transfer_targets_staff_directory_entry_id_fkey"
+            columns: ["staff_directory_entry_id"]
+            isOneToOne: false
+            referencedRelation: "staff_directory_entries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_memberships: {
         Row: {
           created_at: string
@@ -2352,12 +2352,12 @@ export type Database = {
     }
     Functions: {
       call_location_id: { Args: { target_call_id: string }; Returns: string }
-      can_access_location: {
-        Args: { target_location_id: string }
-        Returns: boolean
-      }
       can_access_department: {
         Args: { target_department_id: string }
+        Returns: boolean
+      }
+      can_access_location: {
+        Args: { target_location_id: string }
         Returns: boolean
       }
       can_access_organization: {
@@ -2368,10 +2368,7 @@ export type Database = {
         Args: { target_partner_id: string }
         Returns: boolean
       }
-      can_access_queue: {
-        Args: { target_queue_id: string }
-        Returns: boolean
-      }
+      can_access_queue: { Args: { target_queue_id: string }; Returns: boolean }
       can_access_staff_directory_entry: {
         Args: { target_staff_directory_entry_id: string }
         Returns: boolean
@@ -2392,10 +2389,7 @@ export type Database = {
         Args: { target_partner_id: string }
         Returns: boolean
       }
-      can_manage_queue: {
-        Args: { target_queue_id: string }
-        Returns: boolean
-      }
+      can_manage_queue: { Args: { target_queue_id: string }; Returns: boolean }
       can_manage_staff_directory_entry: {
         Args: { target_staff_directory_entry_id: string }
         Returns: boolean
@@ -2416,10 +2410,7 @@ export type Database = {
         Args: { target_partner_id: string }
         Returns: boolean
       }
-      can_operate_queue: {
-        Args: { target_queue_id: string }
-        Returns: boolean
-      }
+      can_operate_queue: { Args: { target_queue_id: string }; Returns: boolean }
       department_access_mode: {
         Args: { target_department_id: string }
         Returns: string
@@ -2454,10 +2445,7 @@ export type Database = {
         Args: { target_organization_id: string }
         Returns: string
       }
-      partner_role: {
-        Args: { target_partner_id: string }
-        Returns: string
-      }
+      partner_role: { Args: { target_partner_id: string }; Returns: string }
       queue_department_id: {
         Args: { target_queue_id: string }
         Returns: string
