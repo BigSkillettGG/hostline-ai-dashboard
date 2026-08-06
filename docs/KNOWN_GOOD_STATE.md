@@ -77,6 +77,8 @@ The subsequent repository-only function-privilege hardening slice revokes Postgr
 
 The customer-to-customer production write-isolation gate is also passing. `npm run check:commercial-write-isolation` authenticated as all six demo customers and denied 48 current-value PATCH probes across partner administration, organizations, locations, departments, queues, phone numbers, number routes, and telephony accounts. No probe returned a writable row, no insert/delete was issued, and no business data changed. Repository verification is green at 99 test files / 599 tests, TypeScript, lint with zero errors and eight pre-existing warnings, the read-only production gate, and whitespace validation. Partner-role and controlled insert/delete coverage remain open.
 
+The repository now carries explicit department navigation context below the active location. The header loads only RLS-visible active departments, keeps a valid selection or chooses the location default, and clears stale department state on location switches. This is navigation context only: existing calls, requests, workflows, knowledge, and reports remain location-scoped until their department ownership is deliberately modeled. Verification is green at 99 test files / 602 tests, TypeScript, lint with zero errors and eight pre-existing warnings, the production dashboard build, and whitespace validation. Public dashboard publication and browser verification remain pending.
+
 ## Known Good Voice Direction
 
 Baseline details are frozen in `docs/VOICE_BASELINE_LOCK.md`. Read that file before changing Vapi assignments or direct OpenAI Realtime fallback routing/tuning.

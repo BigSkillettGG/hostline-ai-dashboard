@@ -41,6 +41,7 @@ export interface PartnerMembership {
 export interface CurrentUser {
   accessToken?: string;
   accessTokenExpiresAt?: number;
+  activeDepartmentId?: string;
   activeLocationId?: string;
   activeOrganizationId?: string;
   activePartnerId?: string;
@@ -162,6 +163,10 @@ export function getCurrentUser() {
 
 export function getActiveOrganizationId() {
   return readUser()?.activeOrganizationId;
+}
+
+export function getActiveDepartmentId() {
+  return readUser()?.activeDepartmentId;
 }
 
 export function getActivePartnerId() {
@@ -373,6 +378,7 @@ export function signOut() {
 }
 
 export function updateCurrentUserAccess(input: {
+  activeDepartmentId?: string | null;
   activeLocationId?: string;
   activeOrganizationId?: string;
   activePartnerId?: string;
@@ -384,6 +390,10 @@ export function updateCurrentUserAccess(input: {
 
   const next = applyAccessModel({
     ...current,
+    activeDepartmentId:
+      input.activeDepartmentId === null
+        ? undefined
+        : input.activeDepartmentId ?? current.activeDepartmentId,
     activeLocationId: input.activeLocationId ?? current.activeLocationId,
     activeOrganizationId: input.activeOrganizationId ?? current.activeOrganizationId,
     activePartnerId: input.activePartnerId ?? current.activePartnerId,
@@ -776,6 +786,7 @@ function applyAccessModel(user: CurrentUser): CurrentUser {
 
   return {
     ...user,
+    activeDepartmentId: user.activeDepartmentId,
     activeOrganizationId,
     activeLocationId: user.activeLocationId,
     activePartnerId,

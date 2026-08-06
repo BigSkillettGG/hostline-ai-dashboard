@@ -1,5 +1,5 @@
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
-import { Bell, Check, Search, MapPin, ChevronDown } from "lucide-react";
+import { Bell, Building2, Check, Search, MapPin, ChevronDown } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Switch } from "@/components/ui/switch";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -26,8 +26,13 @@ import {
   setRole,
   updateCurrentUserAccess,
 } from "@/lib/auth";
-import { fetchTenantDirectoryFromSupabase, isSupabaseConfigured } from "@/lib/supabase-rest";
+import {
+  fetchDepartmentDirectoryFromSupabase,
+  fetchTenantDirectoryFromSupabase,
+  isSupabaseConfigured,
+} from "@/lib/supabase-rest";
 import { getOnboardingBusinessTemplate } from "@/domain/onboarding";
+import { selectActiveDepartmentId } from "@/domain/commercial-hierarchy";
 import { loadOnboardingDraft } from "@/lib/onboarding-draft";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { toast } from "sonner";
@@ -43,6 +48,7 @@ export default function AppLayout() {
   const demoAuth = isDemoAuthMode();
   const platformAdmin = isPlatformAdminUser(user);
   const activeLocationId = getActiveLocationId();
+  const activeDepartmentId = user?.activeDepartmentId;
   const tenantQuery = useQuery({
     enabled: isSupabaseConfigured() && Boolean(activeLocationId),
     queryFn: fetchTenantDirectoryFromSupabase,
@@ -51,6 +57,16 @@ export default function AppLayout() {
   });
   const activeTenant = tenantQuery.data?.find((tenant) => tenant.locationId === activeLocationId);
   const tenantOptions = tenantQuery.data?.filter((tenant) => tenant.locationId !== "not-created") ?? [];
+  const departmentQuery = useQuery({
+    enabled: user?.authProvider === "supabase" && Boolean(activeLocationId),
+    queryFn: () => fetchDepartmentDirectoryFromSupabase(activeLocationId),
+    queryKey: ["department-directory", "app-shell", activeLocationId],
+    staleTime: 60_000,
+  });
+  const departmentOptions = departmentQuery.data?.filter(
+    (department) => department.locationId === activeLocationId,
+  ) ?? [];
+  const activeDepartment = departmentOptions.find((department) => department.id === activeDepartmentId);
   const restaurantRole = getRestaurantRoleLabel(user?.restaurantMembershipRole);
   const partnerRole = getPartnerRoleLabel(user?.partnerMembershipRole);
   const partnerWorkspace = user?.workspaceKind === "partner";
@@ -67,15 +83,34 @@ export default function AppLayout() {
       ? "Partner workspaces"
       : "Locations";
 
+  useEffect(() => {
+    if (!departmentQuery.data) return;
+    const nextDepartmentId = selectActiveDepartmentId(
+      departmentQuery.data,
+      activeLocationId,
+      activeDepartmentId,
+    );
+    if (nextDepartmentId === activeDepartmentId) return;
+    updateCurrentUserAccess({ activeDepartmentId: nextDepartmentId ?? null });
+  }, [activeDepartmentId, activeLocationId, departmentQuery.data]);
+
   function switchWorkspace(tenant: NonNullable<typeof tenantQuery.data>[number]) {
     if (tenant.locationId === activeLocationId) return;
     updateCurrentUserAccess({
+      activeDepartmentId: null,
       activeLocationId: tenant.locationId,
       activeOrganizationId: tenant.organizationId,
       activePartnerId: tenant.channelPartnerId,
     });
     void queryClient.invalidateQueries();
     toast.success(`Switched to ${tenant.locationName}`);
+  }
+
+  function switchDepartment(department: NonNullable<typeof departmentQuery.data>[number]) {
+    if (department.locationId !== activeLocationId || department.id === activeDepartmentId) return;
+    updateCurrentUserAccess({ activeDepartmentId: department.id });
+    void queryClient.invalidateQueries();
+    toast.success(`Switched to ${department.name}`);
   }
 
   return (
@@ -91,7 +126,9 @@ export default function AppLayout() {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="sm" className="gap-1.5 px-2 text-sm font-medium">
                   <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="hidden sm:inline">{locationLabel}</span>
+                  <span className="hidden sm:inline">
+                    {activeDepartment ? `${locationLabel} / ${activeDepartment.name}` : locationLabel}
+                  </span>
                   <span className="sm:hidden">{workspaceLabel}</span>
                   <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                 </Button>
@@ -116,6 +153,30 @@ export default function AppLayout() {
                         {partnerWorkspace || platformAdmin
                           ? `${tenant.channelPartnerName} · ${tenant.organizationName}`
                           : tenant.organizationName}
+                      </div>
+                    </div>
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>Departments</DropdownMenuLabel>
+                {departmentQuery.isLoading && <DropdownMenuItem disabled>Loading accessible departments...</DropdownMenuItem>}
+                {departmentQuery.isError && <DropdownMenuItem disabled>Could not load accessible departments</DropdownMenuItem>}
+                {!departmentQuery.isLoading && !departmentQuery.isError && departmentOptions.length === 0 && (
+                  <DropdownMenuItem disabled>No active departments</DropdownMenuItem>
+                )}
+                {departmentOptions.map((department) => (
+                  <DropdownMenuItem
+                    key={department.id}
+                    className="items-start gap-2"
+                    onSelect={() => switchDepartment(department)}
+                  >
+                    {department.id === activeDepartmentId
+                      ? <Check className="mt-0.5 h-3.5 w-3.5" />
+                      : <Building2 className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" />}
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">{department.name}</div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        {department.isDefault ? "Default department" : department.departmentType.replace(/_/g, " ")}
                       </div>
                     </div>
                   </DropdownMenuItem>

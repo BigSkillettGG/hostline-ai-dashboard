@@ -5,6 +5,7 @@ import {
   buildDemoUser,
   buildDemoSuperAdmin,
   getAuthReadiness,
+  getActiveDepartmentId,
   getActiveLocationId,
   getActivePartnerId,
   mapSupabaseAuthResponse,
@@ -206,6 +207,33 @@ describe("auth helpers", () => {
       workspaceKind: "partner",
     });
     expect(getActivePartnerId()).toBe("partner_2");
+    signOut();
+  });
+
+  it("persists department context and clears it when the location workspace changes", () => {
+    signOut();
+    localStorage.setItem("signalhost.currentUser", JSON.stringify({
+      accessToken: "access_token",
+      activeDepartmentId: "department_1",
+      activeLocationId: "loc_1",
+      activeOrganizationId: "org_1",
+      authProvider: "supabase",
+      email: "owner@example.com",
+      memberships: [{ organizationId: "org_1", role: "owner" }],
+      name: "Owner",
+      role: "admin",
+      supabaseUserId: "user_1",
+    }));
+
+    expect(getActiveDepartmentId()).toBe("department_1");
+
+    const user = updateCurrentUserAccess({
+      activeDepartmentId: null,
+      activeLocationId: "loc_2",
+    });
+
+    expect(user?.activeDepartmentId).toBeUndefined();
+    expect(getActiveDepartmentId()).toBeUndefined();
     signOut();
   });
 

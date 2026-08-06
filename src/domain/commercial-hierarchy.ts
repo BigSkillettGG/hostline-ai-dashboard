@@ -67,3 +67,15 @@ export function canDepartmentRoleOperate(role: DepartmentMembershipRole | undefi
 export function canDepartmentRoleManageMemberships(role: DepartmentMembershipRole | undefined) {
   return role === "manager";
 }
+
+export function selectActiveDepartmentId(
+  departments: Array<{ id: string; isDefault: boolean; locationId: string; status: string }>,
+  activeLocationId: string | undefined,
+  currentDepartmentId: string | undefined,
+) {
+  const visibleDepartments = departments.filter(
+    (department) => department.locationId === activeLocationId && department.status === "active",
+  );
+  const selected = visibleDepartments.find((department) => department.id === currentDepartmentId);
+  return selected?.id ?? visibleDepartments.find((department) => department.isDefault)?.id ?? visibleDepartments[0]?.id;
+}

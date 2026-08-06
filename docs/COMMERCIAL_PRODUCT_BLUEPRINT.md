@@ -653,3 +653,12 @@ Partner/customer telephony administration, broader write-isolation coverage, cre
 - All 48 current-value PATCH probes returned no writable rows in production on 2026-08-06. No inserts/deletes were issued and no business data changed.
 - Repository verification is green at 99 test files / 599 tests, TypeScript, lint with zero errors and eight pre-existing warnings, the read-only six-tenant production gate, and whitespace validation.
 - This establishes repeatable customer-to-customer write-denial evidence. Controlled partner identities, positive role matrices, department roles, and disposable-fixture insert/delete coverage remain required before commercial pilot sign-off.
+
+### Phase 1 foundation slice status — department navigation context
+
+- Added persisted `activeDepartmentId` beneath the selected partner/organization/location scope.
+- Added an RLS-backed active-department directory and exposed it in the existing header workspace menu.
+- The selection contract keeps a valid department, otherwise chooses the selected location's default/first active department, and clears stale context when switching locations.
+- No voice route or existing business-data query changes: calls, requests, workflows, knowledge, and reports remain location-scoped until department ownership is explicitly added to those contracts.
+- Repository verification is green at 99 test files / 602 tests, TypeScript, lint with zero errors and eight pre-existing warnings, the production dashboard build, and whitespace validation.
+- Public dashboard publication and authenticated browser verification remain pending.

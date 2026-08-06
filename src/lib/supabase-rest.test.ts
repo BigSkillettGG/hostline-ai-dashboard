@@ -22,6 +22,7 @@ import {
   buildReservationInsertPayload,
   calculateForwardingStatus,
   mapSupabaseCalls,
+  mapSupabaseDepartmentDirectory,
   mapSupabaseCallFeedback,
   mapSupabaseBusinessLiveState,
   mapSupabaseBusinessLiveUpdate,
@@ -1107,6 +1108,28 @@ describe("Supabase tenant directory mapping", () => {
       onboardingStatus: "not_started",
       status: "attention",
     });
+  });
+});
+
+describe("Supabase department directory mapping", () => {
+  it("preserves the RLS-visible operational department identity", () => {
+    expect(mapSupabaseDepartmentDirectory([{
+      access_mode: "inherit_location",
+      department_type: "general_reception",
+      id: "department_1",
+      is_default: true,
+      location_id: "location_1",
+      name: "General Reception",
+      status: "active",
+    }])).toEqual([{
+      accessMode: "inherit_location",
+      departmentType: "general_reception",
+      id: "department_1",
+      isDefault: true,
+      locationId: "location_1",
+      name: "General Reception",
+      status: "active",
+    }]);
   });
 });
 

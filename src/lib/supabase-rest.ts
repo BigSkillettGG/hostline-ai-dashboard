@@ -213,6 +213,16 @@ interface SupabaseLocationDirectoryRow {
   timezone: string | null;
 }
 
+interface SupabaseDepartmentDirectoryRow {
+  access_mode: string;
+  department_type: string;
+  id: string;
+  is_default: boolean;
+  location_id: string;
+  name: string;
+  status: string;
+}
+
 interface SupabaseMembershipDirectoryRow {
   created_at: string | null;
   member_email: string | null;
@@ -652,6 +662,16 @@ export interface TenantDirectoryRecord {
   trialGraceEndsAt?: string;
   trialStartedAt?: string;
   voiceWebhookUrl?: string;
+}
+
+export interface DepartmentDirectoryRecord {
+  accessMode: string;
+  departmentType: string;
+  id: string;
+  isDefault: boolean;
+  locationId: string;
+  name: string;
+  status: string;
 }
 
 export interface MenuCategoryRecord {
@@ -1265,6 +1285,40 @@ export async function fetchTenantDirectoryFromSupabase(): Promise<TenantDirector
     organizations,
     phoneNumbers,
   });
+}
+
+export async function fetchDepartmentDirectoryFromSupabase(
+  locationId = getActiveSupabaseLocationId(),
+): Promise<DepartmentDirectoryRecord[]> {
+  if (!isSupabaseConfigured() || !locationId) {
+    throw new Error("Supabase department directory is not configured for an active location.");
+  }
+
+  const rows = await supabaseRequest<SupabaseDepartmentDirectoryRow[]>(
+    "departments",
+    new URLSearchParams({
+      location_id: `eq.${locationId}`,
+      order: "is_default.desc,name.asc",
+      select: "id,location_id,name,department_type,status,access_mode,is_default",
+      status: "eq.active",
+    }),
+  );
+
+  return mapSupabaseDepartmentDirectory(rows);
+}
+
+export function mapSupabaseDepartmentDirectory(
+  rows: SupabaseDepartmentDirectoryRow[],
+): DepartmentDirectoryRecord[] {
+  return rows.map((row) => ({
+    accessMode: row.access_mode,
+    departmentType: row.department_type,
+    id: row.id,
+    isDefault: row.is_default,
+    locationId: row.location_id,
+    name: row.name,
+    status: row.status,
+  }));
 }
 
 export async function fetchCallFeedbackFromSupabase(callId: string): Promise<CallFeedback[]> {

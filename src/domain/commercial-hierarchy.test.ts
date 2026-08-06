@@ -11,6 +11,7 @@ import {
   departmentInheritsLocationAccess,
   getPartnerRoleLabel,
   isPartnerRole,
+  selectActiveDepartmentId,
   SIGNALHOST_DIRECT_PARTNER_ID,
 } from "./commercial-hierarchy";
 
@@ -54,5 +55,17 @@ describe("commercial hierarchy access contract", () => {
       "operator",
       "viewer",
     ]);
+  });
+
+  it("keeps a valid department selection and otherwise selects the active location default", () => {
+    const departments = [
+      { id: "sales", isDefault: false, locationId: "location_1", status: "active" },
+      { id: "reception", isDefault: true, locationId: "location_1", status: "active" },
+      { id: "other", isDefault: true, locationId: "location_2", status: "active" },
+    ];
+
+    expect(selectActiveDepartmentId(departments, "location_1", "sales")).toBe("sales");
+    expect(selectActiveDepartmentId(departments, "location_1", "other")).toBe("reception");
+    expect(selectActiveDepartmentId(departments, "location_3", "sales")).toBeUndefined();
   });
 });
