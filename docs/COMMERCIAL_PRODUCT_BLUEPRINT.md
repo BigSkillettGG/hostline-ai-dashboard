@@ -602,6 +602,8 @@ This slice does not implement live transfer, number routing, queue presence/ring
 ### Phase 1 production application checkpoint — 2026-08-06
 
 - Applied `20260806010000_commercial_hierarchy_foundation.sql`, then `20260806020000_commercial_routing_foundation.sql`, to the connected production Supabase project through the authenticated Lovable database path.
+- Retained the generated applied versions `20260806043652` and `20260806043823` as no-op ledger markers, folded the deployment-added `service_role` grants into the canonical migrations/RLS snapshot, and kept the live-regenerated Supabase types.
+- Post-deployment reconciliation verification: 95 test files / 576 tests, TypeScript, lint with zero errors and eight pre-existing warnings, and all three production builds pass.
 - Verified that all eight new tables resolve through live PostgREST.
 - Verified all six demo users still authenticate and retain their existing location access.
 - Verified each checked demo organization has a channel partner and each checked location has exactly one default General Reception department with one active callback-only Primary Queue.

@@ -57,9 +57,11 @@ describe("commercial routing migration contract", () => {
     for (const table of ["staff_directory_entries", "queues", "queue_members", "transfer_targets"]) {
       const rlsPosition = migration.indexOf(`alter table public.${table} enable row level security`);
       const grantPosition = migration.indexOf(`grant select, insert, update, delete on public.${table}`);
+      const serviceGrantPosition = migration.indexOf(`grant all on public.${table} to service_role`);
 
       expect(rlsPosition, `${table} should enable RLS`).toBeGreaterThan(-1);
       expect(grantPosition, `${table} should grant authenticated access`).toBeGreaterThan(rlsPosition);
+      expect(serviceGrantPosition, `${table} should grant service access`).toBeGreaterThan(grantPosition);
     }
   });
 

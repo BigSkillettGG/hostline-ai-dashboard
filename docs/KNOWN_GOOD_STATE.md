@@ -44,6 +44,7 @@ The subsequent routing-identity foundation in `docs/COMMERCIAL_ROUTING_FOUNDATIO
 Production verification completed on 2026-08-06:
 
 - PostgREST resolves `channel_partners`, `partner_memberships`, `departments`, `department_memberships`, `staff_directory_entries`, `queues`, `queue_members`, and `transfer_targets` in the connected production project.
+- The production migration ledger uses generated versions `20260806043652` and `20260806043823`. Keep their checked-in no-op marker files, keep the full DDL in canonical versions `20260806010000` and `20260806020000`, and keep explicit `service_role` grants in the canonical migrations and RLS snapshot.
 - All six demo users still authenticate and retain their existing location access.
 - Each checked demo organization has a channel partner, and each checked location has exactly one default General Reception department and one active callback-only Primary Queue.
 - Anonymous access cannot read populated partner/department foundation rows. Full executable negative isolation coverage across partner, organization, location, and department boundaries is still required before broader UI/runtime use.

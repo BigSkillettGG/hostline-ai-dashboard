@@ -722,6 +722,11 @@ grant select, insert, update, delete on public.queues to authenticated;
 grant select, insert, update, delete on public.queue_members to authenticated;
 grant select, insert, update, delete on public.transfer_targets to authenticated;
 
+grant all on public.staff_directory_entries to service_role;
+grant all on public.queues to service_role;
+grant all on public.queue_members to service_role;
+grant all on public.transfer_targets to service_role;
+
 comment on table public.staff_directory_entries is
   'Human employee/contractor directory for queue membership and future transfer/callback routing; distinct from AI agent_configs.';
 comment on table public.queues is

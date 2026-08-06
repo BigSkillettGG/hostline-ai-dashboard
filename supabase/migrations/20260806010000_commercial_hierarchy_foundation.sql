@@ -537,6 +537,11 @@ grant select, insert, update, delete on public.partner_memberships to authentica
 grant select, insert, update, delete on public.departments to authenticated;
 grant select, insert, update, delete on public.department_memberships to authenticated;
 
+grant all on public.channel_partners to service_role;
+grant all on public.partner_memberships to service_role;
+grant all on public.departments to service_role;
+grant all on public.department_memberships to service_role;
+
 comment on table public.channel_partners is
   'SignalHost direct-sales or white-label channel partner parent for customer organizations.';
 comment on column public.organizations.channel_partner_id is

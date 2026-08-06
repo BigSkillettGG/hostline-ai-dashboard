@@ -1129,3 +1129,12 @@ grant select, insert, update, delete on staff_directory_entries to authenticated
 grant select, insert, update, delete on queues to authenticated;
 grant select, insert, update, delete on queue_members to authenticated;
 grant select, insert, update, delete on transfer_targets to authenticated;
+
+grant all on channel_partners to service_role;
+grant all on partner_memberships to service_role;
+grant all on departments to service_role;
+grant all on department_memberships to service_role;
+grant all on staff_directory_entries to service_role;
+grant all on queues to service_role;
+grant all on queue_members to service_role;
+grant all on transfer_targets to service_role;
