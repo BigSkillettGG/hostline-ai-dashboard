@@ -40,6 +40,8 @@ The telephony ownership foundation in `docs/COMMERCIAL_TELEPHONY_FOUNDATION.md` 
 
 The first production-backed workspace selector is defined in `docs/COMMERCIAL_SCOPE_SWITCHING.md`. Supabase sign-in now hydrates both customer organization memberships and channel-partner memberships. The dashboard tenant directory includes partner identity, and the header selector changes the active partner/organization/location only among rows already visible through the user's RLS-scoped bearer token. Scope changes invalidate dashboard queries and recalculate the role for the selected organization/partner; they do not impersonate another Auth user or alter any database authorization or voice route.
 
+Commercial `SECURITY DEFINER` function privileges are explicitly constrained by repository-pending migration `20260806170000_commercial_function_privilege_hardening.sql` and `docs/COMMERCIAL_FUNCTION_PRIVILEGE_HARDENING.md`. Internal/trigger helpers, including the write-capable default telephony-account helper, are service-only; authenticated execution is restored only for predicates referenced directly by RLS. Production application and denial/compatibility verification are still pending.
+
 ### Voice Service
 
 Owns inbound phone sessions, streaming audio, barge-in, turn detection, tool calls, escalation, call summaries, and transcript persistence.

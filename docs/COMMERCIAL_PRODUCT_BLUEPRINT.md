@@ -636,3 +636,12 @@ Partner/customer telephony administration, broader write-isolation coverage, cre
 - Department switching, partner administration/branding, partner aggregate reporting, support-session audit, and broader write-isolation coverage remain open.
 - This slice does not change Vapi, providers, assistants, numbers, webhooks, prompts, models, tools, routes, or any voice runtime.
 - Verification: 97 test files / 590 tests, TypeScript, lint with zero errors and eight pre-existing warnings, all three production builds, the authenticated six-tenant production RLS gate, and a real Supabase customer browser login. Production browser coverage for multi-customer partner switching requires a deliberately provisioned partner test identity.
+
+### Phase 1 foundation slice status — function privilege hardening
+
+- Identified PostgreSQL's default `PUBLIC EXECUTE` grant as an RPC exposure for commercial `SECURITY DEFINER` helpers.
+- Added migration `20260806170000_commercial_function_privilege_hardening.sql` to revoke commercial helper execution from `PUBLIC`, `anon`, and `authenticated`, restore service-role access, and grant authenticated execution back only to direct RLS predicates.
+- The write-capable default telephony-account helper, internal relationship lookups, and trigger functions remain service-only.
+- Added a contract test that inventories every function from the three commercial foundation migrations and requires every policy-referenced hardened helper to retain authenticated execution.
+- Repository verification is green at 98 test files / 595 tests, TypeScript, lint with zero errors and eight pre-existing warnings, and whitespace validation.
+- Production application, explicit RPC denial verification, trigger compatibility verification, and post-migration voice/RLS checks remain pending.

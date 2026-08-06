@@ -73,6 +73,8 @@ The first commercial workspace-switching slice preserves these additional invari
 - No voice, provider, phone, assistant, route, or runtime behavior changes with dashboard scope.
 - Verification is green: 97 test files / 590 tests, TypeScript, lint with zero errors and eight pre-existing warnings, all three production builds, the authenticated production RLS verifier, and a real Supabase customer browser login. The customer menu showed only its own live location. A seeded partner demo identity is still needed for production browser coverage of multi-customer partner switching.
 
+The subsequent repository-only function-privilege hardening slice revokes PostgreSQL's default `PUBLIC` execution from all commercial helpers. Only direct RLS predicates are granted back to `authenticated`; internal lookups, trigger functions, and the write-capable `ensure_default_telephony_account(text)` helper remain service-only. Migration `20260806170000_commercial_function_privilege_hardening.sql` must be applied and verified before this protection is considered live. Repository verification is green at 98 test files / 595 tests, TypeScript, lint with zero errors and eight pre-existing warnings, and whitespace validation.
+
 ## Known Good Voice Direction
 
 Baseline details are frozen in `docs/VOICE_BASELINE_LOCK.md`. Read that file before changing Vapi assignments or direct OpenAI Realtime fallback routing/tuning.
