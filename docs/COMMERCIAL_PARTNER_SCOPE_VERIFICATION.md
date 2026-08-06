@@ -1,6 +1,6 @@
 # Commercial Partner Scope Verification
 
-Status: production identity and RLS gate passing; authenticated empty-scope UI fix awaiting publication
+Status: production identity, RLS gate, dashboard publication, and authenticated empty-scope browser verification passing
 
 ## Purpose
 
@@ -49,6 +49,8 @@ On 2026-08-06 the gate passed with:
 
 Browser verification confirmed the direct partner login displayed all six partner workspaces, exposed the default department, and successfully switched from Olive & Ember to Summit Air with the correct vertical-specific live data.
 
-The same browser check exposed an authenticated empty-scope fallback: a valid partner with zero locations was shown the local Olive & Ember demo. The repository fix uses `requiresWorkspaceAssignment` to replace the entire app shell with an explicit `No customer workspaces assigned` state for non-platform Supabase users without an active location. Demo auth and valid customer/partner workspaces remain unchanged. Production publication and retest of that fix are required before this slice is complete.
+The same browser check exposed an authenticated empty-scope fallback: a valid partner with zero locations was shown the local Olive & Ember demo. The fix uses `requiresWorkspaceAssignment` to replace the entire app shell with an explicit `No customer workspaces assigned` state for non-platform Supabase users without an active location. Demo auth and valid customer/partner workspaces remain unchanged.
 
 Pre-publication repository verification passed at 100 test files / 609 tests, TypeScript, lint with zero errors and eight pre-existing warnings, the dashboard production build, whitespace validation, and all three production commercial gates.
+
+Commit `563bc4e` was published to `signalhost.ai` on 2026-08-06. The live bundle `/assets/index-C_-Q3V6_.js` contains the unassigned-workspace state and omits the obsolete `second location (soon)` placeholder. A signed-in control-partner browser retest showed only the active-partner badge, explicit no-workspace message, account identity, partner role, and sign-out control—no app sidebar, customer identity, dashboard metrics, or local demo data. All three commercial production gates and the production voice-health gate passed after publication; Vapi remained the preferred runtime.
