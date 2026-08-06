@@ -14,8 +14,8 @@ The dashboard is the admin and operations app. The real-time phone agent runs as
 
 - Dashboard: React, Vite, shadcn/ui, Tailwind.
 - Database/auth/storage: Supabase.
-- Web deployment: Vercel or Netlify.
-- Voice service: Node/TypeScript on Fly.io, Render, or AWS.
+- Web deployment: Lovable publication is the current production path; the Vite build remains portable to Vercel or Netlify.
+- Voice service: Node/TypeScript on Render in current production, with Fly.io or AWS as portable alternatives.
 - Telephony: Twilio.
 - Preferred voice orchestration: Vapi, with SignalHost-owned context, actions, persistence, administration, and reporting.
 - Maintained voice fallback: direct OpenAI Realtime SIP.
@@ -40,7 +40,7 @@ The telephony ownership foundation in `docs/COMMERCIAL_TELEPHONY_FOUNDATION.md` 
 
 The production-backed workspace selector is defined in `docs/COMMERCIAL_SCOPE_SWITCHING.md`. Supabase sign-in hydrates both customer organization memberships and channel-partner memberships. The dashboard tenant directory includes partner identity, and the header selector changes the active partner/organization/location only among rows already visible through the user's RLS-scoped bearer token. An RLS-backed department directory adds explicit active-department navigation beneath the selected location, preserving a valid selection or choosing that location's default. Scope changes invalidate dashboard queries and recalculate the role for the selected organization/partner; they do not impersonate another Auth user or alter any database authorization or voice route. Existing business data paths remain location-scoped until department ownership is explicitly modeled for them.
 
-Commercial `SECURITY DEFINER` function privileges are explicitly constrained by repository-pending migration `20260806170000_commercial_function_privilege_hardening.sql` and `docs/COMMERCIAL_FUNCTION_PRIVILEGE_HARDENING.md`. Internal/trigger helpers, including the write-capable default telephony-account helper, are service-only; authenticated execution is restored only for predicates referenced directly by RLS. Production application and denial/compatibility verification are still pending.
+Commercial `SECURITY DEFINER` function privileges are explicitly constrained by production-applied migration `20260806170000_commercial_function_privilege_hardening.sql` and `docs/COMMERCIAL_FUNCTION_PRIVILEGE_HARDENING.md`. Internal/trigger helpers, including the write-capable default telephony-account helper, are service-only; authenticated execution is restored only for predicates referenced directly by RLS. Live privilege inspection plus both commercial production isolation gates passed after application on 2026-08-06.
 
 Commercial production isolation has two repeatable gates. `npm run check:commercial-telephony` proves authenticated customer read boundaries and dormant-route invariants; `npm run check:commercial-write-isolation` sends current-value cross-tenant PATCH probes and requires every customer token to receive no writable target row. The write gate covers partner administration plus organization, location, department, queue, phone-number, route, and telephony-account boundaries without inserts or deletes. See `docs/COMMERCIAL_WRITE_ISOLATION.md`.
 

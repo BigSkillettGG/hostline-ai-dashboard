@@ -33,6 +33,7 @@ The selector follows the commercial hierarchy already enforced by Supabase:
 - Voice assistants, phone numbers, webhooks, prompts, models, tools, Vapi assignments, `number_routes`, and runtime routing are unchanged.
 - The selector shows only live RLS-visible directory rows. It does not silently add sample tenants to authenticated production results.
 - Repository verification after the department-context slice is green at 99 test files / 602 tests, TypeScript, lint with zero errors and eight pre-existing warnings, the production dashboard build, and whitespace validation.
+- The dashboard through commit `d6c9dc179e70ba6259820dc452d34a951c5c3628` was published to `signalhost.ai` on 2026-08-06. The live bundle contains the partner and department workspace controls and no longer contains the obsolete `second location (soon)` placeholder. Both commercial production isolation gates passed after publication.
 
 ## Deliberately unfinished
 

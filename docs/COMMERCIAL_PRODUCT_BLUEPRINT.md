@@ -182,7 +182,7 @@ The code can remain until replacements are proven, but the following must not dr
 
 - Documentation that says direct OpenAI Realtime SIP is the primary production runtime is obsolete. The implementation is maintained fallback.
 - Documentation that calls Vapi an optional/quarantined pilot is obsolete. Vapi is the preferred default; its remaining “pilot” names are migration debt.
-- The repository readiness label/detail has now been corrected to describe Vapi as preferred; production `/health` will retain the obsolete wording until the voice service is redeployed. The `vapi_pilot` ID remains temporarily for compatibility. Verification is green at 99 test files / 603 tests, TypeScript, lint with zero errors and eight pre-existing warnings, the voice production build, and whitespace validation.
+- The repository and production readiness label/detail now describe Vapi as preferred. Production `/health` reports `preferredProvider: vapi` and `Vapi preferred runtime`; the `vapi_pilot` ID remains temporarily for compatibility. Direct OpenAI Realtime SIP remains a maintained fallback and LiveKit remains quarantined.
 - The earlier Vapi dynamic-assistant recommendation is obsolete for the current demos. Fixed assistant assignment is the known working mode after dynamic request failures; dynamic mode remains a capability to retest deliberately.
 - LiveKit/Harbor A/B routing, SIP handoff, and agent code are quarantined experiments. They must remain disabled by default unless a named test plan reopens them.
 - Twilio ConversationRelay plus Google/ElevenLabs TTS is a legacy fallback, not a target architecture.
@@ -645,7 +645,8 @@ Partner/customer telephony administration, broader write-isolation coverage, cre
 - The write-capable default telephony-account helper, internal relationship lookups, and trigger functions remain service-only.
 - Added a contract test that inventories every function from the three commercial foundation migrations and requires every policy-referenced hardened helper to retain authenticated execution.
 - Repository verification is green at 98 test files / 595 tests, TypeScript, lint with zero errors and eight pre-existing warnings, and whitespace validation.
-- Production application, explicit RPC denial verification, trigger compatibility verification, and post-migration voice/RLS checks remain pending.
+- Production application completed on 2026-08-06. Live inspection confirmed anon denial on all 49 covered helpers, authenticated execution only on the 20 direct RLS predicates, and service-role execution on all 49; row counts and dormant routes were unchanged.
+- Both commercial production isolation gates and voice health passed after application. Positive service-role trigger coverage remains tied to the next controlled disposable provisioning fixture rather than a production-only test mutation.
 
 ### Phase 1 foundation slice status — customer write isolation
 
@@ -662,4 +663,5 @@ Partner/customer telephony administration, broader write-isolation coverage, cre
 - The selection contract keeps a valid department, otherwise chooses the selected location's default/first active department, and clears stale context when switching locations.
 - No voice route or existing business-data query changes: calls, requests, workflows, knowledge, and reports remain location-scoped until department ownership is explicitly added to those contracts.
 - Repository verification is green at 99 test files / 602 tests, TypeScript, lint with zero errors and eight pre-existing warnings, the production dashboard build, and whitespace validation.
-- Public dashboard publication and authenticated browser verification remain pending.
+- The dashboard through commit `d6c9dc179e70ba6259820dc452d34a951c5c3628` was published to `signalhost.ai` on 2026-08-06. The live bundle contains partner and department workspace controls, omits the obsolete `second location (soon)` placeholder, and passed both production isolation gates after publication.
+- A controlled partner identity remains pending for browser coverage of multi-customer partner switching; customer production RLS behavior is covered by the six-tenant gates.

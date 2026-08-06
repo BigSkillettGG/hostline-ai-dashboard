@@ -18,12 +18,14 @@ Migration `20260806170000_commercial_function_privilege_hardening.sql`:
 
 Trigger execution remains compatible because PostgreSQL checks the trigger-function privilege when the trigger is created; the existing triggers execute their `SECURITY DEFINER` internals as the function owner.
 
-## Deployment gate
+## Production evidence
 
-This migration is repository-only until production application is recorded. After application:
+Migration `20260806170000_commercial_function_privilege_hardening.sql` was applied to the connected production database on 2026-08-06 without repository or runtime changes. Live privilege inspection confirmed:
 
-1. confirm anonymous and authenticated RPC calls to `ensure_default_telephony_account(text)` are denied;
-2. rerun `npm run check:commercial-telephony` across all six customer identities;
-3. confirm the dashboard directory and workspace selector still load;
-4. confirm phone provisioning/service-role writes still create compatibility account/route references; and
-5. recheck production voice health.
+- `anon` has no execution privilege on all 49 covered helpers;
+- `authenticated` retains execution only on the 20 predicates referenced directly by RLS;
+- internal lookups, trigger functions, and `ensure_default_telephony_account(text)` remain unavailable to `authenticated`;
+- `service_role` retains execution on all 49 helpers; and
+- commercial row counts and dormant route state were unchanged.
+
+Post-application verification passed `npm run check:commercial-telephony` for all six customer identities, `npm run check:commercial-write-isolation` for all 48 cross-tenant PATCH denials, and the production voice health check. Controlled service-role provisioning remains the positive trigger-compatibility check when the next disposable phone-number fixture is introduced; production data should not be mutated solely to manufacture that evidence.
