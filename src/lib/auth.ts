@@ -314,6 +314,14 @@ export function isPlatformAdminUser(user: CurrentUser | null | undefined) {
   return Boolean(user?.role === "superadmin" || user?.isPlatformAdmin);
 }
 
+export function requiresWorkspaceAssignment(user: CurrentUser | null | undefined) {
+  return Boolean(
+    user?.authProvider === "supabase" &&
+    !isPlatformAdminUser(user) &&
+    !user.activeLocationId,
+  );
+}
+
 export function canUserAccessRole(user: CurrentUser | null | undefined, role: UserRole) {
   if (!user) return false;
   if (user.role === role) return true;

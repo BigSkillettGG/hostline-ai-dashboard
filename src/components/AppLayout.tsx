@@ -21,6 +21,7 @@ import {
   isDemoAuthMode,
   isDemoWorkspace,
   isPlatformAdminUser,
+  requiresWorkspaceAssignment,
   useCurrentUser,
   signOut,
   setRole,
@@ -93,6 +94,42 @@ export default function AppLayout() {
     if (nextDepartmentId === activeDepartmentId) return;
     updateCurrentUserAccess({ activeDepartmentId: nextDepartmentId ?? null });
   }, [activeDepartmentId, activeLocationId, departmentQuery.data]);
+
+  if (requiresWorkspaceAssignment(user)) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-muted/20 px-6 py-12">
+        <section className="w-full max-w-lg rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <Building2 className="h-6 w-6" />
+          </div>
+          <Badge variant="outline" className="mt-5 border-primary/20 bg-primary/5 text-primary">
+            {partnerWorkspace ? "Partner account active" : "Account active"}
+          </Badge>
+          <h1 className="mt-4 text-2xl font-semibold tracking-tight">No customer workspaces assigned</h1>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
+            {partnerWorkspace
+              ? "Your partner account is ready, but this partner does not have an accessible customer location yet. Ask a SignalHost platform administrator to connect a customer organization."
+              : "Your account is ready, but it does not have an accessible customer location yet. Ask your administrator to assign one."}
+          </p>
+          <div className="mt-6 rounded-lg bg-muted/50 px-4 py-3 text-left">
+            <div className="text-sm font-medium">{user?.name}</div>
+            <div className="mt-0.5 text-xs text-muted-foreground">{user?.email}</div>
+            {partnerWorkspace && <div className="mt-1 text-xs text-muted-foreground">{partnerRole}</div>}
+          </div>
+          <Button
+            variant="outline"
+            className="mt-6"
+            onClick={() => {
+              signOut();
+              navigate("/");
+            }}
+          >
+            Sign out
+          </Button>
+        </section>
+      </main>
+    );
+  }
 
   function switchWorkspace(tenant: NonNullable<typeof tenantQuery.data>[number]) {
     if (tenant.locationId === activeLocationId) return;

@@ -1,6 +1,6 @@
 # Commercial Production Write-Isolation Gate
 
-Status: passing customer-to-customer production gate; partner-role coverage remains pending
+Status: passing customer-to-customer and partner-to-partner production gates; department-role coverage remains pending
 
 ## Purpose
 
@@ -20,14 +20,13 @@ Each request reuses the row's current value. Correct RLS either rejects the requ
 
 On 2026-08-06 all six demo identities passed all eight boundaries, for 48 denied write probes. No probe returned a writable row, so no business data changed.
 
-This complements the read-only `npm run check:commercial-telephony` gate. It does not replace migration contract tests or prove every role path.
+This complements the read-only `npm run check:commercial-telephony` gate. The separate `npm run check:commercial-partner-scope` gate proves positive multi-customer partner access plus cross-partner read/write denial. Neither replaces migration contract tests or proves every role path.
 
 Repository verification after this slice is green at 99 test files / 599 tests, TypeScript, lint with zero errors and eight pre-existing warnings, the read-only six-tenant production gate, and whitespace validation.
 
 ## Remaining authorization coverage
 
-- Provision a controlled channel-partner owner/admin identity with at least two customer organizations.
-- Prove allowed partner administration inside that partner and denied writes outside it.
+- Keep the controlled direct and isolation partner identities healthy and rerun `npm run check:commercial-partner-scope` after commercial RLS changes.
 - Add organization-role and department-role positive/negative write matrices.
 - Add controlled insert and delete coverage using disposable fixtures or rollback-capable database tests.
 - Add immutable, attributable platform support-session audit before cross-tenant support access is exposed.

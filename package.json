@@ -16,6 +16,7 @@
     "check:voice": "node scripts/check-voice-deployment.mjs",
     "check:demos": "node scripts/check-demo-verticals.mjs",
     "check:commercial-telephony": "node scripts/verify-commercial-telephony-production.mjs",
+    "check:commercial-partner-scope": "node scripts/verify-commercial-partner-scope-production.mjs",
     "check:commercial-write-isolation": "node scripts/verify-commercial-write-isolation-production.mjs",
     "lint": "eslint .",
     "marketing:audio": "node scripts/generate-vera-audio.mjs",

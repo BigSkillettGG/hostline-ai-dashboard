@@ -636,7 +636,7 @@ Partner/customer telephony administration, broader write-isolation coverage, cre
 - Existing platform staff tenant view and single-location customer behavior are preserved.
 - Department switching, partner administration/branding, partner aggregate reporting, support-session audit, and broader write-isolation coverage remain open.
 - This slice does not change Vapi, providers, assistants, numbers, webhooks, prompts, models, tools, routes, or any voice runtime.
-- Verification: 97 test files / 590 tests, TypeScript, lint with zero errors and eight pre-existing warnings, all three production builds, the authenticated six-tenant production RLS gate, and a real Supabase customer browser login. Production browser coverage for multi-customer partner switching requires a deliberately provisioned partner test identity.
+- Verification for that slice was green at 97 test files / 590 tests, TypeScript, lint with zero errors and eight pre-existing warnings, all three production builds, the authenticated six-tenant production RLS gate, and a real Supabase customer browser login. The partner-scope slice below subsequently closes the original multi-customer browser-coverage dependency.
 
 ### Phase 1 foundation slice status — function privilege hardening
 
@@ -664,4 +664,12 @@ Partner/customer telephony administration, broader write-isolation coverage, cre
 - No voice route or existing business-data query changes: calls, requests, workflows, knowledge, and reports remain location-scoped until department ownership is explicitly added to those contracts.
 - Repository verification is green at 99 test files / 602 tests, TypeScript, lint with zero errors and eight pre-existing warnings, the production dashboard build, and whitespace validation.
 - The dashboard through commit `d6c9dc179e70ba6259820dc452d34a951c5c3628` was published to `signalhost.ai` on 2026-08-06. The live bundle contains partner and department workspace controls, omits the obsolete `second location (soon)` placeholder, and passed both production isolation gates after publication.
-- A controlled partner identity remains pending for browser coverage of multi-customer partner switching; customer production RLS behavior is covered by the six-tenant gates.
+- The controlled partner browser dependency is closed by the partner-scope verification slice below.
+
+### Phase 1 foundation slice status — partner scope verification
+
+- Provisioned a controlled `SignalHost Direct` partner owner with no customer membership and an inactive isolation-control partner owner with no customer resources.
+- Added `npm run check:commercial-partner-scope` to prove positive access across six customer organizations plus cross-partner read denial and nine current-value write denials without inserts, deletes, routing changes, or business-data changes.
+- Production browser verification showed all six partner workspaces, the default department, and a successful switch from Olive & Ember to Summit Air with the correct vertical-specific live data.
+- The isolation browser check found that an authenticated partner with no visible location fell back to the local Olive & Ember demo. The repository now renders `No customer workspaces assigned` before the app shell for non-platform Supabase users without an active location. Production publication and browser retest remain pending.
+- Legacy authorization helpers may return SQL `NULL` rather than explicit `false` when every branch is absent. RLS denies both; normalizing those helpers remains a later contract-hardening slice.

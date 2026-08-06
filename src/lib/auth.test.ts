@@ -9,6 +9,7 @@ import {
   getActiveLocationId,
   getActivePartnerId,
   mapSupabaseAuthResponse,
+  requiresWorkspaceAssignment,
   roleFromEmailAndMetadata,
   signOut,
   updateCurrentUserAccess,
@@ -172,6 +173,31 @@ describe("auth helpers", () => {
       role: "admin",
       workspaceKind: "partner",
     });
+  });
+
+  it("requires a real workspace assignment instead of falling back to demo data", () => {
+    const unassignedPartner = mapSupabaseAuthResponse({
+      access_token: "access_token",
+      user: {
+        email: "owner@unassigned-partner.example",
+        id: "partner_user_unassigned",
+      },
+    }, {
+      activePartnerId: "partner_without_customers",
+      partnerMemberships: [{ partnerId: "partner_without_customers", role: "owner" }],
+    });
+
+    const assignedPartner = {
+      ...unassignedPartner,
+      activeLocationId: "loc_1",
+      activeOrganizationId: "org_1",
+    };
+
+    expect(unassignedPartner.workspaceKind).toBe("partner");
+    expect(requiresWorkspaceAssignment(unassignedPartner)).toBe(true);
+    expect(requiresWorkspaceAssignment(assignedPartner)).toBe(false);
+    expect(requiresWorkspaceAssignment(buildDemoUser("demo@example.com"))).toBe(false);
+    expect(requiresWorkspaceAssignment(buildDemoSuperAdmin())).toBe(false);
   });
 
   it("recalculates customer and partner roles for the selected scope", () => {
