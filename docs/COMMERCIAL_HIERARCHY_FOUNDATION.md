@@ -1,6 +1,6 @@
 # SignalHost Commercial Hierarchy Foundation
 
-Status: Phase 1 data and authorization contract
+Status: Phase 1 data and authorization contract; production migration applied and verified 2026-08-06
 
 Evidence baseline: `d34e498`
 

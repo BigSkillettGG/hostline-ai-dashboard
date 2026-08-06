@@ -571,7 +571,7 @@ It does **not** change a Vapi assistant, phone number, webhook, model, voice, to
 
 ### Phase 1 foundation slice status — partner and department identities
 
-The first Phase 1 slice is implemented in the repository but deliberately stops before production database application or UI dependency:
+The first Phase 1 slice is implemented in the repository and was applied to production on 2026-08-06, while deliberately stopping before UI/runtime dependency:
 
 - Added the explicit compatibility and role contract in `docs/COMMERCIAL_HIERARCHY_FOUNDATION.md`.
 - Added an additive migration for `channel_partners`, `partner_memberships`, `departments`, and `department_memberships`.
@@ -582,7 +582,7 @@ The first Phase 1 slice is implemented in the repository but deliberately stops 
 - Updated checked-in Supabase types and clean-install schema/RLS snapshots.
 - Added pure role-matrix tests and migration contract tests. Verification: 92 test files / 563 tests, TypeScript, lint with zero errors and eight pre-existing warnings, and all production builds pass. PostgreSQL parsing succeeds for the migration and both SQL snapshots.
 
-That checkpoint was not the completion of Phase 1: queues, transfer targets, production-backed scope switching, support-access audit, executable database isolation tests, partner administration, and downstream department scoping were still open. The migration is not considered applied to production until a database-capable deployment path verifies it; current app and voice code therefore do not depend on the new objects.
+That checkpoint was not the completion of Phase 1: production-backed scope switching, support-access audit, executable database isolation tests, partner administration, number routes, and downstream department scoping remain open. Production application is now verified, but current app and voice code still do not depend on the new objects.
 
 ### Phase 1 foundation slice status — dormant queues and transfer identities
 
@@ -597,4 +597,13 @@ The second Phase 1 slice is implemented in the repository as a data/authorizatio
 - Updated checked-in Supabase types and clean-install schema/RLS snapshots.
 - Added routing vocabulary and migration contract tests. Verification: 94 test files / 574 tests, TypeScript, lint with zero errors and eight pre-existing warnings, and all production builds pass. PostgreSQL parsing succeeds for both migrations and both SQL snapshots.
 
-This slice does not implement live transfer, number routing, queue presence/ring strategy, structured task assignment, department-scoped AI agents/workflows/knowledge/reporting, or UI. Current handoff remains callback/task/alert, and all voice runtimes continue to report live transfer unavailable. Neither Phase 1 migration is considered applied to production until a database-capable deployment verifies ordered application, backfills, and executable RLS isolation.
+This slice does not implement live transfer, number routing, queue presence/ring strategy, structured task assignment, department-scoped AI agents/workflows/knowledge/reporting, or UI. Current handoff remains callback/task/alert, and all voice runtimes continue to report live transfer unavailable.
+
+### Phase 1 production application checkpoint — 2026-08-06
+
+- Applied `20260806010000_commercial_hierarchy_foundation.sql`, then `20260806020000_commercial_routing_foundation.sql`, to the connected production Supabase project through the authenticated Lovable database path.
+- Verified that all eight new tables resolve through live PostgREST.
+- Verified all six demo users still authenticate and retain their existing location access.
+- Verified each checked demo organization has a channel partner and each checked location has exactly one default General Reception department with one active callback-only Primary Queue.
+- Confirmed production voice health remained ready with Vapi preferred, provider routing-policy enforcement disabled, and LiveKit quarantined.
+- Executable negative isolation coverage across partner, organization, location, and department boundaries remains an explicit Phase 1 acceptance gap; production application alone does not close it.

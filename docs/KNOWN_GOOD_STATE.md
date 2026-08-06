@@ -28,9 +28,9 @@ The first Phase 1 foundation slice preserves these invariants:
 - Partner roles extend existing helper-based organization/location RLS; customer membership never grants access to sibling organizations under the same partner.
 - Customer and partner users cannot reassign an organization to another partner or remove/move/restrict the default department.
 - Queues, transfer targets, real scope switching, partner branding, and support-audit controls are still unfinished.
-- The checked-in migration is not production truth until a database-capable deployment applies it and verifies the backfill/RLS behavior.
+- The hierarchy and routing-identity migrations were applied in order to production on 2026-08-06; repository implementation and production schema now agree for these two slices.
 
-The canonical contract is `docs/COMMERCIAL_HIERARCHY_FOUNDATION.md`. Do not make dashboard or voice code depend on these new tables until production migration state is verified.
+The canonical contract is `docs/COMMERCIAL_HIERARCHY_FOUNDATION.md`. Production application is verified, but dashboard or voice dependencies must still be introduced through narrow slices with role, fallback, and regression coverage.
 
 The subsequent routing-identity foundation in `docs/COMMERCIAL_ROUTING_FOUNDATION.md` preserves these additional invariants:
 
@@ -40,6 +40,14 @@ The subsequent routing-identity foundation in `docs/COMMERCIAL_ROUTING_FOUNDATIO
 - Transfer targets start dormant, require service-recorded verification before activation, and require re-verification after routing-relevant changes.
 - Existing alert JSON, trusted-contact fallbacks, free-text task assignment, fixed Vapi assistants/numbers, and all voice prompts/routes remain unchanged.
 - No runtime may claim or attempt live transfer merely because a transfer-target row exists.
+
+Production verification completed on 2026-08-06:
+
+- PostgREST resolves `channel_partners`, `partner_memberships`, `departments`, `department_memberships`, `staff_directory_entries`, `queues`, `queue_members`, and `transfer_targets` in the connected production project.
+- All six demo users still authenticate and retain their existing location access.
+- Each checked demo organization has a channel partner, and each checked location has exactly one default General Reception department and one active callback-only Primary Queue.
+- Anonymous access cannot read populated partner/department foundation rows. Full executable negative isolation coverage across partner, organization, location, and department boundaries is still required before broader UI/runtime use.
+- Production voice health remained ready with Vapi preferred, routing-policy enforcement disabled, and LiveKit quarantined; the migration did not activate a route or change voice configuration.
 
 ## Known Good Voice Direction
 

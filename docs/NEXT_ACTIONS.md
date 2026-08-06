@@ -8,12 +8,12 @@ The user requested a persistent memory system because repeated context compactio
 
 Current slice:
 
-- Execute the second compatibility-safe foundation slice of Phase 1 in `docs/COMMERCIAL_PRODUCT_BLUEPRINT.md`.
-- Add dormant staff-directory, queue, queue-membership, and transfer-target identities beneath departments.
-- Keep every default queue callback-only and require service verification before a transfer target can become active.
-- Do not connect the new identities to phone numbers, calls, AI agents, workflows, knowledge, tasks, reports, or live runtime behavior in this slice.
+- Preserve the verified production application of the first two compatibility-safe Phase 1 migrations.
+- Design the next narrow Phase 1 slice around partner-owned telephony identities and dormant number routes.
+- Keep the existing `phone_numbers` table and all current Vapi/Twilio bindings compatible; add ownership/routing records rather than replacing working data.
+- Do not make a new route operational, change a provider binding, or connect department queues to live calls until a separately verified runtime slice.
 - Do not change live assistants, phone numbers, webhooks, prompts, tools, voices, models, or routes.
-- Keep the production-application state explicit: committed migration is not the same as an applied production migration.
+- Keep production application, repository implementation, and runtime activation as three explicitly separate states.
 
 Status update:
 
@@ -27,7 +27,10 @@ Status update:
 - Existing organization/location IDs, bootstrap writes, dashboard queries, demos, and voice routing remain unchanged. Default departments inherit location access.
 - Checked-in Supabase types and clean-install schema/RLS snapshots represent the new objects.
 - Verification is green: 94 test files / 574 tests, TypeScript, lint with zero errors and eight pre-existing warnings, all three production builds, and independent PostgreSQL parsing of both migrations and SQL snapshots.
-- The two Phase 1 migrations have not yet been applied to production: this workspace has no linked Supabase CLI session, access token, database URL, or database password. They must be applied in order and verified through a database-capable path before app/runtime code depends on them.
+- Both Phase 1 migrations were applied in order to the connected production Supabase project on 2026-08-06 through the authenticated Lovable database path.
+- Live PostgREST verification resolves all eight new tables. Authenticated checks across all six demo tenants confirm the existing location remains visible, its organization has a channel partner, and the location has exactly one default General Reception department with one active callback-only Primary Queue.
+- Anonymous access cannot read the populated partner/department foundation rows, and the checked-in migrations enable RLS on all eight tables. A dedicated executable cross-partner/cross-organization/cross-location/cross-department negative test harness remains open before UI/runtime dependency expands.
+- Production voice verification remained green after the database deployment: `https://hostline-voice.onrender.com` is production-ready, Vapi is preferred, direct routing-policy enforcement remains off, and LiveKit remains quarantined.
 - Number routes, AI agent/workflow/knowledge/report scoping, production-backed location/department switching, immutable support audit, and executable cross-tenant RLS tests remain later Phase 1 slices.
 - The Vapi executor still lacks some tools advertised by fixed assistants; action parity is a later verified slice, not part of this non-routing foundation change.
 - Vapi pilot location allow-list now includes all six demo businesses.
