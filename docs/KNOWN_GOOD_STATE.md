@@ -50,7 +50,7 @@ Production verification completed on 2026-08-06:
 - Anonymous access cannot read populated partner/department foundation rows. Full executable negative isolation coverage across partner, organization, location, and department boundaries is still required before broader UI/runtime use.
 - Production voice health remained ready with Vapi preferred, routing-policy enforcement disabled, and LiveKit quarantined; the migration did not activate a route or change voice configuration.
 
-The subsequent repository-only telephony ownership foundation in `docs/COMMERCIAL_TELEPHONY_FOUNDATION.md` adds these invariants for its eventual production application:
+The subsequent telephony ownership foundation in `docs/COMMERCIAL_TELEPHONY_FOUNDATION.md` is also applied and verified in production. It preserves these invariants:
 
 - Existing `phone_numbers` remains the compatibility source used by Vapi/Twilio provisioning, lifecycle, messaging, and dashboard code.
 - Telephony resource ownership, billing responsibility, and end-customer relationship ownership are separate fields; provider credentials never belong in account/trunk settings.
@@ -59,7 +59,8 @@ The subsequent repository-only telephony ownership foundation in `docs/COMMERCIA
 - SIP trunks and explicit number routes require service-recorded verification and `runtime_enforced = true` before active status.
 - The deployed global Twilio SIP trunk is not backfilled or tenant-manageable in this slice.
 - Vapi remains preferred, no runtime reads `number_routes`, and no current provider/number/assistant/webhook/prompt/model/voice/tool/route is changed.
-- This third migration is repository truth only until a production deployment and live verification are recorded.
+- All six authenticated demo tenants passed the read-only `npm run check:commercial-telephony` gate on 2026-08-06: 21 visible phone numbers had 21 primary observed routes, every number had a telephony account reference, each tenant saw only its own location/department/number/route rows, and partner-global accounts/trunks remained hidden.
+- Production voice health remained ready after application. Vapi and all current runtime routes remain unchanged.
 
 ## Known Good Voice Direction
 

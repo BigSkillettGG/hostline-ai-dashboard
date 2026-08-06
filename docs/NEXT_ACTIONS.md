@@ -8,12 +8,10 @@ The user requested a persistent memory system because repeated context compactio
 
 Current slice:
 
-- Apply and verify the third compatibility-safe Phase 1 migration only after its repository checkpoint is pushed and an exact database-capable deployment path is available.
-- Keep the existing `phone_numbers` table and all current Vapi/Twilio bindings as the compatibility source; `telephony_accounts`, `sip_trunks`, and `number_routes` are ownership/control-plane identities only.
-- Keep every backfilled number route `observed` and `runtime_enforced = false`.
-- Do not import the global Twilio SIP trunk, make a new route operational, change a provider binding, or connect department queues to live calls until a separately verified runtime slice.
-- Do not change live assistants, phone numbers, webhooks, prompts, tools, voices, models, or routes.
-- Keep production application, repository implementation, and runtime activation as three explicitly separate states.
+- Preserve the verified telephony ownership backfill while adding executable scope coverage and the first production-backed partner/customer location switcher.
+- Reuse existing Supabase Auth sessions, RLS, tenant directory records, and `activeOrganizationId` / `activeLocationId` state instead of adding a parallel tenant model.
+- Keep `number_routes` observed and non-enforced. Do not import the global Twilio trunk or change any live assistant, number, provider binding, webhook, prompt, tool, voice, model, or route.
+- Make every context change explicit and constrained to rows already visible through the signed-in user's RLS scope.
 
 Status update:
 
@@ -37,8 +35,9 @@ Status update:
 - The slice adds non-secret telephony account ownership/billing/customer-relationship metadata, dormant SIP trunk identities, a required compatibility account on `phone_numbers`, and observed default-department number routes. Legacy service/script inserts remain compatible through a default-account/observed-route trigger path.
 - Browser users cannot self-verify a trunk/route, enable runtime enforcement, alter observed routes, move numbers across locations, or attach an unauthorized provider account. Current voice/runtime code does not read the new route table.
 - Slice 3 repository verification is green: 97 test files / 586 tests, TypeScript, lint with zero errors and eight pre-existing warnings, and dashboard, voice-service, and LiveKit-agent production builds.
-- The slice 3 migration is not yet applied to production. Do not make UI/runtime code depend on its tables until live backfill, RLS, demo-login, and voice-health verification is recorded.
-- Number routes, AI agent/workflow/knowledge/report scoping, production-backed location/department switching, immutable support audit, and executable cross-tenant RLS tests remain later Phase 1 slices.
+- The slice 3 migration was applied to production on 2026-08-06. `npm run check:commercial-telephony` authenticated as all six demo users and verified 21 phone rows, 21 primary observed/non-enforced routes, required account references, no cross-location reads, and no customer visibility into partner-global telephony accounts or SIP trunks.
+- Production voice verification remained healthy after slice 3 application. Vapi is still the preferred runtime and no runtime reads `number_routes`.
+- The repeatable authenticated verifier is now the first executable cross-tenant read-isolation gate. Partner/customer scope switching, broader write-isolation cases, department-scoped AI/workflow/knowledge/report behavior, immutable support audit, and runtime routing remain open.
 - The Vapi executor still lacks some tools advertised by fixed assistants; action parity is a later verified slice, not part of this non-routing foundation change.
 - Vapi pilot location allow-list now includes all six demo businesses.
 - Vapi demo provisioning has been run successfully for all six demos.

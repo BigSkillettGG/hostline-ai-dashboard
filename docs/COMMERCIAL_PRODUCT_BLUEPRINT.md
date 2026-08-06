@@ -612,7 +612,7 @@ This slice does not implement live transfer, number routing, queue presence/ring
 
 ### Phase 1 foundation slice status — telephony ownership and observed number routes
 
-The third Phase 1 slice is implemented in the repository but is not yet applied to production:
+The third Phase 1 slice is implemented and was applied to production on 2026-08-06:
 
 - Added `telephony_accounts` with separate SignalHost/partner/customer resource ownership, billing responsibility, and SignalHost/partner end-customer relationship ownership.
 - Added dormant `sip_trunks` with service-controlled verification/runtime enforcement. The deployed global Twilio SIP trunk remains environment-managed and is not backfilled.
@@ -620,6 +620,8 @@ The third Phase 1 slice is implemented in the repository but is not yet applied 
 - Added provider-neutral `number_routes`; every existing/new number receives one primary `observed`, non-enforced route to its default department.
 - Added cross-scope validation, ownership-aware RLS, service-only runtime activation, clean-install snapshots/types, vocabulary tests, and migration contract tests.
 - Preserved existing phone IDs, provider/provider IDs, lifecycle, forwarding state, webhooks, `ai_host_phone`, Vapi assistants, and every live route. No runtime reads the new route table.
-- Verification: 97 test files / 586 tests, TypeScript, lint with zero errors and eight pre-existing warnings, and all three production builds pass.
+- Repository verification: 97 test files / 586 tests, TypeScript, lint with zero errors and eight pre-existing warnings, and all three production builds pass.
+- Production verification: `npm run check:commercial-telephony` authenticated as all six demo users and confirmed 21 visible phone numbers, 21 primary observed/non-enforced routes, required ownership references, no cross-location reads, and no customer visibility into partner-global telephony accounts or SIP trunks.
+- Production voice health remained ready after application. Vapi stays preferred and no provider or runtime route changed.
 
-Production application, live backfill/RLS verification, partner/customer telephony administration, credential vaulting, trunk import, PBX adapters, carrier billing reconciliation, and runtime route enforcement remain open.
+Partner/customer telephony administration, broader write-isolation coverage, credential vaulting, trunk import, PBX adapters, carrier billing reconciliation, and runtime route enforcement remain open.
