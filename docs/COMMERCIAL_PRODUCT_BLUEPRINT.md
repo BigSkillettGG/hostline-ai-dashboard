@@ -568,3 +568,18 @@ It does **not** change a Vapi assistant, phone number, webhook, model, voice, to
 - Excluded generated build directories from source lint.
 - Verification: 90 test files / 554 tests passed; TypeScript passed; lint passed with zero errors and eight pre-existing warnings; dashboard, voice-service, and LiveKit-agent builds passed.
 - The existing frontend chunk-size and stale Browserslist warnings remain documented technical debt; they were not expanded into this slice.
+
+### Phase 1 foundation slice status — partner and department identities
+
+The first Phase 1 slice is implemented in the repository but deliberately stops before production database application or UI dependency:
+
+- Added the explicit compatibility and role contract in `docs/COMMERCIAL_HIERARCHY_FOUNDATION.md`.
+- Added an additive migration for `channel_partners`, `partner_memberships`, `departments`, and `department_memberships`.
+- Seeded a deterministic `SignalHost Direct` parent and defaulted every existing/new organization to it.
+- Backfilled every existing location with a default `General Reception` department and added a trigger for new locations.
+- Kept default departments on inherited location access; protected the partner assignment and default-department compatibility contract from non-platform reassignment.
+- Extended the existing organization helper functions so partner `owner`/`admin`/`operator`/`viewer` capabilities flow through current RLS policies without rewriting downstream tables.
+- Updated checked-in Supabase types and clean-install schema/RLS snapshots.
+- Added pure role-matrix tests and migration contract tests. Verification: 92 test files / 563 tests, TypeScript, lint with zero errors and eight pre-existing warnings, and all production builds pass. PostgreSQL parsing succeeds for the migration and both SQL snapshots.
+
+This is not the completion of Phase 1. Queues, transfer targets, production-backed scope switching, support-access audit, executable database isolation tests, partner administration, and downstream department scoping remain open. The migration is not considered applied to production until a database-capable deployment path verifies it; current app and voice code therefore do not depend on the new objects.

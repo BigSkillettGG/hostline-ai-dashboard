@@ -16,6 +16,22 @@ The strongest product direction is:
 - Learn from corrections and temporary updates.
 - Help recover revenue through follow-up.
 
+## Commercial Hierarchy Foundation
+
+The required hierarchy is SignalHost platform -> channel partner -> customer organization -> location/rooftop -> department, with queues, agents, workflows, knowledge, and reporting scoped below it in later slices.
+
+The first Phase 1 foundation slice preserves these invariants:
+
+- Direct customers use the deterministic `SignalHost Direct` channel partner rather than a separate product fork.
+- Existing organization and location IDs are unchanged.
+- Every location receives a default `General Reception` department with `inherit_location` access, so current organization memberships keep working.
+- Partner roles extend existing helper-based organization/location RLS; customer membership never grants access to sibling organizations under the same partner.
+- Customer and partner users cannot reassign an organization to another partner or remove/move/restrict the default department.
+- Queues, transfer targets, real scope switching, partner branding, and support-audit controls are still unfinished.
+- The checked-in migration is not production truth until a database-capable deployment applies it and verifies the backfill/RLS behavior.
+
+The canonical contract is `docs/COMMERCIAL_HIERARCHY_FOUNDATION.md`. Do not make dashboard or voice code depend on these new tables until production migration state is verified.
+
 ## Known Good Voice Direction
 
 Baseline details are frozen in `docs/VOICE_BASELINE_LOCK.md`. Read that file before changing Vapi assignments or direct OpenAI Realtime fallback routing/tuning.

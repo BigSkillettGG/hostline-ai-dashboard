@@ -14,6 +14,162 @@ export type Database = {
   }
   public: {
     Tables: {
+      channel_partners: {
+        Row: {
+          created_at: string
+          id: string
+          is_internal: boolean
+          name: string
+          partner_type: string
+          settings: Json
+          slug: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_internal?: boolean
+          name: string
+          partner_type?: string
+          settings?: Json
+          slug: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_internal?: boolean
+          name?: string
+          partner_type?: string
+          settings?: Json
+          slug?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      department_memberships: {
+        Row: {
+          created_at: string
+          department_id: string
+          id: string
+          role: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          department_id: string
+          id?: string
+          role: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          department_id?: string
+          id?: string
+          role?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "department_memberships_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      departments: {
+        Row: {
+          access_mode: string
+          created_at: string
+          department_type: string
+          id: string
+          is_default: boolean
+          location_id: string
+          name: string
+          settings: Json
+          slug: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          access_mode?: string
+          created_at?: string
+          department_type?: string
+          id?: string
+          is_default?: boolean
+          location_id: string
+          name: string
+          settings?: Json
+          slug: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          access_mode?: string
+          created_at?: string
+          department_type?: string
+          id?: string
+          is_default?: boolean
+          location_id?: string
+          name?: string
+          settings?: Json
+          slug?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "departments_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      partner_memberships: {
+        Row: {
+          created_at: string
+          id: string
+          partner_id: string
+          role: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          partner_id: string
+          role: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          partner_id?: string
+          role?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partner_memberships_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "channel_partners"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       agent_configs: {
         Row: {
           after_hours_behavior: string
@@ -1385,21 +1541,32 @@ export type Database = {
       }
       organizations: {
         Row: {
+          channel_partner_id: string
           created_at: string
           id: string
           name: string
         }
         Insert: {
+          channel_partner_id?: string
           created_at?: string
           id?: string
           name: string
         }
         Update: {
+          channel_partner_id?: string
           created_at?: string
           id?: string
           name?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "organizations_channel_partner_id_fkey"
+            columns: ["channel_partner_id"]
+            isOneToOne: false
+            referencedRelation: "channel_partners"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       owner_reports: {
         Row: {
@@ -1921,8 +2088,20 @@ export type Database = {
         Args: { target_location_id: string }
         Returns: boolean
       }
+      can_access_department: {
+        Args: { target_department_id: string }
+        Returns: boolean
+      }
       can_access_organization: {
         Args: { target_organization_id: string }
+        Returns: boolean
+      }
+      can_access_partner: {
+        Args: { target_partner_id: string }
+        Returns: boolean
+      }
+      can_manage_department: {
+        Args: { target_department_id: string }
         Returns: boolean
       }
       can_manage_location: {
@@ -1933,6 +2112,14 @@ export type Database = {
         Args: { target_organization_id: string }
         Returns: boolean
       }
+      can_manage_partner: {
+        Args: { target_partner_id: string }
+        Returns: boolean
+      }
+      can_operate_department: {
+        Args: { target_department_id: string }
+        Returns: boolean
+      }
       can_operate_location: {
         Args: { target_location_id: string }
         Returns: boolean
@@ -1940,6 +2127,22 @@ export type Database = {
       can_operate_organization: {
         Args: { target_organization_id: string }
         Returns: boolean
+      }
+      can_operate_partner: {
+        Args: { target_partner_id: string }
+        Returns: boolean
+      }
+      department_access_mode: {
+        Args: { target_department_id: string }
+        Returns: string
+      }
+      department_location_id: {
+        Args: { target_department_id: string }
+        Returns: string
+      }
+      department_role: {
+        Args: { target_department_id: string }
+        Returns: string
       }
       is_platform_admin: { Args: never; Returns: boolean }
       location_organization_id: {
@@ -1955,8 +2158,16 @@ export type Database = {
         Returns: string
       }
       order_location_id: { Args: { target_order_id: string }; Returns: string }
+      organization_partner_id: {
+        Args: { target_organization_id: string }
+        Returns: string
+      }
       organization_role: {
         Args: { target_organization_id: string }
+        Returns: string
+      }
+      partner_role: {
+        Args: { target_partner_id: string }
         Returns: string
       }
     }

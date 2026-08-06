@@ -1,12 +1,12 @@
 # SignalHost Architecture
 
-SignalHost is a customer communication platform for local businesses. Restaurants are the first vertical, but the core system should support multiple channels and industries.
+SignalHost is a customer communication platform for local businesses. The current demos span restaurants and field-service businesses; automotive dealerships are the first high-complexity commercial reference implementation. The core system remains industry-neutral.
 
 The architecture has three layers:
 
 - Core platform: conversations, knowledge lookup, business links, customer requests, staff tasks, transcripts, alerts, analytics, and account setup.
 - Channel adapters: phone voice today, website chat next, SMS follow-up now, and later email or social inboxes.
-- Vertical playbooks: restaurant-specific onboarding and policies first, with home services, salons, hotels, and other call-heavy businesses added as industry templates.
+- Vertical playbooks: current restaurant, home-service, and salon demos remain supported; automotive dealerships are the next high-complexity reference template, implemented through reusable platform primitives.
 
 The dashboard is the admin and operations app. The real-time phone agent runs as a separate service because phone audio needs long-lived WebSockets, low latency, retries, and provider-specific event handling.
 
@@ -28,11 +28,13 @@ The dashboard is the admin and operations app. The real-time phone agent runs as
 
 ### Dashboard App
 
-Owns restaurant setup, operations views, order review, reservation review, knowledge base, menu, integrations, users, and analytics.
+Owns customer setup, operations views, request/order/reservation review, knowledge, vertical configuration, integrations, users, and analytics.
 
 The Calls, Orders, and Reservations pages can read from Supabase REST using `VITE_SUPABASE_URL` and either `VITE_SUPABASE_PUBLISHABLE_KEY` or the legacy `VITE_SUPABASE_ANON_KEY`. If Supabase is missing or unavailable, these pages fall back to sample data and mark the source in the UI. The Orders and Reservations pages can also persist status changes back to Supabase.
 
-Dashboard auth can run in local demo mode or Supabase Auth mode. In Supabase mode, dashboard REST calls use the signed-in user's access token so `docs/supabase-rls.sql` can enforce organization and location access. Restaurant users are modeled through organization memberships (`owner`, `admin`, `manager`, `staff`), while SignalHost internal users are modeled through `platform_admins`. The demo workspace is a seeded local sales/development experience, not a production role.
+Dashboard auth can run in local demo mode or Supabase Auth mode. In Supabase mode, dashboard REST calls use the signed-in user's access token so `docs/supabase-rls.sql` can enforce scoped access. The commercial hierarchy is SignalHost platform -> channel partner -> customer organization -> location/rooftop -> department. Existing customer users retain organization memberships (`owner`, `admin`, `manager`, `staff`); partner users use partner memberships (`owner`, `admin`, `operator`, `viewer`); SignalHost internal users use `platform_admins`. The demo workspace is a seeded local sales/development experience, not a production role.
+
+The additive hierarchy foundation is defined in `docs/COMMERCIAL_HIERARCHY_FOUNDATION.md` and migration `20260806010000_commercial_hierarchy_foundation.sql`. It supplies stable partner and department identities without changing the current single-location UI. Queues, transfer targets, scoped switching, and support-audit controls remain later Phase 1 work.
 
 ### Voice Service
 
@@ -62,10 +64,12 @@ The first implementation is in `services/voice`:
 
 Own POS, reservation, SMS, printing, and kitchen tablet delivery. Integration failures should create staff-review tasks instead of dropping orders.
 
-## Core Data Objects
+## Current Core Data Objects
 
+- Channel partner and partner membership.
 - Organization.
 - Location.
+- Department and department membership.
 - User.
 - Phone number.
 - Agent configuration.

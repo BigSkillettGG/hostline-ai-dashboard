@@ -480,6 +480,162 @@ create table staff_tasks (
   created_at timestamptz not null default now()
 );
 
+-- Commercial hierarchy foundation. Existing and new organizations default to
+-- SignalHost Direct until an authorized provisioning flow assigns a partner.
+create table channel_partners (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  slug text not null unique check (
+    slug = lower(slug)
+    and slug ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'
+  ),
+  partner_type text not null default 'channel' check (
+    partner_type in ('direct', 'telecom', 'msp', 'agency', 'other')
+  ),
+  status text not null default 'active' check (status in ('active', 'suspended', 'inactive')),
+  is_internal boolean not null default false,
+  settings jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+insert into channel_partners (
+  id,
+  name,
+  slug,
+  partner_type,
+  status,
+  is_internal
+)
+values (
+  'a0000000-0000-4000-8000-000000000001'::uuid,
+  'SignalHost Direct',
+  'signalhost-direct',
+  'direct',
+  'active',
+  true
+);
+
+create table partner_memberships (
+  id uuid primary key default gen_random_uuid(),
+  partner_id uuid not null references channel_partners(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  role text not null check (role in ('owner', 'admin', 'operator', 'viewer')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (partner_id, user_id)
+);
+
+alter table organizations
+  add column channel_partner_id uuid
+  not null
+  default 'a0000000-0000-4000-8000-000000000001'::uuid
+  references channel_partners(id) on delete restrict;
+
+create index organizations_channel_partner_id_idx
+  on organizations(channel_partner_id);
+
+create table departments (
+  id uuid primary key default gen_random_uuid(),
+  location_id uuid not null references locations(id) on delete cascade,
+  name text not null,
+  slug text not null check (
+    slug = lower(slug)
+    and slug ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'
+  ),
+  department_type text not null default 'general_reception',
+  status text not null default 'active' check (status in ('active', 'inactive')),
+  access_mode text not null default 'inherit_location' check (
+    access_mode in ('inherit_location', 'restricted')
+  ),
+  is_default boolean not null default false,
+  settings jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (location_id, slug)
+);
+
+create unique index departments_one_default_per_location
+  on departments(location_id)
+  where is_default;
+
+create index departments_location_id_idx
+  on departments(location_id);
+
+create table department_memberships (
+  id uuid primary key default gen_random_uuid(),
+  department_id uuid not null references departments(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  role text not null check (role in ('manager', 'agent', 'viewer')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (department_id, user_id)
+);
+
+create index department_memberships_user_id_idx
+  on department_memberships(user_id);
+
+create or replace function public.set_commercial_hierarchy_updated_at()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+create trigger channel_partners_set_updated_at
+before update on channel_partners
+for each row execute function public.set_commercial_hierarchy_updated_at();
+
+create trigger partner_memberships_set_updated_at
+before update on partner_memberships
+for each row execute function public.set_commercial_hierarchy_updated_at();
+
+create trigger departments_set_updated_at
+before update on departments
+for each row execute function public.set_commercial_hierarchy_updated_at();
+
+create trigger department_memberships_set_updated_at
+before update on department_memberships
+for each row execute function public.set_commercial_hierarchy_updated_at();
+
+create or replace function public.ensure_default_department_for_location()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.departments (
+    location_id,
+    name,
+    slug,
+    department_type,
+    status,
+    access_mode,
+    is_default
+  )
+  values (
+    new.id,
+    'General Reception',
+    'general',
+    'general_reception',
+    'active',
+    'inherit_location',
+    true
+  );
+
+  return new;
+end;
+$$;
+
+create trigger locations_create_default_department
+after insert on locations
+for each row execute function public.ensure_default_department_for_location();
+
 -- Dashboard read access should be protected with Supabase Auth + RLS before production launch.
 -- The browser should use VITE_SUPABASE_PUBLISHABLE_KEY or the legacy anon key.
 -- The voice service must use SUPABASE_SECRET_KEY or a legacy service_role key only on the backend.

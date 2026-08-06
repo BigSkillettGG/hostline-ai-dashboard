@@ -36,6 +36,79 @@ as $$
   limit 1;
 $$;
 
+create or replace function public.partner_role(target_partner_id uuid)
+returns text
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select role
+  from public.partner_memberships
+  where user_id = auth.uid()
+    and partner_id = target_partner_id
+  order by case role
+    when 'owner' then 1
+    when 'admin' then 2
+    when 'operator' then 3
+    else 4
+  end
+  limit 1;
+$$;
+
+create or replace function public.organization_partner_id(target_organization_id uuid)
+returns uuid
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select channel_partner_id
+  from public.organizations
+  where id = target_organization_id;
+$$;
+
+create or replace function public.can_access_partner(target_partner_id uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select public.is_platform_admin()
+    or public.partner_role(target_partner_id) is not null
+    or exists (
+      select 1
+      from public.user_memberships
+      join public.organizations
+        on organizations.id = user_memberships.organization_id
+      where user_memberships.user_id = auth.uid()
+        and organizations.channel_partner_id = target_partner_id
+    );
+$$;
+
+create or replace function public.can_manage_partner(target_partner_id uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select public.is_platform_admin()
+    or public.partner_role(target_partner_id) in ('owner', 'admin');
+$$;
+
+create or replace function public.can_operate_partner(target_partner_id uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select public.is_platform_admin()
+    or public.partner_role(target_partner_id) in ('owner', 'admin', 'operator');
+$$;
+
 create or replace function public.can_access_organization(target_organization_id uuid)
 returns boolean
 language sql
@@ -44,7 +117,8 @@ stable
 set search_path = public
 as $$
   select public.is_platform_admin()
-    or public.organization_role(target_organization_id) is not null;
+    or public.organization_role(target_organization_id) is not null
+    or public.partner_role(public.organization_partner_id(target_organization_id)) is not null;
 $$;
 
 create or replace function public.can_manage_organization(target_organization_id uuid)
@@ -55,7 +129,8 @@ stable
 set search_path = public
 as $$
   select public.is_platform_admin()
-    or public.organization_role(target_organization_id) in ('owner', 'admin');
+    or public.organization_role(target_organization_id) in ('owner', 'admin')
+    or public.partner_role(public.organization_partner_id(target_organization_id)) in ('owner', 'admin');
 $$;
 
 create or replace function public.can_operate_organization(target_organization_id uuid)
@@ -66,7 +141,8 @@ stable
 set search_path = public
 as $$
   select public.is_platform_admin()
-    or public.organization_role(target_organization_id) in ('owner', 'admin', 'manager', 'staff');
+    or public.organization_role(target_organization_id) in ('owner', 'admin', 'manager', 'staff')
+    or public.partner_role(public.organization_partner_id(target_organization_id)) in ('owner', 'admin', 'operator');
 $$;
 
 create or replace function public.location_organization_id(target_location_id uuid)
@@ -110,6 +186,142 @@ set search_path = public
 as $$
   select public.can_operate_organization(public.location_organization_id(target_location_id));
 $$;
+
+create or replace function public.department_location_id(target_department_id uuid)
+returns uuid
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select location_id
+  from public.departments
+  where id = target_department_id;
+$$;
+
+create or replace function public.department_access_mode(target_department_id uuid)
+returns text
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select access_mode
+  from public.departments
+  where id = target_department_id;
+$$;
+
+create or replace function public.department_role(target_department_id uuid)
+returns text
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select role
+  from public.department_memberships
+  where user_id = auth.uid()
+    and department_id = target_department_id
+  order by case role
+    when 'manager' then 1
+    when 'agent' then 2
+    else 3
+  end
+  limit 1;
+$$;
+
+create or replace function public.can_access_department(target_department_id uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select public.is_platform_admin()
+    or public.can_manage_location(public.department_location_id(target_department_id))
+    or public.department_role(target_department_id) is not null
+    or (
+      public.department_access_mode(target_department_id) = 'inherit_location'
+      and public.can_access_location(public.department_location_id(target_department_id))
+    );
+$$;
+
+create or replace function public.can_manage_department(target_department_id uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select public.is_platform_admin()
+    or public.can_manage_location(public.department_location_id(target_department_id))
+    or public.department_role(target_department_id) = 'manager';
+$$;
+
+create or replace function public.can_operate_department(target_department_id uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select public.is_platform_admin()
+    or public.can_manage_location(public.department_location_id(target_department_id))
+    or public.department_role(target_department_id) in ('manager', 'agent')
+    or (
+      public.department_access_mode(target_department_id) = 'inherit_location'
+      and public.can_operate_location(public.department_location_id(target_department_id))
+    );
+$$;
+
+create or replace function public.protect_organization_partner_assignment()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.channel_partner_id is distinct from old.channel_partner_id
+    and auth.uid() is not null
+    and not public.is_platform_admin()
+  then
+    raise exception 'Only SignalHost platform operations can reassign an organization to a channel partner.';
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger organizations_protect_partner_assignment
+before update of channel_partner_id on public.organizations
+for each row execute function public.protect_organization_partner_assignment();
+
+create or replace function public.protect_default_department_contract()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if old.is_default
+    and auth.uid() is not null
+    and not public.is_platform_admin()
+    and (
+      not new.is_default
+      or new.location_id is distinct from old.location_id
+      or new.access_mode <> 'inherit_location'
+    )
+  then
+    raise exception 'The default department must remain assigned to its location with inherited access.';
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger departments_protect_default_contract
+before update of is_default, location_id, access_mode on public.departments
+for each row execute function public.protect_default_department_contract();
 
 create or replace function public.call_location_id(target_call_id uuid)
 returns uuid
@@ -180,6 +392,10 @@ alter table reservations enable row level security;
 alter table customer_requests enable row level security;
 alter table integration_connections enable row level security;
 alter table staff_tasks enable row level security;
+alter table channel_partners enable row level security;
+alter table partner_memberships enable row level security;
+alter table departments enable row level security;
+alter table department_memberships enable row level security;
 
 create policy organizations_select_members on organizations
 for select to authenticated
@@ -237,6 +453,40 @@ for all to authenticated
 using (public.is_platform_admin())
 with check (public.is_platform_admin());
 
+create policy channel_partners_select_accessible on channel_partners
+for select to authenticated
+using (public.can_access_partner(id));
+
+create policy channel_partners_insert_platform on channel_partners
+for insert to authenticated
+with check (public.is_platform_admin());
+
+create policy channel_partners_update_managers on channel_partners
+for update to authenticated
+using (public.can_manage_partner(id))
+with check (public.can_manage_partner(id));
+
+create policy channel_partners_delete_platform on channel_partners
+for delete to authenticated
+using (public.is_platform_admin() and not is_internal);
+
+create policy partner_memberships_select_accessible on partner_memberships
+for select to authenticated
+using (user_id = auth.uid() or public.can_manage_partner(partner_id));
+
+create policy partner_memberships_insert_managers on partner_memberships
+for insert to authenticated
+with check (public.can_manage_partner(partner_id));
+
+create policy partner_memberships_update_managers on partner_memberships
+for update to authenticated
+using (public.can_manage_partner(partner_id))
+with check (public.can_manage_partner(partner_id));
+
+create policy partner_memberships_delete_managers on partner_memberships
+for delete to authenticated
+using (public.can_manage_partner(partner_id));
+
 create policy locations_select_members on locations
 for select to authenticated
 using (public.can_access_location(id));
@@ -253,6 +503,40 @@ with check (public.can_manage_organization(organization_id));
 create policy locations_delete_admins on locations
 for delete to authenticated
 using (public.can_manage_location(id));
+
+create policy departments_select_accessible on departments
+for select to authenticated
+using (public.can_access_department(id));
+
+create policy departments_insert_location_managers on departments
+for insert to authenticated
+with check (public.can_manage_location(location_id));
+
+create policy departments_update_location_managers on departments
+for update to authenticated
+using (public.can_manage_location(location_id))
+with check (public.can_manage_location(location_id));
+
+create policy departments_delete_location_managers on departments
+for delete to authenticated
+using (public.can_manage_location(location_id) and not is_default);
+
+create policy department_memberships_select_accessible on department_memberships
+for select to authenticated
+using (user_id = auth.uid() or public.can_manage_department(department_id));
+
+create policy department_memberships_insert_managers on department_memberships
+for insert to authenticated
+with check (public.can_manage_department(department_id));
+
+create policy department_memberships_update_managers on department_memberships
+for update to authenticated
+using (public.can_manage_department(department_id))
+with check (public.can_manage_department(department_id));
+
+create policy department_memberships_delete_managers on department_memberships
+for delete to authenticated
+using (public.can_manage_department(department_id));
 
 create policy business_contacts_read on business_contacts
 for select to authenticated
@@ -495,3 +779,8 @@ with check (public.can_operate_location(location_id));
 create policy staff_alert_events_read on staff_alert_events
 for select to authenticated
 using (public.can_access_location(location_id));
+
+grant select, insert, update, delete on channel_partners to authenticated;
+grant select, insert, update, delete on partner_memberships to authenticated;
+grant select, insert, update, delete on departments to authenticated;
+grant select, insert, update, delete on department_memberships to authenticated;

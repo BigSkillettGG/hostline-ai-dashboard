@@ -8,18 +8,23 @@ The user requested a persistent memory system because repeated context compactio
 
 Current slice:
 
-- Execute Phase 0 of `docs/COMMERCIAL_PRODUCT_BLUEPRINT.md`.
-- Keep Vapi as the preferred runtime while adding a provider-neutral catalog and truthful lifecycle labels.
-- Do not change live assistants, phone numbers, webhooks, prompts, tools, voices, models, or routes in this slice.
-- Restore green verification gates and update canonical memory without rewriting historical call evidence.
+- Execute the first compatibility-safe foundation slice of Phase 1 in `docs/COMMERCIAL_PRODUCT_BLUEPRINT.md`.
+- Add the channel-partner and department identities that the commercial hierarchy requires, while preserving the current organization/location application paths.
+- Do not add queues, transfer targets, switching UI, partner branding, or department-scoping to existing operational records in this slice.
+- Do not change live assistants, phone numbers, webhooks, prompts, tools, voices, models, or routes.
+- Keep the production-application state explicit: committed migration is not the same as an applied production migration.
 
 Status update:
 
 - Commercial repository audit completed on 2026-08-05 at `f91ffa5`; the blueprint records existing, incomplete, mock/fallback, obsolete, missing, and risk states.
-- Added a provider catalog boundary with Vapi preferred, direct OpenAI Realtime SIP maintained fallback, ConversationRelay legacy fallback, and LiveKit quarantined.
-- Provider catalog reporting is intentionally non-routing (`routingPolicyEnforced: false`).
-- Phase 0 verification is green: 90 test files / 554 tests, TypeScript, lint with zero errors, and all three production builds pass.
-- The hierarchy still stops at organization/location; partner/department/queue migrations have not started.
+- Phase 0 is deployed and healthy at `d34e498`: Vapi is preferred, direct OpenAI Realtime SIP is the maintained fallback, ConversationRelay is the legacy fallback, and LiveKit is quarantined. Catalog reporting remains intentionally non-routing (`routingPolicyEnforced: false`).
+- The Phase 1 hierarchy contract is documented in `docs/COMMERCIAL_HIERARCHY_FOUNDATION.md`.
+- Additive migration `20260806010000_commercial_hierarchy_foundation.sql` now defines channel partners, partner memberships, departments, department memberships, the deterministic `SignalHost Direct` parent, default General Reception backfill/trigger, and partner-aware RLS helpers.
+- Existing organization/location IDs, bootstrap writes, dashboard queries, demos, and voice routing remain unchanged. Default departments inherit location access.
+- Checked-in Supabase types and clean-install schema/RLS snapshots represent the new objects.
+- Verification is green: 92 test files / 563 tests, TypeScript, lint with zero errors and eight pre-existing warnings, all three production builds, and independent PostgreSQL parsing of the migration and SQL snapshots.
+- The migration has not yet been applied to production: this workspace has no linked Supabase CLI session, access token, database URL, or database password. It must be applied and verified through a database-capable path before UI code depends on it.
+- Queues, transfer targets, production-backed location/department switching, immutable support audit, and executable cross-tenant RLS tests remain later Phase 1 slices.
 - The Vapi executor still lacks some tools advertised by fixed assistants; action parity is a later verified slice, not part of this non-routing foundation change.
 - Vapi pilot location allow-list now includes all six demo businesses.
 - Vapi demo provisioning has been run successfully for all six demos.

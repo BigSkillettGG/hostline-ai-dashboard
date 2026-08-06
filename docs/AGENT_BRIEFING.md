@@ -22,6 +22,8 @@ If the task involves phone calls, audio behavior, speakerphone behavior, OpenAI 
 
 SignalHost is an AI front desk employee for local businesses. It answers phone calls, website chat, SMS, and email; uses a business-specific knowledge base; captures requests; sends links; alerts staff; reports to owners; and learns from owner corrections.
 
+The commercial hierarchy is SignalHost platform -> channel partner -> customer organization -> location/rooftop -> department. Automotive dealerships are the first high-complexity reference implementation, but hierarchy, workflows, integrations, and reporting must remain reusable by other verticals. See `docs/COMMERCIAL_PRODUCT_BLUEPRINT.md` and `docs/COMMERCIAL_HIERARCHY_FOUNDATION.md`.
+
 The current verticals are:
 
 - Restaurants
@@ -146,6 +148,8 @@ Do not claim to have listened to audio unless you actually used the recording, a
 ## Files That Explain The System
 
 - Architecture: `docs/architecture.md`
+- Commercial product blueprint: `docs/COMMERCIAL_PRODUCT_BLUEPRINT.md`
+- Commercial hierarchy foundation: `docs/COMMERCIAL_HIERARCHY_FOUNDATION.md`
 - Demo testing: `docs/demo-testing-runbook.md`
 - OpenAI Realtime: `docs/openai-realtime-pilot.md`
 - LiveKit experiment: `docs/livekit-harbor-pilot.md`
