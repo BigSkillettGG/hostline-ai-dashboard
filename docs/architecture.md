@@ -42,6 +42,8 @@ The first production-backed workspace selector is defined in `docs/COMMERCIAL_SC
 
 Commercial `SECURITY DEFINER` function privileges are explicitly constrained by repository-pending migration `20260806170000_commercial_function_privilege_hardening.sql` and `docs/COMMERCIAL_FUNCTION_PRIVILEGE_HARDENING.md`. Internal/trigger helpers, including the write-capable default telephony-account helper, are service-only; authenticated execution is restored only for predicates referenced directly by RLS. Production application and denial/compatibility verification are still pending.
 
+Commercial production isolation has two repeatable gates. `npm run check:commercial-telephony` proves authenticated customer read boundaries and dormant-route invariants; `npm run check:commercial-write-isolation` sends current-value cross-tenant PATCH probes and requires every customer token to receive no writable target row. The write gate covers partner administration plus organization, location, department, queue, phone-number, route, and telephony-account boundaries without inserts or deletes. See `docs/COMMERCIAL_WRITE_ISOLATION.md`.
+
 ### Voice Service
 
 Owns inbound phone sessions, streaming audio, barge-in, turn detection, tool calls, escalation, call summaries, and transcript persistence.

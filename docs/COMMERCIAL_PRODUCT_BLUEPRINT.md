@@ -645,3 +645,11 @@ Partner/customer telephony administration, broader write-isolation coverage, cre
 - Added a contract test that inventories every function from the three commercial foundation migrations and requires every policy-referenced hardened helper to retain authenticated execution.
 - Repository verification is green at 98 test files / 595 tests, TypeScript, lint with zero errors and eight pre-existing warnings, and whitespace validation.
 - Production application, explicit RPC denial verification, trigger compatibility verification, and post-migration voice/RLS checks remain pending.
+
+### Phase 1 foundation slice status — customer write isolation
+
+- Added `npm run check:commercial-write-isolation`, a production-safe gate that rotates all six authenticated demo customers against another tenant.
+- The gate covers the shared partner administration boundary plus target organization, location, department, queue, phone-number, number-route, and telephony-account rows.
+- All 48 current-value PATCH probes returned no writable rows in production on 2026-08-06. No inserts/deletes were issued and no business data changed.
+- Repository verification is green at 99 test files / 599 tests, TypeScript, lint with zero errors and eight pre-existing warnings, the read-only six-tenant production gate, and whitespace validation.
+- This establishes repeatable customer-to-customer write-denial evidence. Controlled partner identities, positive role matrices, department roles, and disposable-fixture insert/delete coverage remain required before commercial pilot sign-off.

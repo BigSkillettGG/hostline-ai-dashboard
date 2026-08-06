@@ -75,6 +75,8 @@ The first commercial workspace-switching slice preserves these additional invari
 
 The subsequent repository-only function-privilege hardening slice revokes PostgreSQL's default `PUBLIC` execution from all commercial helpers. Only direct RLS predicates are granted back to `authenticated`; internal lookups, trigger functions, and the write-capable `ensure_default_telephony_account(text)` helper remain service-only. Migration `20260806170000_commercial_function_privilege_hardening.sql` must be applied and verified before this protection is considered live. Repository verification is green at 98 test files / 595 tests, TypeScript, lint with zero errors and eight pre-existing warnings, and whitespace validation.
 
+The customer-to-customer production write-isolation gate is also passing. `npm run check:commercial-write-isolation` authenticated as all six demo customers and denied 48 current-value PATCH probes across partner administration, organizations, locations, departments, queues, phone numbers, number routes, and telephony accounts. No probe returned a writable row, no insert/delete was issued, and no business data changed. Repository verification is green at 99 test files / 599 tests, TypeScript, lint with zero errors and eight pre-existing warnings, the read-only production gate, and whitespace validation. Partner-role and controlled insert/delete coverage remain open.
+
 ## Known Good Voice Direction
 
 Baseline details are frozen in `docs/VOICE_BASELINE_LOCK.md`. Read that file before changing Vapi assignments or direct OpenAI Realtime fallback routing/tuning.
