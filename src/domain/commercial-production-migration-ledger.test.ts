@@ -12,6 +12,10 @@ const ledgerMarkers = [
     canonicalMigration: "20260806020000_commercial_routing_foundation.sql",
     deployedVersion: "20260806043823_1e06a948-7388-4c3f-b3c6-d5e8dabf0f27.sql",
   },
+  {
+    canonicalMigration: "20260806070000_commercial_telephony_ownership_foundation.sql",
+    deployedVersion: "20260806144125_74a0a231-4b3d-43d3-97b1-0f491eca4c5b.sql",
+  },
 ];
 
 describe("commercial production migration ledger markers", () => {

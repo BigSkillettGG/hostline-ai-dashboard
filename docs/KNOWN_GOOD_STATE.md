@@ -61,6 +61,7 @@ The subsequent telephony ownership foundation in `docs/COMMERCIAL_TELEPHONY_FOUN
 - Vapi remains preferred, no runtime reads `number_routes`, and no current provider/number/assistant/webhook/prompt/model/voice/tool/route is changed.
 - All six authenticated demo tenants passed the read-only `npm run check:commercial-telephony` gate on 2026-08-06: 21 visible phone numbers had 21 primary observed routes, every number had a telephony account reference, each tenant saw only its own location/department/number/route rows, and partner-global accounts/trunks remained hidden.
 - Production voice health remained ready after application. Vapi and all current runtime routes remain unchanged.
+- Lovable recorded the applied telephony DDL under generated version `20260806144125`. Keep its checked-in no-op marker, the full DDL in canonical version `20260806070000`, and the live-regenerated Supabase types so clean installs and the production ledger remain reconcilable.
 
 ## Known Good Voice Direction
 
