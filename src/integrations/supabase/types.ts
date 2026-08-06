@@ -1314,6 +1314,95 @@ export type Database = {
           },
         ]
       }
+      number_routes: {
+        Row: {
+          created_at: string
+          department_id: string
+          destination: string | null
+          destination_kind: string
+          id: string
+          is_primary: boolean
+          phone_number_id: string
+          priority: number
+          queue_id: string | null
+          runtime_enforced: boolean
+          runtime_provider_key: string | null
+          settings: Json
+          sip_trunk_id: string | null
+          status: string
+          updated_at: string
+          verified_at: string | null
+          verified_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          department_id: string
+          destination?: string | null
+          destination_kind?: string
+          id?: string
+          is_primary?: boolean
+          phone_number_id: string
+          priority?: number
+          queue_id?: string | null
+          runtime_enforced?: boolean
+          runtime_provider_key?: string | null
+          settings?: Json
+          sip_trunk_id?: string | null
+          status?: string
+          updated_at?: string
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          department_id?: string
+          destination?: string | null
+          destination_kind?: string
+          id?: string
+          is_primary?: boolean
+          phone_number_id?: string
+          priority?: number
+          queue_id?: string | null
+          runtime_enforced?: boolean
+          runtime_provider_key?: string | null
+          settings?: Json
+          sip_trunk_id?: string | null
+          status?: string
+          updated_at?: string
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "number_routes_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "number_routes_phone_number_id_fkey"
+            columns: ["phone_number_id"]
+            isOneToOne: false
+            referencedRelation: "phone_numbers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "number_routes_queue_id_fkey"
+            columns: ["queue_id"]
+            isOneToOne: false
+            referencedRelation: "queues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "number_routes_sip_trunk_id_fkey"
+            columns: ["sip_trunk_id"]
+            isOneToOne: false
+            referencedRelation: "sip_trunks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       onboarding_profiles: {
         Row: {
           completed_required: number
@@ -1657,6 +1746,7 @@ export type Database = {
           restaurant_main_line: string | null
           sms_webhook_url: string | null
           status: string
+          telephony_account_id: string
           trial_ends_at: string | null
           trial_grace_ends_at: string | null
           trial_started_at: string | null
@@ -1681,6 +1771,7 @@ export type Database = {
           restaurant_main_line?: string | null
           sms_webhook_url?: string | null
           status?: string
+          telephony_account_id: string
           trial_ends_at?: string | null
           trial_grace_ends_at?: string | null
           trial_started_at?: string | null
@@ -1705,6 +1796,7 @@ export type Database = {
           restaurant_main_line?: string | null
           sms_webhook_url?: string | null
           status?: string
+          telephony_account_id?: string
           trial_ends_at?: string | null
           trial_grace_ends_at?: string | null
           trial_started_at?: string | null
@@ -1718,6 +1810,13 @@ export type Database = {
             columns: ["location_id"]
             isOneToOne: false
             referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "phone_numbers_telephony_account_id_fkey"
+            columns: ["telephony_account_id"]
+            isOneToOne: false
+            referencedRelation: "telephony_accounts"
             referencedColumns: ["id"]
           },
         ]
@@ -1906,6 +2005,68 @@ export type Database = {
             columns: ["source_call_id"]
             isOneToOne: false
             referencedRelation: "calls"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sip_trunks: {
+        Row: {
+          capabilities: Json
+          created_at: string
+          direction: string
+          external_trunk_id: string | null
+          id: string
+          name: string
+          provider_key: string
+          runtime_enforced: boolean
+          settings: Json
+          signaling_endpoint: string | null
+          status: string
+          telephony_account_id: string
+          updated_at: string
+          verified_at: string | null
+          verified_by: string | null
+        }
+        Insert: {
+          capabilities?: Json
+          created_at?: string
+          direction?: string
+          external_trunk_id?: string | null
+          id?: string
+          name: string
+          provider_key: string
+          runtime_enforced?: boolean
+          settings?: Json
+          signaling_endpoint?: string | null
+          status?: string
+          telephony_account_id: string
+          updated_at?: string
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Update: {
+          capabilities?: Json
+          created_at?: string
+          direction?: string
+          external_trunk_id?: string | null
+          id?: string
+          name?: string
+          provider_key?: string
+          runtime_enforced?: boolean
+          settings?: Json
+          signaling_endpoint?: string | null
+          status?: string
+          telephony_account_id?: string
+          updated_at?: string
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sip_trunks_telephony_account_id_fkey"
+            columns: ["telephony_account_id"]
+            isOneToOne: false
+            referencedRelation: "telephony_accounts"
             referencedColumns: ["id"]
           },
         ]
@@ -2188,6 +2349,85 @@ export type Database = {
           },
         ]
       }
+      telephony_accounts: {
+        Row: {
+          account_kind: string
+          billing_owner: string
+          capabilities: Json
+          channel_partner_id: string
+          created_at: string
+          customer_relationship_owner: string
+          external_account_id: string | null
+          id: string
+          location_id: string | null
+          name: string
+          organization_id: string | null
+          provider_key: string
+          resource_owner: string
+          settings: Json
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          account_kind: string
+          billing_owner: string
+          capabilities?: Json
+          channel_partner_id: string
+          created_at?: string
+          customer_relationship_owner: string
+          external_account_id?: string | null
+          id?: string
+          location_id?: string | null
+          name: string
+          organization_id?: string | null
+          provider_key: string
+          resource_owner: string
+          settings?: Json
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          account_kind?: string
+          billing_owner?: string
+          capabilities?: Json
+          channel_partner_id?: string
+          created_at?: string
+          customer_relationship_owner?: string
+          external_account_id?: string | null
+          id?: string
+          location_id?: string | null
+          name?: string
+          organization_id?: string | null
+          provider_key?: string
+          resource_owner?: string
+          settings?: Json
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "telephony_accounts_channel_partner_id_fkey"
+            columns: ["channel_partner_id"]
+            isOneToOne: false
+            referencedRelation: "channel_partners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "telephony_accounts_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "telephony_accounts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       transcript_turns: {
         Row: {
           call_id: string
@@ -2360,6 +2600,10 @@ export type Database = {
         Args: { target_location_id: string }
         Returns: boolean
       }
+      can_access_number_route: {
+        Args: { target_number_route_id: string }
+        Returns: boolean
+      }
       can_access_organization: {
         Args: { target_organization_id: string }
         Returns: boolean
@@ -2373,12 +2617,20 @@ export type Database = {
         Args: { target_staff_directory_entry_id: string }
         Returns: boolean
       }
+      can_access_telephony_account: {
+        Args: { target_telephony_account_id: string }
+        Returns: boolean
+      }
       can_manage_department: {
         Args: { target_department_id: string }
         Returns: boolean
       }
       can_manage_location: {
         Args: { target_location_id: string }
+        Returns: boolean
+      }
+      can_manage_number_route: {
+        Args: { target_number_route_id: string }
         Returns: boolean
       }
       can_manage_organization: {
@@ -2392,6 +2644,10 @@ export type Database = {
       can_manage_queue: { Args: { target_queue_id: string }; Returns: boolean }
       can_manage_staff_directory_entry: {
         Args: { target_staff_directory_entry_id: string }
+        Returns: boolean
+      }
+      can_manage_telephony_account: {
+        Args: { target_telephony_account_id: string }
         Returns: boolean
       }
       can_operate_department: {
@@ -2423,6 +2679,10 @@ export type Database = {
         Args: { target_department_id: string }
         Returns: string
       }
+      ensure_default_telephony_account: {
+        Args: { target_provider: string }
+        Returns: string
+      }
       is_platform_admin: { Args: never; Returns: boolean }
       location_organization_id: {
         Args: { target_location_id: string }
@@ -2436,6 +2696,18 @@ export type Database = {
         Args: { target_thread_id: string }
         Returns: string
       }
+      normalize_telephony_provider_key: {
+        Args: { value: string }
+        Returns: string
+      }
+      number_route_department_id: {
+        Args: { target_number_route_id: string }
+        Returns: string
+      }
+      number_route_phone_number_id: {
+        Args: { target_number_route_id: string }
+        Returns: string
+      }
       order_location_id: { Args: { target_order_id: string }; Returns: string }
       organization_partner_id: {
         Args: { target_organization_id: string }
@@ -2446,8 +2718,23 @@ export type Database = {
         Returns: string
       }
       partner_role: { Args: { target_partner_id: string }; Returns: string }
+      phone_number_location_id: {
+        Args: { target_phone_number_id: string }
+        Returns: string
+      }
       queue_department_id: {
         Args: { target_queue_id: string }
+        Returns: string
+      }
+      telephony_account_can_serve_location: {
+        Args: {
+          target_location_id: string
+          target_telephony_account_id: string
+        }
+        Returns: boolean
+      }
+      telephony_account_provider_key: {
+        Args: { target_telephony_account_id: string }
         Returns: string
       }
       user_has_location_affiliation: {
