@@ -20,7 +20,7 @@ Trigger execution remains compatible because PostgreSQL checks the trigger-funct
 
 ## Production evidence
 
-Migration `20260806170000_commercial_function_privilege_hardening.sql` was applied to the connected production database on 2026-08-06 without repository or runtime changes. Live privilege inspection confirmed:
+Migration `20260806170000_commercial_function_privilege_hardening.sql` was applied to the connected production database on 2026-08-06 without runtime changes. Lovable recorded that production application under generated version `20260806173859`; the generated file is retained as a no-op ledger marker while the named canonical migration remains the source of truth. Live privilege inspection confirmed:
 
 - `anon` has no execution privilege on all 49 covered helpers;
 - `authenticated` retains execution only on the 20 predicates referenced directly by RLS;
